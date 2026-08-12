@@ -125,3 +125,50 @@ def import_archive(output, archive_data):
     except zipfile.BadZipFile as error:
         raise BenchmarkError("invalid import archive") from error
     return {"id": str(destination.relative_to(Path(output).resolve())), "source": "imported"}
+
+
+def export_archive(run_directory):
+    """Create a portable, self-describing result archive for one completed run.
+
+    Export deliberately uses the same strict format accepted by ``import_archive``.
+    That keeps a downloaded archive useful on another host and, more importantly,
+    avoids giving the HTTP layer a looser archive format than the importer.
+    """
+    root = Path(run_directory).resolve()
+    if not root.is_dir():
+        raise BenchmarkError("result directory does not exist: {}".format(root))
+    load_manifest(root / "run.json")
+    files = []
+    total = 0
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink() or path.name == ".imported":
+            continue
+        relative = path.relative_to(root).as_posix()
+        # An imported archive never carries its own import manifest.  A fresh
+        # one is produced below so a re-export is deterministic and valid.
+        if relative == IMPORT_MANIFEST:
+            continue
+        size = path.stat().st_size
+        if size > MAX_MEMBER_SIZE:
+            raise BenchmarkError("result artifact exceeds export size limit: {}".format(relative))
+        total += size
+        if total > MAX_TOTAL_SIZE:
+            raise BenchmarkError("result archive exceeds export size limit")
+        files.append((relative, path.read_bytes()))
+    if not any(path == "run.json" for path, _ in files):
+        raise BenchmarkError("result archive is missing run.json")
+    if not files or len(files) > MAX_FILES:
+        raise BenchmarkError("result archive has invalid file count")
+    manifest = {
+        "format_version": 1,
+        "files": [
+            {"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+            for path, data in files
+        ],
+    }
+    destination = io.BytesIO()
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(IMPORT_MANIFEST, json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+        for path, data in files:
+            archive.writestr(path, data)
+    return destination.getvalue()

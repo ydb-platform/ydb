@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,15 +21,28 @@ from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition
 class RunConfiguration:
     profile: str
     threads: tuple
-    actor_pairs: tuple
-    parameter_values: tuple
     duration_seconds: int
     repetitions: int
     timeout_seconds: float
+    actor_pairs: tuple = ()
+    parameter_values: tuple = ()
+    timeout_explicit: bool = False
     affinity_modes: tuple = ("none",)
     perf_enabled: bool = False
     perf_frequency: int = 99
     benchmark: BenchmarkDefinition = PING_BENCHMARK
+    parameters: object = None
+
+    def __post_init__(self):
+        values = dict(self.parameters or {})
+        if "actor-pairs" in (item.name for item in self.benchmark.parameters):
+            values["actor-pairs"] = self.actor_pairs or values.get("actor-pairs") or (512,)
+            values[self.benchmark.parameter_name] = self.parameter_values or values.get(self.benchmark.parameter_name) or self.benchmark.parameter(self.benchmark.parameter_name).default
+        object.__setattr__(self, "parameters", values)
+        if not self.actor_pairs and "actor-pairs" in self.parameters:
+            object.__setattr__(self, "actor_pairs", tuple(self.parameters["actor-pairs"]))
+        if not self.parameter_values and self.benchmark.parameter_name in self.parameters:
+            object.__setattr__(self, "parameter_values", tuple(self.parameters[self.benchmark.parameter_name]))
 
 
 def parse_metrics(stdout, benchmark=PING_BENCHMARK):
@@ -42,22 +55,14 @@ def _utc_now():
 
 
 def _environment(configuration):
-    return {
-        "ACTORSYSTEM_TEST_MODE": "manual",
-        "ACTORSYSTEM_THREADS": ",".join(str(value) for value in configuration.threads),
-        "ACTORSYSTEM_ACTOR_PAIRS": ",".join(str(value) for value in configuration.actor_pairs),
-        configuration.benchmark.parameter_environment: ",".join(
-            str(value) for value in configuration.parameter_values
-        ),
-        "ACTORSYSTEM_DURATION": str(configuration.duration_seconds),
-    }
+    return configuration.benchmark.environment(configuration, {"threads": configuration.threads[0], "parameters": {}})
 
 
 def _command_record(binary_path, benchmark):
     return [str(binary_path), benchmark.test_filter]
 
 
-def _perf_record_command(binary_path, perf_data_path, frequency, benchmark):
+def _perf_record_command(base_command, perf_data_path, frequency):
     return [
         "perf",
         "record",
@@ -71,7 +76,7 @@ def _perf_record_command(binary_path, perf_data_path, frequency, benchmark):
         "--call-graph",
         "dwarf",
         "--",
-        *_command_record(binary_path, benchmark),
+        *base_command,
     ]
 
 
@@ -129,7 +134,7 @@ def _run_perf_postprocessing(perf_data_path, repetition_directory, timeout_secon
     return records
 
 
-def run_actors_core(
+def run_benchmark(
     binary,
     configuration,
     output_directory,
@@ -141,12 +146,10 @@ def run_actors_core(
 ):
     output_directory = Path(output_directory)
     benchmark = configuration.benchmark
-    environment = _environment(configuration)
     topology = discover_topology()
-    placements = [
-        plan_affinity(mode, topology, max(configuration.threads))
-        for mode in configuration.affinity_modes
-    ]
+    cases = configuration.benchmark.process_cases(configuration)
+    placements = [(case_index, case, plan_affinity(mode, topology, case["threads"]))
+                  for mode in configuration.affinity_modes for case_index, case in enumerate(cases, 1)]
     binary_record = {
         "name": binary.path.name,
         "sha256": binary.sha256,
@@ -173,8 +176,7 @@ def run_actors_core(
         "cpu_topology": topology_record(topology),
         "parameters": {
             "threads": list(configuration.threads),
-            "actor_pairs": list(configuration.actor_pairs),
-            benchmark.parameter_name: list(configuration.parameter_values),
+            **{name: list(values) for name, values in configuration.parameters.items()},
             "duration_seconds": configuration.duration_seconds,
             "repetitions": configuration.repetitions,
             "timeout_seconds": configuration.timeout_seconds,
@@ -183,14 +185,16 @@ def run_actors_core(
         "affinity": [
             {
                 "mode": placement.mode,
+                "threads": threads,
                 "status": "pending" if placement.supported else "unsupported",
                 "cpus": None if placement.cpus is None else list(placement.cpus),
                 **({"reason": placement.reason} if placement.reason else {}),
             }
-            for placement in placements
+            for case_index, case, placement in placements
+            for threads in (case["threads"],)
         ],
-        "environment": environment,
-        "command": _command_record(binary.path, benchmark),
+        "environment": "<set per process>",
+        "command": "<set per process>",
         "profiler": (
             {
                 "type": "perf-record",
@@ -206,16 +210,17 @@ def run_actors_core(
     manifest_path = output_directory / "run.json"
     write_manifest(manifest_path, manifest)
 
-    if not any(placement.supported for placement in placements):
+    if not any(placement.supported for _, _, placement in placements):
         if event_sink is not None:
-            for placement in placements:
+            for case_index, case, placement in placements:
+                threads = case["threads"]
                 for index in range(1, configuration.repetitions + 1):
                     event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
+                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
                         "state": "unsupported", "fields": {"reason": placement.reason},
                     })
         failure = "none of the selected affinity modes is supported: {}".format(
-            "; ".join("{}: {}".format(placement.mode, placement.reason) for placement in placements)
+            "; ".join("{}/{} threads: {}".format(placement.mode, case["threads"], placement.reason) for _, case, placement in placements)
         )
         manifest["status"] = "failed"
         manifest["finished_at"] = _utc_now()
@@ -226,36 +231,47 @@ def run_actors_core(
 
     repetition_rows = []
 
-    for placement_index, placement in enumerate(placements):
+    for placement_index, (case_index, case, placement) in enumerate(placements):
+        threads = case["threads"]
         affinity_record = manifest["affinity"][placement_index]
         if not placement.supported:
             if event_sink is not None:
                 for index in range(1, configuration.repetitions + 1):
                     event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
+                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
                         "state": "unsupported", "fields": {"reason": placement.reason},
                     })
             continue
         affinity_record["status"] = "running"
-        mode_directory = output_directory / placement.mode
-        mode_directory.mkdir()
+        case_suffix = "case-{:03d}".format(case_index) if case["parameters"] else None
+        mode_directory = output_directory / placement.mode / "threads-{:03d}".format(threads)
+        if case_suffix: mode_directory /= case_suffix
+        mode_directory.mkdir(parents=True)
+        process_configuration = replace(configuration, threads=(threads,))
+        environment = benchmark.environment(process_configuration, case)
 
         for index in range(1, configuration.repetitions + 1):
             repetition_directory = mode_directory / "repeat-{:03d}".format(index)
             perf_data_path = repetition_directory / "perf.data"
+            base_command = benchmark.command(binary.path, benchmark, process_configuration, case)
             if configuration.perf_enabled:
                 repetition_directory.mkdir()
                 command = _perf_record_command(
-                    binary.path,
+                    base_command,
                     perf_data_path,
                     configuration.perf_frequency,
-                    benchmark,
                 )
             else:
-                command = _command_record(binary.path, benchmark)
+                command = base_command
             started_at = _utc_now()
             if event_sink is not None:
-                event_sink({"type": "step-started", "affinity": placement.mode, "repeat": index})
+                event_sink({
+                    "type": "step-started", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
+                    "fields": {
+                        "cpus": None if placement.cpus is None else list(placement.cpus),
+                        "started_at": started_at,
+                    },
+                })
             try:
                 result = run_command(
                     command,
@@ -270,7 +286,8 @@ def run_actors_core(
                 finished_at = _utc_now()
                 manifest["runs"].append(
                     {
-                        "affinity_mode": placement.mode,
+                        "affinity_mode": placement.mode, "case": case_index, "parameters": case["parameters"],
+                        "threads": threads,
                         "cpus": None if placement.cpus is None else list(placement.cpus),
                         "index": index,
                         "command": command,
@@ -294,9 +311,18 @@ def run_actors_core(
                 repetition_directory.mkdir()
             atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
             atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
-            relative_directory = Path(placement.mode) / repetition_directory.name
+            relative_directory = (
+                Path(placement.mode)
+                / "threads-{:03d}".format(threads)
+                / (case_suffix or repetition_directory.name)
+            )
+            if case_suffix:
+                relative_directory /= repetition_directory.name
             run_record = {
                 "affinity_mode": placement.mode,
+                "case": case_index,
+                "parameters": case["parameters"],
+                "threads": threads,
                 "cpus": None if placement.cpus is None else list(placement.cpus),
                 "index": index,
                 "command": list(result.command),
@@ -324,7 +350,7 @@ def run_actors_core(
             else:
                 try:
                     metrics = benchmark.parse_metrics(result.stdout, benchmark)
-                    benchmark.validate_metrics(metrics, configuration)
+                    benchmark.validate_metrics(metrics, process_configuration, case)
                 except BenchmarkError as error:
                     failure = str(error)
                 else:
@@ -364,8 +390,13 @@ def run_actors_core(
                 write_manifest(manifest_path, manifest)
                 if event_sink is not None:
                     event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
-                        "state": "cancelled" if interrupted else "failed", "fields": {"error": failure},
+                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
+                        "state": "cancelled" if interrupted else "failed",
+                        "fields": {
+                            "error": failure,
+                            "finished_at": result.finished_at,
+                            "duration_seconds": result.duration_seconds,
+                        },
                     })
                 if interrupted:
                     raise BenchmarkInterrupted(failure)
@@ -377,8 +408,20 @@ def run_actors_core(
                     artifacts.append(run_record["metrics"])
                 if "perf_data" in run_record:
                     artifacts.append(run_record["perf_data"])
-                event_sink({"type": "step-artifacts", "affinity": placement.mode, "repeat": index, "artifacts": artifacts})
-                event_sink({"type": "step-finished", "affinity": placement.mode, "repeat": index, "state": "passed"})
+                for record in run_record.get("perf_postprocessing", []):
+                    artifacts.extend((
+                        str(relative_directory / record["stdout"]),
+                        str(relative_directory / record["stderr"]),
+                    ))
+                event_sink({"type": "step-artifacts", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index, "artifacts": artifacts})
+                event_sink({
+                    "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
+                    "state": "passed",
+                    "fields": {
+                        "finished_at": result.finished_at,
+                        "duration_seconds": result.duration_seconds,
+                    },
+                })
         affinity_record["status"] = "completed"
         write_manifest(manifest_path, manifest)
 
@@ -391,3 +434,7 @@ def run_actors_core(
     manifest["summary_rows"] = len(summary)
     write_manifest(manifest_path, manifest)
     return manifest
+
+
+# Compatibility for callers of the original actor-specific runner.
+run_actors_core = run_benchmark

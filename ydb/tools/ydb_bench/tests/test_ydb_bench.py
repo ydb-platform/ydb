@@ -23,7 +23,8 @@ from ydb.tools.ydb_bench.lib.actors_core import (
     parse_metrics,
     run_actors_core,
 )
-from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry
+from ydb.tools.ydb_bench.benchmarks import MEMORY_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry, DimensionDefinition, ParameterDefinition
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
 from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, build_run_plan, config_schema, load_config
@@ -36,8 +37,8 @@ from ydb.tools.ydb_bench.lib.topology import (
     plan_affinity,
     topology_record,
 )
-from ydb.tools.ydb_bench.lib.import_results import import_archive
-from ydb.tools.ydb_bench.lib.web import comparison_keys, make_server, read_model
+from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
+from ydb.tools.ydb_bench.lib.web import chart_data, comparison_keys, make_server, read_model
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -121,7 +122,7 @@ class YdbBenchTest(unittest.TestCase):
         with redirect_stdout(schema_output):
             self.assertEqual(main(["config-schema"]), 0)
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
-        self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench"})
+        self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench", "memory-bandwidth-bench"})
 
     def test_cli_json_discovery_and_validation_do_not_create_output(self):
         config = self._config(
@@ -211,16 +212,23 @@ class YdbBenchTest(unittest.TestCase):
         fake = BenchmarkDefinition(
             name="fake-bench",
             description="test adapter",
-            test_filter="Fake::Run",
-            parameter_name="samples",
-            parameter_description="Sample counts",
-            parameter_environment="FAKE_SAMPLES",
-            parameter_column="samples",
+            resource_name="actors_core_ut_fat",
+            parameters=(ParameterDefinition("actor-pairs", "pairs", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs"),
+                        ParameterDefinition("samples", "Sample counts", default=(1,), environment="FAKE_SAMPLES", column="samples")),
+            dimensions=(DimensionDefinition("threads"), DimensionDefinition("actorPairs"), DimensionDefinition("samples")),
+            metrics=PING_BENCHMARK.metrics,
             parse_metrics=PING_BENCHMARK.parse_metrics,
             render_metrics=PING_BENCHMARK.render_metrics,
             validate_metrics=PING_BENCHMARK.validate_metrics,
             summarize_metrics=PING_BENCHMARK.summarize_metrics,
             render_summary=PING_BENCHMARK.render_summary,
+            command=lambda binary, benchmark, configuration, case: [str(binary), "Fake::Run"],
+            environment=lambda configuration, case: {
+                "ACTORSYSTEM_THREADS": str(case["threads"]),
+                "ACTORSYSTEM_ACTOR_PAIRS": ",".join(map(str, configuration.parameters["actor-pairs"])),
+                "FAKE_SAMPLES": ",".join(map(str, configuration.parameters["samples"])),
+            },
+            process_cases=PING_BENCHMARK.process_cases,
         )
         self.assertIs(registry.register(fake), fake)
         self.assertEqual(list(registry), ["fake-bench"])
@@ -230,8 +238,11 @@ class YdbBenchTest(unittest.TestCase):
         script = self._script(
             """
             echo "threads,actorPairs,samples,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
-            echo "1,32,1,1000,1.0,900,1100"
-            echo "2,32,1,2000,1.0,1800,2200"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
             """
         )
         output = self.root / "fake-output"
@@ -296,17 +307,43 @@ class YdbBenchTest(unittest.TestCase):
         loaded = load_config(self._config(
             """
             ping-bench:
-              first: {threads: [1], duration: 1, repetitions: 2, affinity: [none, pack-numa-pack-chiplet]}
+              first: {threads: [1, 2], duration: 1, repetitions: 2, affinity: [none, pack-numa-pack-chiplet]}
               second: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}
             """
         ))
         plan = build_run_plan(loaded)
-        self.assertEqual([(s.profile, s.affinity, s.repeat) for s in plan.steps], [
-            ("first", "none", 1), ("first", "none", 2),
-            ("first", "pack-numa-pack-chiplet", 1), ("first", "pack-numa-pack-chiplet", 2),
-            ("second", "none", 1),
+        self.assertEqual([(s.profile, s.affinity, s.threads, s.repeat) for s in plan.steps], [
+            ("first", "none", 1, 1), ("first", "none", 1, 2),
+            ("first", "none", 2, 1), ("first", "none", 2, 2),
+            ("first", "pack-numa-pack-chiplet", 1, 1), ("first", "pack-numa-pack-chiplet", 1, 2),
+            ("first", "pack-numa-pack-chiplet", 2, 1), ("first", "pack-numa-pack-chiplet", 2, 2),
+            ("second", "none", 1, 1),
         ])
         self.assertEqual(len({step.id for step in plan.steps}), len(plan.steps))
+
+    def test_memory_config_expands_generic_parameter_matrix(self):
+        loaded = load_config(self._config(
+            """
+            memory-bandwidth-bench:
+              mixed:
+                threads: [1, 2]
+                random-percent: [0, 50]
+                random-mode: [copy, write]
+                buffer-size-mb: [8]
+                part-size-kb: [512]
+                duration: 1
+                repetitions: 2
+                affinity: [none]
+            """
+        ))
+        configuration = loaded.runs[0]
+        self.assertIs(configuration.benchmark, MEMORY_BENCHMARK)
+        self.assertEqual(configuration.parameters["random-percent"], (0, 50))
+        plan = build_run_plan(loaded)
+        self.assertEqual(len(plan.steps), 16)
+        self.assertEqual(plan.steps[0].parameters["random-percent"], 0)
+        self.assertEqual(plan.steps[-1].parameters["random-mode"], "write")
+        self.assertEqual({step.threads for step in plan.steps}, {1, 2})
 
     def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
         pending = {"id": "step-1", "state": "pending", "artifacts": []}
@@ -575,14 +612,17 @@ class YdbBenchTest(unittest.TestCase):
             """
             test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
             test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 11
-            test "$ACTORSYSTEM_THREADS" = "1,2" || exit 12
+            test "$ACTORSYSTEM_THREADS" = "1" -o "$ACTORSYSTEM_THREADS" = "2" || exit 12
             test "$ACTORSYSTEM_ACTOR_PAIRS" = "32" || exit 13
             test "$ACTORSYSTEM_INFLIGHTS" = "1" || exit 14
             test "$ACTORSYSTEM_DURATION" = "1" || exit 15
             echo "[ RUN      ] benchmark"
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
-            echo "1,32,1,1000,1.0,900,1100"
-            echo "2,32,1,2000,1.0,1800,2200"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
             """
         )
         output = self.root / "output"
@@ -595,7 +635,7 @@ class YdbBenchTest(unittest.TestCase):
             work_dir_hint=self.root,
         )
         self.assertEqual(manifest["status"], "completed")
-        self.assertEqual(len(manifest["runs"]), 3)
+        self.assertEqual(len(manifest["runs"]), 6)
         self.assertTrue((output / "summary.csv").is_file())
         self.assertIn("none,1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
         stored = json.loads((output / "run.json").read_text())
@@ -604,11 +644,12 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(stored["benchmark"], "ping-bench")
         self.assertEqual(stored["affinity"][0]["mode"], "none")
         self.assertEqual(stored["binary"]["sha256"], self._binary(script).sha256)
-        for index in range(1, 4):
-            repetition = output / "none" / "repeat-{:03d}".format(index)
-            self.assertTrue((repetition / "stdout.txt").is_file())
-            self.assertTrue((repetition / "stderr.txt").is_file())
-            self.assertTrue((repetition / "metrics.csv").is_file())
+        for threads in (1, 2):
+            for index in range(1, 4):
+                repetition = output / "none" / "threads-{:03d}".format(threads) / "repeat-{:03d}".format(index)
+                self.assertTrue((repetition / "stdout.txt").is_file())
+                self.assertTrue((repetition / "stderr.txt").is_file())
+                self.assertTrue((repetition / "metrics.csv").is_file())
 
     def test_star_run_selects_star_filter_environment_and_summary(self):
         """Select the star filter, pass stars and duration, then render a star-specific summary."""
@@ -618,10 +659,13 @@ class YdbBenchTest(unittest.TestCase):
             test "$ACTORSYSTEM_STARS" = "2,4" || exit 11
             test "$ACTORSYSTEM_DURATION" = "3" || exit 12
             echo "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
-            echo "1,32,2,1000,3.0,900,1100"
-            echo "1,32,4,2000,3.0,1800,2200"
-            echo "2,32,2,3000,3.0,2800,3200"
-            echo "2,32,4,4000,3.0,3800,4200"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,2,1000,3.0,900,1100"
+              echo "1,32,4,2000,3.0,1800,2200"
+            else
+              echo "2,32,2,3000,3.0,2800,3200"
+              echo "2,32,4,4000,3.0,3800,4200"
+            fi
             """
         )
         output = self.root / "star-output"
@@ -647,8 +691,11 @@ class YdbBenchTest(unittest.TestCase):
         benchmark = self._script(
             """
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
-            echo "1,32,1,1000,1.0,900,1100"
-            echo "2,32,1,2000,1.0,1800,2200"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
             """
         )
         fake_perf = self._script(
@@ -709,12 +756,12 @@ class YdbBenchTest(unittest.TestCase):
             (output / manifest["binary"]["artifact"]).read_bytes(),
             benchmark.read_bytes(),
         )
-        repetition = output / "none" / "repeat-001"
+        repetition = output / "none" / "threads-001" / "repeat-001"
         self.assertTrue((repetition / "perf.data").is_file())
         self.assertIn("HotFunction", (repetition / "perf-report.txt").read_text())
         self.assertIn("0123456789abcdef", (repetition / "perf-buildids.txt").read_text())
         run = manifest["runs"][0]
-        self.assertEqual(run["perf_data"], "none/repeat-001/perf.data")
+        self.assertEqual(run["perf_data"], "none/threads-001/repeat-001/perf.data")
         self.assertEqual([record["name"] for record in run["perf_postprocessing"]], ["report", "buildid-list"])
 
     def test_empty_csv_fails_even_with_zero_exit_code(self):
@@ -763,7 +810,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("finished_at", manifest["runs"][0])
         self.assertIsNone(manifest["runs"][0]["exit_code"])
         self.assertEqual(manifest["runs"][0]["error"], manifest["error"])
-        self.assertFalse((output / "none" / "repeat-001").exists())
+        self.assertFalse((output / "none" / "threads-001" / "repeat-001").exists())
 
     @unittest.skipUnless(hasattr(os, "killpg"), "requires POSIX process groups")
     def test_timeout_signals_the_whole_process_group(self):
@@ -1030,13 +1077,31 @@ class WebTest(unittest.TestCase):
 
     def _manifest(self, directory, status="completed", imported=False):
         directory.mkdir(parents=True, exist_ok=True)
-        value = {"schema_version": SCHEMA_VERSION, "status": status, "state": "running" if status == "running" else "passed",
-                 "started_at": "2025-01-01T00:00:00+00:00", "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
-                 "steps": [{"id": "step-1", "state": "running" if status == "running" else "passed", "artifacts": []}],
-                 "topology": {"version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}]}}
+        value = {
+            "schema_version": SCHEMA_VERSION,
+            "status": status,
+            "state": "running" if status == "running" else "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
+            "steps": [{
+                "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
+                "affinity": "none", "repeat": 1,
+                "state": "running" if status == "running" else "passed",
+                "artifacts": ["artifact.txt"],
+            }],
+            "config": {
+                "snapshot": "ping-bench:\n  baseline: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n",
+            },
+            "topology": {
+                "version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}], "physical_cores": [[0]],
+                "smt_siblings": [[0]], "hierarchy_reasons": [],
+            },
+        }
         if imported:
             value["imported"] = True
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
+        (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
     def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False):
         run = {"schema_version": version, "status": "completed", "state": "passed", "runs": [], "steps": [], "topology": {"version": 2}}
@@ -1079,6 +1144,14 @@ class WebTest(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             (run / "artifact.txt").open("x")
 
+    def test_export_uses_the_same_portable_archive_contract(self):
+        self._manifest(self.root / "complete")
+        archive = export_archive(self.root / "complete")
+        destination = self.root / "other-host"
+        imported = import_archive(destination, archive)
+        self.assertEqual(imported["source"], "imported")
+        self.assertEqual((destination / imported["id"] / "artifact.txt").read_text(), "artifact")
+
     def test_comparison_key_rules(self):
         model = {
             "one": {"steps": [{"benchmark": "ping", "profile": "p", "affinity": "none"}, {"benchmark": "ping", "profile": "q", "affinity": "pack"}], "runs": []},
@@ -1098,6 +1171,31 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    def test_chart_data_groups_summary_rows_by_affinity(self):
+        self._manifest(self.root / "complete")
+        summary = self.root / "complete" / "ping-bench" / "baseline" / "summary.csv"
+        summary.parent.mkdir(parents=True)
+        summary.write_text(
+            "affinity_mode,threads,actorPairs,in_flight,repetitions,median_msgs_per_sec,min_msgs_per_sec,max_msgs_per_sec,median_elapsed_seconds\n"
+            "none,1,512,1,1,10,9,11,1.0\n"
+            "none,2,512,1,1,20,19,21,1.0\n"
+            "pack-numa,1,512,1,1,12,11,13,1.0\n",
+            encoding="utf-8",
+        )
+        summary.with_name("run.json").write_text(json.dumps({
+            "affinity": [
+                {"mode": "none", "cpus": None},
+                {"mode": "pack-numa", "cpus": [0, 1, 2, 4]},
+            ],
+        }), encoding="utf-8")
+        value = chart_data(self.root, ["complete"])
+        self.assertEqual(value["dimensions"], ["actorPairs", "in_flight", "threads"])
+        self.assertIn("median_msgs_per_sec", value["metrics"])
+        self.assertEqual([item["affinity"] for item in value["series"]], ["none", "pack-numa"])
+        self.assertEqual(value["series"][0]["rows"][1]["threads"], 2)
+        self.assertIsNone(value["series"][0]["cpus"])
+        self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
+
     def test_web_static_api_is_csp_protected_and_read_only(self):
         self._manifest(self.root / "complete")
         server = make_server("127.0.0.1", 0, self.root)
@@ -1108,6 +1206,26 @@ class WebTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/") as response:
                 self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
                 self.assertIn(b"app.js", response.read())
+            with urllib.request.urlopen(base + "/app.js") as response:
+                script = response.read()
+                self.assertIn(b"System topology", script)
+                self.assertIn(b"New run", script)
+                self.assertIn(b"<th>Duration</th>", script)
+                self.assertIn(b"<th>Runs</th>", script)
+                self.assertIn(b"class=affinity-details><td colspan=3>", script)
+                self.assertIn(b"id=refresh-run", script)
+                self.assertNotIn(b"setInterval(()=>renderRun", script)
+                self.assertIn(b"function cpuRanges", script)
+                self.assertIn(b"ranges such as 1-16", script)
+                self.assertIn(b"function compactIntegerRanges", script)
+                self.assertIn(b"benchmarkChanged", script)
+                self.assertIn(b"Incomplete data:", script)
+                self.assertIn(b"function mountChartBuilder", script)
+                self.assertIn(b"function bindChartTooltips", script)
+                self.assertIn(b"rightItem.value-leftItem.value", script)
+                self.assertIn(b'chart-color-', script)
+                self.assertNotIn(b'<span style="color:', script)
+                self.assertIn(b'CPUs: not recorded', script)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
             request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
@@ -1115,6 +1233,55 @@ class WebTest(unittest.TestCase):
                 self.assertEqual(json.loads(response.read())["source"], "imported")
             with self.assertRaisesRegex(Exception, "HTTP Error 400"):
                 urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_web_ui_api_exposes_builder_topology_downloads_and_drafts(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        yaml_text = "ping-bench:\n  ui: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        try:
+            def json_request(path, body):
+                request = urllib.request.Request(
+                    base + path,
+                    data=json.dumps(body).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                return json.loads(urllib.request.urlopen(request).read())
+
+            editor = json_request("/api/editor-config", {"yaml": yaml_text, "perf": False})
+            self.assertEqual(editor["profiles"][0]["name"], "ui")
+            empty_editor = json_request("/api/editor-config", {"yaml": "\n  \n", "perf": False})
+            self.assertEqual(empty_editor["profiles"], [])
+            self.assertIn("memory-bandwidth-bench", [item["name"] for item in empty_editor["benchmarks"]])
+            self.assertIsNone(editor["profiles"][0]["timeout"])
+            explicit_timeout = json_request(
+                "/api/editor-config",
+                {"yaml": yaml_text.replace("affinity: [none]}", "affinity: [none], timeout: 42}"), "perf": False},
+            )
+            self.assertEqual(explicit_timeout["profiles"][0]["timeout"], 42)
+            self.assertIn("ping-bench", [item["name"] for item in editor["benchmarks"]])
+            topology = json.loads(urllib.request.urlopen(base + "/api/system-topology").read())
+            self.assertIn("allowed_cpus", topology["topology"])
+            self.assertEqual(len(topology["affinity"]), 12)
+            draft = json_request("/api/drafts", {"yaml": yaml_text})
+            self.assertTrue(Path(draft["path"]).is_file())
+            with urllib.request.urlopen(base + "/api/runs/complete/config") as response:
+                self.assertIn("attachment", response.headers["Content-Disposition"])
+                self.assertIn(b"ping-bench", response.read())
+            with urllib.request.urlopen(base + "/api/runs/complete/config.json") as response:
+                self.assertIn("ping-bench", json.loads(response.read())["yaml"])
+            with urllib.request.urlopen(base + "/api/runs/complete/archive") as response:
+                self.assertEqual(response.headers["Content-Type"], "application/zip")
+                self.assertTrue(response.read().startswith(b"PK"))
+            with urllib.request.urlopen(base + "/api/runs/complete/artifact/artifact.txt") as response:
+                self.assertEqual(response.read(), b"artifact")
         finally:
             server.shutdown()
             worker.join()

@@ -8,10 +8,11 @@ profile build type so the same binary can also be used with `perf`:
 ./ya make --build=profile ydb/tools/ydb_bench
 ```
 
-The tool currently provides two benchmarks:
+The tool provides three benchmarks:
 
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
+- `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -57,7 +58,33 @@ star-ping-bench:
     duration: 3
     repetitions: 5
     affinity: [none, pack-numa-pack-chiplet]
+
+memory-bandwidth-bench:
+  mixed-memory:
+    threads: [1, 2, 4, 8, 16]
+    random-percent: [0, 25, 50, 75, 100]
+    random-mode: [copy, write]
+    buffer-size-mb: [256]
+    part-size-kb: [2048]
+    duration: 3
+    repetitions: 3
+    affinity: [none, pack-numa, spread-numa-pack-chiplet]
 ```
+
+The memory benchmark runs every matrix combination in a separate process. Each
+worker owns and first-touches its private buffer after process affinity has been
+applied. `random-percent` controls the deterministic interleaving of sequential
+and random workers; `random-mode` selects byte copy or byte write. Before
+allocating, the executable rejects a requested private-buffer footprint above
+80% of Linux `MemAvailable` to avoid silently benchmarking swap activity.
+
+Memory results retain both work counts and memory volume: sequential/random
+operations, payload bytes, read bytes, written bytes, operations per second,
+payload MB/s, read/write MB/s, and estimated program memory traffic MB/s.
+Estimated traffic is `read_bytes + written_bytes`; it is not hardware DRAM
+traffic because caches, prefetching, and write allocation can change physical
+traffic. Hardware counters can therefore be added later as separate metrics
+without changing the benchmark contract.
 
 `threads`, `duration`, `repetitions`, and `affinity` are required and arrays
 must be non-empty. `actor-pairs` defaults to `[512]`; `inflight` and `stars`
@@ -127,7 +154,7 @@ The top-level output contains:
   every benchmark/profile pair and paths to their individual summaries;
 - `<benchmark>/<profile>/run.json` and `summary.csv` with the benchmark-specific
   columns and parameters; results from different profiles are not combined;
-- `<benchmark>/<profile>/<affinity>/repeat-NNN/` with raw stdout, stderr, and
+- `<benchmark>/<profile>/<affinity>/threads-NNN[/case-NNN]/repeat-NNN/` with raw stdout, stderr, and
   extracted `metrics.csv`.
 
 With `--perf`, the exact bundled profile ELF is saved once under `profiler/`.
@@ -165,6 +192,27 @@ previous process stopped.
 
 The server binds to `127.0.0.1` on a free port by default. A non-loopback
 listener requires the explicit `--allow-remote` opt-in.
+
+The offline UI has four persistent navigation sections:
+
+- **Runs** is the local/imported run journal. It filters by status, benchmark,
+  profile, source, and period; provides YAML, `run.json`, and portable archive
+  downloads; and can import a ZIP from another machine.
+- **New run** provides synchronized Builder and YAML tabs. Builder edits the
+  selected benchmark/profile matrix, affinity modes, duration, repetition,
+  timeout, perf, and queue policy. YAML is always the source of portable
+  configuration; invalid YAML remains editable. A draft can be downloaded or
+  stored beneath the configured output root before starting it.
+- **System topology** displays the cpuset-filtered NUMA, chiplet, physical-core
+  and SMT hierarchy, every affinity mode's first usable mask or rejection
+  reason, and can seed a New run affinity template.
+- **Comparisons** persists a local choice of local/imported runs and displays
+  only the compatibility keys supported by the selected manifests.
+
+Run detail has a durable queue grouped by `benchmark/profile`, current-step
+placement and timeout, live stdout/stderr tails, and direct links to all
+published artifacts. It also supports idempotent cancellation and reopening
+the original YAML as a new draft.
 
 ## Portable result imports and comparisons
 

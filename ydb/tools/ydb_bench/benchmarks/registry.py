@@ -1,39 +1,88 @@
-"""Generic benchmark model and ordered registry."""
+"""Generic benchmark metadata and ordered registry."""
 
 from collections import OrderedDict
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ParameterDefinition:
+    name: str
+    description: str
+    value_type: str = "integer"
+    default: tuple = ()
+    required: bool = False
+    matrix: bool = False
+    minimum: object = 1
+    maximum: object = None
+    choices: tuple = ()
+    environment: str = ""
+    column: str = ""
+
+
+@dataclass(frozen=True)
+class DimensionDefinition:
+    name: str
+    value_type: str = "integer"
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class MetricDefinition:
+    name: str
+    unit: str
+    description: str = ""
+    aggregate: bool = True
+
+
+@dataclass(frozen=True)
 class BenchmarkDefinition:
     name: str
     description: str
-    test_filter: str
-    parameter_name: str
-    parameter_description: str
-    parameter_environment: str
-    parameter_column: str
+    resource_name: str
+    parameters: tuple
+    dimensions: tuple
+    metrics: tuple
     parse_metrics: object
     render_metrics: object
     validate_metrics: object
     summarize_metrics: object
     render_summary: object
+    command: object
+    environment: object
+    process_cases: object
 
     @property
     def csv_columns(self):
-        return (
-            "threads", "actorPairs", self.parameter_column, "msgs_per_sec", "elapsed_seconds",
-            "min_pair_sent_msgs", "max_pair_sent_msgs",
-        )
+        return tuple(item.name for item in self.dimensions + self.metrics)
 
     @property
     def csv_header(self):
         return ",".join(self.csv_columns)
 
+    @property
+    def parameter_name(self):
+        """Compatibility for older discovery/UI clients."""
+        varying = [item for item in self.parameters if item.name != "actor-pairs"]
+        return varying[0].name if varying else self.parameters[0].name
+
+    @property
+    def parameter_description(self):
+        return next(item.description for item in self.parameters if item.name == self.parameter_name)
+
+    @property
+    def parameter_environment(self):
+        return next(item.environment for item in self.parameters if item.name == self.parameter_name)
+
+    @property
+    def parameter_column(self):
+        item = next(item for item in self.parameters if item.name == self.parameter_name)
+        return item.column or item.name.replace("-", "_")
+
+    def parameter(self, name):
+        return next(item for item in self.parameters if item.name == name)
+
 
 class BenchmarkRegistry:
-    """An ordered collection of benchmark adapters, suitable for test injection."""
-
     def __init__(self):
         self._benchmarks = OrderedDict()
 

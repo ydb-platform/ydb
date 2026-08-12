@@ -1,0 +1,147 @@
+#include <atomic>
+#include <barrier>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace {
+struct alignas(64) TStats {
+    uint64_t Operations = 0;
+    uint64_t PayloadBytes = 0;
+    uint64_t ReadBytes = 0;
+    uint64_t WrittenBytes = 0;
+    uint64_t Checksum = 0;
+};
+
+struct TOptions {
+    uint32_t Threads = 0;
+    uint32_t RandomPercent = 0;
+    std::string RandomMode = "copy";
+    uint64_t BufferSize = 256ull << 20;
+    uint64_t PartSize = 2ull << 20;
+    uint32_t DurationMs = 3000;
+};
+
+uint64_t Parse(const char* value, const char* name) {
+    try { return std::stoull(value); }
+    catch (...) { throw std::runtime_error(std::string("invalid value for ") + name); }
+}
+
+TOptions ParseOptions(int argc, char** argv) {
+    TOptions result;
+    for (int i = 1; i < argc; i += 2) {
+        if (i + 1 == argc) throw std::runtime_error("option without a value");
+        const std::string name = argv[i]; const char* value = argv[i + 1];
+        if (name == "--threads") result.Threads = Parse(value, "threads");
+        else if (name == "--random-percent") result.RandomPercent = Parse(value, "random-percent");
+        else if (name == "--random-mode") result.RandomMode = value;
+        else if (name == "--buffer-size-mb") result.BufferSize = Parse(value, "buffer-size-mb") << 20;
+        else if (name == "--part-size-kb") result.PartSize = Parse(value, "part-size-kb") << 10;
+        else if (name == "--duration-ms") result.DurationMs = Parse(value, "duration-ms");
+        else throw std::runtime_error("unknown option: " + name);
+    }
+    if (!result.Threads) throw std::runtime_error("threads must be positive");
+    if (result.RandomPercent > 100) throw std::runtime_error("random-percent must be between 0 and 100");
+    if (result.RandomMode != "copy" && result.RandomMode != "write") throw std::runtime_error("random-mode must be copy or write");
+    if (result.BufferSize < 2 || result.PartSize == 0 || result.PartSize > result.BufferSize / 2) throw std::runtime_error("invalid buffer/part size");
+    return result;
+}
+
+uint64_t AvailableMemoryBytes() {
+    std::ifstream input("/proc/meminfo"); std::string name, unit; uint64_t value;
+    while (input >> name >> value >> unit) {
+        if (name == "MemAvailable:") return value * 1024;
+    }
+    return 0;
+}
+
+uint32_t RandomThreads(uint32_t threads, uint32_t percent) {
+    if (percent == 0) return 0;
+    if (percent == 100) return threads;
+    uint32_t value = (threads * percent + 50) / 100;
+    if (threads > 1) value = std::min(threads - 1, std::max(1u, value));
+    return value;
+}
+
+void Worker(uint32_t index, bool random, const TOptions& options, std::barrier<>& ready,
+            std::atomic<bool>& stop, TStats& stats) {
+    std::unique_ptr<char[]> buffer(new char[options.BufferSize]());
+    const uint64_t half = options.BufferSize / 2;
+    uint64_t state = 0x629fa923u ^ (uint64_t(index + 1) * 0x9e3779b97f4a7c15ull);
+    ready.arrive_and_wait();
+    if (!random) {
+        uint64_t offset = 0;
+        while (!stop.load(std::memory_order_relaxed)) {
+            std::memcpy(buffer.get() + half + offset, buffer.get() + offset, options.PartSize);
+            stats.Operations++; stats.PayloadBytes += options.PartSize;
+            stats.ReadBytes += options.PartSize; stats.WrittenBytes += options.PartSize;
+            offset += options.PartSize;
+            if (offset + options.PartSize > half) offset = 0;
+        }
+    } else {
+        while (!stop.load(std::memory_order_relaxed)) {
+            for (uint32_t i = 0; i < 1024; ++i) {
+                state = state * 6364136223846793005ull + 1442695040888963407ull;
+                const uint64_t offset = state % half;
+                if (options.RandomMode == "copy") {
+                    buffer[half + offset] = buffer[offset]; stats.ReadBytes++;
+                } else {
+                    buffer[half + offset] = static_cast<char>(state);
+                }
+                stats.Operations++; stats.PayloadBytes++; stats.WrittenBytes++;
+            }
+        }
+    }
+    stats.Checksum = static_cast<unsigned char>(buffer[state % options.BufferSize]);
+}
+}
+
+int main(int argc, char** argv) {
+    try {
+        const TOptions options = ParseOptions(argc, argv);
+        if (options.BufferSize > std::numeric_limits<uint64_t>::max() / options.Threads) throw std::runtime_error("requested buffer footprint overflows uint64");
+        const uint64_t requiredMemory = options.BufferSize * options.Threads;
+        const uint64_t availableMemory = AvailableMemoryBytes();
+        if (availableMemory && requiredMemory > availableMemory * 8 / 10) {
+            throw std::runtime_error("requested worker buffers exceed 80% of MemAvailable");
+        }
+        const uint32_t randomThreads = RandomThreads(options.Threads, options.RandomPercent);
+        const uint32_t sequentialThreads = options.Threads - randomThreads;
+        std::vector<TStats> stats(options.Threads); std::vector<std::thread> workers;
+        std::barrier ready(options.Threads + 1); std::atomic<bool> stop = false;
+        for (uint32_t i = 0; i < options.Threads; ++i) {
+            // Interleave both workloads deterministically over the selected CPU set.
+            const bool random = ((uint64_t(i + 1) * randomThreads) / options.Threads != (uint64_t(i) * randomThreads) / options.Threads);
+            workers.emplace_back(Worker, i, random, std::cref(options), std::ref(ready), std::ref(stop), std::ref(stats[i]));
+        }
+        ready.arrive_and_wait(); const auto start = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(std::chrono::milliseconds(options.DurationMs));
+        stop.store(true, std::memory_order_relaxed);
+        for (auto& worker : workers) worker.join();
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        TStats sequential, random;
+        for (uint32_t i = 0; i < options.Threads; ++i) {
+            const bool isRandom = ((uint64_t(i + 1) * randomThreads) / options.Threads != (uint64_t(i) * randomThreads) / options.Threads);
+            TStats& total = isRandom ? random : sequential; const TStats& item = stats[i];
+            total.Operations += item.Operations; total.PayloadBytes += item.PayloadBytes;
+            total.ReadBytes += item.ReadBytes; total.WrittenBytes += item.WrittenBytes; total.Checksum ^= item.Checksum;
+        }
+        const double mb = 1000000.0;
+        std::cout << "threads,random_percent,random_mode,buffer_size_mb,part_size_kb,sequential_threads,random_threads,sequential_operations,random_operations,sequential_payload_bytes,random_payload_bytes,read_bytes,written_bytes,sequential_ops_per_sec,random_ops_per_sec,sequential_payload_mb_per_sec,random_payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec,elapsed_seconds\n";
+        std::cout << options.Threads << ',' << options.RandomPercent << ',' << options.RandomMode << ',' << options.BufferSize / (1 << 20) << ',' << options.PartSize / (1 << 10) << ',' << sequentialThreads << ',' << randomThreads << ','
+                  << sequential.Operations << ',' << random.Operations << ',' << sequential.PayloadBytes << ',' << random.PayloadBytes << ','
+                  << sequential.ReadBytes + random.ReadBytes << ',' << sequential.WrittenBytes + random.WrittenBytes << ','
+                  << sequential.Operations / elapsed << ',' << random.Operations / elapsed << ',' << sequential.PayloadBytes / elapsed / mb << ',' << random.PayloadBytes / elapsed / mb << ','
+                  << (sequential.ReadBytes + random.ReadBytes) / elapsed / mb << ',' << (sequential.WrittenBytes + random.WrittenBytes) / elapsed / mb << ','
+                  << (sequential.ReadBytes + random.ReadBytes + sequential.WrittenBytes + random.WrittenBytes) / elapsed / mb << ',' << elapsed << '\n';
+        return 0;
+    } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
+}

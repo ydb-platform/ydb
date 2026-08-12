@@ -16,7 +16,7 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 _PROFILE_NAME_RE = re.compile(PROFILE_NAME_PATTERN)
 _COMMON_REQUIRED_FIELDS = ("threads", "duration", "repetitions", "affinity")
-_COMMON_OPTIONAL_FIELDS = ("actor-pairs", "timeout")
+_COMMON_OPTIONAL_FIELDS = ("timeout",)
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -64,15 +64,22 @@ def _positive_integer_array(description):
     }
 
 
-def _profile_schema(parameter_name, parameter_description):
+def _parameter_schema(parameter):
+    item = {"type": parameter.value_type}
+    if parameter.minimum is not None: item["minimum"] = parameter.minimum
+    if parameter.maximum is not None: item["maximum"] = parameter.maximum
+    if parameter.choices: item["enum"] = list(parameter.choices)
+    return {"type": "array", "description": parameter.description, "items": item, "minItems": 1, "uniqueItems": True}
+
+
+def _profile_schema(benchmark):
     return {
         "type": "object",
         "additionalProperties": False,
         "required": list(_COMMON_REQUIRED_FIELDS),
         "properties": {
             "threads": _positive_integer_array("Actor-system worker thread counts."),
-            "actor-pairs": _positive_integer_array("Actor pair counts; defaults to [512]."),
-            parameter_name: _positive_integer_array(parameter_description + "; defaults to [1]."),
+            **{parameter.name: _parameter_schema(parameter) for parameter in benchmark.parameters},
             "duration": {
                 "type": "integer",
                 "minimum": 1,
@@ -118,7 +125,7 @@ def config_schema(registry=BENCHMARKS):
         "additionalProperties": False,
         "properties": {
             benchmark.name: _profiles_schema(
-                _profile_schema(benchmark.parameter_name, benchmark.parameter_description)
+                _profile_schema(benchmark)
             )
             for benchmark in registry.values()
         },
@@ -142,6 +149,9 @@ class RunStep:
     benchmark: str
     profile: str
     affinity: str
+    threads: int
+    case: int
+    parameters: object
     repeat: int
     configuration: RunConfiguration
 
@@ -158,11 +168,13 @@ def build_run_plan(loaded_config):
     steps = []
     for configuration in loaded_config.runs:
         for affinity in configuration.affinity_modes:
-            for repeat in range(1, configuration.repetitions + 1):
-                step_id = "{:04d}-{}-{}-{}-{:03d}".format(
-                    len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, repeat
-                )
-                steps.append(RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, repeat, configuration))
+            for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
+                threads = case["threads"]
+                for repeat in range(1, configuration.repetitions + 1):
+                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(
+                        len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, repeat
+                    )
+                    steps.append(RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, case["parameters"], repeat, configuration))
     return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps))
 
 
@@ -183,6 +195,16 @@ def _positive_integer_list(value, location):
     if len(set(parsed)) != len(parsed):
         _config_error(location, "must not contain duplicate values")
     return parsed
+
+
+def _nonnegative_integer_list(value, location):
+    if not isinstance(value, list) or not value:
+        _config_error(location, "must be a non-empty array of non-negative integers")
+    if any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in value):
+        _config_error(location, "must contain only non-negative integers")
+    if len(set(value)) != len(value):
+        _config_error(location, "must not contain duplicate values")
+    return tuple(value)
 
 
 def _affinity_modes(value, location):
@@ -212,7 +234,7 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if not isinstance(value, dict):
         _config_error(location, "must be a mapping")
 
-    allowed_fields = set(_COMMON_REQUIRED_FIELDS + _COMMON_OPTIONAL_FIELDS + (benchmark.parameter_name,))
+    allowed_fields = set(_COMMON_REQUIRED_FIELDS + _COMMON_OPTIONAL_FIELDS + tuple(item.name for item in benchmark.parameters))
     missing = sorted(set(_COMMON_REQUIRED_FIELDS) - set(value))
     unknown = sorted((field for field in value if field not in allowed_fields), key=str)
     if missing:
@@ -221,28 +243,43 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
         _config_error(location, "contains unknown fields: {}".format(", ".join(map(str, unknown))))
 
     threads = _positive_integer_list(value["threads"], location + ".threads")
-    actor_pairs = _positive_integer_list(value.get("actor-pairs", [512]), location + ".actor-pairs")
-    parameter_values = _positive_integer_list(
-        value.get(benchmark.parameter_name, [1]),
-        location + "." + benchmark.parameter_name,
-    )
+    parameters = {}
+    for parameter in benchmark.parameters:
+        raw = value.get(parameter.name, list(parameter.default))
+        if parameter.value_type == "integer":
+            parsed = _positive_integer_list(raw, location + "." + parameter.name) if parameter.minimum != 0 else _nonnegative_integer_list(raw, location + "." + parameter.name)
+        elif parameter.value_type == "string":
+            if not isinstance(raw, list) or not raw or not all(isinstance(item, str) for item in raw):
+                _config_error(location + "." + parameter.name, "must be a non-empty array of strings")
+            parsed = tuple(raw)
+        else:
+            _config_error(location + "." + parameter.name, "uses unsupported parameter type")
+        if parameter.minimum is not None and any(item < parameter.minimum for item in parsed):
+            _config_error(location + "." + parameter.name, "contains a value below {}".format(parameter.minimum))
+        if parameter.choices and any(item not in parameter.choices for item in parsed):
+            _config_error(location + "." + parameter.name, "contains a value outside {}".format(list(parameter.choices)))
+        if parameter.maximum is not None and any(item > parameter.maximum for item in parsed):
+            _config_error(location + "." + parameter.name, "contains a value above {}".format(parameter.maximum))
+        parameters[parameter.name] = parsed
     duration = _positive_integer(value["duration"], location + ".duration")
     repetitions = _positive_integer(value["repetitions"], location + ".repetitions")
     affinity = _affinity_modes(value["affinity"], location + ".affinity")
-    combinations = len(threads) * len(actor_pairs) * len(parameter_values)
+    combinations = len(threads)
+    for parameter in benchmark.parameters: combinations *= len(parameters[parameter.name])
+    timeout_explicit = "timeout" in value
     timeout = _timeout(
-        value.get("timeout", combinations * duration * 3 + 30),
+        value["timeout"] if timeout_explicit else combinations * duration * 3 + 30,
         location + ".timeout",
     )
     return RunConfiguration(
         benchmark=benchmark,
         profile=profile_name,
         threads=threads,
-        actor_pairs=actor_pairs,
-        parameter_values=parameter_values,
+        parameters=parameters,
         duration_seconds=duration,
         repetitions=repetitions,
         timeout_seconds=timeout,
+        timeout_explicit=timeout_explicit,
         affinity_modes=affinity,
         perf_enabled=perf_enabled,
         perf_frequency=perf_frequency,

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
-from ydb.tools.ydb_bench.lib.actors_core import run_actors_core
+from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
@@ -18,9 +18,6 @@ from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_c
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, ResultStore
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, topology_record
 from ydb.tools.ydb_bench.lib.web import production_executor, serve
-
-
-RESOURCE_NAME = "actors_core_ut_fat"
 
 
 def _positive_integer(value):
@@ -80,10 +77,13 @@ def _create_parser():
 def _benchmark_record(benchmark):
     return {
         "name": benchmark.name, "description": benchmark.description,
-        "test_filter": benchmark.test_filter, "parameter": {
-            "name": benchmark.parameter_name, "description": benchmark.parameter_description,
-            "environment": benchmark.parameter_environment, "column": benchmark.parameter_column,
-        }, "defaults": {"actor-pairs": [512], benchmark.parameter_name: [1]},
+        "resource": benchmark.resource_name,
+        "parameters": [{"name": item.name, "description": item.description, "type": item.value_type,
+                        "default": list(item.default), "matrix": item.matrix, "choices": list(item.choices)}
+                       for item in benchmark.parameters],
+        "dimensions": [item.name for item in benchmark.dimensions],
+        "metrics": [{"name": item.name, "unit": item.unit} for item in benchmark.metrics],
+        "defaults": {item.name: list(item.default) for item in benchmark.parameters},
         "affinity_modes": list(AFFINITY_MODES), "csv_columns": list(benchmark.csv_columns),
         "examples": [
             {benchmark.name: {"example": {"threads": [1], "duration": 1,
@@ -98,9 +98,9 @@ def _describe(benchmark_name, as_json=False):
         print(json.dumps(_benchmark_record(benchmark), indent=2, sort_keys=True))
         return
     print("{}: {}".format(benchmark.name, benchmark.description))
-    print("test: {}".format(benchmark.test_filter))
-    print("parameter: {}".format(benchmark.parameter_name))
-    print("metrics: {}".format(", ".join(benchmark.csv_columns[:5])))
+    print("resource: {}".format(benchmark.resource_name))
+    print("parameters: {}".format(", ".join(item.name for item in benchmark.parameters)))
+    print("metrics: {}".format(", ".join(item.name for item in benchmark.metrics)))
     print("affinity: {}".format(", ".join(AFFINITY_MODES)))
     print("artifacts: run.json, per-repeat stdout/stderr/metrics.csv, summary.csv")
 
@@ -181,6 +181,9 @@ def _run(arguments, resource_loader, tool_revision):
                 "benchmark": step.benchmark,
                 "profile": step.profile,
                 "affinity": step.affinity,
+                "threads": step.threads,
+                "case": step.case,
+                "parameters": step.parameters,
                 "repeat": step.repeat,
                 "state": "pending",
                 "artifacts": [],
@@ -195,20 +198,23 @@ def _run(arguments, resource_loader, tool_revision):
 
     try:
         with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
-            binary = extract_executable(resource_loader(RESOURCE_NAME), temporary_directory, RESOURCE_NAME)
-            manifest["binary"] = {
-                "name": binary.path.name,
-                "sha256": binary.sha256,
-                "size": binary.size,
-            }
-            profiler_binary_path = None
-            if arguments.perf:
-                profiler_binary_path = output_directory / "profiler" / binary.path.name
-                atomic_copy_file(binary.path, profiler_binary_path, mode=0o755)
-                manifest["binary"]["artifact"] = str(profiler_binary_path.relative_to(output_directory))
+            binaries = {}
+            manifest["binaries"] = {}
             store.write()
 
             for configuration in loaded_config.runs:
+                resource_name = configuration.benchmark.resource_name
+                if resource_name not in binaries:
+                    binaries[resource_name] = extract_executable(resource_loader(resource_name), temporary_directory, resource_name)
+                binary = binaries[resource_name]
+                binary_record = {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
+                manifest["binaries"][resource_name] = binary_record
+                manifest.setdefault("binary", binary_record)
+                profiler_binary_path = None
+                if arguments.perf:
+                    profiler_binary_path = output_directory / "profiler" / binary.path.name
+                    atomic_copy_file(binary.path, profiler_binary_path, mode=0o755)
+                    binary_record["artifact"] = str(profiler_binary_path.relative_to(output_directory))
                 relative_directory = Path(configuration.benchmark.name) / configuration.profile
                 profile_directory = output_directory / relative_directory
                 profile_directory.mkdir(parents=True)
@@ -227,10 +233,12 @@ def _run(arguments, resource_loader, tool_revision):
                             if step.benchmark == configuration.benchmark.name
                             and step.profile == configuration.profile
                             and step.affinity == event["affinity"]
+                            and step.threads == event["threads"]
+                            and step.case == event["case"]
                             and step.repeat == event["repeat"]
                         )
                         if event["type"] == "step-started":
-                            store.transition_step(step_id, "running")
+                            store.transition_step(step_id, "running", **event.get("fields", {}))
                         elif event["type"] == "step-artifacts":
                             store.add_artifacts(
                                 step_id,
@@ -240,7 +248,7 @@ def _run(arguments, resource_loader, tool_revision):
                             store.transition_step(step_id, event["state"], **event.get("fields", {}))
                         else:
                             raise BenchmarkError("unknown benchmark step event: {}".format(event["type"]))
-                    profile_manifest = run_actors_core(
+                    profile_manifest = run_benchmark(
                         binary,
                         configuration,
                         profile_directory,
@@ -345,8 +353,10 @@ def main(argv=None, resource_loader=None, tool_revision=None):
         if arguments.command == "web":
             if not 0 <= arguments.port <= 65535:
                 raise BenchmarkError("--port must be between 0 and 65535")
+            revision = tool_revision or {"commit_id": "unknown"}
             serve(arguments.listen, arguments.port, arguments.output, arguments.no_open, arguments.allow_remote,
-                  executor=production_executor(resource_loader, tool_revision or {"commit_id": "unknown"}))
+                  executor=production_executor(resource_loader, revision),
+                  perf_available=str(revision.get("build_type", "")).lower() == "profile")
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

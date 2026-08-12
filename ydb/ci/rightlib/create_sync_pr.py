@@ -130,30 +130,15 @@ class PrSyncCreator:
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
     def overwrite_paths_from_head(self):
-        """Stage the given paths to exactly match the head branch (100% match, incl. deletions).
-
-        Excluded paths are restored from the base branch afterwards so main-only files
-        under overwritten directories are not deleted.
-
-        This only updates the working tree and index; it does NOT create a commit.
-        The caller folds the result into the merge commit itself, so git blame/log
-        keep pointing at the original head-branch commits (the head branch is a
-        parent of that merge commit) instead of a shadowing snapshot commit.
-        """
+        """Overwrite paths from head, then restore overwrite_exclude from base. Does not commit."""
         for path in self.overwrite_from_head:
             self.logger.info(f"Overwriting {path} fully from {self.head_branch} for 100% match")
-            # Remove the current version so files deleted in head disappear too.
-            # -f is required because the still-open merge has already staged changes
-            # for some of these files; we intentionally discard them and take the exact
-            # head-branch content below. --ignore-unmatch keeps it a no-op when nothing matches.
             self.git_run("rm", "-r", "-f", "--ignore-unmatch", path)
-            # Restore the exact head-branch content (stages it as well).
             self.git_run("checkout", self.head_branch, "--", path)
             self.git_run("add", path)
 
         for path in self.overwrite_exclude:
             self.logger.info(f"Preserving excluded path {path} from {self.base_branch}")
-            # fail=False: path may be absent on base in some edge cases; keep overwrite result then.
             result = self.git_run("checkout", self.base_branch, "--", path, fail=False)
             if result.returncode == 0:
                 self.git_run("add", path)
@@ -176,10 +161,7 @@ class PrSyncCreator:
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)
-        # When overwriting paths from head, defer the commit (--no-commit --no-ff) so the
-        # overwrite is folded into the single merge commit. That merge commit keeps the
-        # head branch as a parent, so git blame/log for the overwritten paths still point
-        # at the original head-branch commits instead of a separate snapshot commit.
+        # --no-commit so overwrite is folded into the merge commit (keeps head as a parent).
         if self.overwrite_from_head:
             merge_result = self.git_run("merge", "--no-commit", "--no-ff", self.head_branch, fail=False)
         else:
@@ -207,15 +189,11 @@ class PrSyncCreator:
                 self.logger.info(f"Resolved conflicts while merging. Other conflicts should be fixed manually: {conflict_files}")
                 self.git_run("add", *list(conflict_files))
                 should_commit = True
-            # In the overwrite path the merge was started with --no-commit, so the commit
-            # is deferred below and folded together with the overwrite into one commit.
             if should_commit and not self.overwrite_from_head:
                 self.git_run("commit", "-m", commit_msg)
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
         if self.overwrite_from_head:
-            # Stage the exact head-branch content for the requested paths, then finalize the
-            # still-open merge with a single commit (two parents: base and head branch).
             self.overwrite_paths_from_head()
             self.git_run("commit", "-m", commit_msg)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)

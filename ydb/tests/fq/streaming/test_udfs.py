@@ -199,7 +199,12 @@ END DO
         kikimr_udfs.first_node.set_log_file_prefix("logfile_restarted_")
         kikimr_udfs.first_node.start()
         logger.info("Node with query restarted")
-        kikimr_udfs.ydb_client = kikimr_udfs._setup_ydb_client(kikimr_udfs.endpoint, enable_discovery=False)
+        kikimr_udfs.ydb_client = YdbClient(
+            database=kikimr_udfs.endpoint.database,
+            endpoint=f"grpc://{kikimr_udfs.endpoint.endpoint}",
+            enable_discovery=False,
+        )
+        kikimr_udfs.ydb_client.wait_connection()
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.nodes.values())[1]

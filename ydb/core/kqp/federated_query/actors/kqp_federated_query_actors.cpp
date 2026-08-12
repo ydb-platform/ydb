@@ -402,7 +402,9 @@ public:
             throw yexception() << "AccessService: "
                 << "Undelivered Event " << ev->Get()->SourceType
                 << " from " << SelfId() << " (Self) to " << ev->Sender
-                << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+                << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie
+                << " (service was not started or failed, check logs)"
+                ;
         } catch(...) {
             Promise.SetException(std::current_exception());
         }

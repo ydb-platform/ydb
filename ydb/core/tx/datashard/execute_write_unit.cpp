@@ -169,10 +169,23 @@ public:
             if (requested == current) {
                 // A duplicate of the last write: report its result again, touch nothing else.
                 Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
-                auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
-                if (const auto* stats = lock->GetWriteSeqNumStats()) {
-                    *res->Record.MutableTxStats() = *stats;
+                auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                res->Record.SetOrigin(tabletId);
+                res->Record.SetTxId(writeOp->GetTxId());
+                res->Record.SetIsDuplicate(true);
+
+                const auto& state = lock->GetWriteSeqNumState();
+                if (state.HasResult) {
+                    res->Record.SetStatus(state.Status);
+                    for (const auto& issue : state.Issues) {
+                        *res->Record.AddIssues() = issue;
+                    }
+                    res->Record.MutableTxStats()->CopyFrom(state.TxStats);
+                } else {
+                    // After restart: no stored result, use default status
+                    res->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
                 }
+
                 THashSet<TPathId> tables = lock->GetReadTables();
                 tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
                 for (const TPathId& pathId : tables) {
@@ -831,7 +844,7 @@ public:
                 // Remembered for a duplicate delivery of this write
                 auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
                 if (lock && lock->GetWriteSeqNum() == lastRequested) {
-                    lock->SetWriteSeqNumStats(writeResult->Record.GetTxStats());
+                    lock->SetWriteSeqNumResult(writeResult->Record);
                 }
             }
 

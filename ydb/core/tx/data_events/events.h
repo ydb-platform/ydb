@@ -146,14 +146,6 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildAlreadyApplied(const ui64 origin, const ui64 txId) {
-            auto result = std::make_unique<TEvWriteResult>();
-            result->Record.SetOrigin(origin);
-            result->Record.SetTxId(txId);
-            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
-            return result;
-        }
-
         static std::unique_ptr<TEvWriteResult> BuildPrepared(const ui64 origin, const ui64 txId, const TCoordinatorInfo& transactionInfo) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
@@ -192,8 +184,8 @@ struct TDataEvents {
 
         bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsAlreadyApplied() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED; }
-        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsAlreadyApplied(); }
+        bool IsDuplicate() const { return Record.GetIsDuplicate(); }
+        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsDuplicate(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

@@ -4725,7 +4725,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             // A duplicate delivery of the same flush must not re-apply it, but must report
             // it the same way, statistics included: KQP never saw the first reply.
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2,
-                NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
@@ -4791,7 +4792,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+            auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT(!echoed.GetHasWrites());
@@ -4993,7 +4995,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         // A duplicate of write 1 must report the unchanged lock, not an empty one.
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
-                NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);

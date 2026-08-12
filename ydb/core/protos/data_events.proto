@@ -162,7 +162,6 @@ message TEvWriteResult {
         STATUS_WRONG_SHARD_STATE = 11;
         STATUS_CONSTRAINT_VIOLATION = 12;
         STATUS_DISK_GROUP_OUT_OF_SPACE = 13;
-        STATUS_ALREADY_APPLIED = 14;
     }
 
     // Status
@@ -188,6 +187,9 @@ message TEvWriteResult {
 
     // Commit version when available
     optional NKikimrProto.TRowVersion CommitVersion = 14;
+
+    // Duplicate of a previously applied write; Status carries the original status.
+    optional bool IsDuplicate = 15;
 }
 
 message TEvLockRows {

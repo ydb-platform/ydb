@@ -948,11 +948,6 @@ public:
             ProcessWriteCompletedShard(ev);
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED: {
-            // A duplicate uncommitted write; the shard reports the unchanged lock.
-            ProcessWriteCompletedShard(ev);
-            return;
-        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received EvWriteResult with aborted status.",
                 {"logPrefix", this->LogPrefix},
@@ -5531,7 +5526,6 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
-        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED:
             AFL_ENSURE(false);
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received external EvWriteResult with aborted status.",

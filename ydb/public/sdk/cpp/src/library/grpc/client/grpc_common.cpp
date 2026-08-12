@@ -1,9 +1,6 @@
 #include "grpc_common.h"
 
 #include <library/cpp/openssl/holders/holder.h>
-#include <library/cpp/svnversion/svnversion.h>
-
-#include <util/string/builder.h>
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -12,7 +9,6 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
-#include <functional>
 #include <memory>
 #include <string>
 

@@ -7,7 +7,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 
 #include <util/datetime/base.h>
-#include <optional>
 #include <unordered_map>
 #include <string>
 #include <memory>
@@ -57,6 +56,7 @@ struct TGRpcClientConfig {
 };
 
 bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage);
+
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);

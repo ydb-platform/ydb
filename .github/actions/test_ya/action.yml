@@ -205,12 +205,68 @@ runs:
           echo "/coredumps/%e.%p.%s" | sudo tee /proc/sys/kernel/core_pattern
           ulimit -c unlimited
 
+          # Soft RLIMIT_CORE=1 is a magic "disable dumps" value (LLVM/ASan). Something
+          # in the ya/test stack lowers soft to 1 after startup; force unlimited for
+          # the whole process tree (incl. ydbd) and block setrlimit from lowering it.
+          FORCE_CORE_SO="${RUNNER_TEMP:-/tmp}/force_rlimit_core.so"
+          cat > "${RUNNER_TEMP:-/tmp}/force_rlimit_core.c" <<'EOF'
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <sys/resource.h>
+static int (*real_setrlimit)(int, const struct rlimit *);
+static void force_unlimited_core(void) {
+    struct rlimit inf = { RLIM_INFINITY, RLIM_INFINITY };
+    if (!real_setrlimit)
+        real_setrlimit = (int (*)(int, const struct rlimit *))dlsym(RTLD_NEXT, "setrlimit");
+    if (real_setrlimit)
+        real_setrlimit(RLIMIT_CORE, &inf);
+}
+int setrlimit(int resource, const struct rlimit *rlim) {
+    if (!real_setrlimit)
+        real_setrlimit = (int (*)(int, const struct rlimit *))dlsym(RTLD_NEXT, "setrlimit");
+    if (resource == RLIMIT_CORE) {
+        struct rlimit inf = { RLIM_INFINITY, RLIM_INFINITY };
+        return real_setrlimit(resource, &inf);
+    }
+    return real_setrlimit(resource, rlim);
+}
+__attribute__((constructor)) static void init(void) { force_unlimited_core(); }
+EOF
+          cc -shared -fPIC -O2 -o "$FORCE_CORE_SO" "${RUNNER_TEMP:-/tmp}/force_rlimit_core.c" -ldl
+          chmod a+r "$FORCE_CORE_SO"
+
+          # Helper inside systemd-run scope: raise core as root, setpriv to runner,
+          # raise again + LD_PRELOAD (preload is cleared on root→user transition).
+          FORCE_CORE_HELPER="${RUNNER_TEMP:-/tmp}/ya_make_with_core.sh"
+          cat > "$FORCE_CORE_HELPER" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+UID_TO="$1"
+GID_TO="$2"
+FORCE_SO="$3"
+shift 3
+ulimit -c unlimited
+exec setpriv --reuid="$UID_TO" --regid="$GID_TO" --init-groups -- \
+  env "LD_PRELOAD=${FORCE_SO}${LD_PRELOAD:+:$LD_PRELOAD}" \
+  bash -c '
+    set -euo pipefail
+    ulimit -c unlimited
+    python3 -c "import resource; inf=resource.RLIM_INFINITY; resource.setrlimit(resource.RLIMIT_CORE,(inf,inf)); s,h=resource.getrlimit(resource.RLIMIT_CORE); print(\"ya-make rlimit_core=\", (s,h)); assert s == inf or s > 1, (s,h)"
+    exec "$@"
+  ' bash "$@"
+EOF
+          chmod a+rx "$FORCE_CORE_HELPER"
+
           echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"
           echo "COREDUMP_MNT=$COREDUMP_MNT" >> "$GITHUB_ENV"
+          echo "FORCE_CORE_SO=$FORCE_CORE_SO" >> "$GITHUB_ENV"
+          echo "FORCE_CORE_HELPER=$FORCE_CORE_HELPER" >> "$GITHUB_ENV"
 
           echo "::group::coredump diagnostics"
           echo "core_pattern=$(cat /proc/sys/kernel/core_pattern)"
           echo "rlimit_core=$(ulimit -c)"
+          echo "force_core_so=$FORCE_CORE_SO"
+          echo "force_core_helper=$FORCE_CORE_HELPER"
           echo "coredump_img=$COREDUMP_IMG (${COREDUMP_SIZE_GB}G)"
           ls -la "$COREDUMP_MNT"
           df -h "$COREDUMP_MNT" /
@@ -469,13 +525,12 @@ runs:
           )
 
           # systemd-run starts a fresh scope; shell ulimit does not apply there.
-          # LimitCORE= is rejected for --scope on our runners ("Unknown assignment").
-          # Inner `sudo -u` resets RLIMIT_CORE to (0,0), so raise the limit as root
-          # first, then drop privileges with setpriv (keeps rlimits + init groups).
+          # LimitCORE= is rejected for --scope ("Unknown assignment"). sudo -u resets
+          # RLIMIT_CORE; helper raises as root, setpriv, then LD_PRELOAD so soft stays
+          # unlimited (soft=1 is a magic "disable dumps" value used by LLVM/ASan).
           if [ "${COLLECT_COREDUMPS}" = "true" ]; then
             YA_MAKE_RUN_CMD=(
-              bash -c 'ulimit -c unlimited || exit 1; exec setpriv --reuid="$1" --regid="$2" --init-groups -- "${@:3}"'
-              bash "$(id -u)" "$(id -g)" "${YA_MAKE_CMD[@]}"
+              "$FORCE_CORE_HELPER" "$(id -u)" "$(id -g)" "${FORCE_CORE_SO}" "${YA_MAKE_CMD[@]}"
             )
           else
             YA_MAKE_RUN_CMD=(

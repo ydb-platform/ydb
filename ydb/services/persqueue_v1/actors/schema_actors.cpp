@@ -149,19 +149,17 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->mutable_availability_period()->set_nanos(availabilityPeriod.NanoSecondsOfSecond());
             }
 
-            if (consumer.HasServiceType()) {
-                rr->set_service_type(consumer.GetServiceType());
-            } else {
-                if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                    this->Request_->RaiseIssue(FillIssue(
-                        "service type must be set for all read rules",
-                        Ydb::PersQueue::ErrorCode::ERROR
-                    ));
-                    Reply(Ydb::StatusIds::INTERNAL_ERROR, ActorContext());
-                    return;
-                }
-                rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
+            TString serviceType;
+            TString serviceTypeError;
+            if (!ResolveConsumerServiceType(consumer, pqConfig, true, serviceType, serviceTypeError)) {
+                this->Request_->RaiseIssue(FillIssue(
+                    serviceTypeError,
+                    Ydb::PersQueue::ErrorCode::ERROR
+                ));
+                Reply(Ydb::StatusIds::INTERNAL_ERROR, ActorContext());
+                return;
             }
+            rr->set_service_type(serviceType);
 
             switch (consumer.GetType()) {
                 case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {

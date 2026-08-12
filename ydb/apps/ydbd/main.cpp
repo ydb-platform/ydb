@@ -10,8 +10,65 @@
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
+#ifdef _linux_
+#include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+#endif
+
+#include <limits>
+
+namespace {
+
+constexpr TStringBuf TCMallocMaxPerCpuCacheSizeEnv = "YDB_TCMALLOC_MAX_PER_CPU_CACHE_SIZE_BYTES";
+
+bool ConfigureTCMallocFromEnvironment() {
+    const auto value = TryGetEnv(TString{TCMallocMaxPerCpuCacheSizeEnv});
+    if (!value || value->empty()) {
+        return true;
+    }
+
+    ui64 bytes = 0;
+    if (!TryFromString(*value, bytes) || bytes > static_cast<ui64>(std::numeric_limits<i32>::max())) {
+        Cerr << "Invalid " << TCMallocMaxPerCpuCacheSizeEnv << " value '" << *value
+             << "': expected 0 or an integer number of bytes in range [1, "
+             << std::numeric_limits<i32>::max() << "]" << Endl;
+        return false;
+    }
+
+    if (bytes == 0) {
+        return true;
+    }
+
+#ifdef _linux_
+    const auto requestedBytes = static_cast<i32>(bytes);
+    tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(requestedBytes);
+    const auto configuredBytes = tcmalloc::MallocExtension::GetMaxPerCpuCacheSize();
+    if (configuredBytes != requestedBytes) {
+        Cerr << "Failed to set TCMalloc maximum per-CPU cache size to " << requestedBytes
+             << " bytes: allocator reports " << configuredBytes << " bytes" << Endl;
+        return false;
+    }
+
+    Cerr << "Configured TCMalloc maximum per-CPU cache size to " << configuredBytes
+         << " bytes from " << TCMallocMaxPerCpuCacheSizeEnv << Endl;
+    return true;
+#else
+    Cerr << TCMallocMaxPerCpuCacheSizeEnv << " is supported only by Linux ydbd builds"
+         << Endl;
+    return false;
+#endif
+}
+
+} // anonymous namespace
+
 int main(int argc, char **argv) {
     SetupTerminateHandler();
+
+    if (!ConfigureTCMallocFromEnvironment()) {
+        return EXIT_FAILURE;
+    }
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();
     factories->DataShardExportFactory = std::make_shared<TDataShardExportFactory>();

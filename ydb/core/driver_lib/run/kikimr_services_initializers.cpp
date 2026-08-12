@@ -1982,22 +1982,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                           appData->UserPoolId)));
         }
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
+                appData->TracingConfigurator,
+                appData->UserFacingTracingConfigurator,
+                Config)) {
+            setup->LocalServices.emplace_back(
                 TActorId(),
-                TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(
-                        appData->TracingConfigurator, Config.GetTracingConfig(),
-                        static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem), /*userFacing*/ false),
-                    TMailboxType::ReadAsFilled,
-                    appData->UserPoolId)));
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-                TActorId(),
-                TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(
-                        appData->UserFacingTracingConfigurator, Config.GetUserFacingTracingConfig(),
-                        static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem), /*userFacing*/ true),
-                    TMailboxType::ReadAsFilled,
-                    appData->UserPoolId)));
+                TActorSetupCmd(configurator, TMailboxType::ReadAsFilled, appData->UserPoolId));
+        }
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

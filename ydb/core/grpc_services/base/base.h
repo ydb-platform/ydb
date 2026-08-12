@@ -496,7 +496,12 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
-    virtual void SetUserFacingTraceId(NWilson::TTraceId) {}
+    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
+        UserFacingTraceId = std::move(id);
+    }
+    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
+        return NWilson::TTraceId(UserFacingTraceId);
+    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -544,6 +549,9 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    NWilson::TTraceId UserFacingTraceId;
 };
 
 // Request context
@@ -1027,13 +1035,6 @@ public:
         return Span_.GetTraceId();
     }
 
-    void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId = std::move(id);
-    }
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId);
-    }
-
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -1157,7 +1158,6 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
-    NWilson::TTraceId UserFacingTraceId;
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
@@ -1427,13 +1427,6 @@ public:
         return Span_.GetTraceId();
     }
 
-    void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId = std::move(id);
-    }
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId);
-    }
-
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -1641,7 +1634,6 @@ private:
 protected:
     NWilson::TSpan Span_;
 private:
-    NWilson::TTraceId UserFacingTraceId;
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
@@ -2060,13 +2052,6 @@ public:
         return Span.GetTraceId();
     }
 
-    void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId = std::move(id);
-    }
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId);
-    }
-
     const TMaybe<TString> GetDatabaseName() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
@@ -2134,7 +2119,6 @@ public:
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;
     NWilson::TSpan Span;
-    NWilson::TTraceId UserFacingTraceId;
     IGRpcProxyCounters::TPtr Counters;
     TMaybe<NRpcService::TRlPath> RlPath;
     TAuditLogParts AuditLogParts;

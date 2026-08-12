@@ -737,24 +737,12 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        system->Register(
-            NConsole::CreateJaegerTracingConfigurator(
+        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
                 appData.TracingConfigurator,
-                Settings->AppConfig->GetTracingConfig(),
-                static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem),
-                /*userFacing*/ false),
-            TMailboxType::ReadAsFilled,
-            appData.UserPoolId
-        );
-        system->Register(
-            NConsole::CreateJaegerTracingConfigurator(
                 appData.UserFacingTracingConfigurator,
-                Settings->AppConfig->GetUserFacingTracingConfig(),
-                static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem),
-                /*userFacing*/ true),
-            TMailboxType::ReadAsFilled,
-            appData.UserPoolId
-        );
+                *Settings->AppConfig)) {
+            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);

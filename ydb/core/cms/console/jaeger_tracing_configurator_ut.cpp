@@ -55,11 +55,10 @@ void InitJaegerTracingConfigurator(
     TTenantTestRuntime& runtime,
     TIntrusivePtr<TSamplingThrottlingConfigurator> configurator,
     const NKikimrConfig::TTracingConfig& initCfg,
-    ui32 configItemKind = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem),
-    bool userFacing = false
+    ETracingConfigKind configKind = ETracingConfigKind::Dev
 ) {
     runtime.Register(CreateJaegerTracingConfigurator(
-        std::move(configurator), initCfg, configItemKind, userFacing));
+        std::move(configurator), initCfg, configKind));
 
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
@@ -92,14 +91,14 @@ private:
 };
 
 void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order,
-        bool userFacing = false) {
-    const auto configItemKind = userFacing
+        ETracingConfigKind configKind = ETracingConfigKind::Dev) {
+    const auto configItemKind = configKind == ETracingConfigKind::UserFacing
         ? NKikimrConsole::TConfigItem::UserFacingTracingConfigItem
         : NKikimrConsole::TConfigItem::TracingConfigItem;
     auto configItem = MakeConfigItem(configItemKind,
                                      NKikimrConfig::TAppConfig(), {}, {}, "", "", order,
                                      NKikimrConsole::TConfigItem::OVERWRITE, "");
-    if (userFacing) {
+    if (configKind == ETracingConfigKind::UserFacing) {
         configItem.MutableConfig()->MutableUserFacingTracingConfig()->CopyFrom(cfg);
     } else {
         configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
@@ -115,9 +114,10 @@ void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig&
 }
 
 void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates,
-        const NKikimrConfig::TTracingConfig& cfg, ui32 order, bool userFacing = false) {
+        const NKikimrConfig::TTracingConfig& cfg, ui32 order,
+        ETracingConfigKind configKind = ETracingConfigKind::Dev) {
     updates.Clear();
-    Configure(runtime, cfg, order, userFacing);
+    Configure(runtime, cfg, order, configKind);
     updates.Wait();
 }
 
@@ -258,13 +258,12 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         rule->SetMaxTracesBurst(100);
         rule->SetMaxTracesPerMinute(1'000);
 
-        Configure(runtime, cfg, 1, true);
+        Configure(runtime, cfg, 1, ETracingConfigKind::UserFacing);
         InitJaegerTracingConfigurator(
             runtime,
             runtime.GetAppData().UserFacingTracingConfigurator,
             cfg,
-            static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem),
-            true);
+            ETracingConfigKind::UserFacing);
         updates.Wait();
 
         ui64 result = HandleTracingOnActorThread(runtime);
@@ -273,7 +272,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         UNIT_ASSERT_VALUES_EQUAL(result >> 8, 7);
 
         cfg.MutableSampling(0)->SetLevel(9);
-        ConfigureAndWaitUpdate(runtime, updates, cfg, 2, true);
+        ConfigureAndWaitUpdate(runtime, updates, cfg, 2, ETracingConfigKind::UserFacing);
         result = HandleTracingOnActorThread(runtime);
         UNIT_ASSERT(!(result & 1));
         UNIT_ASSERT(result & 2);

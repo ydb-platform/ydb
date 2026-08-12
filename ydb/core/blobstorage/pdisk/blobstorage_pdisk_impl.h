@@ -112,6 +112,11 @@ public:
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
+    // If enabled (default), the merged (cross-source) device overestimation metric
+    // replaces the legacy PDisk-only DeviceOverestimationRatio/DeviceNonperformanceMs
+    // sensors. Can be toggled via ICB without a cluster restart to revert to the
+    // old algorithm if something goes wrong with the new one.
+    TControlWrapper UseDeviceOverestimationRatioMerged;
     i64 SemiStrictSpaceIsolationCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {

@@ -2183,6 +2183,14 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+        optional uint64 UseDeviceOverestimationRatioMerged = 8 [(ControlOptions) = {
+            Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
+                          "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
+                          "overestimation metric instead of the legacy PDisk-only computation. "
+                          "Disable to revert to the old (legacy) metric computation without a cluster restart.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TBlobStorageControllerControls {

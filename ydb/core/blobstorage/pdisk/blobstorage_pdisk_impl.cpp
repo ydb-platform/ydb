@@ -80,6 +80,9 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
     SemiStrictSpaceIsolationCached = 0;
     ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
+    // Enabled by default; can be disabled via ICB (no restart required) to
+    // fall back to the legacy PDisk-only overestimation metric computation.
+    UseDeviceOverestimationRatioMerged = TControlWrapper(1, 0, 1);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3118,6 +3121,8 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+            TControlBoard::RegisterSharedControl(UseDeviceOverestimationRatioMerged,
+                    icb->PDiskControls.UseDeviceOverestimationRatioMerged);
             if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {
                 REGISTER_LOCAL_CONTROL(ForcedPDiskSpaceColor);
             }

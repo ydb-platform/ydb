@@ -382,9 +382,6 @@ bool IsResolveResourceIdNeeded(const auto& schemeTx) {
 
 TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     auto actorSystem = context.GetActorSystem();
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
-    }
     return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem] () -> TAsyncStatus {
         if (!secrets || secrets->size() != 1) {
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
@@ -460,6 +457,12 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
         bool isIamAuth = IsIamAuth(schemeTx);
         bool isResolveResourceIdNeeded = isIamAuth && IsResolveResourceIdNeeded(schemeTx);
         auto secrets = isIamAuth ? std::make_shared<std::vector<TString>>() : nullptr;
+        if (isIamAuth) {
+            auto actorSystem = context.GetActorSystem();
+            if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+            }
+        }
         validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
             return ValidateExternalDatasourceSecrets(schemeTxState->GetCreateExternalDataSource(), context, secrets);
         });

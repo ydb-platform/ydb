@@ -222,6 +222,12 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                             {"tabletId", Self->TabletID()},
                             {"intervalEnd", Self->IntervalEnd});
                         break;
+                    case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
+                        Self->LastMergedQueryMetricsIntervalEnd =
+                            TInstant::MicroSeconds(FromString<ui64>(value));
+                        SVLOG_D("[" << Self->TabletID() << "] Loading last merged query metrics interval end: "
+                            << Self->LastMergedQueryMetricsIntervalEnd);
+                        break;
                     default:
                         YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
                             {"tabletId", Self->TabletID()},
@@ -300,6 +306,38 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             YDB_LOG_DEBUG("TTxInit::Execute: loaded interval metrics",
                 {"tabletId", Self->TabletID()},
                 {"queryCount", Self->QueryMetrics.size()});
+        }
+
+        // IntervalMetricsOneHour
+        {
+            Self->CurrentHourMetrics.clear();
+            Self->CurrentHourEnd = Self->EndOfHourInterval(Self->IntervalEnd);
+
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
+                .Prefix(Self->CurrentHourEnd.MicroSeconds())
+                .Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TQueryHash queryHash =
+                    rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
+
+                if (data) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD
+                        Self->CurrentHourMetrics[queryHash].ParseFromString(data);
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SVLOG_D("[" << Self->TabletID() << "] Loading hour query metrics: "
+                << "hour end# " << Self->CurrentHourEnd
+                << ", query count# " << Self->CurrentHourMetrics.size());
         }
 
         // IntervalTops
@@ -500,6 +538,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;
         if (ctx.Now() >= deadline) {
+            if (Self->CurrentStage == AGGREGATE) {
+                Self->PersistQueryResults(db);
+            }
             Self->Reset(db, ctx);
         }
 
@@ -527,6 +568,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         Self->SignalTabletActive(ctx);
         Self->Become(&TThis::StateWork);
+        Self->ScheduleHourMetricsCleanup();
     }
 };
 

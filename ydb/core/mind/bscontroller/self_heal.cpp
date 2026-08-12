@@ -57,10 +57,10 @@ namespace NKikimr::NBsController {
 
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
-                         std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
-                         bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode, bool preferLessOccupiedRack,
-                         bool withAttentionToReplication, bool useSelfHealLocalPolicy,
-                         bool tryToRelocateBrokenDisksLocallyFirst)
+                std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
+                bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode, bool preferLessOccupiedRack,
+                bool withAttentionToReplication,
+                bool useSelfHealLocalPolicy, bool tryToRelocateBrokenDisksLocallyFirst)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -358,11 +358,11 @@ namespace NKikimr::NBsController {
 
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords,
-                       bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
-                       std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
-                       std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter,
-                       const TSelfHealSettings& selfHealSettings, bool useSelfHealLocalPolicy,
-                       bool tryToRelocateBrokenDisksLocallyFirst)
+                bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
+                std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
+                std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter,
+                const TSelfHealSettings& selfHealSettings,
+                bool useSelfHealLocalPolicy, bool tryToRelocateBrokenDisksLocallyFirst)
             : TabletId(tabletId)
             , UnreassignableGroupsCount(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
@@ -781,14 +781,13 @@ namespace NKikimr::NBsController {
 
 
         void CreateReassignerActor(TGroupRecord& group, std::optional<TVDiskID> vdiskId, bool isSelfHealReasonDecommit,
-                                   bool ignoreDegradedGroupsChecks) {
+                bool ignoreDegradedGroupsChecks) {
             group.ReassignStatus = EReassignStatus::Active;
             Y_ABORT_UNLESS(!ActiveReassignerActorId);
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                                                                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks,
-                                                                    DonorMode, SelfHealSettings.PreferLessOccupiedRack,
-                                                                    SelfHealSettings.WithAttentionToReplication, UseSelfHealLocalPolicy,
-                                                                    TryToRelocateBrokenDisksLocallyFirst));
+                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode,
+                    SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication,
+                    UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst));
         }
 
         void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
@@ -1067,9 +1066,8 @@ namespace NKikimr::NBsController {
     IActor *TBlobStorageController::CreateSelfHealActor() {
         Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords, GroupLayoutSanitizerEnabled,
-                                  AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded,
-                                  GroupLayoutSanitizerInvalidGroups, SelfHealSettings, UseSelfHealLocalPolicy,
-                                  TryToRelocateBrokenDisksLocallyFirst);
+            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups, SelfHealSettings,
+            UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {

@@ -563,8 +563,8 @@ namespace NKikimr::NStorage {
 
             const auto settingsIt = pdiskMapperSettings.find(pdiskId);
             const TPDiskMapperSettings settings = settingsIt != pdiskMapperSettings.end()
-                                                  ? settingsIt->second
-                                                  : TPDiskMapperSettings{};
+                ? settingsIt->second
+                : TPDiskMapperSettings{};
 
             ui32 maxSlots = defaultMaxSlots;
             if (settings.SlotCount) {

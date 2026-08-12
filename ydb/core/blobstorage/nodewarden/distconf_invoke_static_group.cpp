@@ -230,10 +230,9 @@ namespace NKikimr::NStorage {
                     continue;
                 }
                 if (!vslot.GetReady()) {
-                    const auto groupId = TGroupId::FromProto(&vslot,
-                                                             &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId);
+                    const auto groupId = TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId);
                     const TVDiskID failedVDiskId(groupId, vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
-                                                 vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+                        vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
                     failedVDisks |= {&GroupInfo->GetTopology(), failedVDiskId};
                 }
             }

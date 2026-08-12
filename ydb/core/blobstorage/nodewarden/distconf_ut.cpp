@@ -1096,7 +1096,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     };
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-                    TReallocateOptions options = {}) {
+            TReallocateOptions options = {}) {
         auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
         selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(options.NumFailDomains));
         selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
@@ -1206,8 +1206,9 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
             s.SetNodeConnected(nodeId, false);
         }
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(RejectsNonNormalPDiskWhenOperationalRequired) {
@@ -1216,42 +1217,46 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         for (ui32 nodeId = 3; nodeId <= 5; ++nodeId) {
             s.SetNodeConnected(nodeId, false);
         }
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(RejectsUnknownVDiskWithoutChangingGeneration) {
         TSetup s = MakeSetup();
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {.VDiskId = TVDiskIdShort(0, 1, 0)}),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {.VDiskId = TVDiskIdShort(0, 1, 0)}),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
     }
 
     Y_UNIT_TEST(RejectsUnusableExplicitTarget) {
         TSetup s = MakeSetup();
         s.SetPDiskDriveStatus(2, NKikimrBlobStorage::EDriveStatus::INACTIVE);
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false,
-                                         {.TargetPDiskId = NBsController::TPDiskId(2, 1)}),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {.TargetPDiskId = NBsController::TPDiskId(2, 1)}),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(RejectsNonOperationalExplicitTargetWhenRequested) {
         TSetup s = MakeSetup();
         s.SetNodeConnected(2, false);
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {
-            .SettleOnlyOnOperationalDisks = true,
-            .TargetPDiskId = NBsController::TPDiskId(2, 1),
-        }),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {
+                .SettleOnlyOnOperationalDisks = true,
+                .TargetPDiskId = NBsController::TPDiskId(2, 1),
+            }),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(UsesValidExplicitTarget) {
         TSetup s = MakeSetup();
         NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
-        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), false, {
-            .TargetPDiskId = NBsController::TPDiskId(3, 1),
-            .Reassignments = &reassignments,
-        }));
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {
+                .TargetPDiskId = NBsController::TPDiskId(3, 1),
+                .Reassignments = &reassignments,
+            }));
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
 
         UNIT_ASSERT_VALUES_EQUAL(reassignments.size(), 1u);
@@ -1284,31 +1289,34 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
 
     Y_UNIT_TEST(Block42FailsWhenAllowedNodeConflictsWithExistingDomain) {
         TSetup s = MakeBlock42Setup();
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, {
-            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
-            .NumFailDomains = 8,
-        }),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+            }),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(Block42RejectsUnusablePreservedPDiskByDefault) {
         TSetup s = MakeBlock42Setup();
         s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
-        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {
-            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
-            .NumFailDomains = 8,
-        }),
-                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+            }),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(Block42AllowsUnusablePreservedPDiskWhenRequested) {
         TSetup s = MakeBlock42Setup();
         s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
-        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), false, {
-            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
-            .NumFailDomains = 8,
-            .AllowUnusableDisks = true,
-        }));
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+                .AllowUnusableDisks = true,
+            }));
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[1], 2u);
     }
 

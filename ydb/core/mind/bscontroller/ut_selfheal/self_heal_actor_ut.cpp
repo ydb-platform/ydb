@@ -1,10 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/mind/bscontroller/self_heal.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
-#include <ydb/core/mind/bscontroller/self_heal.h>
-#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -54,8 +54,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup(TGroupId groupId = TGroupId::Fr
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
     return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
-                                                TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL,
-                                                TCypherKey(), groupId);
+        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), groupId);
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,

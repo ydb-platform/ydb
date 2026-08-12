@@ -2956,6 +2956,7 @@ namespace {
 TKikimrRunner KikimrRowIdOptIn() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(false);
     featureFlags.SetEnableUniqConstraint(true);
     // EnableAddUniqueIndex gates `ALTER TABLE ADD INDEX ... GLOBAL UNIQUE`. The unique index over
     // __ydb_row_id is added after the table exists, so this flag must be on.
@@ -3639,6 +3640,7 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
 static TKikimrRunner KikimrPrefix() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(false);
     featureFlags.SetEnableFulltextIndexPrefix(true);
     return Kikimr(std::move(featureFlags));
 }
@@ -4255,8 +4257,8 @@ static void SetupPrefixedDocs(NYdb::NQuery::TQueryClient& db) {
     )sql");
 }
 
-Y_UNIT_TEST(PrefixedInsert) {
-    auto kikimr = KikimrPrefix();
+Y_UNIT_TEST_TWIN(PrefixedInsert, Compact) {
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db);
 
@@ -4281,8 +4283,8 @@ Y_UNIT_TEST(PrefixedInsert) {
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
-Y_UNIT_TEST(PrefixedUpsert) {
-    auto kikimr = KikimrPrefix();
+Y_UNIT_TEST_TWIN(PrefixedUpsert, Compact) {
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db);
 
@@ -4315,8 +4317,8 @@ Y_UNIT_TEST(PrefixedUpsert) {
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
-Y_UNIT_TEST(PrefixedUpdate) {
-    auto kikimr = KikimrPrefix();
+Y_UNIT_TEST_TWIN(PrefixedUpdate, Compact) {
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db);
 
@@ -4344,8 +4346,8 @@ Y_UNIT_TEST(PrefixedUpdate) {
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
-Y_UNIT_TEST(PrefixedReplace) {
-    auto kikimr = KikimrPrefix();
+Y_UNIT_TEST_TWIN(PrefixedReplace, Compact) {
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db);
 

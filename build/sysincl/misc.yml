@@ -67,16 +67,6 @@
   includes:
     - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h
 
-# nmslib (ydb/library/nmslib) ships headers whose names clash with system
-# headers, and references <spe.h> from a PowerPC-SPE-only dead branch of
-# portable_simd.h that never compiles on supported platforms.
-- source_filter: "^ydb/library/nmslib/"
-  includes:
-    - memory.h:      ydb/library/nmslib/include/memory.h
-    - tune.h:        ydb/library/nmslib/include/tune.h
-    - space_sqfd.h:  ydb/library/nmslib/include/space/space_sqfd.h
-    - spe.h
-
 - source_filter: "^contrib/libs/llvm"
   includes:
     - plugin-api.h # GNU linker plugin API.

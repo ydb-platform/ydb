@@ -3370,6 +3370,8 @@ message TUdfStoreConfig {
     optional string KvStorageMedia = 2 [default = "ssd"];
     optional bool EnableUnsafeNativeUdf = 3 [default = false];
     optional string UnsafeNativeUdfDir = 4;
+    optional bool EnableWasmUdf = 5 [default = false];
+    optional string WasmCpuSpecOverride = 6;
 }
 
 message TAppConfig {
@@ -3426,6 +3428,7 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
+    optional TTracingConfig UserFacingTracingConfig = 123;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;

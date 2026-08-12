@@ -1139,7 +1139,11 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    // Destination is missing at first — mover fails and WakeUpDLQ returns the message.
+    // Create DLQ first so create/alter ACL checks pass, then drop it so the mover fails.
+    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+            .EndAddConsumer()).GetValueSync();
+
     client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
                 .BeginDeadLetterPolicy()
@@ -1150,6 +1154,8 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
                     .MoveAction("/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
+
+    client.DropTopic("/Root/topic1-dlq").GetValueSync();
 
     const auto msg = "dlq-retry-me";
     setup->Write("/Root/topic1", msg, 0);

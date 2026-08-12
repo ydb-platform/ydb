@@ -7,16 +7,13 @@ namespace NCloud {
 using namespace NKikimr;
 
 struct TServiceAccountServiceSettings : NGrpcActorClient::TGrpcClientSettings {
-    explicit TServiceAccountServiceSettings(TString endpoint, TString userAgentPrefix) {
-        Endpoint = std::move(endpoint);
-        UserAgentPrefix = std::move(userAgentPrefix);
-    }
+    TServiceAccountServiceSettings(TString endpoint, TStringBuf userAgentHint);
 };
 
 IActor* CreateServiceAccountService(const TServiceAccountServiceSettings& settings);
 
-inline IActor* CreateServiceAccountService(TString endpoint, TString userAgentPrefix) {
-    TServiceAccountServiceSettings settings(std::move(endpoint), std::move(userAgentPrefix));
+inline IActor* CreateServiceAccountService(TString endpoint, TStringBuf userAgentHint) {
+    TServiceAccountServiceSettings settings(std::move(endpoint), userAgentHint);
     return CreateServiceAccountService(settings);
 }
 

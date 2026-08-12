@@ -58,10 +58,10 @@ public:
         UNIT_ASSERT(Server);
     }
 
-    TString Call(std::optional<TString> userAgentPrefix) {
+    TString Call(TString userAgentPrefix) {
         NGrpcActorClient::TGrpcClientSettings settings;
         settings.Endpoint = Endpoint;
-        settings.UserAgentPrefix = userAgentPrefix;
+        settings.UserAgentPrefix = std::move(userAgentPrefix);
         const auto config = TClient::InitGrpcConfig(settings);
         auto channel = NYdbGrpc::CreateChannelInterface(config);
         auto stub = Draft::Dummy::DummyService::NewStub(channel);
@@ -89,23 +89,12 @@ private:
 
 Y_UNIT_TEST_SUITE_F(GrpcServiceClientUserAgentTests, TGrpcServiceClientUserAgentFixture) {
     Y_UNIT_TEST(DoesNotWriteUserAgentAndPreservesGrpcInfo) {
-        const TString userAgent = Call(std::nullopt);
-
-        UNIT_ASSERT_C(!TStringBuf(userAgent).StartsWith("ydb/"), userAgent);
-        UNIT_ASSERT_STRING_CONTAINS(userAgent, "grpc-c++/");
-    }
-
-    Y_UNIT_TEST(WritesDefaultUserAgentAndPreservesGrpcInfo) {
         const TString userAgent = Call("");
-
-        UNIT_ASSERT_C(TStringBuf(userAgent).StartsWith("ydb/"), userAgent);
-        UNIT_ASSERT_STRING_CONTAINS(userAgent, "grpc-c++/");
+        UNIT_ASSERT_C(TStringBuf(userAgent).StartsWith("grpc-c++/"), userAgent);
     }
 
     Y_UNIT_TEST(WritesUserAgentAndPreservesGrpcInfo) {
-        const TString userAgent = Call("ydb-grpc_service_client");
-
-        UNIT_ASSERT_C(TStringBuf(userAgent).StartsWith("ydb-grpc_service_client/"), userAgent);
-        UNIT_ASSERT_STRING_CONTAINS(userAgent, "grpc-c++/");
+        const TString userAgent = Call("test-user-agent");
+        UNIT_ASSERT_C(TStringBuf(userAgent).StartsWith("test-user-agent grpc-c++/"), userAgent);
     }
 }

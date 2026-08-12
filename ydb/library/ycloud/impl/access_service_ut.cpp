@@ -7,6 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/string/builder.h>
+#include <util/generic/strbuf.h>
 #include "access_service.h"
 
 using namespace NKikimr;
@@ -30,12 +31,12 @@ struct TTestSetup {
     TAccessServiceMockV2 AccessServiceMockV2;
     std::unique_ptr<grpc::Server> AccessServer;
 
-    TTestSetup(bool enableV2Interface)
+    TTestSetup(TStringBuf userAgent, bool enableV2Interface)
         : EnableV2Interface(enableV2Interface)
         , KikimrPort(PortManager.GetPort(2134))
         , ServicePort(PortManager.GetPort(4286))
     {
-        StartKikimr();
+        StartKikimr(userAgent);
         StartAccessService();
     }
 
@@ -43,7 +44,7 @@ struct TTestSetup {
         return Server->GetRuntime();
     }
 
-    void StartKikimr() {
+    void StartKikimr(TStringBuf userAgent) {
         NKikimrProto::TAuthConfig authConfig;
         auto settings = TServerSettings(KikimrPort, authConfig);
         settings.SetDomainName("Root");
@@ -54,7 +55,7 @@ struct TTestSetup {
         Client->InitRootScheme();
         EdgeActor = GetRuntime()->AllocateEdgeActor();
 
-        NCloud::TAccessServiceSettings sets("localhost:" + ToString(ServicePort), "ydb-as");
+        NCloud::TAccessServiceSettings sets("localhost:" + ToString(ServicePort), userAgent);
         AccessServiceActor = NCloud::CreateAccessServiceWithCache(sets, EnableV2Interface);
         GetRuntime()->Register(AccessServiceActor);
     }
@@ -73,7 +74,7 @@ struct TTestSetup {
 
 Y_UNIT_TEST_SUITE(TAccessServiceTest) {
     Y_UNIT_TEST(Authenticate) {
-        TTestSetup setup(false);
+        TTestSetup setup("ydb-as-v1", false);
 
         TAutoPtr<IEventHandle> handle;
         setup.AccessServiceMockV1.AuthenticateData["good1"].Response.mutable_subject()->mutable_user_account()->set_id("1234");
@@ -95,12 +96,12 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
         with_lock (setup.AccessServiceMockV1.MetadataMutex) {
-            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV1.CapturedUserAgent, "ydb-as/");
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV1.CapturedUserAgent, "ydb-as-v1/");
         }
     }
 
     Y_UNIT_TEST(PassRequestId) {
-        TTestSetup setup(false);
+        TTestSetup setup("", false);
 
         TAutoPtr<IEventHandle> handle;
         auto& req = setup.AccessServiceMockV1.AuthenticateData["token"];
@@ -115,12 +116,15 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
+        with_lock (setup.AccessServiceMockV1.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV1.CapturedUserAgent, "ydb/");
+        }
     }
 }
 
 Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
     Y_UNIT_TEST(Authenticate) {
-        TTestSetup setup(true);
+        TTestSetup setup("ydb-as-v2", true);
 
         TAutoPtr<IEventHandle> handle;
         setup.AccessServiceMockV2.AuthenticateData["good1"].Response.mutable_subject()->mutable_user_account()->set_id("1234");
@@ -140,12 +144,12 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
         with_lock (setup.AccessServiceMockV2.MetadataMutex) {
-            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as-v2/");
         }
     }
 
     Y_UNIT_TEST(Authorize) {
-        TTestSetup setup(true);
+        TTestSetup setup("", true);
 
         TAutoPtr<IEventHandle> handle;
         setup.AccessServiceMockV2.AuthorizeData["user1-something.read-test_folder"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
@@ -160,12 +164,12 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "user1");
         with_lock (setup.AccessServiceMockV2.MetadataMutex) {
-            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb/");
         }
     }
 
     Y_UNIT_TEST(BulkAuthorize) {
-        TTestSetup setup(true);
+        TTestSetup setup("", true);
 
         TAutoPtr<IEventHandle> handle;
         setup.AccessServiceMockV2.AuthorizeData["user1-something.read-test_folder_1"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
@@ -189,12 +193,12 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path(0).id(), "test_folder_2");
         with_lock (setup.AccessServiceMockV2.MetadataMutex) {
-            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb/");
         }
     }
 
     Y_UNIT_TEST(PassRequestId) {
-        TTestSetup setup(true);
+        TTestSetup setup("", true);
 
         TAutoPtr<IEventHandle> handle;
         auto& req = setup.AccessServiceMockV2.AuthenticateData["token"];
@@ -208,5 +212,8 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
+        with_lock (setup.AccessServiceMockV2.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb/");
+        }
     }
 }

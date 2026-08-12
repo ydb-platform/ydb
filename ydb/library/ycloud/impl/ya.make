@@ -20,6 +20,7 @@ SRCS(
     service_account_service.h
     user_account_service.cpp
     user_account_service.h
+    util.cpp
 )
 
 PEERDIR(

@@ -54,8 +54,7 @@ struct TTestSetup {
         Client->InitRootScheme();
         EdgeActor = GetRuntime()->AllocateEdgeActor();
 
-        NCloud::TAccessServiceSettings sets;
-        sets.Endpoint = "localhost:" + ToString(ServicePort);
+        NCloud::TAccessServiceSettings sets("localhost:" + ToString(ServicePort), "ydb-as");
         AccessServiceActor = NCloud::CreateAccessServiceWithCache(sets, EnableV2Interface);
         GetRuntime()->Register(AccessServiceActor);
     }
@@ -95,6 +94,9 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
+        with_lock (setup.AccessServiceMockV1.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV1.CapturedUserAgent, "ydb-as/");
+        }
     }
 
     Y_UNIT_TEST(PassRequestId) {
@@ -137,6 +139,9 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
+        with_lock (setup.AccessServiceMockV2.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+        }
     }
 
     Y_UNIT_TEST(Authorize) {
@@ -154,6 +159,9 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "user1");
+        with_lock (setup.AccessServiceMockV2.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+        }
     }
 
     Y_UNIT_TEST(BulkAuthorize) {
@@ -180,6 +188,9 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).permission(), "something.write");
         UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path(0).id(), "test_folder_2");
+        with_lock (setup.AccessServiceMockV2.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(setup.AccessServiceMockV2.CapturedUserAgent, "ydb-as/");
+        }
     }
 
     Y_UNIT_TEST(PassRequestId) {

@@ -1,6 +1,9 @@
 #include "grpc_common.h"
 
 #include <library/cpp/openssl/holders/holder.h>
+#include <library/cpp/svnversion/svnversion.h>
+
+#include <util/string/builder.h>
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -9,6 +12,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -16,6 +20,38 @@ namespace NYdbGrpc {
 inline namespace Dev {
 
 namespace {
+
+TString GetRevision() {
+    TString version = std::invoke([]() {
+        TString res = GetTag();
+        return res.empty() ? GetBranch() : res;
+    });
+
+    if (const auto pos = version.rfind('/'); pos != TString::npos) {
+        version = version.substr(pos + 1);
+    }
+
+    if (TString commitId = GetProgramCommitId(); !commitId.empty()) {
+        if (commitId.size() > 7) {
+            commitId = commitId.substr(0, 7);
+        }
+
+        if (version.empty()) {
+            version = commitId;
+        } else {
+            version += '.' + commitId;
+        }
+    }
+
+    return version.empty() ? "unknown" : version;
+}
+
+TString BuildUserAgent(const TStringBuf userAgentPrefix) {
+    static const TString revision = GetRevision();
+    return userAgentPrefix.empty()
+        ? TStringBuilder() << "ydb" << '/' << revision
+        : TStringBuilder() << userAgentPrefix << '/' << revision;
+}
 
 std::string DrainOpenSslErrors() {
     std::string out;
@@ -79,6 +115,28 @@ bool ValidateRootCertificates(const std::string& pemRootCerts, std::string& erro
 
 } // namespace
 
+TGRpcClientConfig::TGRpcClientConfig(
+    const std::string& locator,
+    TDuration timeout,
+    ui64 maxMessageSize,
+    ui32 maxInFlight,
+    const std::string& caCert,
+    const std::string& clientCert,
+    const std::string& clientPrivateKey,
+    grpc_compression_algorithm compressionAlgorithm,
+    bool enableSsl)
+    : Locator(locator)
+    , Timeout(timeout)
+    , MaxMessageSize(maxMessageSize)
+    , MaxInFlight(maxInFlight)
+    , EnableSsl(enableSsl)
+    , SslCredentials{.pem_root_certs = NYdb::TStringType{caCert},
+                     .pem_private_key = NYdb::TStringType{clientPrivateKey},
+                     .pem_cert_chain = NYdb::TStringType{clientCert}}
+    , CompressionAlgorithm(compressionAlgorithm)
+    , UseXds((Locator.starts_with("xds:///")))
+{}
+
 bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage) {
     errorMessage.clear();
 
@@ -128,6 +186,50 @@ bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, s
     }
     ERR_clear_error();
     return true;
+}
+
+std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator) {
+    grpc::ChannelArguments args;
+    args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
+    args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
+    args.SetCompressionAlgorithm(config.CompressionAlgorithm);
+
+    if (config.UserAgentPrefix.has_value()) {
+        args.SetUserAgentPrefix(NYdb::TStringType{BuildUserAgent(config.UserAgentPrefix.value())});
+    }
+
+    for (const auto& kvp: config.StringChannelParams) {
+        args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});
+    }
+
+    for (const auto& kvp: config.IntChannelParams) {
+        args.SetInt(NYdb::TStringType{kvp.first}, kvp.second);
+    }
+
+    if (config.MemQuota) {
+        grpc::ResourceQuota quota;
+        quota.Resize(config.MemQuota);
+        args.SetResourceQuota(quota);
+    }
+    if (mutator) {
+        args.SetSocketMutator(mutator);
+    }
+    if (!config.LoadBalancingPolicy.empty()) {
+        args.SetLoadBalancingPolicyName(NYdb::TStringType{config.LoadBalancingPolicy});
+    }
+    if (!config.SslTargetNameOverride.empty()) {
+        args.SetSslTargetNameOverride(NYdb::TStringType{config.SslTargetNameOverride});
+    }
+    std::shared_ptr<grpc::ChannelCredentials> channelCredentials = nullptr;
+    if (config.EnableSsl || !config.SslCredentials.pem_root_certs.empty()) {
+        channelCredentials = grpc::SslCredentials(config.SslCredentials);
+    } else {
+        channelCredentials = grpc::InsecureChannelCredentials();
+    }
+    if (config.UseXds) {
+        channelCredentials = grpc::XdsCredentials(channelCredentials);
+    }
+    return grpc::CreateCustomChannel(grpc::string(config.Locator), channelCredentials, args);
 }
 
 }

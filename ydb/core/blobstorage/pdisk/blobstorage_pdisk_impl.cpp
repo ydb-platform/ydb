@@ -79,6 +79,10 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     // 2 - YellowStop
     SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
     SemiStrictSpaceIsolationCached = 0;
+
+    // Upper bound for the chunk reserve of the static group owners, in permille of the user chunk pool
+    StaticGroupChunkReservePerMille = TControlWrapper(NPDisk::StaticGroupChunkReservePerMille, 0, 1000);
+    StaticGroupChunkReservePerMilleCached = StaticGroupChunkReservePerMille;
     ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
 
     if (Cfg->SectorMap) {
@@ -3118,6 +3122,8 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+            TControlBoard::RegisterSharedControl(StaticGroupChunkReservePerMille,
+                    icb->PDiskControls.StaticGroupChunkReservePerMille);
             if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {
                 REGISTER_LOCAL_CONTROL(ForcedPDiskSpaceColor);
             }
@@ -4253,6 +4259,11 @@ void TPDisk::Update() {
             TColor::E colorBorder = GetColorBorderIcb();
             Keeper.SetColorBorder(colorBorder);
             SemiStrictSpaceIsolationCached = currentIsolation;
+        }
+
+        if (i64 currentReserve = StaticGroupChunkReservePerMille; currentReserve != StaticGroupChunkReservePerMilleCached) {
+            Keeper.SetStaticGroupChunkReservePerMille(static_cast<ui32>(currentReserve));
+            StaticGroupChunkReservePerMilleCached = currentReserve;
         }
 
         if (!PDiskCategory.IsSolidState()) { // HDD

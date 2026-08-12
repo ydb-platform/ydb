@@ -388,8 +388,13 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     }
 
     if (Encryption) {
-        TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
-        Buffer = std::move(encryptedBlock);
+        try {
+            TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+            Buffer = std::move(encryptedBlock);
+        } catch (const std::exception& ex) {
+            ErrorString = ex.what();
+            return Nothing();
+        }
     }
 
     return std::exchange(Buffer, TBuffer());
@@ -506,7 +511,49 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         );
     }
 
+<<<<<<< HEAD
     return CreateS3ExportBuffer(std::move(bufferSettings));
+=======
+    std::unique_ptr<IExportDataFormat> dataFormat;
+    switch (DataFormatFromTask(Task)) {
+    case EDataFormat::YdbDump:
+        {
+            TYdbDumpExportSettings settings;
+            settings
+                .WithColumns(Columns);
+            dataFormat = CreateExportDataFormat(std::move(settings));
+            break;
+        }
+    case EDataFormat::Parquet:
+        {
+            bufferSettings.WithoutCompression();
+
+            auto maybeSettings = ParquetExportSettingsFromTask(Task);
+            auto settings = maybeSettings.value_or(TParquetExportSettings{});
+            settings
+                .WithColumns(Columns);
+
+            switch (CodecFromTask(Task)) {
+            case ECompressionCodec::None:
+                break;
+            case ECompressionCodec::Zstd:
+                settings
+                    .WithCompression(TParquetExportSettings::TCompressionSettings()
+                        .WithAlgorithm(TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd)
+                        .WithLevel(Task.GetCompression().GetLevel()));
+                break;
+            case ECompressionCodec::Invalid:
+                Y_ENSURE(false, "unreachable");
+            }
+            dataFormat = CreateExportDataFormat(std::move(settings));
+            break;
+        }
+    case EDataFormat::Invalid:
+        Y_ENSURE(false, "unreachable");
+    }
+
+    return CreateS3ExportBuffer(std::move(bufferSettings), std::move(dataFormat));
+>>>>>>> 1d0045f1159 (Fail encrypted export when block exceeds MAX_BLOCK_SIZE (#49469))
 }
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {

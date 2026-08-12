@@ -229,8 +229,10 @@ protected:
 template <bool IsNull>
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TSingularColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
-        Y_UNUSED(type, pool);
+    TSingularColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool)
+        : Pool_(pool)
+    {
+        Y_UNUSED(type);
     }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
@@ -239,9 +241,13 @@ public:
     }
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
-        Y_UNUSED(array);
-        Y_UNUSED(nullBitmapRelocationBuffer);
-        return {nullptr};
+        if constexpr (IsNull) {
+            nullBitmapRelocationBuffer.push_back(bitmap);
+            return {bitmap->data()};
+        } else {
+            Y_UNUSED(array, nullBitmapRelocationBuffer);
+            return {nullptr};
+        }
     }
 
     TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
@@ -270,6 +276,9 @@ public:
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
     }
+
+private:
+    arrow::MemoryPool* Pool_;
 };
 
 template <typename TStringType, bool Nullable>

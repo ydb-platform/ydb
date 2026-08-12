@@ -594,6 +594,43 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
+    // singular null has DataSize == 0
+    // without packing its allnull validity bitmap
+    // two Null keys compare equal and would match in the join.
+    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        TBlockLayoutConverterTestData data;
+
+        auto* const nullType = data.Env.GetTypeOfNullLazy();
+        TVector<NKikimr::NMiniKQL::TType*> types{nullType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        constexpr size_t testSize = 17;
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        TVector<arrow::Datum> columns{
+            arrow::Datum(NYql::NUdf::MakeSingularArray(/*isNull=*/true, testSize))};
+
+        TPackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
+
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->Columns[0].DataSize, 0u);
+
+        for (size_t row = 0; row < testSize; ++row) {
+            const ui8* tuple = packRes.PackedTuples.data() + row * layout->TotalRowSize;
+            const ui8 bit = (tuple[layout->BitmaskOffset] >> 0) & 1u;
+            UNIT_ASSERT_VALUES_EQUAL_C(bit, 0u, "Null key column must be packed as NULL");
+        }
+
+        const ui8* row0 = packRes.PackedTuples.data();
+        const ui8* row1 = packRes.PackedTuples.data() + layout->TotalRowSize;
+        UNIT_ASSERT_C(
+            !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must not compare equal");
+    }
+
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 

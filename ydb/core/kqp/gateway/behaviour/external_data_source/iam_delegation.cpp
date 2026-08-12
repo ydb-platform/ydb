@@ -7,8 +7,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/ycloud/api/service_control.h>
 #include <ydb/library/ycloud/impl/service_control.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
-
 #include <util/string/ascii.h>
 
 namespace NKikimr::NKqp::NExternalDataSource {
@@ -29,11 +27,13 @@ public:
         TIamDelegationSettings settings,
         TIamDelegation delegation,
         TString subjectId,
+        TString operationToken,
         EAction action,
         NThreading::TPromise<TIamDelegationResult> promise)
         : Settings(std::move(settings))
         , Delegation(std::move(delegation))
         , SubjectId(std::move(subjectId))
+        , OperationToken(std::move(operationToken))
         , Action(action)
         , Promise(std::move(promise))
     {}
@@ -47,23 +47,17 @@ public:
         settings.RequestTimeoutMs = Settings.Timeout.MilliSeconds();
         ServiceControl = Register(NCloud::CreateServiceControl(settings));
 
-        Credentials = NYdb::CreateIamCredentialsProviderFactory(
-            MakeMetadataServiceHost(Settings))->CreateProvider();
-        Credentials->GetAuthInfoAsync().Subscribe([
-            actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
-            try {
-                actorSystem->Send(self, new TEvPrivate::TEvToken(TString(future.GetValue())));
-            } catch (...) {
-                actorSystem->Send(self, new TEvPrivate::TEvTokenError(CurrentExceptionMessage()));
-            }
-        });
+        if (OperationToken.empty()) {
+            Finish(false, "user IAM token is empty");
+            return;
+        }
+        Send(SelfId(), new TEvPrivate::TEvToken(std::move(OperationToken)));
     }
 
 private:
     struct TEvPrivate {
         enum EEv {
             EvToken = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvTokenError,
         };
 
         struct TEvToken : TEventLocal<TEvToken, EvToken> {
@@ -73,12 +67,6 @@ private:
             TString Token;
         };
 
-        struct TEvTokenError : TEventLocal<TEvTokenError, EvTokenError> {
-            explicit TEvTokenError(TString error)
-                : Error(std::move(error))
-            {}
-            TString Error;
-        };
     };
 
     void HandleToken(TEvPrivate::TEvToken::TPtr ev) {
@@ -87,10 +75,6 @@ private:
         } else {
             co_await Revoke(std::move(ev->Get()->Token));
         }
-    }
-
-    void HandleTokenError(TEvPrivate::TEvTokenError::TPtr ev) {
-        Finish(false, TStringBuilder() << "failed to obtain system service-account token: " << ev->Get()->Error);
     }
 
     async<void> Setup(TString token) {
@@ -152,7 +136,6 @@ private:
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvPrivate::TEvToken, HandleToken);
-        hFunc(TEvPrivate::TEvTokenError, HandleTokenError);
     )
 
 private:
@@ -162,33 +145,28 @@ private:
     const TIamDelegationSettings Settings;
     const TIamDelegation Delegation;
     const TString SubjectId;
+    TString OperationToken;
     const EAction Action;
     NThreading::TPromise<TIamDelegationResult> Promise;
     NActors::TActorId ServiceControl;
-    NYdb::TCredentialsProviderPtr Credentials;
 };
 
 NThreading::TFuture<TIamDelegationResult> Run(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation,
     const TString& subjectId,
+    const TString& operationToken,
     EAction action,
     TActorSystem* actorSystem)
 {
     auto promise = NThreading::NewPromise<TIamDelegationResult>();
     auto future = promise.GetFuture();
-    actorSystem->Register(new TIamDelegationActor(settings, delegation, subjectId, action, std::move(promise)));
+    actorSystem->Register(new TIamDelegationActor(
+        settings, delegation, subjectId, operationToken, action, std::move(promise)));
     return future;
 }
 
 } // anonymous namespace
-
-NYdb::TIamHost MakeMetadataServiceHost(const TIamDelegationSettings& settings) {
-    NYdb::TIamHost result;
-    result.Host = settings.MetadataServiceHost;
-    result.Port = settings.MetadataServicePort;
-    return result;
-}
 
 yandex::cloud::priv::servicecontrol::v1::EnsureEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
@@ -296,17 +274,19 @@ NThreading::TFuture<TIamDelegationResult> SetupIamDelegation(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation,
     const TString& subjectId,
+    const TString& operationToken,
     TActorSystem* actorSystem)
 {
-    return Run(settings, delegation, subjectId, EAction::Setup, actorSystem);
+    return Run(settings, delegation, subjectId, operationToken, EAction::Setup, actorSystem);
 }
 
 NThreading::TFuture<TIamDelegationResult> RevokeIamDelegation(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation,
+    const TString& operationToken,
     TActorSystem* actorSystem)
 {
-    return Run(settings, delegation, {}, EAction::Revoke, actorSystem);
+    return Run(settings, delegation, {}, operationToken, EAction::Revoke, actorSystem);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

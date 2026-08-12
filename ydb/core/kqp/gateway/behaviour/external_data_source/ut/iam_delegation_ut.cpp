@@ -193,15 +193,6 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT(!flags.GetEnableExternalDataSourceIamDelegation());
     }
 
-    Y_UNIT_TEST(ConfiguredMetadataServiceIsPreserved) {
-        auto settings = Settings();
-        settings.MetadataServiceHost = "metadata.proxy.local";
-        settings.MetadataServicePort = 8123;
-        const auto host = MakeMetadataServiceHost(settings);
-        UNIT_ASSERT_VALUES_EQUAL(host.Host, "metadata.proxy.local");
-        UNIT_ASSERT_VALUES_EQUAL(host.Port, 8123);
-    }
-
     Y_UNIT_TEST(OnlyConfirmedMissingObjectCanBeIgnored) {
         using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
         UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::RootUnknown, false) ==

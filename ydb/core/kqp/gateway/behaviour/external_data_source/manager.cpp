@@ -518,16 +518,18 @@ NExternalDataSource::TIamDelegationSettings GetIamDelegationSettings(NActors::TA
     settings.MicroserviceId = config.GetMicroserviceId();
     settings.ResourceType = config.GetResourceType();
     settings.EnableSsl = config.GetEnableSsl();
-    const auto& authConfig = AppData(actorSystem)->AuthConfig;
-    if (authConfig.HasLocalMetadataService()) {
-        settings.MetadataServiceHost = authConfig.GetLocalMetadataService().GetHost();
-        settings.MetadataServicePort = authConfig.GetLocalMetadataService().GetPort();
-    }
     return settings;
 }
 
 TString GetIamSubject(const NACLib::TUserToken& token) {
     return NExternalDataSource::NormalizeIamSubject(token.GetUserSID());
+}
+
+TString GetIamOperationToken(
+    const TExternalDataSourceManager::TExternalModificationContext& context)
+{
+    const auto& userToken = context.GetUserToken();
+    return userToken ? userToken->GetSerializedToken() : TString{};
 }
 
 struct TEvIamDelegationDdl {
@@ -681,6 +683,7 @@ public:
             // A committed DROP cannot be converted to a client-visible error.
             co_await AwaitDelegation(NExternalDataSource::RevokeIamDelegation(
                 GetIamDelegationSettings(Context.GetActorSystem()), described.Delegation,
+                GetIamOperationToken(Context),
                 Context.GetActorSystem()));
         }
         Finish(schemeStatus);
@@ -719,7 +722,9 @@ public:
                 co_return;
             }
             const auto& userToken = Context.GetUserToken();
-            if (!userToken || !userToken->HasAuthType() || userToken->GetAuthType() != "AccessService") {
+            if (!userToken || !userToken->HasAuthType() || userToken->GetAuthType() != "AccessService" ||
+                userToken->GetSerializedToken().empty())
+            {
                 Finish(TStatus::Fail(NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
                     "AUTH_METHOD=IAM requires a cloud IAM authenticated session"));
                 co_return;
@@ -761,6 +766,7 @@ public:
             if (!schemeStatus.IsFail() && NExternalDataSource::IsManagedIamDelegation(previous.Delegation)) {
                 co_await AwaitDelegation(NExternalDataSource::RevokeIamDelegation(
                     GetIamDelegationSettings(Context.GetActorSystem()), previous.Delegation,
+                    GetIamOperationToken(Context),
                     Context.GetActorSystem()));
             }
             Finish(schemeStatus);
@@ -775,7 +781,8 @@ public:
         };
         const auto setup = co_await AwaitDelegation(NExternalDataSource::SetupIamDelegation(
             GetIamDelegationSettings(Context.GetActorSystem()), staged,
-            GetIamSubject(*Context.GetUserToken()), Context.GetActorSystem()));
+            GetIamSubject(*Context.GetUserToken()), GetIamOperationToken(Context),
+            Context.GetActorSystem()));
         if (!setup.Success) {
             Finish(DelegationStatus(setup));
             co_return;
@@ -786,11 +793,13 @@ public:
             !schemeStatus.IsFail(), previous.Delegation, staged);
         if (cleanup == NExternalDataSource::EDelegationCleanup::Staged) {
             co_await AwaitDelegation(NExternalDataSource::RevokeIamDelegation(
-                GetIamDelegationSettings(Context.GetActorSystem()), staged, Context.GetActorSystem()));
+                GetIamDelegationSettings(Context.GetActorSystem()), staged,
+                GetIamOperationToken(Context), Context.GetActorSystem()));
         } else if (cleanup == NExternalDataSource::EDelegationCleanup::Previous) {
             // Cleanup is best effort and cannot turn committed DDL into an error.
             co_await AwaitDelegation(NExternalDataSource::RevokeIamDelegation(
                 GetIamDelegationSettings(Context.GetActorSystem()), previous.Delegation,
+                GetIamOperationToken(Context),
                 Context.GetActorSystem()));
         }
         Finish(schemeStatus);
@@ -903,7 +912,22 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
         }
         return ExecuteLegacySchemeRequest(schemeTx, context);
     }
-    return ExecuteIamDelegationDdl(schemeTx, context, operationCase);
+
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+        return ExecuteIamDelegationDdl(schemeTx, context, operationCase);
+    }
+
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        const auto& create = schemeTx.GetCreateExternalDataSource();
+        if (create.GetAuth().HasIam() || schemeTx.GetReplaceIfExists()) {
+            return ExecuteIamDelegationDdl(schemeTx, context, operationCase);
+        }
+        return ExecuteLegacySchemeRequest(schemeTx, context);
+    }
+
+    return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+        "Unsupported EXTERNAL_DATA_SOURCE operation"));
 }
 
 }  // namespace NKikimr::NKqp

@@ -50,6 +50,35 @@ void CommonBuildTasks(double aggrTasksRatio, ui32 maxHashShuffleTasks, TDqTasksG
             auto cnMap = maybeCnMap.Cast();
             const auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
             maxHashShuffleTasks = partitionsCount = originStageInfo.Tasks.size();
+        } else if (auto maybeCnStreamLookup = input.Maybe<NNodes::TDqCnStreamLookup>()) {
+            auto cnStreamLookup = maybeCnStreamLookup.Cast();
+            const auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
+            auto shuffleMode = NDq::EShuffleMode::Default;
+            if (auto maybeShuffleMode = cnStreamLookup.ShuffleMode().Maybe<NNodes::TCoAtom>()) {
+                shuffleMode = FromString<NDq::EShuffleMode>(maybeShuffleMode.Cast().StringValue());
+            }
+            switch (shuffleMode) {
+                case NDq::EShuffleMode::Default:
+                case NDq::EShuffleMode::Off:
+                    // same as UnionAll
+                    break;
+                case NDq::EShuffleMode::Map:
+                    // same as Map
+                    maxHashShuffleTasks = partitionsCount = originStageInfo.Tasks.size();
+                    break;
+                case NDq::EShuffleMode::Hash: {
+                    // same as HashShuffle
+                    ui32 srcTasks = originStageInfo.Tasks.size();
+                    if (TDqStageSettings::EPartitionMode::Aggregate == partitionMode) {
+                        srcTasks = ui32(srcTasks * aggrTasksRatio);
+                    } else {
+                        YQL_ENSURE(TDqStageSettings::EPartitionMode::Default == partitionMode);
+                    }
+                    partitionsCount = std::max(partitionsCount, srcTasks);
+                    partitionsCount = std::min(partitionsCount, maxHashShuffleTasks);
+                    break;
+                }
+            }
         }
     }
 
@@ -218,7 +247,37 @@ void BuildStreamLookupChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, 
     auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
     auto outputIndex = FromString<ui32>(cnStreamLookup.Output().Index().Value());
 
-    BuildUnionAllChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+    auto shuffleMode = NDq::EShuffleMode::Default;
+    if (auto maybeShuffleMode = cnStreamLookup.ShuffleMode().Maybe<NNodes::TCoAtom>()) {
+        shuffleMode = FromString<NDq::EShuffleMode>(maybeShuffleMode.Cast().StringValue());
+    }
+    switch (shuffleMode) {
+        case NDq::EShuffleMode::Default:
+        case NDq::EShuffleMode::Off:
+            BuildUnionAllChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+            break;
+        case NDq::EShuffleMode::Map:
+            BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+            break;
+        case NDq::EShuffleMode::Hash: {
+            TVector<TString> keyColumns;
+            if (cnStreamLookup.LeftLabel().StringValue().empty()) {
+                for (const auto& keyColumn : cnStreamLookup.LeftJoinKeyNames()) {
+                    keyColumns.push_back(TString(keyColumn));
+                }
+            } else {
+                for (const auto& keyColumn : cnStreamLookup.LeftJoinKeyNames()) {
+                    auto keyColumnBuf = TStringBuf(keyColumn);
+                    if (auto pos = keyColumnBuf.find_last_of('.'); pos != TStringBuf::npos) {
+                        keyColumnBuf = keyColumnBuf.substr(pos + 1);
+                    }
+                    keyColumns.push_back(TString(keyColumnBuf));
+                }
+            }
+            BuildHashShuffleChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, keyColumns, false /*spilling*/, logFunc);
+            break;
+        }
+    }
 }
 
 template <typename TGraph>

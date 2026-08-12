@@ -245,7 +245,7 @@ class StreamingTestBase(TestYdsBase):
     def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
         total = 0
         for node_id in kikimr.cluster.nodes:
-            sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
+            sensor = self.get_sensors(kikimr, node_id, "tablets").find_sensor(
                 {"type": "SchemeShard", "category": "app", "sensor": counter_name}
             )
             if sensor is not None:

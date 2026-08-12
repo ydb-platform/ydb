@@ -8,13 +8,16 @@
 
 ## Tests
 
-Cover cases:
-* small and large messages
-* kafka batch message format with single and multiple messages
-* holes in the offset (mirroring)
+When changing topic read/write/offset/blob logic, cover:
+
+* **Small and large messages.** Large = >512 KiB (split into parts).
+* **Large-message layout:** all parts in one blob; parts across different blobs.
+* **Formats:** at least native and Kafka (single and multi-message batch).
+* **Offset gaps:** missing offsets / holes (e.g. mirroring).
 
 ## Review
 
+* Flag missing coverage for the cases above when the change touches message/blob/offset handling.
 * Flag redundant or unreachable branches.
 * [`agents/BACKWARD_COMPATIBILITY.md`](../../agents/BACKWARD_COMPATIBILITY.md)
 * [`agents/NO_ABORT.md`](../../agents/NO_ABORT.md)

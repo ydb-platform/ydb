@@ -1,8 +1,8 @@
 #pragma once
 
-#include "defs.h"
-
 #include <ydb/library/actors/util/rope.h>
+
+#include <util/generic/size_literals.h>
 
 #include <vector>
 
@@ -12,11 +12,10 @@ namespace NKikimr::NDDisk {
 constexpr size_t IntegrityUnitSize = 4096;
 constexpr size_t IntegritySubBlockSize = 512;
 
-// DataChunk / IntegrityChunk are PDisk chunks (default 128 MiB). IntegrityChunk reserves
-// 128 KiB at the front for its own metadata (TIntegrityChunkHeader replicas, etc.).
-constexpr size_t IntegrityChunkSize = 128_MB;
+// DataChunk / IntegrityChunk are PDisk chunks whose size comes from the PDisk format at runtime.
+// IntegrityChunk reserves a fixed 128 KiB region at the front for its own metadata
+// (TIntegrityChunkHeader replicas, etc.).
 constexpr size_t IntegrityChunkHeaderRegionSize = 128_KB;
-constexpr ui32 DataBlocksPerChunk = IntegrityChunkSize / IntegrityUnitSize;
 
 // Placeholder magics (PDisk-style unique values); not yet finalized for production format.
 constexpr ui64 MagicIntegrityBlock = 0x1B71E6A7B10C4E55ull;
@@ -32,6 +31,11 @@ enum class EIntegrityFormatVersion : ui16 {
 // value, so the caller's own iterator is not advanced. This is a raw data checksum with no identity
 // or salt mixed in.
 ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes);
+
+// Raw XXH3-64 over a contiguous buffer. Unlike the TRope variant above there are no alignment or
+// size restrictions; used for self-checksums of integrity metadata blocks (BlockChecksum /
+// HeaderChecksum fields computed with the field itself zeroed).
+ui64 CalculateRawChecksum(const void* data, size_t size);
 
 // Splits payload into IntegrityUnitSize (4 KiB) blocks and computes a checksum for each block, in order.
 // payload.size() must be a non-zero multiple of IntegrityUnitSize (same as MinSectorSize).
@@ -123,34 +127,9 @@ struct TIntegritySubBlock {
 
 static_assert(sizeof(TIntegritySubBlock) == IntegritySubBlockSize);
 
-// IntegrityExtent covers one DataChunk: ceil(data blocks / checksums per integrity block).
-constexpr ui32 IntegrityBlocksPerExtent =
-    (DataBlocksPerChunk + ChecksumsPerIntegrityBlock - 1) / ChecksumsPerIntegrityBlock;
-static_assert(IntegrityBlocksPerExtent == 67);
-
-constexpr ui32 IntegrityBlocksPerExtentAwupf512 =
-    (DataBlocksPerChunk + ChecksumsPerIntegrityBlockAwupf512 - 1) / ChecksumsPerIntegrityBlockAwupf512;
-static_assert(IntegrityBlocksPerExtentAwupf512 == 71);
-
-// IntegrityExtentSize counts current slots only: this is the working set of reads and the checksum
-// cache. On disk every TIntegrityBlock lives in a ping-pong pair of adjacent 4 KiB slots (A/B, read
-// together as one 8 KiB I/O; never rewritten in place because we do not rely on AWUPF), so an
-// extent physically occupies IntegrityExtentOnDiskSize = 2x.
+// On disk every TIntegrityBlock lives in a ping-pong pair of adjacent 4 KiB slots (A/B, read
+// together as one 8 KiB I/O; never rewritten in place because we do not rely on AWUPF).
 constexpr ui32 IntegrityPairSlots = 2;
-
-constexpr size_t IntegrityExtentSize = IntegrityBlocksPerExtent * IntegrityUnitSize;
-constexpr size_t IntegrityExtentSizeAwupf512 = IntegrityBlocksPerExtentAwupf512 * IntegrityUnitSize;
-
-constexpr size_t IntegrityExtentOnDiskSize = IntegrityPairSlots * IntegrityExtentSize;
-constexpr size_t IntegrityExtentOnDiskSizeAwupf512 = IntegrityPairSlots * IntegrityExtentSizeAwupf512;
-
-constexpr ui32 IntegrityExtentsPerChunk =
-    (IntegrityChunkSize - IntegrityChunkHeaderRegionSize) / IntegrityExtentOnDiskSize;
-static_assert(IntegrityExtentsPerChunk == 244);
-
-constexpr ui32 IntegrityExtentsPerChunkAwupf512 =
-    (IntegrityChunkSize - IntegrityChunkHeaderRegionSize) / IntegrityExtentOnDiskSizeAwupf512;
-static_assert(IntegrityExtentsPerChunkAwupf512 == 230);
 
 struct TIntegrityChunkHeader {
     ui64 Magic;
@@ -174,7 +153,5 @@ struct TIntegrityChunkHeader {
 static_assert(sizeof(TIntegrityChunkHeader) == IntegrityUnitSize);
 
 #pragma pack(pop)
-
-static_assert(DataBlocksPerChunk == 32768);
 
 } // namespace NKikimr::NDDisk

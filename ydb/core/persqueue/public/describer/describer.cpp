@@ -190,9 +190,7 @@ public:
                     YDB_LOG_DEBUG("Path ACCESS DENIED",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    Result[originalPath] = TTopicInfo{
-                        .Status = EStatus::UNAUTHORIZED
-                    };
+                    SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
@@ -313,6 +311,10 @@ public:
 private:
     bool TryScheduleFederationRetry(const TString& originalPath, const TString& realPath) {
         if (FederationRoot.empty()) {
+            return false;
+        }
+        if (CDCPaths.contains(realPath)) {
+            // streamImpl miss must not spawn FederationRoot/<...>/streamImpl retries.
             return false;
         }
         if (FederationPaths.contains(realPath)) {

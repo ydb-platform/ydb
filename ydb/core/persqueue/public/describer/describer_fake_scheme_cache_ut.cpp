@@ -274,6 +274,30 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::NOT_FOUND);
     }
 
+    Y_UNIT_TEST(CdcStreamImplNotFoundSkipsFederation) {
+        // Broken streamImpl must not schedule a FederationRoot rewrite of .../streamImpl.
+        ui32 requests = 0;
+        TDescribeEnv env([&](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
+            requests = requestIndex + 1;
+            if (requestIndex == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+                FillCdcStream(entry);
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            UNIT_ASSERT(EntryPath(entry).EndsWith("/streamImpl"));
+            entry.Status = TNavigate::EStatus::PathErrorUnknown;
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"/Root/table1/feed"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(requests, 3u); // feed + streamImpl + sync streamImpl
+        UNIT_ASSERT(ev->UsedSyncVersion);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::NOT_FOUND);
+    }
+
     Y_UNIT_TEST(CdcWithEmptyDatabase) {
         // Regression: empty DatabaseName must still schedule streamImpl retry.
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {

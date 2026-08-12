@@ -1572,7 +1572,12 @@ FROM `{table_name}`"""
         kikimr.first_node.set_log_file_prefix("logfile_restarted_")
         kikimr.first_node.start()
         logger.info("Node with query restarted")
-        kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
+        kikimr.ydb_client = YdbClient(
+            database=kikimr.endpoint.database,
+            endpoint=f"grpc://{kikimr.endpoint.endpoint}",
+            enable_discovery=False,
+        )
+        kikimr.ydb_client.wait_connection()
 
         second_node = list(kikimr.cluster.nodes.values())[1]
         second_ydb_client = YdbClient(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
@@ -1671,7 +1676,12 @@ FROM `{table_name}`"""
         kikimr.first_node.set_log_file_prefix("logfile_restarted_")
         kikimr.first_node.start()
         logger.info("Node with query restarted")
-        kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
+        kikimr.ydb_client = YdbClient(
+            database=kikimr.endpoint.database,
+            endpoint=f"grpc://{kikimr.endpoint.endpoint}",
+            enable_discovery=False,
+        )
+        kikimr.ydb_client.wait_connection()
 
         time.sleep(5)
         assert wait_for(lambda: "Lease expired" in check_issues(), timeout_seconds=120, step_seconds=1), "Failed to wait for script execution restart"

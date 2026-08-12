@@ -3658,6 +3658,53 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
     }
+
+    Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr ui32 partitionCount = 1000;
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1000";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    { "tx": 0, "stage": 0, "tasks": 1000 }
+                ] @@;
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            bool hasIssues = false;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                hasIssues = issuesJson.contains("Previous query retries") && issuesJson.contains("Not enough resources to execute query");
+                error = TStringBuilder() << "issues: " << issuesJson;
+            });
+
+            return hasIssues;
+        });
+    }
 }
 
 } // namespace NKikimr::NKqp

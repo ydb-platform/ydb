@@ -187,34 +187,9 @@ TStringBuf GetMessageFromTaggedPayload(const TTaggedLogEventPayload& payload)
 
 std::string FormatTaggedPayload(const TTaggedLogEventPayload& payload)
 {
-    TTaggedPayloadReader reader(payload);
-    std::string result(reader.ReadMessage());
-    // Well-known tags (e.g. an error) are always written last -- the fluent |.With| chain
-    // enforces this at the type level (see #TWellKnownTaggedLoggingGuard) -- so they render
-    // after the |(...)| group on trailing lines in a single pass.
-    bool parenOpen = false;
-    while (auto tag = reader.TryReadTag()) {
-        if (tag->IsWellKnown) {
-            if (parenOpen) {
-                result += ')';
-                parenOpen = false;
-            }
-            result += '\n';
-            result += tag->Value;
-        } else {
-            result += parenOpen ? ", " : " (";
-            parenOpen = true;
-            if (tag->Key != TraceLoggingTagKey) {
-                result += tag->Key;
-                result += ": ";
-            }
-            result += tag->Value;
-        }
-    }
-    if (parenOpen) {
-        result += ')';
-    }
-    return result;
+    TStringBuilder builder;
+    FormatTaggedPayload(&builder, payload);
+    return builder.Flush();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

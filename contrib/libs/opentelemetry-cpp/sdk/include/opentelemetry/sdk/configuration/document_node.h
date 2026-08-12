@@ -178,9 +178,9 @@ private:
 class DocumentNodeLocation
 {
 public:
-  size_t offset;
-  size_t line;
-  size_t col;
+  std::size_t offset{};
+  std::size_t line{};
+  std::size_t col{};
   std::string filename;
 
   std::string ToString() const;

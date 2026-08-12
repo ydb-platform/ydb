@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test) {
 Y_UNIT_TEST_LLVM(TestConcatItemsToKey) {
@@ -92,5 +91,4 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

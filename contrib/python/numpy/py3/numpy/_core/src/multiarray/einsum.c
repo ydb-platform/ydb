@@ -26,7 +26,7 @@
 #define _MULTIARRAYMODULE
 #include <numpy/npy_common.h>
 #include <numpy/arrayobject.h>
-#include <npy_pycompat.h>
+
 #include <array_assign.h>   //PyArray_AssignRawScalar
 
 #include <ctype.h>

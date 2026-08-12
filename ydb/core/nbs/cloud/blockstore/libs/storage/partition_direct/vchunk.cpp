@@ -3,7 +3,6 @@
 #include "flush_request.h"
 #include "partition_direct_service.h"
 #include "read_request_executor.h"
-#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -25,6 +25,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NThreading;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+NProto::TError MakeVChunkDestroyedError()
+{
+    return MakeError(E_REJECTED, "VChunk destroyed");
+}
+
+NProto::TError MakeVChunkStoppedError()
+{
+    return MakeError(E_REJECTED, "VChunk stopped");
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -160,8 +176,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
                     std::move(request),
                     std::move(span));
             } else {
-                promise.SetValue(
-                    TReadBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                promise.SetValue(TReadBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -217,8 +233,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(std::move(bundle));
             } else {
-                bundle->SendFinalReply(
-                    TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                bundle->SendFinalReply(TWriteBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -340,7 +356,7 @@ void TVChunk::OnWriteBlocksResponse(
         "%s OnWriteBlocksResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str(),
-        FormatError(response.Error).c_str());
+        FormatError(response.Error).Quote().c_str());
 
     --InflightWritesCount;
 
@@ -437,17 +453,17 @@ void TVChunk::DoStop()
 
     Stopped = true;
 
+    if (Copiers.empty()) {
+        OnStopped();
+        return;
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s DoStop copiers: %zu",
         LogTitle.GetWithTime().c_str(),
         Copiers.size());
-
-    if (Copiers.empty()) {
-        OnStopped();
-        return;
-    }
 
     TVector<TFuture<TDDiskDataCopier::EResult>> copierStops;
     for (const auto& [_, copier]: Copiers) {
@@ -480,8 +496,8 @@ void TVChunk::DoReadBlocksLocal(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        promise.SetValue(TReadBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        promise.SetValue(
+            TReadBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 
@@ -529,7 +545,7 @@ void TVChunk::DoReadBlocksLocal(
                         std::move(span));
                 } else {
                     promise.SetValue(TReadBlocksLocalResponse{
-                        .Error = MakeError(E_CANCELLED)});
+                        .Error = MakeVChunkDestroyedError()});
                 }
             });
         return;
@@ -585,8 +601,8 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        bundle->SendFinalReply(TWriteBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        bundle->SendFinalReply(
+            TWriteBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 

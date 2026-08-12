@@ -5,7 +5,7 @@ from .trace import LspMessage, LspRequest, LspResponse, LspTrace
 def replay_trace(trace: LspTrace, server: LanguageServer) -> None:
     carefully(lambda s: _replay_messages(trace, s), server)
     x = server.recv()
-    assert x is None, "expected an end of stream, got {x.json!r}"
+    assert x is None, f"expected an end of stream, got {x.json!r}"
 
 
 def _replay_messages(trace: LspTrace, server: LanguageServer) -> None:

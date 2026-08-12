@@ -53,8 +53,8 @@ message CreatePartitionResult {
 
 message DeletePartitionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    // Partition tablet id to delete.
-    string TabletId = 2;
+    // Disk id of the partition to delete.
+    string DiskId = 2;
 }
 
 message DeletePartitionResponse {
@@ -62,8 +62,8 @@ message DeletePartitionResponse {
 }
 
 message DeletePartitionResult {
-    // Deleted partition tablet id.
-    string TabletId = 1;
+    // Deleted disk id.
+    string DiskId = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

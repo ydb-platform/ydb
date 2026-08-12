@@ -7,7 +7,7 @@
 #include "numpy/arrayobject.h"
 
 #include "npy_config.h"
-#include "npy_pycompat.h"
+
 #include "common.h"
 
 #include "abstractdtypes.h"
@@ -119,7 +119,7 @@ PyArray_DTypeFromObject(PyObject *obj, int maxdims, PyArray_Descr **out_dtype)
     int ndim;
 
     ndim = PyArray_DiscoverDTypeAndShape(
-            obj, maxdims, shape, &cache, NULL, NULL, out_dtype, 1);
+            obj, maxdims, shape, &cache, NULL, NULL, out_dtype, 1, NULL);
     if (ndim < 0) {
         return -1;
     }

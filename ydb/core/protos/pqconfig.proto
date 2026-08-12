@@ -289,9 +289,13 @@ message TPartitionConfig {
     optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
+        // Consumer name the quota is applied to. The special value CLIENTID_WITHOUT_CONSUMER
+        // ("$without_consumer") stores the quota for reading a partition without a consumer.
         optional string ClientId = 1;
         optional uint64 SpeedInBytesPerSecond = 2;
         optional uint64 BurstSize = 3;
+        optional uint64 SpeedInMessagesPerSecond = 4;
+        optional uint64 BurstSizeInMessages = 5;
     }
 
     repeated TReadQuota ReadQuota = 11;
@@ -308,6 +312,15 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
     optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
+
+    // Total read speed for a single partition (across all consumers), in bytes per second.
+    optional uint64 ReadSpeedInBytesPerSecond = 20;
+    // Total burst size for read from a single partition (across all consumers), in bytes.
+    optional uint64 ReadBurstBytes = 21;
+    // Total read speed for a single partition (across all consumers), in messages per second.
+    optional uint64 ReadSpeedInMessagesPerSecond = 22;
+    // Total burst size for read from a single partition (across all consumers), in messages.
+    optional uint64 ReadBurstMessages = 23;
 };
 
 message TPartitionKeyRange {

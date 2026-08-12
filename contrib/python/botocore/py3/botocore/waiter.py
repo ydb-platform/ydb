@@ -370,7 +370,7 @@ class Waiter:
                     )
             if current_state == 'success':
                 logger.debug(
-                    "Waiting complete, waiter matched the " "success state."
+                    "Waiting complete, waiter matched the success state."
                 )
                 return
             if current_state == 'failure':

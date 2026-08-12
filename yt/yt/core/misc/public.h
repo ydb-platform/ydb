@@ -95,9 +95,6 @@ DEFINE_ENUM(ESerializationDumpMode,
 
 using TSerializationDumpScopeFilter = std::optional<THashSet<std::string>>;
 
-template <class TKey, class TComparer>
-class TSkipList;
-
 class TBlobOutput;
 
 class TStringBuilderBase;

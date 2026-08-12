@@ -631,10 +631,10 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo);

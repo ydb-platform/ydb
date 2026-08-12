@@ -154,6 +154,7 @@ SRCS(
     subdomains.proto
     sys_view.proto
     sys_view_types.proto
+    table_metrics_settings.proto
     table_service_config.proto
     table_stats.proto
     tablet.proto

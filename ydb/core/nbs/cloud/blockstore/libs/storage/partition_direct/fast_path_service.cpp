@@ -2,7 +2,6 @@
 
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
-#include "region_geometry.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -10,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -247,6 +247,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
+    auto startAt = TMonotonic::Now();
+
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         callContext->RootTraceId.Clone(),
@@ -273,7 +275,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span)]   //
+        [weakSelf = weak_from_this(), span = std::move(span), startAt]   //
         (const TFuture<TReadBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -284,7 +286,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::ReadBlocks,
-                    !HasError(response.Error));
+                    !HasError(response.Error),
+                    TMonotonic::Now() - startAt);
             }
         });
 
@@ -296,6 +299,8 @@ TFastPathService::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request)
 {
+    auto startAt = TMonotonic::Now();
+
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         callContext->RootTraceId.Clone(),
@@ -322,7 +327,7 @@ TFastPathService::WriteBlocksLocal(
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span)]   //
+        [weakSelf = weak_from_this(), span = std::move(span), startAt]   //
         (const TFuture<TWriteBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -333,7 +338,8 @@ TFastPathService::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::WriteBlocks,
-                    !HasError(response.Error));
+                    !HasError(response.Error),
+                    TMonotonic::Now() - startAt);
             }
         });
 

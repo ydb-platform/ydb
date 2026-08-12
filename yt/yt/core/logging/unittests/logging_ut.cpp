@@ -36,7 +36,7 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 #include <library/cpp/yt/misc/range_formatters.h>
 
 #include <library/cpp/yt/string/string_builder.h>
@@ -88,7 +88,7 @@ void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "Test");
+YT_DEFINE_LEAKY_GLOBAL(NLogging::TLogger, Logger, "Test");
 
 std::string GenerateLogFileName()
 {
@@ -1482,6 +1482,20 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
 
     EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
     EXPECT_TRUE(coreDumper->SafeCoreDumped);
+
+    // The trap text carries the tags as well.
+    exceptionExpression.reset();
+
+    try {
+        YT_TLOG_FATAL("Fatal message")
+            .With("Arg1", 1);
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message (Arg1: 1))"));
 }
 
 // Windows does not support request tracing for now.
@@ -1609,8 +1623,9 @@ TEST_P(TLoggingTagsTest, All)
     auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
     if (hasTraceContext) {
-        loggingContext.TraceLoggingTag = "TraceContextTag: 1";
+        loggingContext.TraceLoggingTags = NLogging::AsView(traceTags.GetPayload());
     }
 
     auto logger = TLogger("Test");

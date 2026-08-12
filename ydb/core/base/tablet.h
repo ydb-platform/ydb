@@ -991,10 +991,17 @@ struct TEvTablet {
     };
 
     struct TEvMoveDataResponse : TEventPB<TEvMoveDataResponse, NKikimrTabletBase::TEvMoveDataResponse, EvMoveDataResponse> {
+        using EStatus = NKikimrTabletBase::TEvMoveDataResponse::EStatus;
+
         TEvMoveDataResponse() = default;
 
-        TEvMoveDataResponse(ui64 tabletId) {
+        TEvMoveDataResponse(
+                ui64 tabletId,
+                EStatus status,
+                const TString& errorReason = {}) {
             Record.SetTabletId(tabletId);
+            Record.SetStatus(status);
+            Record.SetErrorReason(errorReason);
         }
     };
 };

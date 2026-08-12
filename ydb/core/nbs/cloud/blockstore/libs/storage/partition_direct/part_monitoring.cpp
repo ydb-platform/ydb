@@ -39,6 +39,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "vchunk") {
         return EMonPage::VChunk;
     }
+    if (page == "latency") {
+        return EMonPage::Latency;
+    }
     return EMonPage::Overview;
 }
 
@@ -56,6 +59,33 @@ std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
     ui32 vchunkIndex = 0;
     if (cgi.Has("vchunk") && TryFromString(cgi.Get("vchunk"), vchunkIndex)) {
         return vchunkIndex;
+    }
+    return std::nullopt;
+}
+
+ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
+{
+    const TString& p = cgi.Get("p");
+    if (p == "50") {
+        return ELatencyPercentile::P50;
+    }
+    if (p == "90") {
+        return ELatencyPercentile::P90;
+    }
+    if (p == "max") {
+        return ELatencyPercentile::Max;
+    }
+    return ELatencyPercentile::P99;
+}
+
+std::optional<EOperation> ParseSelectedLatencyOperation(
+    const TCgiParameters& cgi)
+{
+    ui32 opIndex = 0;
+    if (cgi.Has("op") && TryFromString(cgi.Get("op"), opIndex) &&
+        opIndex < OperationCount)
+    {
+        return static_cast<EOperation>(opIndex);
     }
     return std::nullopt;
 }
@@ -169,7 +199,12 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+    // Latency page always gathers every DBG (needs the full node map).
+    const std::optional<size_t> selectedDbg =
+        (page == EMonPage::Latency) ? std::nullopt : ParseSelectedDbg(cgi);
+    const ELatencyPercentile selectedPercentile = ParseSelectedPercentile(cgi);
+    const std::optional<EOperation> selectedLatencyOperation =
+        ParseSelectedLatencyOperation(cgi);
 
     // The "Add host" button. POST only: link prefetching must not add hosts.
     //
@@ -207,8 +242,9 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    // DBG page: gather snapshots, then render + reply in the callback. Safe
-    // off-thread - captures are taken here and RenderMonPage is pure.
+    // DBG / Latency page: gather snapshots, then render + reply in the
+    // callback. Safe off-thread - captures are taken here and RenderMonPage
+    // is pure.
     auto* actorSystem = TActivationContext::ActorSystem();
     const TActorId requester = ev->Sender;
 
@@ -217,6 +253,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             [tabletInfo = MakeMonTabletInfo(),
              page,
              selectedDbg,
+             selectedPercentile,
+             selectedLatencyOperation,
              requester,
              actorSystem](const auto& future)
             {
@@ -224,6 +262,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                     .Page = page,
                     .TabletInfo = tabletInfo,
                     .Dbgs = future.GetValue(),
+                    .SelectedPercentile = selectedPercentile,
+                    .SelectedLatencyOperation = selectedLatencyOperation,
                 };
                 if (selectedDbg) {
                     data.SelectedDbg = static_cast<ui32>(*selectedDbg);

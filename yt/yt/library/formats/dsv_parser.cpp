@@ -135,8 +135,8 @@ const char* TDsvParser::Consume(const char* begin, const char* end)
 
     if (*next == '\0') {
         THROW_ERROR_EXCEPTION("Unescaped \\0 symbol in DSV")
-            << TErrorAttribute("record_index", RecordCount)
-            << TErrorAttribute("field_index", FieldCount);
+            .With("record_index", RecordCount)
+            .With("field_index", FieldCount);
     }
 
     // Here, we have finished reading prefix, key or value
@@ -198,8 +198,8 @@ void TDsvParser::ValidatePrefix(const std::string& prefix) const
         THROW_ERROR_EXCEPTION("Malformed line prefix in DSV: expected %Qv, found %Qv",
             *Config->LinePrefix,
             prefix)
-            << TErrorAttribute("record_index", RecordCount)
-            << TErrorAttribute("field_index", FieldCount);
+            .With("record_index", RecordCount)
+            .With("field_index", FieldCount);
     }
 }
 

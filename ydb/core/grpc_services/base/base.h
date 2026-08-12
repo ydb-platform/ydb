@@ -2105,7 +2105,7 @@ public:
         return {};
     }
 
-    TString Database;
+    TString Database; // Raw `database` extracted from the HTTP request
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;

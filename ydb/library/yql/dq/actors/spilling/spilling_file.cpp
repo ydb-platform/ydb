@@ -169,6 +169,7 @@ private:
             EvWriteFileResponse,
             EvReadFileResponse,
             EvRemoveOldTmp,
+            EvRetryStart,
 
             LastEvent
         };
@@ -208,6 +209,13 @@ private:
             TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString spillingSessionId)
                 : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), SpillingSessionId(std::move(spillingSessionId)) {}
         };
+
+        struct TEvRetryStart : public TEventLocal<TEvRetryStart, EvRetryStart> {
+            ui32 RetriesLeft;
+
+            explicit TEvRetryStart(ui32 retriesLeft)
+                : RetriesLeft(retriesLeft) {}
+        };
     };
 
     struct TFileDesc;
@@ -225,28 +233,10 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
-        const auto rootToRemoveOldTmp = Root_;
-        const auto sessionId = Config_.SpillingSessionId;
-        const auto nodeId = SelfId().NodeId();
-
-        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
+        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << SelfId().NodeId() << "_" << Config_.SpillingSessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
-        try {
-            if (Root_.IsSymlink()) {
-                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
-            }
-            Root_.ForceDelete();
-            Root_.MkDirs(DIR_MODE);
-        } catch (...) {
-            LOG_E(CurrentExceptionMessage());
-            Become(&TDqLocalFileSpillingService::BrokenState);
-            return;
-        }
-
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
-
-        Become(&TDqLocalFileSpillingService::WorkState);
+        CreateRoot(MaxStartupRetries);
     }
 
     static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING_SERVICE";
@@ -261,32 +251,44 @@ protected:
     }
 
 private:
-    STATEFN(BrokenState) {
-        switch (ev->GetTypeRewrite()) {
-            case TEvDqSpillingLocalFile::TEvOpenFile::EventType:
-            case TEvDqSpillingLocalFile::TEvCloseFile::EventType:
-            case TEvDqSpilling::TEvWrite::EventType:
-            case TEvDqSpilling::TEvRead::EventType: {
-                HandleBroken(ev->Sender);
-                break;
+    void CreateRoot(ui32 retriesLeft) {
+        try {
+            if (Root_.IsSymlink()) {
+                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
             }
-            hFunc(NMon::TEvHttpInfo, HandleBroken);
+            Root_.ForceDelete();
+            Root_.MkDirs(DIR_MODE);
+        } catch (const yexception& e) {
+            const TString root = Root_.GetPath();
+            if (retriesLeft > 0) {
+                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << e.what() << ". Retry "
+                    << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
+                    << " in " << StartupRetryDelay.Seconds() << "s");
+                Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft - 1));
+                Become(&TDqLocalFileSpillingService::BrokenState);
+                return;
+            }
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
+        }
+
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Config_.SpillingSessionId));
+
+        Become(&TDqLocalFileSpillingService::WorkState);
+    }
+
+    STFUNC(BrokenState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NMon::TEvHttpInfo, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
+            case TEvPrivate::TEvRetryStart::EventType:
+                CreateRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
+                break;
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
+                LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
+                Send(ev->Sender, new TEvDqSpilling::TEvError("Spilling service is not started"));
         }
     }
 
-    void HandleBroken(const TActorId& from) {
-        LOG_E("Service is broken, send error to client " << from);
-        Send(from, new TEvDqSpilling::TEvError("Service not started"));
-    }
-
-    void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
-        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
-    }
-
-private:
     STRICT_STFUNC(WorkState,
         hFunc(TEvDqSpillingLocalFile::TEvOpenFile, HandleWork)
         hFunc(TEvDqSpillingLocalFile::TEvCloseFile, HandleWork)
@@ -1061,6 +1063,9 @@ private:
     };
 
 private:
+    static constexpr ui32 MaxStartupRetries = 2;
+    static constexpr TDuration StartupRetryDelay = TDuration::Seconds(1);
+
     const TFileSpillingServiceConfig Config_;
     const TString NodePrefix_ = "node";
     TFsPath Root_;

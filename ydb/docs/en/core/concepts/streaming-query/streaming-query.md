@@ -8,13 +8,13 @@ Stream data processing is a widely used approach implemented in systems such as 
 
 ## Differences from regular queries {#differences}
 
-Regular queries work with data that is already stored in tables. A query executes, returns a result, and terminates. A streaming query is created and runs indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, "flows through" the query, and is written to a sink — another topic or table.
+Regular queries work with data that is already stored in tables. A query executes, returns a result, and completes. A streaming query is created and continues running indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink — another topic or table.
 
 | Characteristic | Regular queries | Streaming queries |
 | --- | --- | --- |
-| Data | Finite set in tables | Infinite event stream |
-| Lifetime | Terminates after processing | Runs continuously |
-| Result | Available after completion | Updated as data arrives |
+| Data | Finite dataset in tables | Infinite stream of events |
+| Lifetime | Completes after processing | Runs continuously |
+| Result | Available after completion | Updates as data arrives |
 | Recovery on failures | Manual restart | Automatic recovery from [checkpoint](../../dev/streaming-query/checkpoints.md) |
 
 ## Data sources and sinks {#data-flow}
@@ -47,7 +47,7 @@ A detailed description of guarantees, anomalies, and ways to minimize them is in
 
 {% note info %}
 
-We are constantly working on developing streaming processing mechanisms. In future versions, the provided guarantees will be improved.
+We are constantly working on improving streaming processing mechanisms. In future versions, the provided guarantees will be improved.
 
 {% endnote %}
 
@@ -55,12 +55,12 @@ We are constantly working on developing streaming processing mechanisms. In futu
 
 {% note warning %}
 
-- The query must contain at least one read from a topic, since streaming processing requires a continuous input data stream.
+- The query must contain at least one read from a topic, as streaming processing requires a continuous input data stream.
 - `JOIN` of two streams is not supported (temporary architectural limitation).
 
 {% endnote %}
 
-Also not supported in the current version:
+The following are also not supported in the current version:
 
 - The [important reader](../datamodel/topic.md#important-consumer) flag for consumers used by streaming queries.
 - [Autopartitioning](../datamodel/topic.md#autopartitioning) (split/merge of partitions) of topics used by streaming queries. When the number of partitions in a topic from which a running streaming query reads increases, new partitions will not be processed.
@@ -79,6 +79,8 @@ Query status is available in the system table [`.sys/streaming_queries`](../../d
 ## Query language {#syntax}
 
 Streaming queries are written in [YQL](../../yql/reference/index.md) and support familiar SQL constructs: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md), [GROUP BY](../../yql/reference/syntax/select/group-by.md), [JOIN](../../yql/reference/syntax/select/join.md). For working with time windows, [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop) is used{% if feature_match_recogznize==true %}, and for pattern matching — [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}.
+
+A single streaming query can read multiple input topics, use the [UNION ALL](../../yql/reference/syntax/select/union.md#union-all) construct to combine data streams, and write the result to multiple output topics and/or tables (see more details in the articles [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats) and [{#T}](../../dev/streaming-query/table-writing.md)).
 
 ## See also
 

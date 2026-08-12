@@ -2,9 +2,7 @@
 
 #include "mkql_builtins_impl.h"  // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
-namespace NDecimal {
+namespace NKikimr::NMiniKQL::NDecimal {
 #ifndef MKQL_DISABLE_CODEGEN
 
 ConstantInt* GenConstant(NYql::NDecimal::TInt128 value, LLVMContext &context);
@@ -293,6 +291,4 @@ void RegisterAggregateFunctionForAllPrecisions(IBuiltinFunctionRegistry& registr
     RegisterAggregateFunctionForPrecision<35, TFunc, TArgs>(registry, name);
 }
 
-}
-}
-}
+} // namespace NKikimr::NMiniKQL::NDecimal

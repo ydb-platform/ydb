@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
 Y_UNIT_TEST_LLVM(TestNanvl) {
@@ -65,14 +64,14 @@ Y_UNIT_TEST_LLVM(TestToIntegral) {
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
-                                      return pb.NewTuple({pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i64>::Id, true)),
-                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui64>::Id, true))});
+                                      return pb.NewTuple({pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i64>::Id, /*optional=*/true)),
+                                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true))});
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -125,23 +124,23 @@ Y_UNIT_TEST_LLVM(TestToFloat) {
     const auto iterator = graph->GetValue().GetListIterator();
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 2.123f);
+    AssertUnboxedValueElementEqual(item, 2.123F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 0.233f);
+    AssertUnboxedValueElementEqual(item, 0.233F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 0.0f);
+    AssertUnboxedValueElementEqual(item, 0.0F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, -3277.823f);
+    AssertUnboxedValueElementEqual(item, -3277.823F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, -0.001f);
+    AssertUnboxedValueElementEqual(item, -0.001F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 7.128f);
+    AssertUnboxedValueElementEqual(item, 7.128F);
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT(std::isnan(item.template Get<float>()));
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(std::isinf(item.template Get<float>()) && item.template Get<float>() > 0.0f);
+    UNIT_ASSERT(std::isinf(item.template Get<float>()) && item.template Get<float>() > 0.0F);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(std::isinf(item.template Get<float>()) && item.template Get<float>() < 0.0f);
+    UNIT_ASSERT(std::isinf(item.template Get<float>()) && item.template Get<float>() < 0.0F);
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
@@ -999,10 +998,9 @@ Y_UNIT_TEST_LLVM(TestFromUtf8ToFloat) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{
-                                                          0.f, +24.75f, -24.75f, +42.42f, -42.42f,
+                                                          0.F, +24.75F, -24.75F, +42.42F, -42.42F,
                                                       });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

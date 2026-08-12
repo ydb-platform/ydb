@@ -220,16 +220,16 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
     }
 }
 
-void FillTablesMap(const TStringBuf path, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
-    tablesMap.emplace(path, THashSet<TStringBuf>{});
+void FillTablesMap(const TStringBuf path, THashMap<TString, THashSet<TString>>& tablesMap) {
+    tablesMap.emplace(path, THashSet<TString>{});
 }
 
-void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+void FillTablesMap(const TKqpTable& table, THashMap<TString, THashSet<TString>>& tablesMap) {
     FillTablesMap(table.Path().Value(), tablesMap);
 }
 
 void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(path, tablesMap);
 
@@ -239,7 +239,7 @@ void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -249,7 +249,7 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -258,7 +258,7 @@ void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
     }
 }
 
-void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& columns,
+void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TString>&& columns,
     NKqpProto::TKqpPhyTable& tableProto)
 {
     FillTableId(tableMeta, *tableProto.MutableId());
@@ -320,7 +320,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
 }
 
 void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
-    THashSet<TStringBuf> columns;
+    THashSet<TString> columns;
     columns.reserve(tableMeta.Columns.size());
     for (const auto& [col, _] : tableMeta.Columns){
         columns.emplace(col);
@@ -963,7 +963,7 @@ private:
         TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap,
         TRequestPredictor& rPredictor,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
     ) {
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
@@ -1192,7 +1192,7 @@ private:
 
         TMap<ui64, ui32> stagesMap;
         THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
-        THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
+        THashMap<TString, THashSet<TString>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
@@ -1312,7 +1312,7 @@ private:
     }
 
     void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+        THashMap<TString, THashSet<TString>>& tablesMap)
     {
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
             NKqpProto::TKqpReadRangesSource& readProto = *protoSource->MutableReadRangesSource();
@@ -1668,7 +1668,7 @@ private:
     }
 
     void FillSource(const TDqSource& source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
+        THashMap<TString, THashSet<TString>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
         if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
@@ -2094,7 +2094,7 @@ private:
     }
 
     // Fills indexSettings for a GlobalSync / GlobalSyncUnique secondary index.
-    void FillSyncIndexSettings(const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillSyncIndexSettings(const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns) {
         indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
 
@@ -2128,7 +2128,7 @@ private:
 
     // Fills indexSettings for a fulltext / json compact index (and its dict/docs/stats
     // sub-tables for the relevance variant).
-    void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns) {
         if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
             indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact);
@@ -2271,7 +2271,7 @@ private:
     }
 
     // Fills all per-index settings for the EnableIndexStreamWrite feature.
-    void FillIndexesSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillIndexesSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape, const TAffectedIndexes& affectedIndexes,
             const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns, const THashSet<TStringBuf>& mainKeyColumnsSet) {
         for (size_t index : affectedIndexes.Affected) {
@@ -2324,7 +2324,7 @@ private:
     // The EnableIndexStreamWrite path: computes lookup/index requirements and fills
     // index settings + returning columns + final operation type.
     // Returns the locally-processed DEFAULT columns (consumed by FillMainTableColumnsAndOrder).
-    TLocalDefaultColumns BuildStreamIndexWrite(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    TLocalDefaultColumns BuildStreamIndexWrite(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape) {
         const auto mode = settings.Mode().StringValue();
 
@@ -2456,7 +2456,7 @@ private:
         }
     }
 
-    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
+    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage) {
         settingsProto.SetDatabase(Database);
 
         const TSinkInputShape shape = DetermineInputRowFormat(settings, settingsProto, stage);
@@ -2491,7 +2491,7 @@ private:
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
@@ -2586,7 +2586,7 @@ private:
         const TMap<ui64, ui32>& stagesMap,
         NKqpProto::TKqpPhyConnection& connectionProto,
         TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID,
         const TDqPhyStage* stage,
         ui32 inputIndex
@@ -2939,7 +2939,7 @@ private:
             auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
             YQL_ENSURE(levelTableMeta);
 
-            tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
+            tablesMap.emplace(levelTablePath, THashSet<TString>{});
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
@@ -3014,6 +3014,110 @@ private:
                     vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
                     pos++;
                 }
+            }
+
+            return;
+        }
+
+        if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& proto = *connectionProto.MutableVectorSearch();
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, vectorSearch.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
+            YQL_ENSURE(indexDesc);
+
+            // Index settings
+            const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+            *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
+
+            const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
+            proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
+
+            // Main table
+            FillTablesMap(vectorSearch.Table(), tablesMap);
+            FillTableId(vectorSearch.Table(), *proto.MutableTable());
+
+            auto fillImplTable = [&](const char* implName, NKqpProto::TKqpPhyTableId& tableIdProto) {
+                TString path = TStringBuilder()
+                    << vectorSearch.Table().Path().Value()
+                    << "/" << vectorSearch.Index().Value()
+                    << "/" << implName;
+                auto implMeta = TablesData->ExistingTable(Cluster, path).Metadata;
+                YQL_ENSURE(implMeta);
+                tablesMap.emplace(path, THashSet<TString>{});
+                tableIdProto.SetPath(path);
+                tableIdProto.SetOwnerId(implMeta->PathId.OwnerId());
+                tableIdProto.SetTableId(implMeta->PathId.TableId());
+                tableIdProto.SetVersion(implMeta->SchemaVersion);
+                return implMeta;
+            };
+
+            // Index level table
+            fillImplTable(NTableIndex::NKMeans::LevelTable, *proto.MutableLevelTable());
+            const TString levelTablePath = proto.GetLevelTable().GetPath();
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
+
+            // Index posting table
+            auto postingTableMeta = fillImplTable(NTableIndex::NKMeans::PostingTable, *proto.MutablePostingTable());
+            const TString postingTablePath = proto.GetPostingTable().GetPath();
+            for (const auto& keyColumn : postingTableMeta->KeyColumnNames) {
+                tablesMap[postingTablePath].emplace(keyColumn);
+            }
+
+            // Input and output types
+            const auto inputType = vectorSearch.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty vector search input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector search input type");
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+            proto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
+
+            const auto outputType = vectorSearch.Ref().GetTypeAnn();
+            YQL_ENSURE(outputType, "Empty vector search output type");
+            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector search output type");
+            const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
+            YQL_ENSURE(outputItemType->GetKind() == ETypeAnnotationKind::Struct);
+            proto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
+
+            // Output columns, in the same order as the (canonical) output struct type so that
+            // the actor emits rows matching OutputType. The embedding column must be present
+            // (the logical optimizer includes it) so the actor can rank rows by distance.
+            const auto& embeddingColumn = indexDesc->KeyColumns.back();
+            ui32 vectorColumnIndex = 0;
+            bool hasEmbedding = false;
+            ui32 columnIndex = 0;
+            for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
+                const auto name = TString(item->GetName());
+                proto.AddColumns(name);
+                tablesMap[vectorSearch.Table().Path()].emplace(name);
+                // Covered index: the actor reads output columns straight from the
+                // posting table, so register them there too (not just main table).
+                if (postingTableMeta->Columns.contains(name)) {
+                    tablesMap[postingTablePath].emplace(name);
+                }
+                if (name == embeddingColumn) {
+                    vectorColumnIndex = columnIndex;
+                    hasEmbedding = true;
+                }
+                ++columnIndex;
+            }
+            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
+            proto.SetVectorColumnIndex(vectorColumnIndex);
+
+            // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
+            // a parameter is resolved to an actual value at execution time.
+            SetVectorTopKLimit(proto.MutableTopK(), vectorSearch.TopK().Ptr());
+
+            // Prefixed index: the transform input carries the per-group root __ydb_parent.
+            if (vectorSearch.HasPrefix().IsValid()) {
+                proto.SetHasPrefix(vectorSearch.HasPrefix().Cast().Value() == "true");
             }
 
             return;

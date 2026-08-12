@@ -92,6 +92,29 @@ Y_UNIT_TEST_SUITE(TPortionBlobValidation) {
         UNIT_ASSERT_VALUES_EQUAL(hash20, (((ui64)2) << 16) + 0);
     }
 
+    Y_UNIT_TEST(BlobBuilderSurvivesBlobsReallocation) {
+        const auto schema = MakeSchemaWithBlobBloom();
+        auto storages = TTestStoragesManager::GetInstance();
+        auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs({}, {}, TInternalPathId::FromRawValue(1), schema->GetVersion(),
+            schema->GetSnapshot(), storages, EPortionType::Written, schema->GetIndexInfo());
+        auto storage = storages->GetOperatorVerified(IStoragesManager::DefaultStorageId);
+        auto& blobs = constructor.GetBlobs();
+        blobs.emplace_back(storage);
+        TWritePortionInfoWithBlobsConstructor::TBlobInfo::TBuilder builder(constructor, 0);
+
+        const auto capacity = blobs.capacity();
+        while (blobs.capacity() == capacity) {
+            blobs.emplace_back(storage);
+        }
+
+        const auto batch = MakeBatch();
+        const auto chunk = BuildColumnChunkFromArray(*schema, PkColumnId, batch->column(0));
+        chunk->SetChunkIdx(0);
+        builder.AddChunk(chunk);
+        UNIT_ASSERT_VALUES_EQUAL(blobs.front().GetSize(), chunk->GetData().size());
+        UNIT_ASSERT(blobs.front().GetChunks().contains(chunk->GetChunkAddressVerified()));
+    }
+
     // Smoke test for the mixed column+index blob path that failed in #47860:
     // bloom index stored in default blob storage (not inplace), then portion Build/Finalize
     // with FullValidation of all column and index blob ranges.

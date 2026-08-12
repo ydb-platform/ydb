@@ -8,6 +8,7 @@ PEERDIR(
 SRCS(
     completion.cpp
     exception.cpp
+    formatting.cpp
     method.cpp
     session.cpp
     synchronization.cpp

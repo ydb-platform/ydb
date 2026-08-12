@@ -11,21 +11,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockVariantNodeTest) {
 
 Y_UNIT_TEST(TupleVariant_Ui32_IntoIndex0) {
     using TVariant = std::variant<ui32, ui64>;
-    TVector<ui32> data = {1u, 2u, 3u};
-    TVector<TVariant> expected = {TVariant{ui32{1u}}, TVariant{ui32{2u}}, TVariant{ui32{3u}}};
+    TVector<ui32> data = {1U, 2U, 3U};
+    TVector<TVariant> expected = {TVariant{ui32{1U}}, TVariant{ui32{2U}}, TVariant{ui32{3U}}};
     TBlockHelper().TestKernelFuzzied(data, expected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
-        return pb.BlockVariant(payloadValue, 0u, ConvertToMinikqlType<TVariant>(pb));
+        return pb.BlockVariant(payloadValue, 0U, ConvertToMinikqlType<TVariant>(pb));
     });
 }
 
 Y_UNIT_TEST(TupleVariant_Ui64_IntoIndex1) {
     using TVariant = std::variant<ui32, ui64>;
-    TVector<ui64> data = {10ull, 20ull, 30ull};
-    TVector<TVariant> expected = {TVariant{ui64{10ull}}, TVariant{ui64{20ull}}, TVariant{ui64{30ull}}};
+    TVector<ui64> data = {10ULL, 20ULL, 30ULL};
+    TVector<TVariant> expected = {TVariant{ui64{10ULL}}, TVariant{ui64{20ULL}}, TVariant{ui64{30ULL}}};
     TBlockHelper().TestKernelFuzzied(data, expected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
-        return pb.BlockVariant(payloadValue, 1u, ConvertToMinikqlType<TVariant>(pb));
+        return pb.BlockVariant(payloadValue, 1U, ConvertToMinikqlType<TVariant>(pb));
     });
 }
 
@@ -35,7 +35,7 @@ Y_UNIT_TEST(TupleVariant_StringAlternative) {
     TVector<TVariant> expected = {TVariant{TString{"hello"}}, TVariant{TString{"world"}}};
     TBlockHelper().TestKernelFuzzied(data, expected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
-        return pb.BlockVariant(payloadValue, 1u, ConvertToMinikqlType<TVariant>(pb));
+        return pb.BlockVariant(payloadValue, 1U, ConvertToMinikqlType<TVariant>(pb));
     });
 }
 
@@ -46,15 +46,15 @@ Y_UNIT_TEST(TupleVariant_TuplePayload) {
     TVector<TVariant> expected = {TVariant{TInner{ui32{1}, TString{"a"}}}, TVariant{TInner{ui32{2}, TString{"b"}}}};
     TBlockHelper().TestKernelFuzzied(data, expected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
-        return pb.BlockVariant(payloadValue, 0u, ConvertToMinikqlType<TVariant>(pb));
+        return pb.BlockVariant(payloadValue, 0U, ConvertToMinikqlType<TVariant>(pb));
     });
 }
 
 Y_UNIT_TEST(StructVariant_ByMemberName_XMember) {
     using TVariant = TStructVariant<NTest::TStructMember<"x", ui32>, NTest::TStructMember<"y", ui64>>;
 
-    TVector<ui32> xData = {7u, 8u};
-    TVector<TMaybe<ui32>> xExpected = {ui32{7u}, ui32{8u}};
+    TVector<ui32> xData = {7U, 8U};
+    TVector<TMaybe<ui32>> xExpected = {ui32{7U}, ui32{8U}};
     TBlockHelper().TestKernelFuzzied(xData, xExpected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
         auto varNode = pb.BlockVariant(payloadValue, NUdf::TStringRef("x"), ConvertToMinikqlType<TVariant>(pb));
@@ -65,8 +65,8 @@ Y_UNIT_TEST(StructVariant_ByMemberName_XMember) {
 Y_UNIT_TEST(StructVariant_ByMemberName_YMember) {
     using TVariant = TStructVariant<NTest::TStructMember<"x", ui32>, NTest::TStructMember<"y", ui64>>;
 
-    TVector<ui64> yData = {100ull, 200ull};
-    TVector<TMaybe<ui64>> yExpected = {ui64{100ull}, ui64{200ull}};
+    TVector<ui64> yData = {100ULL, 200ULL};
+    TVector<TMaybe<ui64>> yExpected = {ui64{100ULL}, ui64{200ULL}};
     TBlockHelper().TestKernelFuzzied(yData, yExpected, [](TSetup<false>& setup, TRuntimeNode payloadValue) {
         auto& pb = *setup.PgmBuilder;
         auto varNode = pb.BlockVariant(payloadValue, NUdf::TStringRef("y"), ConvertToMinikqlType<TVariant>(pb));

@@ -22,10 +22,8 @@ void FormatValue(TStringBuilderBase* builder, TLoggingTagListPayloadView tags, T
             builder->AppendString(", "_sb);
         }
         first = false;
-        if (tag->Key != TraceLoggingTagKey) {
-            builder->AppendString(tag->Key);
-            builder->AppendString(": "_sb);
-        }
+        builder->AppendString(tag->Key);
+        builder->AppendString(": "_sb);
         builder->AppendString(tag->Value);
     }
 }

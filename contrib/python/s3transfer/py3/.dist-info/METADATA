@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3transfer
-Version: 0.12.0
+Version: 0.15.0
 Summary: An Amazon S3 Transfer Manager
 Home-page: https://github.com/boto/s3transfer
 Author: Amazon Web Services
@@ -18,6 +18,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Requires-Python: >= 3.9
 License-File: LICENSE.txt
 License-File: NOTICE.txt

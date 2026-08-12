@@ -466,6 +466,7 @@ public:
         Proto_ = std::move(desc);
 
         Owner_ = Proto_.self().owner();
+        InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
         PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
         PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
@@ -681,6 +682,10 @@ public:
         return EffectivePermissions_;
     }
 
+    bool GetInterruptInheritance() const {
+        return InterruptInheritance_;
+    }
+
     const std::vector<TKeyRange>& GetKeyRanges() const {
         return Ranges_;
     }
@@ -756,6 +761,7 @@ private:
     std::vector<TChangefeedDescription> Changefeeds_;
     std::optional<TTtlSettings> TtlSettings_;
     std::string Owner_;
+    bool InterruptInheritance_ = false;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::vector<TKeyRange> Ranges_;
@@ -844,6 +850,10 @@ const std::vector<NScheme::TPermissions>& TTableDescription::GetPermissions() co
 
 const std::vector<NScheme::TPermissions>& TTableDescription::GetEffectivePermissions() const {
     return Impl_->GetEffectivePermissions();
+}
+
+bool TTableDescription::GetInterruptInheritance() const {
+    return Impl_->GetInterruptInheritance();
 }
 
 const std::vector<TKeyRange>& TTableDescription::GetKeyRanges() const {

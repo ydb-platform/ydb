@@ -27,8 +27,14 @@ from io import BytesIO
 
 import botocore
 import botocore.auth
-from botocore import utils
+from botocore import (
+    retryhandler,  # noqa: F401
+    translate,  # noqa: F401
+    utils,
+)
+from botocore.args import ClientConfigString
 from botocore.compat import (
+    MD5_AVAILABLE,  # noqa: F401
     ETree,
     OrderedDict,
     XMLParseError,
@@ -49,33 +55,30 @@ from botocore.docs.utils import (
 from botocore.endpoint_provider import VALID_HOST_LABEL_RE
 from botocore.exceptions import (
     AliasConflictParameterError,
+    MissingServiceIdError,  # noqa: F401
     ParamValidationError,
     UnsupportedTLSVersionWarning,
 )
 from botocore.regions import EndpointResolverBuiltins
+from botocore.serialize import TIMESTAMP_PRECISION_MILLISECOND
 from botocore.signers import (
     add_dsql_generate_db_auth_token_methods,
     add_generate_db_auth_token,
     add_generate_presigned_post,
     add_generate_presigned_url,
 )
+from botocore.useragent import register_feature_id
 from botocore.utils import (
     SAFE_CHARS,
+    SERVICE_NAME_ALIASES,  # noqa: F401
     ArnParser,
+    conditionally_calculate_md5,
+    get_token_from_environment,
+    hyphenize_service_id,  # noqa: F401
+    is_global_accesspoint,  # noqa: F401
     percent_encode,
     switch_host_with_param,
-    conditionally_calculate_md5,
 )
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore import retryhandler  # noqa
-from botocore import translate  # noqa
-from botocore.compat import MD5_AVAILABLE  # noqa
-from botocore.exceptions import MissingServiceIdError  # noqa
-from botocore.utils import hyphenize_service_id  # noqa
-from botocore.utils import is_global_accesspoint  # noqa
-from botocore.utils import SERVICE_NAME_ALIASES  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +239,24 @@ def set_operation_specific_signer(context, signing_name, **kwargs):
         return signature_version
 
 
+def _handle_sqs_compatible_error(parsed, context, **kwargs):
+    """
+    Ensures backward compatibility for SQS errors.
+
+    SQS's migration from the Query protocol to JSON was done prior to SDKs allowing a
+    service to support multiple protocols.  Because of this, SQS is missing the "error"
+    key from its modeled exceptions, which is used by most query compatible services
+    to map error codes to the proper exception.  Instead, SQS uses the error's shape name,
+    which is preserved in the QueryErrorCode key.
+    """
+    parsed_error = parsed.get("Error", {})
+    if not parsed_error:
+        return
+
+    if query_code := parsed_error.get("QueryErrorCode"):
+        context['error_code_override'] = query_code
+
+
 def _resolve_sigv4a_region(context):
     region = None
     if 'client_config' in context:
@@ -264,7 +285,9 @@ def generate_idempotent_uuid(params, model, **kwargs):
         if name not in params:
             params[name] = str(uuid.uuid4())
             logger.debug(
-                f"injecting idempotency token ({params[name]}) into param '{name}'."
+                "injecting idempotency token (%s) into param '%s'.",
+                params[name],
+                name,
             )
 
 
@@ -329,9 +352,8 @@ def _sse_md5(params, sse_member_prefix='SSECustomer'):
     key_as_bytes = params[sse_key_member]
     if isinstance(key_as_bytes, str):
         key_as_bytes = key_as_bytes.encode('utf-8')
-    key_md5_str = base64.b64encode(get_md5(key_as_bytes).digest()).decode(
-        'utf-8'
-    )
+    md5_val = get_md5(key_as_bytes, usedforsecurity=False).digest()
+    key_md5_str = base64.b64encode(md5_val).decode('utf-8')
     key_b64_encoded = base64.b64encode(key_as_bytes).decode('utf-8')
     params[sse_key_member] = key_b64_encoded
     params[sse_md5_member] = key_md5_str
@@ -841,7 +863,7 @@ def decode_list_object_v1ext(parsed, context, **kwargs):
         top_level_keys=['Delimiter', 'Prefix', 'StartAfter'],
         nested_keys=[('Contents', 'Key'), ('CommonPrefixes', 'Prefix')],
         parsed=parsed,
-        context=context
+        context=context,
     )
     # lowercase metadata keys
     if 'Contents' in parsed:
@@ -1070,6 +1092,11 @@ def remove_bedrock_runtime_invoke_model_with_bidirectional_stream(
         del class_attributes['invoke_model_with_bidirectional_stream']
 
 
+def enable_millisecond_timestamp_precision(serializer_kwargs, **kwargs):
+    """Event handler to enable millisecond precision"""
+    serializer_kwargs['timestamp_precision'] = TIMESTAMP_PRECISION_MILLISECOND
+
+
 def add_retry_headers(request, **kwargs):
     retries_context = request.context.get('retries')
     if not retries_context:
@@ -1218,8 +1245,9 @@ def handle_expires_header(
                 utils.parse_timestamp(expires_value)
             except (ValueError, RuntimeError):
                 logger.warning(
-                    f'Failed to parse the "Expires" member as a timestamp: {expires_value}. '
-                    f'The unparsed value is available in the response under "ExpiresString".'
+                    'Failed to parse the "Expires" member as a timestamp: %s. '
+                    'The unparsed value is available in the response under "ExpiresString".',
+                    expires_value,
                 )
                 del response_dict['headers']['Expires']
 
@@ -1283,7 +1311,8 @@ def _handle_200_error(operation_model, response_dict, **kwargs):
     ):
         response_dict['status_code'] = 500
         logger.debug(
-            f"Error found for response with 200 status code: {response_dict['body']}."
+            "Error found for response with 200 status code: %s.",
+            response_dict['body'],
         )
 
 
@@ -1316,12 +1345,6 @@ def _update_status_code(response, **kwargs):
         http_response.status_code = parsed_status_code
 
 
-def add_query_compatibility_header(model, params, **kwargs):
-    if not model.service_model.is_query_compatible:
-        return
-    params['headers']['x-amzn-query-mode'] = 'true'
-
-
 def _handle_request_validation_mode_member(params, model, **kwargs):
     client_config = kwargs.get("context", {}).get("client_config")
     if client_config is None:
@@ -1349,6 +1372,100 @@ def _set_extra_headers_for_unsigned_request(
         headers["X-Amz-Content-SHA256"] = "STREAMING-UNSIGNED-PAYLOAD-TRAILER"
 
 
+def _set_auth_scheme_preference_signer(context, signing_name, **kwargs):
+    """
+    Determines the appropriate signer to use based on the client configuration,
+    authentication scheme preferences, and the availability of a bearer token.
+    """
+    client_config = context.get('client_config')
+    if client_config is None:
+        return
+
+    signature_version = client_config.signature_version
+    auth_scheme_preference = client_config.auth_scheme_preference
+    auth_options = context.get('auth_options')
+
+    signature_version_set_in_code = (
+        isinstance(signature_version, ClientConfigString)
+        or signature_version is botocore.UNSIGNED
+    )
+    auth_preference_set_in_code = isinstance(
+        auth_scheme_preference, ClientConfigString
+    )
+    has_in_code_configuration = (
+        signature_version_set_in_code or auth_preference_set_in_code
+    )
+
+    resolved_signature_version = signature_version
+
+    # If signature version was not set in code, but an auth scheme preference
+    # is available, resolve it based on the preferred schemes and supported auth
+    # options for this service.
+    if (
+        not signature_version_set_in_code
+        and auth_scheme_preference
+        and auth_options
+    ):
+        preferred_schemes = auth_scheme_preference.split(',')
+        resolved = botocore.auth.resolve_auth_scheme_preference(
+            preferred_schemes, auth_options
+        )
+        resolved_signature_version = (
+            botocore.UNSIGNED if resolved == 'none' else resolved
+        )
+
+    # Prefer 'bearer' signature version if a bearer token is available, and it
+    # is allowed for this service. This can override earlier resolution if the
+    # config object didn't explicitly set a signature version.
+    if _should_prefer_bearer_auth(
+        has_in_code_configuration,
+        signing_name,
+        resolved_signature_version,
+        auth_options,
+    ):
+        register_feature_id('BEARER_SERVICE_ENV_VARS')
+        resolved_signature_version = 'bearer'
+
+    if resolved_signature_version == signature_version:
+        return None
+    return resolved_signature_version
+
+
+def _should_prefer_bearer_auth(
+    has_in_code_configuration,
+    signing_name,
+    resolved_signature_version,
+    auth_options,
+):
+    if signing_name not in get_bearer_auth_supported_services():
+        return False
+
+    if not auth_options or 'smithy.api#httpBearerAuth' not in auth_options:
+        return False
+
+    has_token = get_token_from_environment(signing_name) is not None
+
+    # Prefer 'bearer' if a bearer token is available, and either:
+    #   Bearer was already resolved, or
+    #   No auth-related values were explicitly set in code
+    return has_token and (
+        resolved_signature_version == 'bearer' or not has_in_code_configuration
+    )
+
+
+def get_bearer_auth_supported_services():
+    """
+    Returns a set of services that support bearer token authentication.
+    These values correspond to the service's `signingName` property as defined
+    in model.py, falling back to `endpointPrefix` if `signingName` is not set.
+
+    Warning: This is a private interface and is subject to abrupt breaking changes,
+    including removal, in any botocore release. It is not intended for external use,
+    and its usage outside of botocore is not advised or supported.
+    """
+    return {'bedrock'}
+
+
 # This is a list of (event_name, handler).
 # When a Session is created, everything in this list will be
 # automatically registered with that Session.
@@ -1358,6 +1475,10 @@ BUILTIN_HANDLERS = [
     (
         'getattr.mturk.list_hi_ts_for_qualification_type',
         ClientMethodAlias('list_hits_for_qualification_type'),
+    ),
+    (
+        'getattr.socialmessaging.delete_whatsapp_media_message',
+        ClientMethodAlias('delete_whatsapp_message_media'),
     ),
     (
         'before-parameter-build.s3.UploadPart',
@@ -1383,10 +1504,18 @@ BUILTIN_HANDLERS = [
         'creating-client-class.bedrock-runtime',
         remove_bedrock_runtime_invoke_model_with_bidirectional_stream,
     ),
+    (
+        'creating-serializer.bedrock-agentcore',
+        enable_millisecond_timestamp_precision,
+    ),
     ('after-call.iam', json_decode_policies),
     ('after-call.ec2.GetConsoleOutput', decode_console_output),
     ('after-call.cloudformation.GetTemplate', json_decode_template_body),
     ('after-call.s3.GetBucketLocation', parse_get_bucket_location),
+    (
+        'after-call.sqs.*',
+        _handle_sqs_compatible_error,
+    ),
     ('before-parse.s3.*', handle_expires_header),
     ('before-parse.s3.*', _handle_200_error, REGISTER_FIRST),
     ('before-parameter-build', generate_idempotent_uuid),
@@ -1420,7 +1549,6 @@ BUILTIN_HANDLERS = [
     ('docs.response-params.s3.*.complete-section', document_expires_shape),
     ('before-endpoint-resolution.s3', customize_endpoint_resolver_builtins),
     ('before-call', add_recursion_detection_header),
-    ('before-call', add_query_compatibility_header),
     ('before-call.s3', add_expect_header),
     ('before-call.glacier', add_glacier_version),
     ('before-call.apigateway', add_accept_header),
@@ -1443,6 +1571,7 @@ BUILTIN_HANDLERS = [
     ('choose-signer.sts.AssumeRoleWithSAML', disable_signing),
     ('choose-signer.sts.AssumeRoleWithWebIdentity', disable_signing),
     ('choose-signer', set_operation_specific_signer),
+    ('choose-signer', _set_auth_scheme_preference_signer),
     ('before-parameter-build.s3.HeadObject', sse_md5),
     ('before-parameter-build.s3.GetObject', sse_md5),
     ('before-parameter-build.s3.PutObject', sse_md5),

@@ -29,6 +29,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
+    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_ != TDuration::Zero() ?

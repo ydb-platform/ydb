@@ -8,6 +8,7 @@ RECURSE(
     ydb_bench
     query_replay
     query_replay_yt
+    ssh_ya
     stress_tool
     tsserver
     tstool

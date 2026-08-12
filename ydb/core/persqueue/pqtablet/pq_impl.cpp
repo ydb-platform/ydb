@@ -3550,10 +3550,9 @@ void TPersQueue::AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack)
 void TPersQueue::SendDeferredPlanStepAcks(const TActorContext& ctx)
 {
     for (auto& e : DeferredPlanStepAcks) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send deferred TEvPlanStep acks",
-            {"logPrefix", LogPrefix()},
-            {"step", e.Event->Record.GetStep()},
-            {"txCount", e.Event->Record.TransactionsSize()});
+        PQ_LOG_TX_D("Send deferred TEvPlanStep acks." <<
+                    "Step: " << e.Event->Record.GetStep() <<
+		    ", TxCount: " << e.Event->Record.TransactionsSize());
         SendPlanStepAcks(ctx, e.Sender, *e.Event);
     }
 
@@ -3906,12 +3905,10 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         // CreatePQ re-plan after Attach→NODATA) would let the stale tablet confirm the step
         // without a successful KV write. Defer ack until WRITE_TX succeeds — same fence as
         // deferred TEvReadSetAck for unknown txs. Watermark is not moved on this path.
-        YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX,
-            "All-unknown PlanStep; deferring ack until WRITE_TX completes",
-            {"logPrefix", LogPrefix()},
-            {"step", step},
-            {"planStep", PlanStep},
-            {"txCount", event.TransactionsSize()});
+        PQ_LOG_TX_W("All-unknown PlanStep; deferring ack until WRITE_TX completes." <<
+                    " Step: " << step <<
+		    ", PlanStep: " << PlanStep <<
+		    ", TxCount: " << event.TransactionsSize());
         AddPendingDeferredPlanStepAck({.Sender = sender, .Event = std::move(ev)});
         TryWriteTxs(ctx);
     }

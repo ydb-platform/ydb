@@ -1251,6 +1251,12 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
     UNIT_FAIL("expected execution step " << step);
 }
 
+namespace {
+
+constexpr ui32 WRITE_TX_COOKIE = 5; // TPersQueue::WRITE_TX_COOKIE
+
+}
+
 void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
 {
     bool found = false;

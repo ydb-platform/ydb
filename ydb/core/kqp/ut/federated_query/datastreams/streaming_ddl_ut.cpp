@@ -4308,7 +4308,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
-        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
+        appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -4331,7 +4333,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ] @@;
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT * FROM `{pq_source}`.`{input_topic}`
+                SELECT Data FROM `{pq_source}`.`{input_topic}`
+                GROUP BY Data, HOP(CurrentUtcTimestamp(TableRow()), "PT10S", "PT10S", "PT10S");
             END DO;)",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,

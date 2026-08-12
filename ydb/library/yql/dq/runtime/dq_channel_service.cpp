@@ -130,13 +130,8 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
 
 TLocalBuffer::~TLocalBuffer() {
     if (QuotaManager) {
-        // release quota allocated for the chunks which were never popped (early finish, abort, etc)
-        ui64 queueBytes = 0;
-        while (!Queue.empty()) {
-            queueBytes += Queue.front().Bytes;
-            Queue.pop();
-        }
-        QuotaManager->FreeQuota(queueBytes);
+        // InflightBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
+        QuotaManager->FreeQuota(InflightBytes.load());
     }
     *Registry->LocalBufferInflightBytes -= InflightBytes.load();
     Registry->DeleteLocalBufferInfo(Info);
@@ -181,22 +176,23 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             // and always report soft/hard limit even if we have small inflight
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
-            InflightBytes += data.Bytes;
-            *Registry->LocalBufferInflightBytes += data.Bytes;
+            // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
             if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
                 AbortChannelByMemoryLimit(data.Bytes);
                 return;
             }
+            InflightBytes += data.Bytes;
+            *Registry->LocalBufferInflightBytes += data.Bytes;
             Queue.push(std::move(data));
             fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
-        InflightBytes += data.Bytes;
-        *Registry->LocalBufferInflightBytes += data.Bytes;
         if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
             AbortChannelByMemoryLimit(data.Bytes);
             return;
         }
+        InflightBytes += data.Bytes;
+        *Registry->LocalBufferInflightBytes += data.Bytes;
         Queue.push(std::move(data));
         fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
@@ -275,6 +271,12 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     } else {
         while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
             auto bytes = SpilledChunkBytes.front();
+            // quota for a spilled chunk is allocated as soon as it is counted as inflight (and released on pop),
+            // no matter whether it is loaded right here or via LoadingQueue
+            if (QuotaManager && !QuotaManager->AllocateQuota(bytes)) {
+                AbortChannelByMemoryLimit(bytes);
+                break;
+            }
             SpilledChunkBytes.pop();
             InflightBytes += bytes;
             *Registry->LocalBufferInflightBytes += bytes;
@@ -359,10 +361,7 @@ void TLocalBuffer::StorageWakeupHandler() {
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
-        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
-            AbortChannelByMemoryLimit(data.Bytes);
-            return;
-        }
+        // quota is already allocated for this chunk in TLocalBuffer::Pop
         Queue.emplace(std::move(data));
         SpilledBytes -= info.Bytes;
 

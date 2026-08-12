@@ -12,7 +12,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
 #include <ydb/services/scheme_secret/resolver.h>
-#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NKikimr::NKqp {
 
@@ -427,7 +426,7 @@ TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& gr
     if (grpcStatus.InternalError) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
     }
-    return TYqlConclusionStatus::Fail(NYql::NDq::YdbStatusToYqlStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
+    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
 }
 
 TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {

@@ -115,12 +115,6 @@ struct TReadIteratorVectorTop {
 
 namespace {
 
-constexpr ui64 DefaultHnswMaxMemoryBytes = 10_GB;
-
-ui64 EffectiveHnswMaxMemoryBytes(const Ydb::Table::VectorIndexSettings& settings) {
-    return settings.hnsw_max_memory_bytes() ? settings.hnsw_max_memory_bytes() : DefaultHnswMaxMemoryBytes;
-}
-
 constexpr ui64 MinRowsPerCheck  = 1000;
 constexpr ui64 MinBytesPerCheck = 1_MB;
 
@@ -2649,7 +2643,8 @@ public:
                     Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
                     << " size=" << cached->Size());
                 topState->HnswIndex = std::move(cached);
-            } else if (topK.GetSettings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+            } else if (topK.GetSettings().hnsw_max_memory_bytes() != 0
+                    && topK.GetSettings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && !Self->IsHnswIndexBuilding(localTid)) {
                 // Compatibility/restart path: eager construction only runs at
                 // index finalization, so an index created before deployment or
@@ -2667,7 +2662,7 @@ public:
                     const ui64 rowCount = vectors.size();
                     auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid, rowCount,
                         topK.GetSettings(), std::move(vectors),
-                        EffectiveHnswMaxMemoryBytes(topK.GetSettings()));
+                        topK.GetSettings().hnsw_max_memory_bytes());
                     const TActorId actorId = ctx.Register(
                         actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
                     Self->Actors.insert(actorId);

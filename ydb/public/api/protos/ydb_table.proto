@@ -99,8 +99,8 @@ message VectorIndexSettings {
     // The in-memory HNSW index accelerates vector search and is built once,
     // when the index build completes. If the estimated memory required to build
     // or hold it would exceed this budget, it is skipped and brute force search
-    // is used instead. 0 (default) means an implementation defined default
-    // budget is used.
+    // is used instead. The protobuf default of 0 disables the in-memory HNSW
+    // index.
     //
     // Note that the index reflects the table as of index build time: rows
     // written afterwards are not reflected in accelerated search results.

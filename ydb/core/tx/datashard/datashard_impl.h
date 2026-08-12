@@ -1786,16 +1786,22 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
-        if (locksDb) {
-            SysLocks.RemoveSchema(tableId, locksDb);
-        }
+    void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && it->second->LocalTid != tableInfo->LocalTid) {
             HnswIndexCache.erase(it->second->LocalTid);
         }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        SetUserTable(tableId, tableInfo);
+    }
+
+    void ReplaceUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb& locksDb) {
+        SysLocks.RemoveSchema(tableId, &locksDb);
+        SetUserTable(tableId, tableInfo);
     }
 
     // Returns the cached HNSW index for the given local table id, or nullptr.

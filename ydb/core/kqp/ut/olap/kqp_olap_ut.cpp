@@ -5585,7 +5585,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
-        // Verify the renamed standalone table is accessible
+        // Verify the standalone table is still accessible (move was rejected)
         {
             auto it = queryClient.ExecuteQuery(R"(
                 SELECT * FROM `/Root/StandaloneTable`;

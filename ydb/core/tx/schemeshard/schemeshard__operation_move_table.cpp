@@ -822,7 +822,7 @@ public:
             }
             if (srcPath->IsColumnTable() && srcPath.Parent()->IsOlapStore()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "Moving tables inside a TABLESTORE is not supported");
+                    "TABLESTORE tables cannot be renamed or moved");
                 return result;
             }
 

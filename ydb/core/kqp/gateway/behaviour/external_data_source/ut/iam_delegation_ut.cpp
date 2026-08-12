@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/gateway/behaviour/external_data_source/iam_delegation.h>
+#include <ydb/core/kqp/gateway/behaviour/external_data_source/iam_delegation_ddl.h>
 #include <ydb/core/kqp/gateway/behaviour/external_data_source/iam_object_lookup.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
@@ -92,6 +93,30 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(punctuation, "eds:-:unique");
         const TString empty = MakeIamDelegationReferrerId("", "unique");
         UNIT_ASSERT_VALUES_EQUAL(empty, "eds:source:unique");
+    }
+
+    Y_UNIT_TEST(PrepareDelegationPersistsManagedHumanReadableReference) {
+        NKikimrSchemeOp::TExternalDataSourceDescription description;
+        description.MutableAuth()->MutableIam()->SetServiceAccountId("target-sa-id");
+
+        const auto status = PrepareIamDelegation(description, "Orders From Production");
+        UNIT_ASSERT(!status.IsFail());
+        const auto& iam = description.GetAuth().GetIam();
+        UNIT_ASSERT(iam.GetDelegationReferrerId().StartsWith("eds:orders-f:"));
+        UNIT_ASSERT_LE(iam.GetDelegationReferrerId().size(), 50);
+
+        TIamDelegation delegation{
+            .ResourceId = "cloud-id",
+            .ServiceAccountId = iam.GetServiceAccountId(),
+            .ReferrerId = iam.GetDelegationReferrerId(),
+        };
+        UNIT_ASSERT(IsManagedIamDelegation(delegation));
+    }
+
+    Y_UNIT_TEST(PrepareDelegationRejectsMissingServiceAccount) {
+        NKikimrSchemeOp::TExternalDataSourceDescription description;
+        UNIT_ASSERT(PrepareIamDelegation(description, "source").IsFail());
+        UNIT_ASSERT(!description.GetAuth().GetIam().HasDelegationReferrerId());
     }
 
     Y_UNIT_TEST(ReferrerSanitizationIsStableAndBounded) {

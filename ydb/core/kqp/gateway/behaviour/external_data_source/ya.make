@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     iam_delegation.cpp
+    iam_delegation_ddl.cpp
     manager.cpp
     GLOBAL behaviour.cpp
 )

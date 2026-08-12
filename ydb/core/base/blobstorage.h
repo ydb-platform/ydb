@@ -771,6 +771,7 @@ struct TEvBlobStorage {
         EvBSQueueResetConnection, // for test purposes
         EvRecoveryLogCutDone,
         EvChangeExpectedSlotCount,
+        EvPDiskThreadLifecycle,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

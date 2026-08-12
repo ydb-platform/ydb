@@ -9,6 +9,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NActors {
 
     struct TBasicExecutorPoolConfig {
@@ -17,6 +19,7 @@ namespace NActors {
 
         ui32 PoolId = 0;
         TString PoolName;
+        std::optional<ui32> PlacementGroupId;
         ui32 Threads = 1;
         ui64 SpinThreshold = 100;
         TCpuMask Affinity; // Executor thread affinity
@@ -103,6 +106,15 @@ namespace NActors {
             for (const auto& p : IO) {
                 if (p.PoolId == poolId) {
                     return p.Threads;
+                }
+            }
+            return {};
+        }
+
+        std::optional<ui32> GetPlacementGroupId(ui32 poolId) const {
+            for (const auto& p : Basic) {
+                if (p.PoolId == poolId) {
+                    return p.PlacementGroupId;
                 }
             }
             return {};

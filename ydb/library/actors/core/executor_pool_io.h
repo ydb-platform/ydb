@@ -44,6 +44,7 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        TVector<TThreadId> GetThreadIds() const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
 

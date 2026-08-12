@@ -119,6 +119,11 @@ namespace NActors {
             Y_UNUSED(statsCopy);
         }
 
+        // Returns IDs of all physical executor threads. Must be called after Start().
+        virtual TVector<TThreadId> GetThreadIds() const {
+            return {};
+        }
+
         virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {
             Y_UNUSED(poolState);
         }

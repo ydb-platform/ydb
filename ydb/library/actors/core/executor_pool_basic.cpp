@@ -502,6 +502,15 @@ namespace NActors {
         }
     }
 
+    TVector<TThreadId> TBasicExecutorPool::GetThreadIds() const {
+        TVector<TThreadId> threadIds;
+        threadIds.reserve(MaxFullThreadCount);
+        for (i16 i = 0; i < MaxFullThreadCount; ++i) {
+            threadIds.push_back(Threads[i].Thread->GetThreadId());
+        }
+        return threadIds;
+    }
+
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);

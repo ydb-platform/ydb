@@ -36,6 +36,23 @@
 namespace NKikimr {
 namespace NPDisk {
 
+namespace {
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetPDiskCounters(
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TPDiskConfig& cfg) {
+    auto pdiskCounters = GetServiceCounters(counters, "pdisks")
+        ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, cfg.PDiskId))
+        ->GetSubgroup("media", to_lower(cfg.PDiskCategory.TypeStrShort()));
+    if (cfg.BlobStorageExecutorPoolPlacementGroupId) {
+        pdiskCounters = pdiskCounters->GetSubgroup(
+            "placement", ToString(*cfg.BlobStorageExecutorPoolPlacementGroupId));
+    }
+    return pdiskCounters;
+}
+
+} // anonymous namespace
+
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 void CreatePDiskActor(TExecutorThread& executorThread,
@@ -225,9 +242,7 @@ public:
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Cfg(cfg)
         , MainKey(mainKey)
-        , PDiskCounters(GetServiceCounters(counters, "pdisks")
-                ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, (ui32)cfg->PDiskId))
-                ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
+        , PDiskCounters(GetPDiskCounters(counters, *cfg))
     {
         Y_VERIFY(MainKey.IsInitialized);
     }
@@ -1156,6 +1171,7 @@ public:
         PDisk->Mon.UpdateLights();
         const bool halt = PDisk->Mon.UpdateDeviceHaltCounters();
         PDisk->Mon.UpdateStats();
+        PDisk->Mon.UpdateThreadStats();
         ui64 updatePercentileTrackersCycles = timer.Elapsed();
 
         if (halt) {
@@ -1451,6 +1467,22 @@ public:
         PDisk->InputRequest(request);
     }
 
+    void Handle(TEvPDiskThreadLifecycle::TPtr& ev) {
+        const auto* event = ev->Get();
+        if (!PDisk) {
+            return;
+        }
+
+        switch (event->Action) {
+            case TEvPDiskThreadLifecycle::EAction::Register:
+                PDisk->Mon.RegisterThread(event->ThreadName, event->ThreadId);
+                break;
+            case TEvPDiskThreadLifecycle::EAction::Unregister:
+                PDisk->Mon.UnregisterThread(event->ThreadName, event->ThreadId);
+                break;
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Actor state functions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1485,6 +1517,7 @@ public:
             hFunc(NMon::TEvHttpInfo, InitHandle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
+            hFunc(NPDisk::TEvPDiskThreadLifecycle, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
             hFunc(NPDisk::TEvFormatReencryptionFinish, InitHandle);
             hFunc(NPDisk::TEvShredPDisk, InitHandle);
@@ -1529,6 +1562,7 @@ public:
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
+            hFunc(NPDisk::TEvPDiskThreadLifecycle, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
 
             hFunc(TEvReadMetadata, Handle);
@@ -1566,6 +1600,7 @@ public:
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
+            hFunc(NPDisk::TEvPDiskThreadLifecycle, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
 
             hFunc(TEvReadMetadata, Handle);

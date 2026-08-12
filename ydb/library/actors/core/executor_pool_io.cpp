@@ -158,6 +158,15 @@ namespace NActors {
         }
     }
 
+    TVector<TThreadId> TIOExecutorPool::GetThreadIds() const {
+        TVector<TThreadId> threadIds;
+        threadIds.reserve(PoolThreads);
+        for (i16 i = 0; i < PoolThreads; ++i) {
+            threadIds.push_back(Threads[i].Thread->GetThreadId());
+        }
+        return threadIds;
+    }
+
     void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);

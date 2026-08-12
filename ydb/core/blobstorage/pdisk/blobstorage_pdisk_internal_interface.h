@@ -203,6 +203,25 @@ struct TEvDeviceError : public TEventLocal<TEvDeviceError, TEvBlobStorage::EvDev
     {}
 };
 
+struct TEvPDiskThreadLifecycle
+    : public TEventLocal<TEvPDiskThreadLifecycle, TEvBlobStorage::EvPDiskThreadLifecycle>
+{
+    enum class EAction : ui8 {
+        Register,
+        Unregister,
+    };
+
+    const TString ThreadName;
+    const ui64 ThreadId;
+    const EAction Action;
+
+    TEvPDiskThreadLifecycle(TString threadName, ui64 threadId, EAction action)
+        : ThreadName(std::move(threadName))
+        , ThreadId(threadId)
+        , Action(action)
+    {}
+};
+
 struct TEvFormatReencryptionFinish : public TEventLocal<TEvFormatReencryptionFinish, TEvBlobStorage::EvFormatReencryptionFinish> {
     bool Success;
     TString ErrorReason;

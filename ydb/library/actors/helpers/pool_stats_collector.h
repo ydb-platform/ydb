@@ -2,12 +2,16 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_pool_counters.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/thread_stats.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
 #include <util/string/printf.h>
+
+#include <optional>
 
 namespace NActors {
 
@@ -149,6 +153,9 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr DestroyedActors;
         NMonitoring::TDynamicCounters::TCounterPtr EmptyMailboxActivation;
         NMonitoring::TDynamicCounters::TCounterPtr CpuMicrosec;
+        NMonitoring::TDynamicCounters::TCounterPtr SchedRuntimeMicrosec;
+        NMonitoring::TDynamicCounters::TCounterPtr SchedWaitMicrosec;
+        NMonitoring::TDynamicCounters::TCounterPtr NonvoluntaryContextSwitches;
         NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosec;
         NMonitoring::TDynamicCounters::TCounterPtr ParkedMicrosec;
         NMonitoring::TDynamicCounters::TCounterPtr ActorRegistrations;
@@ -203,7 +210,8 @@ private:
         double LimitThreads;
         double DefaultThreads;
 
-        void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
+        void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads,
+                std::optional<ui32> placementGroupId) {
             LastElapsedSeconds = 0;
             Usage = 0;
             UsageTimer.Reset();
@@ -212,7 +220,7 @@ private:
             LimitThreads = threads;
             DefaultThreads = threads;
 
-            PoolGroup = group->GetSubgroup("execpool", poolName);
+            PoolGroup = GetExecutorPoolCountersGroup(group, poolName, placementGroupId);
 
             SentEvents          = PoolGroup->GetCounter("SentEvents", true);
             ReceivedEvents      = PoolGroup->GetCounter("ReceivedEvents", true);
@@ -220,6 +228,9 @@ private:
             NonDeliveredEvents  = PoolGroup->GetCounter("NonDeliveredEvents", true);
             DestroyedActors     = PoolGroup->GetCounter("DestroyedActors", true);
             CpuMicrosec         = PoolGroup->GetCounter("CpuMicrosec", true);
+            SchedRuntimeMicrosec = PoolGroup->GetCounter("SchedRuntimeMicrosec", true);
+            SchedWaitMicrosec = PoolGroup->GetCounter("SchedWaitMicrosec", true);
+            NonvoluntaryContextSwitches = PoolGroup->GetCounter("NonvoluntaryContextSwitches", true);
             ElapsedMicrosec     = PoolGroup->GetCounter("ElapsedMicrosec", true);
             ParkedMicrosec      = PoolGroup->GetCounter("ParkedMicrosec", true);
             EmptyMailboxActivation = PoolGroup->GetCounter("EmptyMailboxActivation", true);
@@ -285,6 +296,9 @@ private:
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
             *CpuMicrosec        = stats.CpuUs;
+            *SchedRuntimeMicrosec = stats.SchedRuntimeNs / 1000;
+            *SchedWaitMicrosec = stats.SchedWaitNs / 1000;
+            *NonvoluntaryContextSwitches = stats.NonvoluntaryContextSwitches;
             *ElapsedMicrosec    = elapsedSeconds*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;
@@ -416,15 +430,29 @@ public:
         , Counters(counters)
     {
         PoolCounters.resize(setup.GetExecutorsCount());
+        ThreadSchedulerStatsReaders.resize(PoolCounters.size());
         for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
-            PoolCounters[poolId].Init(Counters.Get(), setup.GetPoolName(poolId), setup.GetThreads(poolId));
+            PoolCounters[poolId].Init(Counters.Get(), setup.GetPoolName(poolId), setup.GetThreads(poolId),
+                setup.GetExecutorPoolPlacementGroupId(poolId));
         }
         ActorSystemCounters.Init(Counters.Get());
     }
 
     void Bootstrap(const TActorContext& ctx) {
         ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
+        Become(&TThis::StateInit);
+    }
+
+    STFUNC(StateInit) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvents::TEvWakeup, InitializeThreadSchedulerStats);
+        }
+    }
+
+    void InitializeThreadSchedulerStats(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+        InitializeThreadSchedulerStatsReaders(ctx.ActorSystem());
         Become(&TThis::StateWork);
+        ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
     }
 
     STFUNC(StateWork) {
@@ -449,6 +477,7 @@ private:
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
             ctx.ActorSystem()->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            CollectThreadSchedulerStats(poolId, stats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
             ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
             return;
@@ -457,6 +486,37 @@ private:
         ActorSystemCounters.Set(harmonizerStats);
         OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
+    }
+
+    void InitializeThreadSchedulerStatsReaders(TActorSystem* actorSystem) {
+        for (ui32 poolId = 0; poolId < ThreadSchedulerStatsReaders.size(); ++poolId) {
+            const TVector<TThreadId> threadIds = actorSystem->GetPoolThreadIds(poolId);
+            auto& readers = ThreadSchedulerStatsReaders[poolId];
+            readers.reserve(threadIds.size());
+            for (TThreadId threadId : threadIds) {
+                readers.emplace_back(threadId, TDuration::Seconds(5));
+            }
+        }
+    }
+
+    void CollectThreadSchedulerStats(ui16 poolId, TVector<TExecutorThreadStats>& stats) {
+        if (stats.empty()) {
+            return;
+        }
+
+        auto& readers = ThreadSchedulerStatsReaders[poolId];
+        const size_t threadCount = Min(readers.size(), stats.size() - 1);
+        for (size_t threadIndex = 0; threadIndex < threadCount; ++threadIndex) {
+            auto& reader = readers[threadIndex];
+            TThreadSchedulerStats schedulerStats;
+            if (reader.Read(schedulerStats).SchedulerStatsStatus
+                    != EThreadSchedulerStatsReadStatus::Unavailable) {
+                auto& threadStats = stats[threadIndex + 1];
+                threadStats.SchedRuntimeNs = schedulerStats.RuntimeNs;
+                threadStats.SchedWaitNs = schedulerStats.WaitNs;
+                threadStats.NonvoluntaryContextSwitches = schedulerStats.NonvoluntaryContextSwitches;
+            }
+        }
     }
 
     void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
@@ -479,6 +539,7 @@ protected:
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;
+    TVector<TVector<TThreadSchedulerStatsReader>> ThreadSchedulerStatsReaders;
     TActorSystemCounters ActorSystemCounters;
 };
 

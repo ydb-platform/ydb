@@ -4,6 +4,7 @@
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 
+#include <ydb/library/actors/core/executor_pool_counters.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/cpu_topology.h>
 
@@ -109,12 +110,14 @@ NActors::TBasicExecutorPoolConfig BuildBasicExecutorPoolConfig(
     ui32 threads,
     ui32 minThreadCount,
     ui32 maxThreadCount,
-    ui32 defaultThreadCount)
+    ui32 defaultThreadCount,
+    std::optional<ui32> placementGroupId = {})
 {
     NActors::TBasicExecutorPoolConfig basic;
 
     basic.PoolId = poolId;
     basic.PoolName = poolName;
+    basic.PlacementGroupId = placementGroupId;
     basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
 
     basic.Affinity = affinity;
@@ -124,7 +127,8 @@ NActors::TBasicExecutorPoolConfig BuildBasicExecutorPoolConfig(
     basic.DefaultThreadCount = defaultThreadCount;
 
     if (poolConfig.HasMaxAvgPingDeviation() && counters) {
-        auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
+        auto poolGroup = NActors::GetExecutorPoolCountersGroup(
+            counters.Get(), basic.PoolName, basic.PlacementGroupId);
         auto& poolInfo = cpuManager.PingInfoByPool[poolId];
         poolInfo.AvgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
         poolInfo.AvgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
@@ -358,7 +362,7 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
                     ui32 defaultThreadCount = threads;
 
                     cpuManager.Basic.emplace_back(BuildBasicExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, cpuManager,
-                        counters, affinity, threads, minThreadCount, maxThreadCount, defaultThreadCount));
+                        counters, affinity, threads, minThreadCount, maxThreadCount, defaultThreadCount, placementGroup.Id));
 
                     ++poolId;
                 }

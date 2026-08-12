@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_abstract.h"
+#include "blobstorage_pdisk_internal_interface.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/thread.h>
 #include <util/system/thread.h>
@@ -55,6 +56,40 @@ private:
     const std::optional<TCpuMask> Affinity;
 };
 
+class TPDiskThreadStatsRegistration {
+public:
+    TPDiskThreadStatsRegistration(
+            const std::shared_ptr<TPDiskCtx>& pCtx,
+            TString threadName)
+        : PCtx(pCtx)
+        , ThreadName(std::move(threadName))
+    {
+        if (PCtx->ActorSystem && PCtx->PDiskActor) {
+            ThreadId = ::TThread::CurrentThreadNumericId();
+            Send(TEvPDiskThreadLifecycle::EAction::Register);
+        }
+    }
+
+    ~TPDiskThreadStatsRegistration() {
+        if (ThreadId) {
+            Send(TEvPDiskThreadLifecycle::EAction::Unregister);
+        }
+    }
+
+    TPDiskThreadStatsRegistration(const TPDiskThreadStatsRegistration&) = delete;
+    TPDiskThreadStatsRegistration& operator=(const TPDiskThreadStatsRegistration&) = delete;
+
+private:
+    void Send(TEvPDiskThreadLifecycle::EAction action) const {
+        PCtx->ActorSystem->Send(PCtx->PDiskActor, new TEvPDiskThreadLifecycle(
+            ThreadName, ThreadId, action));
+    }
+
+    const std::shared_ptr<TPDiskCtx> PCtx;
+    const TString ThreadName;
+    ui64 ThreadId = 0;
+};
+
 class TPDiskFunctionThread final : public TPDiskSimpleThread {
 public:
     TPDiskFunctionThread(::TThread::TThreadProc threadProc, void* cookie,
@@ -83,16 +118,20 @@ private:
 
 class TPDiskThread : public TPDiskSimpleThread {
 public:
-    TPDiskThread(IPDisk &pDisk, std::optional<TCpuMask> affinity = std::nullopt)
+    TPDiskThread(IPDisk& pDisk,
+            const std::shared_ptr<TPDiskCtx>& pCtx,
+            std::optional<TCpuMask> affinity = std::nullopt)
         : TPDiskSimpleThread(std::move(affinity))
         , Quit(0)
         , IsEnded(0)
         , PDisk(pDisk)
+        , PCtx(pCtx)
     {}
 
 private:
     void* DoThreadProc() override {
         ::SetCurrentThreadName("PDisk");
+        TPDiskThreadStatsRegistration registration(PCtx, "main");
         Exec();
         return nullptr;
     }
@@ -120,7 +159,8 @@ public:
 private:
     TAtomic Quit;
     TAtomic IsEnded;
-    IPDisk &PDisk;
+    IPDisk& PDisk;
+    const std::shared_ptr<TPDiskCtx> PCtx;
 };
 
 } // NPDisk

@@ -6,6 +6,7 @@
 #include <ydb/core/graph/api/service.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/executor_pool_counters.h>
 
 
 namespace NKikimr {
@@ -92,7 +93,8 @@ private:
             PoolCurrentThreadCount.resize(Config.Pools.size());
             PoolElapsedMicrosecPrevValue.resize(Config.Pools.size());
             for (size_t i = 0; i < Config.Pools.size(); ++i) {
-                auto poolGroup = utilsGroup->FindSubgroup("execpool", Config.Pools[i].Name);
+                auto poolGroup = NActors::FindExecutorPoolCountersGroup(
+                    utilsGroup.Get(), Config.Pools[i].Name, Config.Pools[i].PlacementGroupId);
                 if (poolGroup) {
                     PoolElapsedMicrosec[i] = poolGroup->FindCounter("ElapsedMicrosec");
                     PoolCurrentThreadCount[i] = poolGroup->FindCounter("CurrentThreadCount");

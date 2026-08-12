@@ -24,7 +24,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 // Initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : PCtx(std::move(pCtx))
     , Mon(counters, cfg->PDiskId, cfg.Get())
     , DriveModel(cfg->DriveModelSeekTimeNs,
@@ -43,7 +44,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , OwnerData(OwnerCount)
     , Keeper(Mon, cfg)
     , CostLimitNs(cfg->CostLimitNs)
-    , PDiskThread(*this, cfg->BlobStorageExecutorPoolAffinity)
+    , PDiskThread(*this, PCtx, cfg->BlobStorageExecutorPoolAffinity)
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),

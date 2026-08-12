@@ -309,12 +309,20 @@ namespace NActors {
         CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
     }
 
+    TVector<TThreadId> TActorSystem::GetPoolThreadIds(ui32 poolId) const {
+        return CpuManager->GetPoolThreadIds(poolId);
+    }
+
     THarmonizerStats TActorSystem::GetHarmonizerStats() const {
         return CpuManager->GetHarmonizerStats();
     }
 
     std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
         return CpuManager->GetExecutorPoolAffinity(poolId);
+    }
+
+    std::optional<ui32> TActorSystem::GetExecutorPoolPlacementGroupId(ui32 poolId) const {
+        return CpuManager->GetExecutorPoolPlacementGroupId(poolId);
     }
 
     void TActorSystem::Start() {

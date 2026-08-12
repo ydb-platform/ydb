@@ -16,8 +16,10 @@ affected:
 
 Dashboard joins open **and recently closed** issues to suite rows via ``affected``
 (not Title/suite alone). Closed pills = issues closed within
-``CLOSED_ISSUES_MAX_AGE_DAYS`` (grey). Duty-agent duplicate search still uses
-open-only (``fetch_open_duty_issues``).
+``CLOSED_ISSUES_MAX_AGE_DAYS`` (grey). A closed issue covers a fail only when the
+tested point (``version_ts`` / run ``ts`` / day) is **on or before** ``closed_at``;
+a newer SHA/run after close counts as **new issue**. Duty-agent duplicate search
+still uses open-only (``fetch_open_duty_issues``).
 Agent expands ``affected`` when the same fingerprint appears on another suite/query.
 """
 
@@ -341,6 +343,60 @@ def _affected_hit(
     return nq in qs or any(q.lower() == nq.lower() for q in qs)
 
 
+def run_as_of(run: dict[str, Any] | None) -> datetime | None:
+    """Timestamp of the tested point for closed-issue coverage.
+
+    Prefer commit/version time, then run ``ts``, then ``day`` / label date.
+    """
+    if not isinstance(run, dict):
+        return None
+    for key in ("version_ts", "commit_ts", "tested_at"):
+        dt = parse_github_ts(run.get(key))
+        if dt is not None:
+            return dt
+    dt = parse_github_ts(run.get("ts"))
+    if dt is not None:
+        return dt
+    for raw in (run.get("day"), run.get("label")):
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
+        if not m:
+            continue
+        try:
+            return datetime(
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            continue
+    return None
+
+
+def closed_issue_covers_as_of(
+    iss: dict[str, Any],
+    as_of: datetime | None,
+) -> bool:
+    """Whether a closed issue still covers a fail at ``as_of``.
+
+    Open issues → True. Closed with unknown ``closed_at`` or missing ``as_of``
+    → True (keep prior behaviour). Closed and ``as_of`` after ``closed_at`` → False
+    (recurrence on a newer SHA/run → new issue).
+    """
+    if _norm_issue_state(iss.get("state")) != "closed":
+        return True
+    if as_of is None:
+        return True
+    closed = parse_github_ts(iss.get("closed_at") or iss.get("closedAt"))
+    if closed is None:
+        return True
+    as_of_utc = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+    return as_of_utc.astimezone(timezone.utc) <= closed
+
+
 def classify_fail_coverage(
     issues: list[dict[str, Any]],
     *,
@@ -349,6 +405,7 @@ def classify_fail_coverage(
     branch: str | None = None,
     query: str | None = None,
     kind: str | None = None,
+    as_of: datetime | None = None,
 ) -> dict[str, Any]:
     """Classify a fail against duty issues (open or closed).
 
@@ -356,9 +413,13 @@ def classify_fail_coverage(
       status: covered | wrong_branch | uncovered
       tickets: list of matching issue stubs (state / branch_match / needs_branch)
       missing_branch: branch label to add when status=wrong_branch
+
+    Closed issues with ``closed_at`` before ``as_of`` do not cover (``post_close``
+    stubs may still be returned for UI context while status stays uncovered).
     """
     covered: list[dict[str, Any]] = []
     wrong: list[dict[str, Any]] = []
+    post_close: list[dict[str, Any]] = []
     for iss in issues:
         if kind and iss.get("kind") and str(iss["kind"]).lower() != str(kind).lower():
             continue
@@ -387,8 +448,14 @@ def classify_fail_coverage(
             "branch_match": br_ok,
             "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
         }
+        if iss.get("closed_at"):
+            stub["closed_at"] = iss["closed_at"]
         if br_ok:
-            covered.append(stub)
+            if closed_issue_covers_as_of(iss, as_of):
+                covered.append(stub)
+            else:
+                stub["post_close"] = True
+                post_close.append(stub)
         else:
             wrong.append(stub)
     if covered:
@@ -402,6 +469,12 @@ def classify_fail_coverage(
             "status": "wrong_branch",
             "tickets": wrong,
             "missing_branch": norm_branch_label(branch) or None,
+        }
+    if post_close:
+        return {
+            "status": "uncovered",
+            "tickets": post_close,
+            "missing_branch": None,
         }
     return {"status": "uncovered", "tickets": [], "missing_branch": None}
 
@@ -571,13 +644,10 @@ def tickets_for_suite(
     db: str | None = None,
     branch: str | None = None,
     kind: str | None = None,
+    as_of: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Tickets matching suite (+ optional db) for report pills."""
-    cov = classify_fail_coverage(
-        issues, suite=suite, db=db, branch=branch, query=None, kind=kind
-    )
-    # suite pills: all affected hits (covered + wrong_branch)
-    # Re-run without branch filter for listing, but annotate branch_match.
+    # suite pills: all affected hits (covered + wrong_branch + post_close)
     out: list[dict[str, Any]] = []
     for iss in issues:
         if kind and iss.get("kind") and str(iss["kind"]).lower() != str(kind).lower():
@@ -596,21 +666,22 @@ def tickets_for_suite(
             continue
         labels = list(iss.get("labels") or [])
         br_ok = branch_label_match(labels, branch) if branch else True
-        out.append(
-            {
-                "number": iss.get("number"),
-                "title": iss.get("title"),
-                "url": iss.get("url"),
-                "fingerprint": iss.get("fingerprint"),
-                "queries": matched_q,
-                "labels": labels,
-                "state": _norm_issue_state(iss.get("state")),
-                "branch_match": br_ok,
-                "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
-            }
-        )
-    # prefer covered ordering but keep cov unused warning silent
-    _ = cov
+        stub: dict[str, Any] = {
+            "number": iss.get("number"),
+            "title": iss.get("title"),
+            "url": iss.get("url"),
+            "fingerprint": iss.get("fingerprint"),
+            "queries": matched_q,
+            "labels": labels,
+            "state": _norm_issue_state(iss.get("state")),
+            "branch_match": br_ok,
+            "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
+        }
+        if iss.get("closed_at"):
+            stub["closed_at"] = iss["closed_at"]
+        if br_ok and not closed_issue_covers_as_of(iss, as_of):
+            stub["post_close"] = True
+        out.append(stub)
     return out
 
 
@@ -729,8 +800,11 @@ def _attach_coverage_to_item(
     suite = str(item.get("suite") or "")
     db = item.get("db")
     branch = item.get("branch")
+    runs = [r for r in (item.get("now_runs") or []) if isinstance(r, dict)]
+    # Suite / catalog gaps judged against the latest (focus) run time.
+    suite_as_of = run_as_of(runs[-1]) if runs else run_as_of(item)
     suite_tickets = tickets_for_suite(
-        known, suite=suite, db=db, branch=branch, kind=kind
+        known, suite=suite, db=db, branch=branch, kind=kind, as_of=suite_as_of
     )
     # Full suite×db hits (any affected query) — for tooling; inbox pills use gap tickets.
     item["suite_tickets"] = suite_tickets
@@ -747,7 +821,13 @@ def _attach_coverage_to_item(
         if not qname:
             return
         cov = classify_fail_coverage(
-            known, suite=suite, db=db, branch=branch, query=qname, kind=kind
+            known,
+            suite=suite,
+            db=db,
+            branch=branch,
+            query=qname,
+            kind=kind,
+            as_of=suite_as_of,
         )
         if count_new:
             q["ticket_coverage"] = cov["status"]
@@ -761,6 +841,7 @@ def _attach_coverage_to_item(
             counted.add(qname)
             # wrong_branch = ticket exists but lacks this branch label → still a
             # "new issue" for the branch (add label / treat as not covered here).
+            # post_close closed match → uncovered → new issue as well.
             if cov["status"] == "uncovered":
                 new_issues += 1
             elif cov["status"] == "wrong_branch":
@@ -815,7 +896,13 @@ def _attach_coverage_to_item(
         )
         if is_gap:
             cov = classify_fail_coverage(
-                known, suite=suite, db=db, branch=branch, query=None, kind=kind
+                known,
+                suite=suite,
+                db=db,
+                branch=branch,
+                query=None,
+                kind=kind,
+                as_of=suite_as_of,
             )
             if cov["status"] == "uncovered":
                 new_issues = max(new_issues, 1)
@@ -828,7 +915,6 @@ def _attach_coverage_to_item(
     item["wrong_branch_count"] = wrong_branch
 
     # per now_run badge coverage: mart fail_tests + query-history fail/nodata
-    runs = [r for r in (item.get("now_runs") or []) if isinstance(r, dict)]
     for ri, run in enumerate(runs):
         qnames = gap_queries_for_run(item, run)
         # Catalog gaps (no usable history) also land on the latest card.
@@ -836,12 +922,19 @@ def _attach_coverage_to_item(
             for qn in gap_names:
                 if qn not in qnames:
                     qnames.append(qn)
+        as_of = run_as_of(run)
         qcovs: list[dict[str, Any]] = []
         for qn in qnames:
             if not qn:
                 continue
             c = classify_fail_coverage(
-                known, suite=suite, db=db, branch=branch, query=qn, kind=kind
+                known,
+                suite=suite,
+                db=db,
+                branch=branch,
+                query=qn,
+                kind=kind,
+                as_of=as_of,
             )
             qcovs.append({"query": qn, **c})
         problem_n = max(int(run.get("fail") or 0), len(qnames))

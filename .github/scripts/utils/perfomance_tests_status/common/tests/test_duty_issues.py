@@ -202,6 +202,7 @@ class JoinTests(unittest.TestCase):
                 "url": "https://example/99",
                 "kind": "olap",
                 "state": "closed",
+                "closed_at": "2026-08-05T12:00:00Z",
                 "fingerprint": "x",
                 "keys": ["x"],
                 "labels": ["main"],
@@ -239,6 +240,92 @@ class JoinTests(unittest.TestCase):
         attach_tickets_to_report(data, issues, kind="olap")
         self.assertEqual(data["known_issues"][0]["state"], "closed")
         self.assertEqual(data["inbox"][0]["tickets"][0]["state"], "closed")
+
+    def test_closed_ticket_after_sha_is_new_issue(self):
+        """Fail on a run/SHA after closed_at → uncovered + new_issue (post_close pill)."""
+        from datetime import datetime, timezone
+
+        from common.duty_issues import classify_fail_coverage, run_as_of
+
+        issues = [
+            {
+                "number": 47284,
+                "title": "CountersForStep",
+                "url": "https://example/47284",
+                "kind": "olap",
+                "state": "closed",
+                "closed_at": "2026-07-31T11:28:09Z",
+                "fingerprint": "CountersForStep",
+                "keys": ["CountersForStep"],
+                "labels": ["main"],
+                "affected": [
+                    {
+                        "suite": "UploadTpch1000",
+                        "db": "vla_small_column",
+                        "queries": ["Query01"],
+                    }
+                ],
+            }
+        ]
+        as_of = datetime(2026, 8, 11, 18, 41, 7, tzinfo=timezone.utc)
+        cov = classify_fail_coverage(
+            issues,
+            suite="UploadTpch1000",
+            db="vla_small_column",
+            branch="main",
+            query="Query01",
+            kind="olap",
+            as_of=as_of,
+        )
+        self.assertEqual(cov["status"], "uncovered")
+        self.assertTrue(cov["tickets"][0].get("post_close"))
+        # Still covered when tested point is on/before close.
+        cov_old = classify_fail_coverage(
+            issues,
+            suite="UploadTpch1000",
+            db="vla_small_column",
+            branch="main",
+            query="Query01",
+            kind="olap",
+            as_of=datetime(2026, 7, 30, tzinfo=timezone.utc),
+        )
+        self.assertEqual(cov_old["status"], "covered")
+
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "vla_small_column",
+                    "branch": "main",
+                    "issue": "failing",
+                    "queries": [{"test": "Query01", "kind": "fail"}],
+                    "now_runs": [
+                        {
+                            "label": "2026-08-11_6c40390",
+                            "version": "6c40390",
+                            "ts": "2026-08-11T18:41:07",
+                            "day": "2026-08-11",
+                            "fail": 1,
+                            "fail_tests": "Query01",
+                        }
+                    ],
+                }
+            ],
+            "ok": [],
+        }
+        self.assertEqual(
+            run_as_of(data["inbox"][0]["now_runs"][0]).date().isoformat(),
+            "2026-08-11",
+        )
+        attach_tickets_to_report(data, issues, kind="olap")
+        item = data["inbox"][0]
+        self.assertEqual(item["new_issue_count"], 1)
+        self.assertEqual(item["queries"][0]["ticket_coverage"], "uncovered")
+        self.assertTrue(item["queries"][0]["tickets"][0].get("post_close"))
+        run = item["now_runs"][0]
+        self.assertEqual(run["ticket_coverage"], "uncovered")
+        self.assertIn("Query01", run["uncovered_queries"])
+        self.assertEqual(data["summary"]["new_issues"], 1)
 
     def test_attach_passes_closed_at(self):
         issues = [

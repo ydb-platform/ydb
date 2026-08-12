@@ -525,7 +525,7 @@
     <span class="lbl">React</span>
     <span id="reactBar" style="display:inline-flex;gap:4px" title="Каналы сигналов: inbox + скрытие строк heatmap без совпадений">
       <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
-      <button type="button" class="react-btn" data-react="new" aria-pressed="false" title="Fail/no-data without a branch-matched open issue (uncovered or needs &lt;branch&gt; label)">new issues</button>
+      <button type="button" class="react-btn" data-react="new" aria-pressed="false" title="Fail/no-data without a covering issue: uncovered, needs &lt;branch&gt; label, or only a closed issue from before this SHA/run">new issues</button>
       <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
       <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
       <button type="button" class="react-btn" data-react="nodata" aria-pressed="true">no data</button>
@@ -1208,14 +1208,48 @@ function branchLabelMatchJS(labels, branch) {
   if (set.has(want)) return true;
   return want === 'main' && set.has('trunk');
 }
+function parseGitHubTsJS(raw) {
+  if (raw == null || raw === '') return null;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  let s = String(raw).trim();
+  if (!s) return null;
+  if (s.endsWith('Z')) s = s.slice(0, -1) + '+00:00';
+  const dt = new Date(s);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+/** Tested-point time for closed-issue coverage (version_ts → ts → day/label). */
+function runAsOfJS(run) {
+  if (!run || typeof run !== 'object') return null;
+  for (const key of ['version_ts', 'commit_ts', 'tested_at', 'ts']) {
+    const dt = parseGitHubTsJS(run[key]);
+    if (dt) return dt;
+  }
+  for (const raw of [run.day, run.label]) {
+    const m = String(raw || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) continue;
+    const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (!Number.isNaN(dt.getTime())) return dt;
+  }
+  return null;
+}
+/** Closed issue covers only when as_of ≤ closed_at (or as_of/closed unknown). */
+function closedIssueCoversAsOfJS(iss, asOf) {
+  if (String(iss && iss.state || 'open').toLowerCase() !== 'closed') return true;
+  if (!asOf) return true;
+  const closed = parseGitHubTsJS(iss.closed_at || iss.closedAt);
+  if (!closed) return true;
+  return asOf.getTime() <= closed.getTime();
+}
 function classifyFailCoverageJS(issues, opts) {
   const suite = opts.suite || '';
   const db = opts.db || null;
   const branch = opts.branch || null;
   const query = opts.query || null;
   const kind = opts.kind || null;
+  const asOf = opts.as_of || null;
   const covered = [];
   const wrong = [];
+  const postClose = [];
   for (const iss of (issues || [])) {
     if (kind && iss.kind && String(iss.kind).toLowerCase() !== String(kind).toLowerCase()) continue;
     let hit = false;
@@ -1242,11 +1276,20 @@ function classifyFailCoverageJS(issues, opts) {
       branch_match: brOk,
       needs_branch: brOk ? null : (normBranchLabelJS(branch) || null),
     };
-    (brOk ? covered : wrong).push(stub);
+    if (iss.closed_at) stub.closed_at = iss.closed_at;
+    if (brOk) {
+      if (closedIssueCoversAsOfJS(iss, asOf)) covered.push(stub);
+      else { stub.post_close = true; postClose.push(stub); }
+    } else {
+      wrong.push(stub);
+    }
   }
   if (covered.length) return { status: 'covered', tickets: covered, missing_branch: null };
   if (wrong.length) {
     return { status: 'wrong_branch', tickets: wrong, missing_branch: normBranchLabelJS(branch) || null };
+  }
+  if (postClose.length) {
+    return { status: 'uncovered', tickets: postClose, missing_branch: null };
   }
   return { status: 'uncovered', tickets: [], missing_branch: null };
 }
@@ -1347,9 +1390,11 @@ function runCoverageForDisplay(item, run) {
       && !(Number(run.fail || 0) > 0)) {
     return run;
   }
+  const asOf = runAsOfJS(run);
   const qcovs = qnames.map(qn => {
     const c = classifyFailCoverageJS(issues, {
       suite: item.suite, db: item.db, branch: item.branch, query: qn, kind: 'olap',
+      as_of: asOf,
     });
     return { query: qn, ...c };
   });
@@ -1423,11 +1468,16 @@ function runTicketsHtml(run) {
   }
   if (waitPill) {
     parts.push(waitPill);
-  } else if (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
-      || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
+  } else if (!tickets.length && (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
+      || (failN > 0 && cov !== 'covered' && cov !== 'wrong_branch'))) {
     const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
     parts.push(
-      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤10d) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤10d covering this SHA/run) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+    );
+  } else if (tickets.length && cov === 'uncovered' && tickets.every(t => t.post_close || String(t.state || '').toLowerCase() === 'closed')) {
+    // Closed match after issue close → still a new issue (grey closed pill + cue).
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('closed issue predates this SHA/run — treat as new issue')}">new issue</span>`
     );
   }
   if (!parts.length && cov === 'wrong_branch') {
@@ -1681,13 +1731,34 @@ function querySplit(r) {
     nodata: merge((view.nodatas || []).map(q => String(q.test)), cat.nodata),
   };
 }
+/** Live focus-run uncovered count (incl. closed issues that predate this SHA/run). */
+function liveNewIssueCount(r) {
+  try {
+    const data = diveData(r);
+    const focusIdx = diveFocusRunIndex(r, data);
+    const focusRun = (data.now_runs || [])[focusIdx];
+    if (!focusRun) return 0;
+    const cov = runCoverageForDisplay(data, focusRun);
+    const uq = (cov.uncovered_queries || []).length;
+    if (uq > 0) return uq;
+    if (cov.ticket_coverage === 'wrong_branch') return 1;
+    if (cov.ticket_coverage === 'uncovered'
+        && (Number(focusRun.fail || 0) > 0 || Number(data.n_nodata || 0) > 0)) {
+      return 1;
+    }
+    return 0;
+  } catch (_) {
+    return 0;
+  }
+}
 function newIssueQueryCount(r) {
   const n = Number(r && (r.new_issue_count || r.new_fail_count) || 0);
   const w = Number(r && (r.wrong_branch_count || 0) || 0);
   const nFin = Number(r && r.finished && (r.finished.new_issue_count || r.finished.new_fail_count) || 0);
   const wFin = Number(r && r.finished && (r.finished.wrong_branch_count || 0) || 0);
   // new_issue_count already includes wrong_branch after attach; keep max for older packs.
-  return Math.max(n || 0, w || 0, nFin || 0, wFin || 0);
+  // Live path catches post_close closed tickets before the next generate.
+  return Math.max(n || 0, w || 0, nFin || 0, wFin || 0, liveNewIssueCount(r));
 }
 function hasFailSignal(r) {
   if (['failing', 'both'].includes(r.issue)) return true;
@@ -2342,7 +2413,7 @@ function renderHeader() {
     <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
     <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
     <div class="counter hot"><div class="n">${fmtNM(s.failing, total.failing, !!sel)}</div><div class="lbl">Failing</div></div>
-    <div class="counter newfail" title="Suites with fail or no-data query and no matching issue (open or closed) for affected + branch label">
+    <div class="counter newfail" title="Suites with fail or no-data and no covering issue (open, or closed with closed_at ≥ tested SHA/run time)">
       <div class="n">${fmtNM(nNew, nNewTotal, !!sel)}</div>
       <div class="lbl">New issues</div>
     </div>
@@ -3375,12 +3446,16 @@ function ticketsForQuery(item, queryName, qObj) {
   if (!nq) return [];
   const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
   if (issues.length) {
+    const data = diveData(item);
+    const focusIdx = diveFocusRunIndex(item, data);
+    const focusRun = (data.now_runs || [])[focusIdx] || null;
     const cov = classifyFailCoverageJS(issues, {
       suite: item.suite || '',
       db: item.db || null,
       branch: item.branch || null,
       query: nq,
       kind: 'olap',
+      as_of: runAsOfJS(focusRun),
     });
     if ((cov.tickets || []).length) return cov.tickets;
   }
@@ -3388,14 +3463,39 @@ function ticketsForQuery(item, queryName, qObj) {
 }
 function queryTicketRowHtml(item, q, data) {
   const suite = data || diveData(item);
-  const tickets = ticketsForQuery(item, q.test || q.name, q);
+  const nq = normQueryNameJS(q.test || q.name);
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const focusIdx = diveFocusRunIndex(item, suite);
+  const focusRun = (suite.now_runs || [])[focusIdx] || null;
+  let tickets = ticketsForQuery(item, q.test || q.name, q);
+  let covStatus = null;
+  if (issues.length && nq) {
+    const cov = classifyFailCoverageJS(issues, {
+      suite: item.suite || '',
+      db: item.db || null,
+      branch: item.branch || null,
+      query: nq,
+      kind: 'olap',
+      as_of: runAsOfJS(focusRun),
+    });
+    covStatus = cov.status;
+    if ((cov.tickets || []).length) tickets = cov.tickets;
+  }
   const waitPill = dutyDecisionPillHtml(waitNextAppliesToQuery(item, suite, q.test || q.name));
+  const postCloseOnly = !!(tickets.length
+    && covStatus === 'uncovered'
+    && tickets.every(t => t.post_close || String(t.state || '').toLowerCase() === 'closed'));
   if (!tickets.length && !waitPill) return '';
   const parts = [];
   if (tickets.length) {
     parts.push(ticketPillsHtml(tickets, { compact: true, maxTitle: 28 }));
   }
   if (waitPill) parts.push(waitPill);
+  else if (postCloseOnly) {
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('closed issue predates this SHA/run — treat as new issue')}">new issue</span>`
+    );
+  }
   return `<div class="q-row-tickets">${parts.join(' ')}</div>`;
 }
 function wrapQueryRow(pillHtml, ticketsHtml) {
@@ -3737,14 +3837,20 @@ function queryGapsAtRun(item, run) {
 function queryTicketMeta(item, testName) {
   const nq = normQueryNameJS(testName);
   const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const data = diveData(item);
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = (data.now_runs || [])[focusIdx] || null;
   const cov = classifyFailCoverageJS(issues, {
     suite: item.suite, db: item.db, branch: item.branch, query: nq, kind: 'olap',
+    as_of: runAsOfJS(focusRun),
   });
   return {
     ticket_coverage: cov.status,
     tickets: (cov.tickets || []).slice(0, 3).map(t => ({
       number: t.number, url: t.url || null, branch_match: t.branch_match !== false,
       needs_branch: t.needs_branch || null,
+      post_close: !!t.post_close,
+      state: t.state || 'open',
     })),
   };
 }

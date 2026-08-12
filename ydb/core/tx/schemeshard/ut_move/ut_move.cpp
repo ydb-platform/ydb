@@ -1519,7 +1519,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplLevelTable"),
             { NLs::PathExist, NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPostingTable"),
-            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key"}, {}, {ParentColumn, "key"}, true) });
+            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key", "embedding"}, {}, {ParentColumn, "key"}, true) });
 
         // Replace again - it previously crashed here when Dec/IncAliveChildren were incorrect
 
@@ -1536,7 +1536,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplLevelTable"),
             { NLs::PathExist, NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPostingTable"),
-            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key"}, {}, {ParentColumn, "key"}, true) });
+            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key", "embedding"}, {}, {ParentColumn, "key"}, true) });
 
         // Drop - it also crashed here when the sequence wasn't moved correctly
 

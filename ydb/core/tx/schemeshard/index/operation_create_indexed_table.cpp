@@ -459,7 +459,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                     }
                 }
-                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                // Vector search ranks posting rows by the embedding even when
+                // the index is otherwise non-covering.
+                indexDataColumns.insert(indexDescription.GetKeyColumnNames(indexDescription.KeyColumnNamesSize() - 1));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {

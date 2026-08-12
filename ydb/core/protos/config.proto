@@ -2183,7 +2183,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
-        optional uint64 UseDeviceOverestimationRatioMerged = 8 [(ControlOptions) = {
+        optional uint64 StaticGroupChunkReservePerMille = 8 [(ControlOptions) = {
+            Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 500 }];
+        optional uint64 UseDeviceOverestimationRatioMerged = 9 [(ControlOptions) = {
             Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
                           "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
                           "overestimation metric instead of the legacy PDisk-only computation. "
@@ -2191,11 +2196,6 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
-        optional uint64 StaticGroupChunkReservePerMille = 8 [(ControlOptions) = {
-            Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
-            MinValue: 0,
-            MaxValue: 1000,
-            DefaultValue: 500 }];
     }
 
     message TBlobStorageControllerControls {

@@ -24,8 +24,8 @@ DEPENDS(
 DATA(
     arcadia/ydb/library/yql/tests/sql
     arcadia/yt/yql/tests/sql/suites
-    arcadia/ydb/tests/fq/yt
-    arcadia/ydb/tests/fq/yt/cfg
+    arcadia/ydb/tests/fq/yt/kqp_yt
+    arcadia/ydb/tests/fq/yt/kqp_yt/cfg
 )
 
 PEERDIR(

@@ -163,7 +163,7 @@ def validate_sql(sql_query):
 
 
 def read_test_whitelist():
-    test_whitelist_path = yql_source_path('ydb/tests/fq/yt/cfg/test_whitelist.txt')
+    test_whitelist_path = yql_source_path('ydb/tests/fq/yt/kqp_yt/cfg/test_whitelist.txt')
     with codecs.open(test_whitelist_path, 'r', encoding='utf-8') as test_whitelist_file:
         return set(test_whitelist_file.read().split('\n'))
 
@@ -204,8 +204,8 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_config.conf'),
-                    scheme_file=os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_scheme.sql'),
+    kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_config.conf'),
+                    scheme_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_scheme.sql'),
                     udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
 
     return kqprun.yql_exec(yql_program=sql_query, verbose=True, check_error=True, yql_tables=in_tables)

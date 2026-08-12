@@ -1,7 +1,7 @@
 import json
 
 from ydb.tests.fq.tools.kqprun import KqpRun
-from ydb.tests.fq.yt.kqp_yt_import.helpers import add_sample_table, validate_sample_result
+from ydb.tests.fq.yt.kqp_yt.kqp_yt_import.helpers import add_sample_table, validate_sample_result
 
 
 class TestYtReading:

@@ -124,7 +124,7 @@ def test_udf_store_feature_flag(enable_udf_store):
         if enable_udf_store:
             assert table_appeared, (
                 "UDF metadata table `%s` was NOT created within %ds when udf_store_config.enabled=true"
-                % (UDF_TABLE_META_PATH, _SETTLE_TIMEOUT)
+                % (UDF_TABLE_MODULES_PATH, _SETTLE_TIMEOUT)
             )
             assert kv_appeared, (
                 "KV volume `%s` was NOT created within %ds when udf_store_config.enabled=true"
@@ -132,7 +132,7 @@ def test_udf_store_feature_flag(enable_udf_store):
             )
         else:
             assert not table_appeared, (
-                "UDF metadata table `%s` appeared even though udf_store_config is disabled" % UDF_TABLE_META_PATH
+                "UDF metadata table `%s` appeared even though udf_store_config is disabled" % UDF_TABLE_MODULES_PATH
             )
             assert not kv_appeared, (
                 "KV volume `%s` appeared even though udf_store_config is disabled" % UDF_KV_BINARIES_PATH
@@ -193,6 +193,42 @@ def _run_upload_udf(
             f"upload_udf failed (rc={result.returncode}): {result.stderr}"
         )
     return result.stdout.strip()
+
+
+def _run_upload_library(endpoint, database, library_file_path, library_name):
+    """Upload a WASM library via upload_udf --kind library."""
+    return _run_upload_udf(
+        endpoint,
+        database,
+        udf_file_path=library_file_path,
+        udf_type="WASM",
+        kind="library",
+        library_name=library_name,
+    )
+
+
+def _run_delete_udf(endpoint, database, md5, udf_type="WASM"):
+    """Delete a UDF module row (and related chunks/artifacts) by md5."""
+    return _run_upload_udf(
+        endpoint,
+        database,
+        udf_type=udf_type,
+        kind="udf",
+        action="delete",
+        md5=md5,
+    )
+
+
+def _run_delete_library(endpoint, database, library_name):
+    """Delete a WASM library by name."""
+    return _run_upload_udf(
+        endpoint,
+        database,
+        udf_type="WASM",
+        kind="library",
+        library_name=library_name,
+        action="delete",
+    )
 
 
 def test_using_native_unsafe_udf():

@@ -9,6 +9,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -40,6 +41,17 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
+
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST_TWIN(TraverseNestedTable, ColumnShard) {
+        TTestEnv env = CreateTestEnv();
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "subdir/Table", ColumnShard);
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
@@ -462,6 +474,33 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         });
 
         UNIT_ASSERT_VALUES_EQUAL(observer.GetSaveCount(), 1);
+    }
+
+    // Verifies the analyze actor resolves the correct database for a nested
+    // table by checking DatabaseName in the TEvResolveKeySet request.
+    Y_UNIT_TEST_TWIN(TraverseNestedTableResolvesCorrectDatabase, ColumnShard) {
+        TTestEnv env = CreateTestEnv();
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "subdir/Table", ColumnShard);
+
+        TString resolveDatabaseName;
+        auto resolveObserver = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySet>(
+            [&](TAutoPtr<TEventHandle<TEvTxProxySchemeCache::TEvResolveKeySet>>& ev) {
+                const auto& request = *ev->Get()->Request;
+                for (const auto& entry : request.ResultSet) {
+                    if (entry.KeyDescription
+                        && entry.KeyDescription->TableId.PathId == tableInfo.PathId) {
+                        resolveDatabaseName = request.DatabaseName;
+                    }
+                }
+            });
+
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+        resolveObserver.Remove();
+
+        UNIT_ASSERT_VALUES_EQUAL(resolveDatabaseName, "/Root/Database");
+        ValidateStatistics(runtime, tableInfo.PathId);
     }
 
 } // Y_UNIT_TEST_SUITE(TraverseStatistics)

@@ -10,6 +10,7 @@
 #include "mkql_block_coalesce.h"
 #include "mkql_block_container.h"
 #include "mkql_block_decimal.h"
+#include "mkql_block_dynamic_variant.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
 #include "mkql_block_guess.h"
@@ -317,6 +318,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockGuess", &WrapBlockGuess},
         {"BlockVariant", &WrapBlockVariant},
         {"BlockVariantItem", &WrapBlockVariantItem},
+        {"BlockDynamicVariant", &WrapBlockDynamicVariant},
         {"BlockWay", &WrapBlockWay},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},

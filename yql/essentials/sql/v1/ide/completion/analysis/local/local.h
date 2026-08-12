@@ -80,13 +80,12 @@ struct TLocalSyntaxContext {
     TEditRange FilterRange;
 };
 
-// TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
 class ILocalSyntaxAnalysis {
 public:
     using TPtr = THolder<ILocalSyntaxAnalysis>;
 
     virtual ~ILocalSyntaxAnalysis() = default;
-    virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
+    virtual TLocalSyntaxContext Analyze(TCompletionInput input) const = 0;
 };
 
 ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(

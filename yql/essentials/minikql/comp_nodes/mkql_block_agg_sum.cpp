@@ -14,6 +14,8 @@
 #include <arrow/scalar.h>
 #include <arrow/array/builder_primitive.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -82,8 +84,8 @@ public:
         auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
         auto tupleBuilder = static_cast<NUdf::TTupleArrayBuilder<true>*>(Builder_.get());
         if (typedState->Count) {
-            TBlockItem tupleItems[] = {TBlockItem(TOut(typedState->Sum)), TBlockItem(typedState->Count)};
-            tupleBuilder->Add(TBlockItem(tupleItems));
+            std::array<TBlockItem, 2> tupleItems = {TBlockItem(TOut(typedState->Sum)), TBlockItem(typedState->Count)};
+            tupleBuilder->Add(TBlockItem(tupleItems.data()));
         } else {
             tupleBuilder->Add(TBlockItem());
         }

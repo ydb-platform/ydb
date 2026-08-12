@@ -96,31 +96,40 @@ namespace {
 
     // Extract BreakerQueryText from a single TLI record
     std::optional<TString> ExtractBreakerQueryTextFromRecord(const TString& record) {
-        std::cerr << "      ExtractBreakerQueryTextFromRecord 1" << std::endl;
         size_t allPos = record.find("breakerQueryText=");
         if (allPos == TString::npos) {
             return std::nullopt;
         }
-        std::cerr << "      ExtractBreakerQueryTextFromRecord 2" << std::endl;
         allPos +=17;
         auto resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, allPos);
         if (resultOpt.Empty()) {
             return std::nullopt;
         }
         TString result = resultOpt.GetRef();
-        std::cerr << "      ExtractBreakerQueryTextFromRecord 3 result=" << result << std::endl;
 
         size_t nextFieldPos = record.find("breakerQueryTexts=");
         if (nextFieldPos != TString::npos) {
-            std::cerr << "      ExtractBreakerQueryTextFromRecord 4" << std::endl;
             nextFieldPos += 18;
             resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, nextFieldPos);
             if (resultOpt.Defined()) {
                 result = resultOpt.GetRef();
-                std::cerr << "      ExtractBreakerQueryTextFromRecord 5 result=" << result << std::endl;
             }
         }
-        return UnescapeC(result);
+
+        auto queryTextStartPos = result.find("QueryText=");
+        if (queryTextStartPos==std::string::npos) {
+            return std::nullopt;
+        }
+        queryTextStartPos+=10;
+
+        auto queryTextEndPos = result.find("]");
+        if (queryTextEndPos==std::string::npos) {
+            return std::nullopt;
+        }
+        result = result.substr(queryTextStartPos, queryTextEndPos - queryTextStartPos);
+
+        auto unescapedResult = UnescapeC(result);
+        return unescapedResult;
     }
 
     std::optional<TString> ExtractQueryText(const TString& logs, const TString& messagePattern,
@@ -144,23 +153,47 @@ namespace {
 
     // Extract VictimQueryText from a single TLI record
     std::optional<TString> ExtractVictimQueryTextFromRecord(const TString& record) {
-        const size_t victimPos = record.find("VictimQueryText: ");
-        if (victimPos == TString::npos) {
+        size_t allPos = record.find("victimQueryText=");
+        if (allPos == TString::npos) {
             return std::nullopt;
         }
-        TString result = record.substr(victimPos + 17);
-        const size_t nextFieldPos = result.find(", VictimQueryTexts:");
-        if (nextFieldPos != TString::npos) {
-            result = result.substr(0, nextFieldPos);
+        allPos +=16;
+        auto resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, allPos);
+        if (resultOpt.Empty()) {
+            return std::nullopt;
         }
-        return UnescapeC(result);
+        TString result = resultOpt.GetRef();
+
+        size_t nextFieldPos = record.find("victimQueryTexts=");
+        if (nextFieldPos != TString::npos) {
+            nextFieldPos += 17;
+            resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, nextFieldPos);
+            if (resultOpt.Defined()) {
+                result = resultOpt.GetRef();
+            }
+        }
+
+        auto queryTextStartPos = result.find("QueryText=");
+        if (queryTextStartPos==std::string::npos) {
+            return std::nullopt;
+        }
+        queryTextStartPos+=10;
+
+        auto queryTextEndPos = result.find("]");
+        if (queryTextEndPos==std::string::npos) {
+            return std::nullopt;
+        }
+        result = result.substr(queryTextStartPos, queryTextEndPos - queryTextStartPos);
+
+        auto unescapedResult = UnescapeC(result);
+        return unescapedResult;
     }
 
     std::optional<TString> ExtractVictimQueryText(const TString& logs, const TString& messagePattern,
         const std::optional<TString>& expectedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("сomponent=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             auto text = ExtractVictimQueryTextFromRecord(record);
@@ -225,7 +258,7 @@ namespace {
     }
 
     std::optional<ui64> ExtractNumericField(const TString& record, const TString& fieldName) {
-        const TString prefix = fieldName + ": ";
+        const TString prefix = fieldName + "=";
         const size_t pos = record.find(prefix);
         if (pos == TString::npos) {
             return std::nullopt;
@@ -244,7 +277,7 @@ namespace {
             if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            return ExtractNumericField(record, "CurrentQuerySpanId");
+            return ExtractNumericField(record, "currentQuerySpanId");
         }
         return std::nullopt;
     }
@@ -252,34 +285,19 @@ namespace {
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
-        std::cerr << std::endl;
-        std::cerr << "Enter ExtractBreakerQuerySpanId component=" << component
-            << " message=" << messagePattern
-            << std::endl;
-
         for (const auto& record : ExtractTliRecords(logs)) {
-            std::cerr << std::endl;
-
-            bool bComponent = record.Contains("component=" + component);
-            bool bMessage = MatchesMessage(record, messagePattern);
-
-            std::cerr << "  Scan " << record
-                << " component=" << bComponent
-                << " macthesMessage=" << bMessage
-                << std::endl;
             if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             if (expectedBreakerQueryText && component == "SessionActor") {
                 auto text = ExtractBreakerQueryTextFromRecord(record);
-                if (!text) {
-                    std::cerr << "  Scan text=" << *text << std::endl;
-                }
                 if (!text || *text != *expectedBreakerQueryText) {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "breakerQuerySpanId");
+
+            auto result = ExtractNumericField(record, "breakerQuerySpanId");
+            return result;
         }
         return std::nullopt;
     }
@@ -288,7 +306,7 @@ namespace {
         const std::optional<TString>& expectedVictimQueryText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             if (expectedVictimQueryText && component == "SessionActor") {
@@ -297,7 +315,7 @@ namespace {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "VictimQuerySpanId");
+            return ExtractNumericField(record, "victimQuerySpanId");
         }
         return std::nullopt;
     }
@@ -334,10 +352,10 @@ namespace {
     {
         std::vector<ui64> result;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto value = ExtractNumericField(record, "VictimQuerySpanId");
+            auto value = ExtractNumericField(record, "victimQuerySpanId");
             if (value) {
                 result.push_back(*value);
             }
@@ -349,9 +367,15 @@ namespace {
     }
 
     void DumpTliRecords(const TString& logs) {
+        std::cerr << " " << std::endl;
+        std::cerr << logs << std::endl;
+        std::cerr << " " << std::endl;
+        std::cerr << "START DUMP RECORDS" << std::endl;
         for (const auto& record : ExtractTliRecords(logs)) {
             Cerr << record << Endl;
         }
+        std::cerr << "FINISH DUMP RECORDS" << std::endl;
+        std::cerr << " " << std::endl;
     }
 
     // ==================== TLI log patterns ====================
@@ -403,16 +427,21 @@ namespace {
             return {false, std::nullopt};
         }
 
+        std::cerr << "Enter ExtractMatchingFromBreakerDatashard" << std::endl;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+            std::cerr << "   Parse:" << record << std::endl;
+            if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto breakerQuerySpanId = ExtractNumericField(record, "BreakerQuerySpanId");
+            std::cerr << "   Parse 1"<< std::endl;
+            auto breakerQuerySpanId = ExtractNumericField(record, "breakerQuerySpanId");
             if (breakerQuerySpanId && *breakerQuerySpanId == *breakerQuerySpanIdFromKQP) {
+                std::cerr << "   Parse 2" << std::endl;
                 std::optional<std::vector<ui64>> matchingVictimIds;
-                static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
+                static constexpr TStringBuf victimIdsPrefix = "victimQuerySpanIds=";
                 const size_t idsPos = record.find(victimIdsPrefix);
                 if (idsPos != TString::npos) {
+                    std::cerr << "   Parse 3" << std::endl;
                     const size_t listStart = idsPos + victimIdsPrefix.size();
                     const size_t listEnd = record.find(']', listStart);
                     if (listEnd != TString::npos) {

@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <cfloat>
+#include <array>
 #include <utility>
 #include <random>
 
@@ -38,7 +39,9 @@ std::vector<std::pair<i8, double>> MakeSamples() {
     std::vector<std::pair<i8, double>> samples(TotalSambles);
 
     eng.seed(std::time(nullptr));
-    std::generate(samples.begin(), samples.end(), std::bind(&std::make_pair<i8, double>, std::bind(std::move(keys), std::move(eng)), std::bind(std::move(unif), std::move(eng))));
+    std::generate(samples.begin(), samples.end(), [&] {
+        return std::pair<i8, double>{keys(eng), unif(eng)};
+    });
     return samples;
 }
 
@@ -50,7 +53,9 @@ std::vector<std::pair<ui16, double>> MakeOtherSamples() {
     std::vector<std::pair<ui16, double>> samples(TotalSambles);
 
     eng.seed(std::time(nullptr));
-    std::generate(samples.begin(), samples.end(), std::bind(&std::make_pair<ui16, double>, std::bind(std::move(keys), std::move(eng)), std::bind(std::move(unif), std::move(eng))));
+    std::generate(samples.begin(), samples.end(), [&] {
+        return std::pair<ui16, double>{keys(eng), unif(eng)};
+    });
     return samples;
 }
 
@@ -883,7 +888,7 @@ Y_UNIT_TEST_QUAD(TestExtendRandomYields, LLVM, WIDE) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
 
-    TGraphInput* inputs[4];
+    std::array<TGraphInput*, 4> inputs{};
 
     for (ui32 i = 0; i < 4; i++) {
         NUdf::TUnboxedValuePod inputPod = graph->GetHolderFactory().template Create<TGraphInput>(i);
@@ -2474,14 +2479,14 @@ Y_UNIT_TEST_LLVM(TestSortTuples) {
 
     const auto listMaker = [&]()
     {
-        TTriple testData[] = {
+        const std::array<TTriple, 6> testData = {{
             {1, 1, 1},
             {1, 1, 2},
             {1, 2, 3},
             {1, 3, 0},
             {2, 0, 1},
             {2, 1, 0},
-        };
+        }};
 
         TVector<TRuntimeNode> tuplesList;
         for (auto& i : testData) {
@@ -2502,60 +2507,60 @@ Y_UNIT_TEST_LLVM(TestSortTuples) {
 
     {
         TRuntimeNode order = TupleOrder(pb, /*asc1=*/true, /*asc2=*/true, /*asc3=*/true);
-        TTriple expectedData[] = {
+        const std::array<TTriple, 6> expectedData = {{
             {1, 1, 1},
             {1, 1, 2},
             {1, 2, 3},
             {1, 3, 0},
             {2, 0, 1},
             {2, 1, 0},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
         TRuntimeNode order = TupleOrder(pb, /*asc1=*/false, /*asc2=*/false, /*asc3=*/false);
-        TTriple expectedData[] = {
+        const std::array<TTriple, 6> expectedData = {{
             {2, 1, 0},
             {2, 0, 1},
             {1, 3, 0},
             {1, 2, 3},
             {1, 1, 2},
             {1, 1, 1},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
         TRuntimeNode order = TupleOrder(pb, /*asc1=*/true, /*asc2=*/false, /*asc3=*/true);
-        TTriple expectedData[] = {
+        const std::array<TTriple, 6> expectedData = {{
             {1, 3, 0},
             {1, 2, 3},
             {1, 1, 1},
             {1, 1, 2},
             {2, 1, 0},
             {2, 0, 1},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
         TRuntimeNode order = TupleOrder(pb, /*asc1=*/false, /*asc2=*/true, /*asc3=*/false);
-        TTriple expectedData[] = {
+        const std::array<TTriple, 6> expectedData = {{
             {2, 0, 1},
             {2, 1, 0},
             {1, 1, 2},
             {1, 1, 1},
             {1, 2, 3},
             {1, 3, 0},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
@@ -3077,12 +3082,12 @@ Y_NO_INLINE NUdf::TUnboxedValuePod SpecialFunc(const NUdf::TUnboxedValuePod* arg
 Y_UNIT_TEST_LLVM(TestPerfGrepSpecialFunc) {
     const auto t1 = TInstant::Now();
     {
-        NUdf::TUnboxedValuePod items[2];
+        std::array<NUdf::TUnboxedValuePod, 2> items;
         const ui32 n = 10000;
         for (ui32 i = 0; i < n; ++i) {
             items[0] = NUdf::TUnboxedValuePod(i);
             items[1] = NUdf::TUnboxedValuePod::Embedded("ABCDF");
-            bool keep = SpecialFunc(items).template Get<bool>();
+            bool keep = SpecialFunc(items.data()).template Get<bool>();
             UNIT_ASSERT(!keep);
         }
     }

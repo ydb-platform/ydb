@@ -28,7 +28,7 @@ Piles are not standalone {{ ydb-short-name }} clusters; they are parts of a sing
 
 Cluster operation is determined by the states of all its piles. For example, for a cluster of pile A and pile B, the pile states are written as (A, B), where order matters.
 
-![Cluster state diagram](_assets/bridge_pile_states.drawio.svg)
+![Cluster state diagram](_assets/bridge_pile_states.drawio.svg){inline=false}
 
 Each pile can be in one of the following states:
 

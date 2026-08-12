@@ -48,13 +48,13 @@ struct TRuntimeKeyInfo {
 
 struct TMyValueCompare {
     explicit TMyValueCompare(const std::vector<TKeyInfo>& keys)
-        : Keys_(keys.cbegin(), keys.cend())
+        : Keys(keys.cbegin(), keys.cend())
     {
     }
 
     int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
-        for (auto i = 0U; i < Keys_.size(); ++i) {
-            auto& key = Keys_[i];
+        for (auto i = 0U; i < Keys.size(); ++i) {
+            auto& key = Keys[i];
             int cmp;
             if (key.Compare) {
                 cmp = key.Compare->Compare(left[i], right[i]);
@@ -62,8 +62,8 @@ struct TMyValueCompare {
                     cmp = -cmp;
                 }
             } else if (key.LeftPacker) {
-                auto strLeft = key.LeftPacker->Encode(left[i], false);
-                auto strRight = key.RightPacker->Encode(right[i], false);
+                auto strLeft = key.LeftPacker->Encode(left[i], /*desc=*/false);
+                auto strRight = key.RightPacker->Encode(right[i], /*desc=*/false);
                 cmp = strLeft.compare(strRight);
                 if (!directions[i]) {
                     cmp = -cmp;
@@ -80,7 +80,7 @@ struct TMyValueCompare {
         return 0;
     }
 
-    const std::vector<TRuntimeKeyInfo> Keys_;
+    const std::vector<TRuntimeKeyInfo> Keys;
 };
 
 using NYql::TChunkedBuffer;
@@ -395,7 +395,7 @@ private:
     llvm::IntegerType* StatusType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
@@ -406,18 +406,18 @@ public:
     }
 
     llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetTongue() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
     explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , ValueType_(Type::getInt128Ty(Context))
+        , ValueType_(Type::getInt128Ty(context))
         , PtrValueType_(PointerType::getUnqual(ValueType_))
-        , StatusType_(Type::getInt32Ty(Context))
+        , StatusType_(Type::getInt32Ty(context))
     {
     }
 };
@@ -493,7 +493,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         DIScopeAnnotator annotate(ctx.Annotator);
 
@@ -762,7 +762,7 @@ private:
                 Full_.reserve(newRowCount);
             }
             Storage_.insert(Storage_.end(), Indexes_.size(), {});
-        } catch (TMemoryLimitExceededException) {
+        } catch (const TMemoryLimitExceededException&) {
             if (CanSpill()) {
                 SpillReason_ = ESpillReason::Exception;
                 SwitchMode(EOperatingMode::Spilling);
@@ -939,7 +939,7 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode) {
-        const size_t rowsInMemory = Indexes_.size() > 0 ? Storage_.size() / Indexes_.size() : 0;
+        const size_t rowsInMemory = !Indexes_.empty() ? Storage_.size() / Indexes_.size() : 0;
         // clang-format off
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, TStringBuilder()
             << (const void*)this << "# SwitchMode "
@@ -1259,7 +1259,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         DIScopeAnnotator annotate(ctx.Annotator);
 
@@ -1503,7 +1503,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         bool encoded;
         bool useIHash;
         TKeyTypes oneKeyTypes;
-        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple, encoded, useIHash, false);
+        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple, encoded, useIHash, /*expandTuple=*/false);
         if (useIHash) {
             keys[i].Compare = MakeCompareImpl(inputWideComponents[keyIndex]);
         } else if (encoded) {

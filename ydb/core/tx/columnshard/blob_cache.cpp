@@ -248,6 +248,7 @@ private:
         // Is in cache?
         auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
         if (it != Cache.End()) {
+            Y_ABORT_UNLESS(it.Value().size() == blobRange.Size, "Cached %s, size %" PRISZT, blobRange.ToString().c_str(), it.Value().size());
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
             SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), {}, ctx, true);

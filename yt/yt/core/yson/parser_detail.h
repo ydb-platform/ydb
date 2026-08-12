@@ -85,9 +85,9 @@ public:
         } catch (const std::exception& ex) {
             auto [context, contextPosition] = TBase::GetContextFromCheckpoint();
             THROW_ERROR_EXCEPTION(EErrorCode::ParseError, "Error occurred while parsing YSON")
-                << TErrorAttribute("context", EscapeC(TStringBuf(context)))
-                << TErrorAttribute("context_pos", contextPosition)
-                << ex;
+                .With("context", EscapeC(TStringBuf(context)))
+                .With("context_pos", contextPosition)
+                .With(ex);
         }
     }
 
@@ -171,7 +171,7 @@ private:
         if (NestingLevel_ >= NestingLevelLimit_) {
             auto nestingLevelLimit = NestingLevelLimit_;
             THROW_ERROR_EXCEPTION(EErrorCode::DepthLimitExceeded, "Depth limit exceeded while parsing YSON")
-                << TErrorAttribute("limit", nestingLevelLimit);
+                .With("limit", nestingLevelLimit);
         }
 
         ++NestingLevel_;

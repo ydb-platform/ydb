@@ -6,7 +6,7 @@ namespace NSQLPureAST {
 
 class TSQLv1NarrowingVisitor: public TSQLv1BaseVisitor {
 public:
-    explicit TSQLv1NarrowingVisitor(antlr4::TokenStream* tokens, size_t cursorPosition);
+    explicit TSQLv1NarrowingVisitor(const antlr4::TokenStream* tokens, size_t cursorPosition);
 
 protected:
     bool shouldVisitNextChild(antlr4::tree::ParseTree* node, const std::any& /*currentResult*/) override;
@@ -17,7 +17,7 @@ protected:
     [[nodiscard]] antlr4::misc::Interval CursorInterval() const;
 
 private:
-    antlr4::TokenStream* Tokens_;
+    const antlr4::TokenStream* Tokens_;
     size_t CursorPosition_;
 };
 

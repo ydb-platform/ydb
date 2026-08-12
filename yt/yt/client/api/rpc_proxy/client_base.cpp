@@ -232,7 +232,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
-                "Transaction started");
+                "Started");
         }));
 }
 
@@ -1312,7 +1312,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
             int rowIndex = protoReplicationRowIndex.row_index();
             if (result.EndReplicationRowIndexes.contains(tabletId)) {
                 THROW_ERROR_EXCEPTION("Duplicate tablet id in end replication row indexes")
-                    << TErrorAttribute("tablet_id", tabletId);
+                    .With("tablet_id", tabletId);
             }
             InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }

@@ -317,7 +317,7 @@ public:
             if (auto it = attrs.find("database_id"); it != attrs.end()) {
                 alterConfig.SetYdbDatabaseId(it->second);
             }
-            if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+            if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
             alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));

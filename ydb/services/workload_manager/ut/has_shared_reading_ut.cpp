@@ -1,6 +1,7 @@
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <google/protobuf/any.pb.h>
 
@@ -54,7 +55,8 @@ NKqp::TUserRequestContext MakeStreamingUserContext() {
     return userCtx;
 }
 
-NKqp::TPreparedQueryHolder MakePreparedQueryWithSharedReading(bool sharedReading) {
+NKqp::TPreparedQueryHolder MakePreparedQueryWithSharedReading(bool sharedReading)
+{
     auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
     auto* phyQuery = proto->MutablePhysicalQuery();
     auto* tx = phyQuery->AddTransactions();
@@ -64,7 +66,9 @@ NKqp::TPreparedQueryHolder MakePreparedQueryWithSharedReading(bool sharedReading
     NYql::NPq::NProto::TDqPqTopicSource pqSource;
     pqSource.SetTopicPath("/Root/topic");
     pqSource.SetSharedReading(sharedReading);
-    source->MutableExternalSource()->MutableSettings()->PackFrom(pqSource);
+    auto* externalSource = source->MutableExternalSource();
+    externalSource->SetType(TString{NYql::PqSource});
+    externalSource->MutableSettings()->PackFrom(pqSource);
 
     return NKqp::TPreparedQueryHolder(proto.release(), nullptr, /*noFillTables=*/true);
 }

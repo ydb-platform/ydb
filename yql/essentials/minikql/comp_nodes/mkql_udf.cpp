@@ -220,7 +220,7 @@ public:
         const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
         const auto builder = ctx.GetBuilder();
 
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, false);
+        const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, /*isVarArg=*/false);
         const auto runFunc = ctx.Codegen.GetModule().getOrInsertFunction(llvm::StringRef(IrFunctionName_.data(), IrFunctionName_.size()), funType);
         CallInst::Create(runFunc, {boxed, result, builder, args}, "", block);
     }
@@ -278,7 +278,7 @@ public:
         return callable;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto indexType = Type::getInt32Ty(context);
@@ -554,7 +554,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                            << "type mismatch, expected run config type: "
                            << PrintNode(runConfigType, /*singleLine=*/true)
                            << ", actual: "
-                           << PrintNode(firstArgType, true);
+                           << PrintNode(firstArgType, /*singleLine=*/true);
             UdfTerminate((TStringBuilder() << pos
                                            << " Udf Function '"
                                            << funcName
@@ -572,9 +572,9 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
             if (!IsDateTimeConvertible(funcName, closureNodeType, closureFuncType, wrapDateTimeConvert)) {
                 TString diff = TStringBuilder()
                                << "type mismatch, expected return type: "
-                               << PrintNode(closureNodeType, true)
+                               << PrintNode(closureNodeType, /*singleLine=*/true)
                                << ", actual: "
-                               << PrintNode(closureFuncType, true);
+                               << PrintNode(closureFuncType, /*singleLine=*/true);
                 UdfTerminate((TStringBuilder() << pos
                                                << " Udf Function '"
                                                << funcName
@@ -594,9 +594,9 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                    : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, closureFuncType, userType, wrapDateTimeConvert);
     }
 
-    if (!callableFuncType->IsConvertableTo(*callableNodeType, true)) {
+    if (!callableFuncType->IsConvertableTo(*callableNodeType, /*ignoreTagged=*/true)) {
         if (!IsDateTimeConvertible(funcName, callableNodeType, callableFuncType, wrapDateTimeConvert)) {
-            TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callableNodeType, true) << ", actual:" << PrintNode(callableFuncType, true);
+            TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callableNodeType, /*singleLine=*/true) << ", actual:" << PrintNode(callableFuncType, /*singleLine=*/true);
             UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
         }
         MKQL_ENSURE(funcName == NUdf::TStringRef::Of("DateTime2.Format") ||

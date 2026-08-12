@@ -133,9 +133,7 @@ namespace NActors {
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();
         static NHPTimer::STime GetCurrentEventEnqueuedTimestampTs();
-        static TInstant GetCurrentEventEnqueuedTimestamp();
         static NHPTimer::STime GetCurrentMailboxScheduledTimestampTs();
-        static TInstant GetCurrentMailboxScheduledTimestamp();
         static ui64 GetCurrentEventDeliveryTimeUs();
         static ui64 GetCurrentActivationTimeUs();
 

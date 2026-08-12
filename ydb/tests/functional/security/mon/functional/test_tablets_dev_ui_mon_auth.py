@@ -1105,3 +1105,119 @@ def test_graph_shard_change_backend_links_use_secure_path(
     assert 'action=change_backend&backend=1' in response.text
     assert 'action=change_backend&backend=2' in response.text
     assert f'app?TabletID={tid}&action=change_backend' not in response.text
+
+
+def _pers_queue_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _pers_queue_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _pers_queue_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _pers_queue_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_pers_queue_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+# Views whose every parameter is in the public whitelist, so they keep monitoring-level access.
+_PERS_QUEUE_PUBLIC_PAGES = (
+    '',  # main page
+    'kv=1',
+    'kv=1&section=channelstat',
+    'consumer=user&partitionId=0',
+    'TxId=1',
+)
+
+# SendReadSet commits or aborts a transaction. NewAction stands for a handler added later: an
+# unknown parameter is admin only without anyone having to remember to list it.
+_PERS_QUEUE_ADMIN_PAGES = (
+    'SendReadSet=1&step=1&txId=1&decision=commit&allSenderTablets=1',
+    'SendReadSet=1&step=1&txId=1&decision=abort&senderTablet=1',
+    'NewAction=1',
+)
+
+
+def _pers_queue_devui_cases(tablet_id, secure_path_mode):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for query_suffix in _PERS_QUEUE_PUBLIC_PAGES:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    for query_suffix in _PERS_QUEUE_ADMIN_PAGES:
+        q = f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
+    cases.extend(_pers_queue_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
+    return cases
+
+
+def _pers_queue_tablet_devui_mon_paths(cluster, secure_path_mode):
+    for endpoint_path, token, expected_status in _pers_queue_devui_cases(
+        cluster.pers_queue_tablet_id, secure_path_mode=secure_path_mode
+    ):
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_pers_queue_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+):
+    _pers_queue_tablet_devui_mon_paths(
+        ydb_cluster_with_enforce_user_token_and_pers_queue_topic, secure_path_mode=False
+    )
+
+
+def test_pers_queue_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    _pers_queue_tablet_devui_mon_paths(
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic, secure_path_mode=True
+    )
+
+
+def test_pers_queue_send_read_set_form_points_to_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    base_url = _pers_queue_mon_base_url(cluster)
+
+    on_app = requests.get(
+        f'{base_url}/tablets/app?TabletID={tid}&TxId=1',
+        headers={'Authorization': 'monitoring@builtin'},
+        verify=False,
+    )
+    assert on_app.status_code == 200, on_app.text
+    assert f"action='app/secure?TabletID={tid}'" not in on_app.text or 'SendReadSet' in on_app.text
+
+    on_secure = requests.get(
+        f'{base_url}/tablets/app/secure?TabletID={tid}&TxId=1',
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+    )
+    assert on_secure.status_code == 200, on_secure.text
+    assert "action='app" not in on_secure.text and 'action="app' not in on_secure.text

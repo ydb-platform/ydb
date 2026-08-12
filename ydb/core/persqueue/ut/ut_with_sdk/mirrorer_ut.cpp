@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
         const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
         const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
-        const TString dstTopicPath = "/Root/" + dstTopicFullName;
+        const TString dstTopicPath = "/Root/PQ/" + dstTopicFullName;
         const TString mirrorConsumer = "mirror_user";
         const TString readerConsumer = "reader";
 

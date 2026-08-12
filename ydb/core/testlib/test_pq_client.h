@@ -1096,12 +1096,12 @@ public:
 
         if (createRequest.PartitionStrategy) {
             const auto& ps = *createRequest.PartitionStrategy;
-            const auto strategy = ConvertPartitionStrategyType(ps.GetPartitionStrategyType());
+            // Initial count is NumParts; MinPartitionCount is an autoscaling bound.
             settings.PartitioningSettings(
-                ps.GetMinPartitionCount() ? ps.GetMinPartitionCount() : createRequest.NumParts,
+                createRequest.NumParts,
                 ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts,
                 NYdb::NTopic::TAutoPartitioningSettings(
-                    strategy,
+                    ConvertPartitionStrategyType(ps.GetPartitionStrategyType()),
                     TDuration::Seconds(ps.GetScaleThresholdSeconds()),
                     ps.GetScaleDownPartitionWriteSpeedThresholdPercent(),
                     ps.GetScaleUpPartitionWriteSpeedThresholdPercent()));
@@ -1142,7 +1142,10 @@ public:
 
         if (createRequest.PartitionStrategy) {
             const auto& ps = *createRequest.PartitionStrategy;
-            settings.PartitionsCount(ps.GetMinPartitionCount() ? ps.GetMinPartitionCount() : createRequest.NumParts);
+            // Initial partition count comes from NumParts (msgbus SetNumPartitions).
+            // MinPartitionCount is an autoscaling bound and may be lower than NumParts
+            // (e.g. RootPartitionOverlap starts dst wider than strategy min).
+            settings.PartitionsCount(createRequest.NumParts);
             settings.MaxPartitionsCount(std::make_optional<uint64_t>(
                 ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts));
             settings.AutoPartitioningStrategy(std::make_optional(
@@ -1174,11 +1177,14 @@ public:
 
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
 
-        // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
+        // Topic/PQv1 SDK create does not preserve msgbus semantics needed by many
+        // legacy UTs (LowWatermark, consumers without service type under
+        // DisallowDefaultClientServiceType, unauthenticated scheme ops). Keep
+        // msgbus for non-mirror creates; mirrors use PersQueue RemoteMirrorRule.
         if (createRequest.MirrorFrom) {
             CreateTopicViaPersQueueSdk(createRequest);
         } else {
-            CreateTopicViaTopicSdk(createRequest);
+            CallPersQueueGRPC(createRequest.GetRequest()->Record);
         }
 
         AddTopic(createRequest.Topic);

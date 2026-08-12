@@ -7501,25 +7501,6 @@ Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixtur
     WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
 }
 
-Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyContainerReturnsZero, TPartitionFixture) {
-    UNIT_ASSERT(Ctx.Defined());
-    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
-
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
-    cz.DataKeysBody.clear();
-    cz.HeadKeys.clear();
-    fwz.DataKeysBody.clear();
-    fwz.HeadKeys.clear();
-    // Divergent meta-like state that used to trip PQ_ENSURE(!container.empty()).
-    cz.StartOffset = 0;
-    cz.EndOffset = 3804;
-    fwz.StartOffset = 0;
-    fwz.EndOffset = 3804;
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
-}
-
 Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
     TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});

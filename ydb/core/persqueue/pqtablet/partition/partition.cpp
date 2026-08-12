@@ -1527,20 +1527,11 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     const TPartitionBlobEncoder& blobEncoder = GetBlobEncoder(offset);
     offset = Max(offset, blobEncoder.StartOffset);
     const std::deque<TDataKey>& container = GetContainer(blobEncoder, offset);
-    if (container.empty()) {
-        // Can happen if meta offsets diverge from blob keys (e.g. after init with
-        // NODATA). Treat as "no such record" — same as offset >= EndOffset.
-        YDB_LOG_WARN_COMP(Service, "GetWriteTimeEstimate: empty container for offset",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"tablet_id", TabletId},
-            {"partition", Partition},
-            {"offset", offset},
-            {"cz.StartOffset", CompactionBlobEncoder.StartOffset},
-            {"cz.EndOffset", CompactionBlobEncoder.EndOffset},
-            {"fwz.StartOffset", BlobEncoder.StartOffset},
-            {"fwz.EndOffset", BlobEncoder.EndOffset});
-        return TInstant::Zero();
-    }
+    PQ_ENSURE(!container.empty())
+        ("offset", offset)
+        ("cz.StartOffset", CompactionBlobEncoder.StartOffset)("cz.EndOffset", CompactionBlobEncoder.EndOffset)
+        ("fwz.StartOffset", BlobEncoder.StartOffset)("fwz.EndOffset", BlobEncoder.EndOffset)
+        ;
 
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {

@@ -322,7 +322,6 @@ When creating row-oriented tables, it is possible to specify:
 When creating column-oriented tables, it is possible to specify:
 
 * [A Bloom skip index](bloom_skip_index.md).
-* [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).
 

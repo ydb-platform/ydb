@@ -462,6 +462,11 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
+    optional uint64 QueryMetricsCompletedQueries = 11;
+    optional uint64 QueryMetricsRejectedQueries = 12;
+    optional uint64 QueryMetricsEvictedHashes = 13;
 }
 
 // sysview processor tablet -> node

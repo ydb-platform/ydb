@@ -4,11 +4,156 @@ namespace NKikimr {
 namespace NSysView {
 
 struct TSysViewProcessor::TTxAggregate : public TTxBase {
+    using TNodeRequests = std::unordered_map<TNodeId, TNodeToQueries>;
+
     explicit TTxAggregate(TSelf* self)
         : TTxBase(self)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_AGGREGATE; }
+
+    THashVector SelectMetricCandidates() const {
+        TRankedQueryMetrics candidates;
+        candidates.reserve(Self->Queries.size());
+        for (const auto& [queryHash, query] : Self->Queries) {
+            candidates.emplace_back(query.Cpu, queryHash);
+        }
+        std::sort(candidates.begin(), candidates.end(), Self->QueryMetricsRankCompare);
+
+        THashVector selectedHashes;
+        selectedHashes.reserve(std::min(candidates.size(), Self->MetricsFetchLimit));
+        for (const auto& [_, queryHash] : candidates) {
+            if (selectedHashes.size() == Self->MetricsFetchLimit) {
+                break;
+            }
+            selectedHashes.emplace_back(queryHash);
+        }
+        return selectedHashes;
+    }
+
+    std::unordered_set<TQueryHash> SelectTextsToFetch(
+        const THashVector& selectedHashes) const
+    {
+        const std::unordered_set<TQueryHash> selectedSet(
+            selectedHashes.begin(), selectedHashes.end());
+
+        std::unordered_set<TQueryHash> result;
+        for (size_t i = 0; i < selectedHashes.size() && i < Self->PublicMinuteLimit; ++i) {
+            result.insert(selectedHashes[i]);
+        }
+
+        TRankedQueryMetrics prospectiveHourTop;
+        prospectiveHourTop.reserve(Self->CurrentHourMetrics.size() + selectedHashes.size());
+        for (const auto& [queryHash, metrics] : Self->CurrentHourMetrics) {
+            ui64 cpu = metrics.GetCpuTimeUs().GetSum();
+            if (selectedSet.contains(queryHash)) {
+                cpu += Self->Queries.at(queryHash).Cpu;
+            }
+            prospectiveHourTop.emplace_back(cpu, queryHash);
+        }
+        for (auto queryHash : selectedHashes) {
+            if (!Self->CurrentHourMetrics.contains(queryHash)) {
+                prospectiveHourTop.emplace_back(Self->Queries.at(queryHash).Cpu, queryHash);
+            }
+        }
+        std::sort(prospectiveHourTop.begin(), prospectiveHourTop.end(),
+            Self->QueryMetricsRankCompare);
+
+        std::unordered_set<TQueryHash> knownHourTexts;
+        const ui64 hourEndUs = Self->EndOfHourInterval(Self->IntervalEnd).MicroSeconds();
+        auto persisted = Self->MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
+        while (persisted != Self->MetricsOneHour.end() && persisted->first.first == hourEndUs) {
+            if (!persisted->second.Text.empty()) {
+                knownHourTexts.insert(persisted->second.Metrics.GetQueryTextHash());
+            }
+            ++persisted;
+        }
+
+        for (size_t i = 0; i < prospectiveHourTop.size() && i < Self->PublicHourLimit; ++i) {
+            const auto queryHash = prospectiveHourTop[i].second;
+            if (selectedSet.contains(queryHash) && !knownHourTexts.contains(queryHash)) {
+                result.insert(queryHash);
+            }
+        }
+        return result;
+    }
+
+    void AddQueryMetricRequests(const THashVector& selectedHashes,
+        const std::unordered_set<TQueryHash>& textsToFetch,
+        TNodeRequests& requests, std::unordered_set<TNodeId>& metricsNodes) const
+    {
+        static constexpr size_t TextReplicaCount = 3;
+
+        for (auto queryHash : selectedHashes) {
+            const auto& nodes = Self->Queries.at(queryHash).Nodes;
+            for (const auto& node : nodes) {
+                requests[node.first].Hashes.emplace_back(queryHash);
+                metricsNodes.insert(node.first);
+            }
+
+            if (!textsToFetch.contains(queryHash)) {
+                continue;
+            }
+
+            if (nodes.size() <= TextReplicaCount) {
+                for (const auto& node : nodes) {
+                    requests[node.first].TextsToGet.emplace_back(queryHash);
+                }
+                continue;
+            }
+
+            std::unordered_set<TNodeId> used;
+            while (used.size() < TextReplicaCount) {
+                const auto nodeId = nodes[RandomNumber<ui64>(nodes.size())].first;
+                if (used.insert(nodeId).second) {
+                    requests[nodeId].TextsToGet.emplace_back(queryHash);
+                }
+            }
+        }
+    }
+
+    void AddTopQueryRequests(TNodeRequests& requests) const {
+        for (const auto& entry : Self->ByDurationMinute) {
+            requests[entry.NodeId].ByDuration.emplace_back(entry.Hash);
+        }
+        for (const auto& entry : Self->ByReadBytesMinute) {
+            requests[entry.NodeId].ByReadBytes.emplace_back(entry.Hash);
+        }
+        for (const auto& entry : Self->ByCpuTimeMinute) {
+            requests[entry.NodeId].ByCpuTime.emplace_back(entry.Hash);
+        }
+        for (const auto& entry : Self->ByRequestUnitsMinute) {
+            requests[entry.NodeId].ByRequestUnits.emplace_back(entry.Hash);
+        }
+    }
+
+    void PersistNodeRequests(NIceDb::TNiceDb& db, TNodeRequests& requests) {
+        Self->NodesToRequest.reserve(requests.size());
+        for (auto& [nodeId, queries] : requests) {
+            queries.NodeId = nodeId;
+
+            auto serializeHashes = [] (const THashVector& hashes) {
+                return TString(reinterpret_cast<const char*>(hashes.data()),
+                    hashes.size() * sizeof(TQueryHash));
+            };
+
+            db.Table<Schema::NodesToRequest>().Key(nodeId).Update(
+                NIceDb::TUpdate<Schema::NodesToRequest::QueryHashes>(
+                    serializeHashes(queries.Hashes)),
+                NIceDb::TUpdate<Schema::NodesToRequest::TextsToGet>(
+                    serializeHashes(queries.TextsToGet)),
+                NIceDb::TUpdate<Schema::NodesToRequest::ByDuration>(
+                    serializeHashes(queries.ByDuration)),
+                NIceDb::TUpdate<Schema::NodesToRequest::ByReadBytes>(
+                    serializeHashes(queries.ByReadBytes)),
+                NIceDb::TUpdate<Schema::NodesToRequest::ByCpuTime>(
+                    serializeHashes(queries.ByCpuTime)),
+                NIceDb::TUpdate<Schema::NodesToRequest::ByRequestUnits>(
+                    serializeHashes(queries.ByRequestUnits)));
+
+            Self->NodesToRequest.emplace_back(std::move(queries));
+        }
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxAggregate::Execute");
@@ -21,78 +166,23 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
             return true;
         }
 
-        std::unordered_map<TNodeId, TNodeToQueries> nodesToRequest;
-        size_t count = 0;
-        for (auto it = Self->ByCpu.rbegin();
-            it != Self->ByCpu.rend() && count < Self->TopCountLimit;
-            ++it, ++count)
-        {
-            auto queryHash = it->second;
-            const auto& nodes = Self->Queries[queryHash].Nodes;
-            for (const auto& node : nodes) {
-                nodesToRequest[node.first].Hashes.emplace_back(queryHash);
-            }
+        const auto selectedHashes = SelectMetricCandidates();
+        const auto textsToFetch = SelectTextsToFetch(selectedHashes);
 
-            static constexpr size_t textReqsCount = 3;
-            const auto nodesCount = nodes.size();
-            if (nodesCount <= textReqsCount) {
-                for (const auto& node : nodes) {
-                    nodesToRequest[node.first].TextsToGet.emplace_back(queryHash);
-                }
-            } else {
-                std::unordered_set<TNodeId> used;
-                for (size_t count = 0; count < textReqsCount; ) {
-                    auto nodeId = nodes[RandomNumber<ui64>(nodesCount)].first;
-                    if (used.find(nodeId) != used.end()) {
-                        continue;
-                    }
-                    nodesToRequest[nodeId].TextsToGet.emplace_back(queryHash);
-                    used.insert(nodeId);
-                    ++count;
-                }
-            }
+        TNodeRequests nodesToRequest;
+        std::unordered_set<TNodeId> metricsNodesToRequest;
+        AddQueryMetricRequests(selectedHashes, textsToFetch,
+            nodesToRequest, metricsNodesToRequest);
+        AddTopQueryRequests(nodesToRequest);
+
+        Self->QueryMetricsCoverage.SummaryNodes = Self->SummaryNodes.size();
+        Self->QueryMetricsCoverage.ProcessorRetainedCpuTimeUs = 0;
+        for (const auto& [_, query] : Self->Queries) {
+            Self->QueryMetricsCoverage.ProcessorRetainedCpuTimeUs += query.Cpu;
         }
 
-        for (auto& entry : Self->ByDurationMinute) {
-            nodesToRequest[entry.NodeId].ByDuration.emplace_back(entry.Hash);
-        }
-        for (auto& entry : Self->ByReadBytesMinute) {
-            nodesToRequest[entry.NodeId].ByReadBytes.emplace_back(entry.Hash);
-        }
-        for (auto& entry : Self->ByCpuTimeMinute) {
-            nodesToRequest[entry.NodeId].ByCpuTime.emplace_back(entry.Hash);
-        }
-        for (auto& entry : Self->ByRequestUnitsMinute) {
-            nodesToRequest[entry.NodeId].ByRequestUnits.emplace_back(entry.Hash);
-        }
-
-        Self->NodesToRequest.reserve(nodesToRequest.size());
-
-        for (auto& [nodeId, queries] : nodesToRequest) {
-            queries.NodeId = nodeId;
-            auto& hashes = queries.Hashes;
-            auto& texts = queries.TextsToGet;
-            auto& byDuration = queries.ByDuration;
-            auto& byReadBytes = queries.ByReadBytes;
-            auto& byCpuTime = queries.ByCpuTime;
-            auto& byRequestUnits = queries.ByRequestUnits;
-
-            db.Table<Schema::NodesToRequest>().Key(nodeId).Update(
-                NIceDb::TUpdate<Schema::NodesToRequest::QueryHashes>(
-                    TString((char*)hashes.data(), hashes.size() * sizeof(TQueryHash))),
-                NIceDb::TUpdate<Schema::NodesToRequest::TextsToGet>(
-                    TString((char*)texts.data(), texts.size() * sizeof(TQueryHash))),
-                NIceDb::TUpdate<Schema::NodesToRequest::ByDuration>(
-                    TString((char*)byDuration.data(), byDuration.size() * sizeof(TQueryHash))),
-                NIceDb::TUpdate<Schema::NodesToRequest::ByReadBytes>(
-                    TString((char*)byReadBytes.data(), byReadBytes.size() * sizeof(TQueryHash))),
-                NIceDb::TUpdate<Schema::NodesToRequest::ByCpuTime>(
-                    TString((char*)byCpuTime.data(), byCpuTime.size() * sizeof(TQueryHash))),
-                NIceDb::TUpdate<Schema::NodesToRequest::ByRequestUnits>(
-                    TString((char*)byRequestUnits.data(), byRequestUnits.size() * sizeof(TQueryHash))));
-
-            Self->NodesToRequest.emplace_back(std::move(queries));
-        }
+        Self->QueryMetricsCoverage.RequestedNodes = metricsNodesToRequest.size();
+        PersistNodeRequests(db, nodesToRequest);
 
         Self->ClearIntervalSummaries(db);
 
@@ -110,6 +200,7 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         SVLOG_D("[" << Self->TabletID() << "] TTxAggregate::Complete");
 
         if (Self->CurrentStage == COLLECT) {
+            Self->ScheduleHourMetricsCleanup();
             Self->ScheduleAggregate();
         } else {
             Self->ScheduleCollect();

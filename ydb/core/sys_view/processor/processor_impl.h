@@ -41,6 +41,8 @@ private:
     struct TTxAggregate;
     struct TTxIntervalSummary;
     struct TTxIntervalMetrics;
+    struct TTxIntervalMetricsFailure;
+    struct TTxCleanupHourMetrics;
     struct TTxTopPartitions;
 
     struct TEvPrivate {
@@ -52,6 +54,7 @@ private:
             EvApplyCounters,
             EvApplyLabeledCounters,
             EvSendNavigate,
+            EvCleanupHourMetrics,
             EvEnd
         };
 
@@ -68,6 +71,8 @@ private:
         struct TEvApplyLabeledCounters : public TEventLocal<TEvApplyLabeledCounters, EvApplyLabeledCounters> {};
 
         struct TEvSendNavigate : public TEventLocal<TEvSendNavigate, EvSendNavigate> {};
+
+        struct TEvCleanupHourMetrics : public TEventLocal<TEvCleanupHourMetrics, EvCleanupHourMetrics> {};
     };
 
     struct TTopQuery {
@@ -95,9 +100,30 @@ private:
         TString Text;
     };
 
+    struct TQueryMetricsCoverage {
+        ui64 Nodes = 0;
+        ui64 TotalCpuTimeUs = 0;
+        ui64 NodeRetainedCpuTimeUs = 0;
+        ui64 CompletedQueries = 0;
+        ui64 RejectedQueries = 0;
+        ui64 EvictedHashes = 0;
+        ui64 SummaryNodes = 0;
+        ui64 ProcessorRetainedCpuTimeUs = 0;
+        ui64 RequestedNodes = 0;
+        ui64 RespondedNodes = 0;
+        ui64 FailedNodes = 0;
+    };
+
+    using TQueryMetricsRank = std::pair<ui64, TQueryHash>;
+    using TRankedQueryMetrics = std::vector<TQueryMetricsRank>;
+
 private:
     static bool TopQueryCompare(const TTopQuery& l, const TTopQuery& r) {
         return l.Value == r.Value ? l.Hash > r.Hash : l.Value > r.Value;
+    }
+
+    static bool QueryMetricsRankCompare(const TQueryMetricsRank& l, const TQueryMetricsRank& r) {
+        return l.first != r.first ? l.first > r.first : l.second < r.second;
     }
 
     void OnDetach(const TActorContext& ctx) override;
@@ -126,6 +152,7 @@ private:
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvSendNavigate::TPtr& ev);
+    void Handle(TEvPrivate::TEvCleanupHourMetrics::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev);
@@ -137,10 +164,20 @@ private:
     void PersistDatabase(NIceDb::TNiceDb& db);
     void PersistStage(NIceDb::TNiceDb& db);
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
+    void PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb& db);
 
     template <typename TSchema>
     void PersistQueryTopResults(NIceDb::TNiceDb& db,
         TQueryTop& top, TResultStatsMap& results, TInstant intervalEnd);
+    TRankedQueryMetrics RankMinuteQueryMetrics() const;
+    TRankedQueryMetrics RankCurrentHourQueryMetrics() const;
+    ui32 PersistMinuteQueryMetrics(NIceDb::TNiceDb& db,
+        const TRankedQueryMetrics& rankedMetrics);
+    void MergeCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd);
+    ui32 PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd,
+        const TRankedQueryMetrics& rankedMetrics);
+    void LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const;
+    void FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db);
     void PersistQueryResults(NIceDb::TNiceDb& db);
 
     template <typename TSchema>
@@ -154,6 +191,7 @@ private:
     void ScheduleApplyCounters();
     void ScheduleApplyLabeledCounters();
     void ScheduleSendNavigate();
+    void ScheduleHourMetricsCleanup();
 
     template <typename TSchema, typename TMap>
     void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
@@ -165,7 +203,7 @@ private:
     void Reset(NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void SendRequests();
-    void IgnoreFailure(TNodeId nodeId);
+    void HandleIntervalMetricsFailure(TNodeId nodeId);
 
     static void EntryToProto(NKikimrSysView::TQueryMetricsEntry& dst, const TQueryToMetrics& src);
     static void EntryToProto(NKikimrSysView::TQueryStatsEntry& dst, const NKikimrSysView::TQueryStats& src);
@@ -238,6 +276,7 @@ private:
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
             hFunc(TEvPrivate::TEvApplyLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
+            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
@@ -257,8 +296,11 @@ private:
 private:
     // limit on number of distinct queries when gathering summaries
     static constexpr size_t DistinctQueriesLimit = 1024;
-    // limit on number of queries to aggregate metrics
-    static constexpr size_t TopCountLimit = 256;
+    // limit on number of queries to fetch full metrics for
+    static constexpr size_t MetricsFetchLimit = 1024;
+    // public result limits
+    static constexpr size_t PublicMinuteLimit = 256;
+    static constexpr size_t PublicHourLimit = 1024;
     // limit on number of concurrent metrics requests from services
     static constexpr size_t MaxInFlightRequests = 16;
     // limit on scan batch size
@@ -291,9 +333,16 @@ private:
     std::unordered_map<TQueryHash, TQueryToNodes> Queries;
     std::multimap<ui64, TQueryHash> ByCpu;
     std::unordered_set<TNodeId> SummaryNodes;
+    TQueryMetricsCoverage QueryMetricsCoverage;
 
     // IntervalMetrics
     std::unordered_map<TQueryHash, TQueryToMetrics> QueryMetrics;
+
+    // IntervalMetricsOneHour
+    std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
+    TInstant CurrentHourEnd;
+    TInstant LastMergedQueryMetricsIntervalEnd;
+    bool HourMetricsCleanupInFlight = false;
 
     // NodesToRequest
     using THashVector = std::vector<TQueryHash>;
@@ -384,4 +433,3 @@ private:
 
 } // NSysView
 } // NKikimr
-

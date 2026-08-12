@@ -158,6 +158,21 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
         }
         Self->SummaryNodes.insert(nodeId);
 
+        if (Record.HasQueryMetricsTotalCpuTimeUs()
+            && Record.HasQueryMetricsRetainedCpuTimeUs())
+        {
+            ++Self->QueryMetricsCoverage.Nodes;
+            Self->QueryMetricsCoverage.TotalCpuTimeUs += Record.GetQueryMetricsTotalCpuTimeUs();
+            Self->QueryMetricsCoverage.NodeRetainedCpuTimeUs +=
+                Record.GetQueryMetricsRetainedCpuTimeUs();
+            Self->QueryMetricsCoverage.CompletedQueries +=
+                Record.GetQueryMetricsCompletedQueries();
+            Self->QueryMetricsCoverage.RejectedQueries +=
+                Record.GetQueryMetricsRejectedQueries();
+            Self->QueryMetricsCoverage.EvictedHashes +=
+                Record.GetQueryMetricsEvictedHashes();
+        }
+
         const auto& metrics = Record.GetMetrics();
         auto count = metrics.HashesSize();
 

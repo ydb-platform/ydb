@@ -376,6 +376,11 @@ private:
 
         auto& log = QueryLogs[database];
         log.Metrics.Report.FillSummary(*record.MutableMetrics());
+        record.SetQueryMetricsTotalCpuTimeUs(log.Metrics.Report.GetTotalCpuTimeUs());
+        record.SetQueryMetricsRetainedCpuTimeUs(log.Metrics.Report.GetRetainedCpuTimeUs());
+        record.SetQueryMetricsCompletedQueries(log.Metrics.Report.GetCompletedQueries());
+        record.SetQueryMetricsRejectedQueries(log.Metrics.Report.GetRejectedQueries());
+        record.SetQueryMetricsEvictedHashes(log.Metrics.Report.GetEvictedHashes());
         log.TopByDuration.Report.FillSummary(*record.MutableTopByDuration());
         log.TopByReadBytes.Report.FillSummary(*record.MutableTopByReadBytes());
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());

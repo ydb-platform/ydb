@@ -148,6 +148,40 @@ void WaitForStats(TTableClient& client, const TString& tableName, const TString&
     }
     UNIT_ASSERT_GE(rowCount, 0);
 }
+
+void SendQueryMetric(TTestEnv& env, ui32 nodeIdx, const TString& database,
+    ui64 queryHash, const TString& queryText, ui64 cpuTimeUs,
+    ui64 durationMs = 1, ui64 readRows = 0, ui64 endTimeMs = 0)
+{
+    auto metric = std::make_unique<TEvSysView::TEvCollectQueryStats>();
+    metric->Database = database;
+    metric->QueryStats.SetQueryTextHash(queryHash);
+    metric->QueryStats.SetQueryText(queryText);
+    metric->QueryStats.SetEndTimeMs(endTimeMs ? endTimeMs : TInstant::Now().MilliSeconds());
+    metric->QueryStats.SetDurationMs(durationMs);
+    metric->QueryStats.SetTotalCpuTimeUs(cpuTimeUs);
+    metric->QueryStats.MutableStats()->SetReadRows(readRows);
+
+    auto& actorSystem = *env.GetServer().GetRuntime()->GetActorSystem(nodeIdx);
+    actorSystem.Send(MakeSysViewServiceID(actorSystem.NodeId), metric.release());
+}
+
+ui64 ReadUint64(NQuery::TQueryClient& client, const TString& query, bool optional = false) {
+    auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+    auto parser = result.GetResultSetParser(0);
+    if (optional && parser.RowsCount() == 0) {
+        return 0;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+    UNIT_ASSERT(parser.TryNextRow());
+    if (optional) {
+        return parser.ColumnParser(0).GetOptionalUint64().value_or(0);
+    }
+    return parser.ColumnParser(0).GetUint64();
+}
+
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -2437,10 +2471,269 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        UNIT_ASSERT_GE(rowCount, 0);
+        UNIT_ASSERT_GT(rowCount, 0);
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
+
+        rowCount = 0;
+        for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT SumReadBytes
+                FROM `/Root/Tenant1/.sys/query_metrics_one_hour`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            ysonString = NKqp::StreamResultToYson(it);
+
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+            UNIT_ASSERT(node.IsList());
+            rowCount = node.AsList().size();
+
+            if (!rowCount) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+
+        UNIT_ASSERT_GT(rowCount, 0);
+        NKqp::CompareYson(R"([
+            [[0u]];
+        ])", ysonString);
+
+        // The public hour bucket is live and accumulates the next minute instead
+        // of replacing the previous result.
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            "SELECT * FROM `/Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
+        ).GetValueSync());
+
+        ui64 count = 0;
+        for (size_t iter = 0; iter < 30 && count < 2; ++iter) {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Count
+                FROM `/Root/Tenant1/.sys/query_metrics_one_hour`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto node = NYT::NodeFromYsonString(
+                NKqp::StreamResultToYson(it), ::NYson::EYsonType::Node);
+            UNIT_ASSERT(node.IsList());
+            if (!node.AsList().empty()) {
+                const auto& value = node.AsList()[0].AsList()[0].AsList()[0];
+                count = value.AsUint64();
+            }
+
+            if (count < 2) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+
+        UNIT_ASSERT_GE(count, 2);
+    }
+
+    Y_UNIT_TEST(QueryMetricsOneHourCandidateBeyondMinuteTop) {
+        TTestEnv env(1, 2, {.EnableSVP = true});
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
+
+        const TString database = "/Root/Tenant1";
+        const ui32 nodeIdx = env.GetTenants().List(database).front();
+        constexpr ui64 candidateCount = 257;
+        constexpr ui64 cpuTimeUs = 1'000'000'000;
+
+        for (ui64 hash = 1; hash <= candidateCount; ++hash) {
+            SendQueryMetric(env, nodeIdx, database, hash,
+                TStringBuilder() << "synthetic-rank-" << hash, cpuTimeUs);
+        }
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase(database));
+        NQuery::TQueryClient client(driver);
+
+        WaitFor(TDuration::Minutes(1), "rank 257 in hour metrics", [&](TString& error) {
+            const ui64 rows = ReadUint64(client, R"(
+                SELECT COUNT(*)
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = 'synthetic-rank-257';
+            )");
+            error = TStringBuilder() << "hour rows for rank 257 = " << rows;
+            return rows == 1;
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT COUNT(*)
+            FROM `.sys/query_metrics_one_minute`
+            WHERE QueryText = 'synthetic-rank-257';
+        )"), 0);
+        UNIT_ASSERT_LE(ReadUint64(client,
+            "SELECT COUNT(*) FROM `.sys/query_metrics_one_minute`;"), 256);
+        UNIT_ASSERT_LE(ReadUint64(client,
+            "SELECT COUNT(*) FROM `.sys/query_metrics_one_hour`;"), 1024);
+    }
+
+    Y_UNIT_TEST(QueryMetricsOneHourAggregateAndReboot) {
+        TTestEnv env(1, 2, {.EnableSVP = true});
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
+
+        const TString database = "/Root/Tenant1";
+        const TString queryText = "synthetic-aggregate";
+        const ui32 nodeIdx = env.GetTenants().List(database).front();
+        constexpr ui64 queryHash = 42;
+
+        SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
+            /* cpuTimeUs */ 10, /* durationMs */ 1, /* readRows */ 100);
+        SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
+            /* cpuTimeUs */ 20, /* durationMs */ 3, /* readRows */ 200);
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase(database));
+        NQuery::TQueryClient client(driver);
+
+        WaitFor(TDuration::Minutes(1), "first hour aggregate", [&](TString& error) {
+            const ui64 count = ReadUint64(client, R"(
+                SELECT Count
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = 'synthetic-aggregate';
+            )", true);
+            error = TStringBuilder() << "hour count = " << count << ", expected 2";
+            return count == 2;
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT SumCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 30);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT MinCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 10);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT MaxCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 20);
+
+        // Restart the tenant node rather than only the tablet: this is the
+        // rolling-restart scenario the persistent accumulator must survive.
+        env.GetTenants().Free(database);
+        env.GetTenants().Add(database);
+
+        WaitFor(TDuration::Minutes(1), "hour aggregate after node restart", [&](TString& error) {
+            const ui64 count = ReadUint64(client, R"(
+                SELECT Count
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = 'synthetic-aggregate';
+            )", true);
+            error = TStringBuilder() << "hour count after restart = " << count << ", expected 2";
+            return count == 2;
+        });
+
+        const ui32 restartedNodeIdx = env.GetTenants().List(database).front();
+        SendQueryMetric(env, restartedNodeIdx, database, queryHash, queryText,
+            /* cpuTimeUs */ 5, /* durationMs */ 2, /* readRows */ 50);
+
+        WaitFor(TDuration::Minutes(1), "second hour aggregate after reboot", [&](TString& error) {
+            const ui64 count = ReadUint64(client, R"(
+                SELECT Count
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = 'synthetic-aggregate';
+            )", true);
+            error = TStringBuilder() << "hour count = " << count << ", expected 3";
+            return count == 3;
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT SumCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 35);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT MinCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 5);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT MaxCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-aggregate';
+        )", true), 20);
+    }
+
+    Y_UNIT_TEST(QueryMetricsOneHourDeliveryFailure) {
+        TTestEnv env(1, 3, {.EnableSVP = true});
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 2);
+
+        const TString database = "/Root/Tenant1";
+        const auto& tenantNodes = env.GetTenants().List(database);
+        UNIT_ASSERT_VALUES_EQUAL(tenantNodes.size(), 2);
+        const ui32 goodNodeIdx = tenantNodes[0];
+        const ui32 failedNodeIdx = tenantNodes[1];
+        constexpr ui64 queryHash = 91'001;
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        const ui32 failedNodeId = runtime.GetActorSystem(failedNodeIdx)->NodeId;
+        bool failureInjected = false;
+        TTestActorRuntime::TEventFilter previousFilter;
+        previousFilter = runtime.SetEventFilter(
+            [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
+                if (!failureInjected
+                    && ev->GetRecipientRewrite() == MakeSysViewServiceID(failedNodeId)
+                    && ev->Cookie == failedNodeId)
+                {
+                    failureInjected = true;
+                    ev.Reset(new IEventHandle(
+                        ev->Sender,
+                        ev->GetRecipientRewrite(),
+                        new TEvents::TEvUndelivered(
+                            ev->GetTypeRewrite(),
+                            TEvents::TEvUndelivered::Disconnected),
+                        0,
+                        ev->Cookie));
+                    return false;
+                }
+                return previousFilter(runtimeBase, ev);
+            });
+
+        const ui64 endTimeMs = TInstant::Now().MilliSeconds();
+        SendQueryMetric(env, goodNodeIdx, database, queryHash,
+            "synthetic-delivery", /* cpuTimeUs */ 1'000'000'000,
+            /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+        SendQueryMetric(env, failedNodeIdx, database, queryHash,
+            "synthetic-delivery", /* cpuTimeUs */ 1'000'000'000,
+            /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase(database));
+        NQuery::TQueryClient client(driver);
+
+        WaitFor(TDuration::Minutes(1), "partial hour result after delivery failure",
+            [&](TString& error) {
+                const ui64 count = ReadUint64(client, R"(
+                    SELECT Count
+                    FROM `.sys/query_metrics_one_hour`
+                    WHERE QueryText = 'synthetic-delivery';
+                )", true);
+                error = TStringBuilder()
+                    << "good count = " << count
+                    << ", failure injected = " << failureInjected;
+                return count == 1 && failureInjected;
+            });
+
+        runtime.SetEventFilter(std::move(previousFilter));
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT SumCPUTime
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-delivery';
+        )", true), 1'000'000'000);
     }
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {

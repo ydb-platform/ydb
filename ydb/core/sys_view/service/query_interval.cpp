@@ -80,12 +80,20 @@ void TQueryInterval::Clear() {
     Texts.clear();
     Metrics.clear();
     ByCpu.clear();
+    TotalCpuTimeUs = 0;
+    CompletedQueries = 0;
+    RejectedQueries = 0;
+    EvictedHashes = 0;
 }
 
 void TQueryInterval::Swap(TQueryInterval& other) {
     Texts.swap(other.Texts);
     Metrics.swap(other.Metrics);
     ByCpu.swap(other.ByCpu);
+    std::swap(TotalCpuTimeUs, other.TotalCpuTimeUs);
+    std::swap(CompletedQueries, other.CompletedQueries);
+    std::swap(RejectedQueries, other.RejectedQueries);
+    std::swap(EvictedHashes, other.EvictedHashes);
 }
 
 void TQueryInterval::Add(TQueryStatsPtr stats) {
@@ -93,6 +101,8 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
         return;
     }
     auto queryHash = stats->GetQueryTextHash();
+    TotalCpuTimeUs += stats->GetTotalCpuTimeUs();
+    ++CompletedQueries;
 
     if (auto metricsIt = Metrics.find(queryHash); metricsIt != Metrics.end()) {
         auto oldCpu = metricsIt->second.GetCpuTimeUs().GetSum();
@@ -117,11 +127,13 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
         if (ByCpu.size() == CountLimit) {
             auto it = ByCpu.begin();
             if (it->first >= cpu) {
+                ++RejectedQueries;
                 return;
             }
             Texts.erase(it->second);
             Metrics.erase(it->second);
             ByCpu.erase(it);
+            ++EvictedHashes;
         }
 
         NKikimrSysView::TQueryMetrics metrics;
@@ -140,6 +152,30 @@ void TQueryInterval::FillSummary(NKikimrSysView::TEvIntervalQuerySummary::TQuery
         queries.AddValues(it->first);
         queries.AddHashes(it->second);
     }
+}
+
+ui64 TQueryInterval::GetTotalCpuTimeUs() const {
+    return TotalCpuTimeUs;
+}
+
+ui64 TQueryInterval::GetRetainedCpuTimeUs() const {
+    ui64 result = 0;
+    for (const auto& [cpu, _] : ByCpu) {
+        result += cpu;
+    }
+    return result;
+}
+
+ui64 TQueryInterval::GetCompletedQueries() const {
+    return CompletedQueries;
+}
+
+ui64 TQueryInterval::GetRejectedQueries() const {
+    return RejectedQueries;
+}
+
+ui64 TQueryInterval::GetEvictedHashes() const {
+    return EvictedHashes;
 }
 
 void TQueryInterval::FillMetrics(const NKikimrSysView::TEvGetIntervalMetricsRequest& request,
@@ -166,4 +202,3 @@ void TQueryInterval::FillMetrics(const NKikimrSysView::TEvGetIntervalMetricsRequ
 
 } // NSysView
 } // NKikimr
-

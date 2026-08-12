@@ -1541,6 +1541,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["metadata@system"]];
                 [["/Root/.sys/nodes"];["metadata@system"]];
                 [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1590,6 +1591,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1638,6 +1640,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1900,6 +1903,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["metadata@system"]];
                 [["/Root/.sys/nodes"];["metadata@system"]];
                 [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -2557,6 +2561,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/nodes"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/query_metrics_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
@@ -2609,6 +2614,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];

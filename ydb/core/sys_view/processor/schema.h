@@ -124,6 +124,15 @@ struct TProcessorSchema : NIceDb::Schema {
 
 #undef RESULT_PARTITION_TABLE
 
+    struct IntervalMetricsOneHour : Table<22> {
+        struct HourEnd   : Column<1, NScheme::NTypeIds::Timestamp> {};
+        struct QueryHash : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Data      : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<HourEnd, QueryHash>;
+        using TColumns = TableColumns<HourEnd, QueryHash, Data>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         IntervalSummaries,
@@ -145,7 +154,8 @@ struct TProcessorSchema : NIceDb::Schema {
         TopPartitionsOneMinute,
         TopPartitionsOneHour,
         TopPartitionsByTliOneMinute,
-        TopPartitionsByTliOneHour
+        TopPartitionsByTliOneHour,
+        IntervalMetricsOneHour
     >;
 
     using TSettings = SchemaSettings<
@@ -156,6 +166,7 @@ struct TProcessorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_Database = 1;
     static constexpr ui64 SysParam_CurrentStage = 2;
     static constexpr ui64 SysParam_IntervalEnd = 3;
+    static constexpr ui64 SysParam_LastMergedQueryMetricsIntervalEnd = 4;
 };
 
 }

@@ -32,6 +32,7 @@ struct TSysViewProcessor::TTxCollect : public TTxBase {
         YDB_LOG_DEBUG("TTxCollect::Complete",
             {"tabletId", Self->TabletID()});
 
+        Self->ScheduleHourMetricsCleanup();
         Self->ScheduleAggregate();
     }
 };

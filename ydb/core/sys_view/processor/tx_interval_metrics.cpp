@@ -27,6 +27,14 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             {"metricsCount", Record.MetricsSize()},
             {"queryTextCount", Record.QueryTextsSize()});
 
+        auto node = Self->NodesInFlight.find(NodeId);
+        if (node == Self->NodesInFlight.end()) {
+            SVLOG_W("[" << Self->TabletID() << "] TTxIntervalMetrics::Execute, unexpected or duplicate response: "
+                << "node id# " << NodeId);
+            return true;
+        }
+        const bool requestedQueryMetrics = !node->second.Hashes.empty();
+
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto& queryText : *Record.MutableQueryTexts()) {
@@ -101,8 +109,11 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             *Record.MutableTopByRequestUnits());
 
-        Self->NodesInFlight.erase(NodeId);
+        Self->NodesInFlight.erase(node);
         db.Table<Schema::NodesToRequest>().Key(NodeId).Delete();
+        if (requestedQueryMetrics) {
+            ++Self->QueryMetricsCoverage.RespondedNodes;
+        }
 
         if (Self->NodesInFlight.empty() && Self->NodesToRequest.empty()) {
             Self->PersistQueryResults(db);
@@ -117,6 +128,47 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
 
         YDB_LOG_DEBUG("TTxIntervalMetrics::Complete",
             {"tabletId", Self->TabletID()});
+    }
+};
+
+struct TSysViewProcessor::TTxIntervalMetricsFailure : public TTxBase {
+    TNodeId NodeId;
+
+    TTxIntervalMetricsFailure(TSelf* self, TNodeId nodeId)
+        : TTxBase(self)
+        , NodeId(nodeId)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INTERVAL_METRICS; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        auto node = Self->NodesInFlight.find(NodeId);
+        if (node == Self->NodesInFlight.end()) {
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        const bool requestedQueryMetrics = !node->second.Hashes.empty();
+        Self->NodesInFlight.erase(node);
+        db.Table<Schema::NodesToRequest>().Key(NodeId).Delete();
+        if (requestedQueryMetrics) {
+            ++Self->QueryMetricsCoverage.FailedNodes;
+        }
+
+        if (Self->NodesInFlight.empty() && Self->NodesToRequest.empty()) {
+            Self->PersistQueryResults(db);
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (!Self->NodesToRequest.empty()) {
+            Self->SendRequests();
+        }
+
+        SVLOG_D("[" << Self->TabletID() << "] TTxIntervalMetricsFailure::Complete: "
+            << "node id# " << NodeId);
     }
 };
 
@@ -141,7 +193,19 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
         return;
     }
 
+    if (IntervalEnd <= LastMergedQueryMetricsIntervalEnd) {
+        SVLOG_W("[" << TabletID() << "] TEvGetIntervalMetricsResponse, interval already merged: "
+            << "node id# " << nodeId
+            << ", interval end# " << IntervalEnd);
+        return;
+    }
+
     Execute(new TTxIntervalMetrics(this, nodeId, std::move(record)),
+        TActivationContext::AsActorContext());
+}
+
+void TSysViewProcessor::HandleIntervalMetricsFailure(TNodeId nodeId) {
+    Execute(new TTxIntervalMetricsFailure(this, nodeId),
         TActivationContext::AsActorContext());
 }
 

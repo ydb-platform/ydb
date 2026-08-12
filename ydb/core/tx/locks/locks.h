@@ -5,8 +5,11 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
+
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/actors/async/event.h>
 
@@ -26,6 +29,20 @@ namespace NDataShard {
 struct TLockWriteSeqNum {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
+};
+
+// All data about the last applied write at this lock's position in the writer's chain.
+// WriterIndex and WriteSeqNum are persisted via local DB columns; the rest is in-memory
+// only and never migrated, so a duplicate that arrives after a restart is answered
+// without the stored result fields.
+struct TWriteSeqNumState {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+    // In-memory only: the non-reconstructible parts of the original write's result.
+    NKikimrDataEvents::TEvWriteResult::EStatus Status = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+    TVector<Ydb::Issue::IssueMessage> Issues;
+    NKikimrQueryStats::TTxStats TxStats;
+    bool HasResult = false;  // Whether Status/Issues/TxStats are populated
 };
 
 class ILocksDb {
@@ -455,13 +472,12 @@ public:
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
-    ui64 GetWriterIndex() const { return WriterIndex; }
-    ui64 GetWriteSeqNum() const { return WriteSeqNum; }
+    ui64 GetWriterIndex() const { return WriteSeqNumState.WriterIndex; }
+    ui64 GetWriteSeqNum() const { return WriteSeqNumState.WriteSeqNum; }
     bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
 
-    // Statistics of the write at WriteSeqNum, null when the shard doesn't remember them
-    const NKikimrQueryStats::TTxStats* GetWriteSeqNumStats() const { return WriteSeqNumStats.get(); }
-    void SetWriteSeqNumStats(const NKikimrQueryStats::TTxStats& stats);
+    const TWriteSeqNumState& GetWriteSeqNumState() const { return WriteSeqNumState; }
+    void SetWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
@@ -510,11 +526,7 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
-    ui64 WriterIndex = 0;
-    ui64 WriteSeqNum = 0;
-    // Statistics of the write at WriteSeqNum. In-memory only and never migrated, so a
-    // duplicate that arrives after a restart is answered without statistics.
-    std::unique_ptr<NKikimrQueryStats::TTxStats> WriteSeqNumStats;
+    TWriteSeqNumState WriteSeqNumState;
 
 public:
     TAsyncEvent OnBrokenEvent;

@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     }
 
     // A resent uncommitted write is answered twice: with the original result and, once the
-    // shard has seen it, with STATUS_ALREADY_APPLIED. KQP must take only the first one.
+    // shard has seen it, with IsDuplicate set. KQP must take only the first one.
     class TPipelinedUncommittedWriteAnsweredTwice : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     {
                         auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
                         again->Record = record;
-                        again->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+                        again->Record.SetIsDuplicate(true);
                         runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
                             again.release(), 0, ev->Cookie));
                         ++answeredTwice;

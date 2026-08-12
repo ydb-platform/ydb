@@ -114,8 +114,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , VictimQuerySpanId(row.VictimQuerySpanId)
     , BreakerQuerySpanId_(row.BreakerQuerySpanId)
     , BreakerNodeId_(row.BreakerNodeId)
-    , WriterIndex(row.WriterIndex)
-    , WriteSeqNum(row.WriteSeqNum)
+    , WriteSeqNumState{.WriterIndex = row.WriterIndex, .WriteSeqNum = row.WriteSeqNum}
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -553,10 +552,12 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
 }
 
 bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
-    WriterIndex = writerIndex;
-    WriteSeqNum = writeSeqNum;
-    // The statistics describe the write that is being replaced
-    WriteSeqNumStats.reset();
+    WriteSeqNumState.WriterIndex = writerIndex;
+    WriteSeqNumState.WriteSeqNum = writeSeqNum;
+    // The result describes the write that is being replaced
+    WriteSeqNumState.HasResult = false;
+    WriteSeqNumState.Issues.clear();
+    WriteSeqNumState.TxStats.Clear();
     if (db && IsPersistent()) {
         db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum);
         return true;
@@ -564,9 +565,14 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
     return false;
 }
 
-void TLockInfo::SetWriteSeqNumStats(const NKikimrQueryStats::TTxStats& stats) {
-    Y_ENSURE(WriteSeqNum, "Statistics of an uncommitted write imply its position in the chain");
-    WriteSeqNumStats = std::make_unique<NKikimrQueryStats::TTxStats>(stats);
+void TLockInfo::SetWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
+    Y_ENSURE(WriteSeqNumState.WriteSeqNum, "Result of an uncommitted write imply its position in the chain");
+    WriteSeqNumState.Status = record.GetStatus();
+    WriteSeqNumState.Issues.assign(record.GetIssues().begin(), record.GetIssues().end());
+    if (record.HasTxStats()) {
+        WriteSeqNumState.TxStats = record.GetTxStats();
+    }
+    WriteSeqNumState.HasResult = true;
 }
 
 void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {

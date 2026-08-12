@@ -257,7 +257,10 @@ private:
                 throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
             }
             Root_.ForceDelete();
-            Root_.MkDirs(DIR_MODE);
+            // root must already exist
+            // create only the per-node subdirectory inside it
+            // dont create the directories recursively to avoid multiuser errors
+            Root_.MkDir(DIR_MODE);
         } catch (const yexception& e) {
             const TString root = Root_.GetPath();
             if (retriesLeft > 0) {

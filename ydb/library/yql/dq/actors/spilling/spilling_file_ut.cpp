@@ -57,6 +57,7 @@ public:
         ui64 maxFilePartSize = 100, ui32 ioThreadPoolQueueSize = 1000, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
     {
         SpillingRoot_ = root;
+        SpillingRoot_.MkDir();
         SpillingSessionId_ = CreateGuidAsString();
 
         auto config = TFileSpillingServiceConfig{

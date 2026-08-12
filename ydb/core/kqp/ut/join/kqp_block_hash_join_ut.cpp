@@ -2,6 +2,8 @@
 #include <counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -26,6 +28,7 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
     if (limitFileSize) {
         spilling->SetMaxTotalSize(1);
     }

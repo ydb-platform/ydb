@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <cstdlib>
+#include <initializer_list>
 
 namespace NKikimr {
 namespace NKqp {
@@ -17,41 +18,38 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-void AddStageCpuStats(NYql::NDqProto::TDqExecutionStats& executionStats, TStringBuf stageGuid, ui64 cpuTimeUs) {
-    auto* stageStats = executionStats.AddStages();
-    stageStats->SetStageGuid(TString(stageGuid));
-    stageStats->MutableCpuTimeUs()->SetMax(cpuTimeUs);
-}
-
-NJson::TJsonValue GetLegacySimplifiedPlan(
-    const TString& plan,
-    const NYql::NDqProto::TDqExecutionStats& executionStats)
-{
+NJson::TJsonValue GetLegacySimplifiedPlan(const TString& plan) {
+    NYql::NDqProto::TDqExecutionStats executionStats;
     NJson::TJsonValue planJson;
     const auto planWithStats = AddExecStatsToTxPlan(plan, executionStats, false);
     UNIT_ASSERT_C(NJson::ReadJsonTree(planWithStats, &planJson, true), planWithStats);
     return planJson.GetMapSafe().at("SimplifiedPlan");
 }
 
-NJson::TJsonValue FindPlanNodeByTypeAndStat(
+NJson::TJsonValue FindPlanNodeByTypeAndStats(
     const NJson::TJsonValue& plan,
     TStringBuf nodeType,
-    TStringBuf statName)
+    std::initializer_list<TStringBuf> statNames)
 {
     if (!plan.IsMap()) {
         return {};
     }
 
     const auto& map = plan.GetMapSafe();
-    if (map.contains("Node Type") && map.at("Node Type").GetStringSafe() == nodeType
-        && map.contains("Stats") && map.at("Stats").GetMapSafe().contains(TString(statName)))
-    {
-        return plan;
+    if (map.contains("Node Type") && map.at("Node Type").GetStringSafe() == nodeType && map.contains("Stats")) {
+        const auto& stats = map.at("Stats").GetMapSafe();
+        bool containsAllStats = true;
+        for (const auto statName : statNames) {
+            containsAllStats &= stats.contains(TString(statName));
+        }
+        if (containsAllStats) {
+            return plan;
+        }
     }
 
     if (map.contains("Plans")) {
         for (const auto& child : map.at("Plans").GetArraySafe()) {
-            auto result = FindPlanNodeByTypeAndStat(child, nodeType, statName);
+            auto result = FindPlanNodeByTypeAndStats(child, nodeType, statNames);
             if (result.IsDefined()) {
                 return result;
             }
@@ -527,6 +525,14 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuWithActualRows) {
         "Plan": {
             "Node Type": "Filter",
             "StageGuid": "stage-1",
+            "Stats": {
+                "Operator": [{
+                    "Type": "Filter",
+                    "Id": "0",
+                    "Rows": {"Sum": 6}
+                }],
+                "CpuTimeUs": {"Max": 7000}
+            },
             "Operators": [{
                 "Name": "Filter",
                 "Id": "0",
@@ -535,12 +541,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuWithActualRows) {
         }
     })";
 
-    NYql::NDqProto::TDqExecutionStats executionStats;
-    AddStageCpuStats(executionStats, "stage-1", 7000);
-    auto* stageStats = executionStats.MutableStages(0);
-    (*stageStats->MutableOperatorFilter())["0"].MutableRows()->SetSum(6);
-
-    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
     const auto filter = FindPlanNodeByKv(simplifiedPlan, "Name", "Filter");
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
     UNIT_ASSERT_VALUES_EQUAL_C(filter.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
@@ -555,6 +556,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
                 "Plans": [{
                     "Node Type": "Collect",
                     "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
                     "Plans": [{
                         "Node Type": "TableFullScan",
                         "Operators": [{"Name": "TableFullScan", "Inputs": []}]
@@ -563,9 +565,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
             }
         })";
 
-        NYql::NDqProto::TDqExecutionStats executionStats;
-        AddStageCpuStats(executionStats, "collect-stage", 7000);
-        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
         const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
         UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
         AssertCpuValues(fullScan, 7, 7, simplifiedPlan);
@@ -578,6 +578,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
                 "Plans": [{
                     "Node Type": "Collect",
                     "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
                     "Plans": [
                         {
                             "Node Type": "LeftScan",
@@ -592,9 +593,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
             }
         })";
 
-        NYql::NDqProto::TDqExecutionStats executionStats;
-        AddStageCpuStats(executionStats, "collect-stage", 7000);
-        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
         UNIT_ASSERT_C(FindPlanNodes(simplifiedPlan, "A-SelfCpu").empty(), simplifiedPlan);
         UNIT_ASSERT_C(FindPlanNodes(simplifiedPlan, "A-Cpu").empty(), simplifiedPlan);
     }
@@ -606,19 +605,18 @@ Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
                 "Plans": [{
                     "Node Type": "Collect",
                     "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
                     "Plans": [{
                         "Node Type": "TableFullScan",
                         "StageGuid": "scan-stage",
+                        "Stats": {"CpuTimeUs": {"Max": 3000}},
                         "Operators": [{"Name": "TableFullScan", "Inputs": []}]
                     }]
                 }]
             }
         })";
 
-        NYql::NDqProto::TDqExecutionStats executionStats;
-        AddStageCpuStats(executionStats, "collect-stage", 7000);
-        AddStageCpuStats(executionStats, "scan-stage", 3000);
-        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
         const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
         UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
         AssertCpuValues(fullScan, 3, 3, simplifiedPlan);
@@ -631,6 +629,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanSyntheticLookupCpu) {
             "Plan": {
                 "Node Type": "Collect",
                 "StageGuid": "lookup-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
                 "Plans": [{
                     "Node Type": "TableLookup",
                     "Columns": ["Value"],
@@ -641,9 +640,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanSyntheticLookupCpu) {
             }
         })";
 
-        NYql::NDqProto::TDqExecutionStats executionStats;
-        AddStageCpuStats(executionStats, "lookup-stage", 7000);
-        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
         const auto lookup = FindPlanNodeByKv(simplifiedPlan, "Name", "TableLookup");
         UNIT_ASSERT_C(lookup.IsDefined(), simplifiedPlan);
         AssertCpuValues(lookup, 7, 7, simplifiedPlan);
@@ -654,6 +651,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanSyntheticLookupCpu) {
             "Plan": {
                 "Node Type": "Collect",
                 "StageGuid": "lookup-join-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
                 "Plans": [{
                     "Node Type": "TableLookupJoin",
                     "Columns": ["Value"],
@@ -663,9 +661,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanSyntheticLookupCpu) {
             }
         })";
 
-        NYql::NDqProto::TDqExecutionStats executionStats;
-        AddStageCpuStats(executionStats, "lookup-join-stage", 7000);
-        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
         const auto lookup = FindPlanNodeByKv(simplifiedPlan, "Name", "Lookup");
         UNIT_ASSERT_C(lookup.IsDefined(), simplifiedPlan);
         AssertCpuValues(lookup, 7, 7, simplifiedPlan);
@@ -681,6 +677,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
                     "Node Type": "Filter",
                     "PlanNodeId": 1,
                     "StageGuid": "filter-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
                     "Operators": [{
                         "Name": "Filter",
                         "Inputs": [{"ExternalPlanNodeId": 2}]
@@ -689,6 +686,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
                         "Node Type": "TableFullScan",
                         "PlanNodeId": 2,
                         "StageGuid": "scan-stage",
+                        "Stats": {"CpuTimeUs": {"Max": 3000}},
                         "Operators": [{"Name": "TableFullScan", "Inputs": []}]
                     }]
                 },
@@ -703,6 +701,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
                 {
                     "Node Type": "Collect",
                     "StageGuid": "cte-owner-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 11000}},
                     "Plans": [{
                         "Node Type": "CTE",
                         "CTE Name": "precompute_1"
@@ -712,11 +711,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
         }
     })";
 
-    NYql::NDqProto::TDqExecutionStats executionStats;
-    AddStageCpuStats(executionStats, "filter-stage", 7000);
-    AddStageCpuStats(executionStats, "scan-stage", 3000);
-    AddStageCpuStats(executionStats, "cte-owner-stage", 11000);
-    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
 
     const auto filter = FindPlanNodeByKv(simplifiedPlan, "Name", "Filter");
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
@@ -739,6 +734,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanInheritedCpuStopsAtExternalEdge) {
             "Plans": [{
                 "Node Type": "Collect",
                 "StageGuid": "collect-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
                 "Plans": [{
                     "Node Type": "Filter",
                     "PlanNodeId": 1,
@@ -756,9 +752,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanInheritedCpuStopsAtExternalEdge) {
         }
     })";
 
-    NYql::NDqProto::TDqExecutionStats executionStats;
-    AddStageCpuStats(executionStats, "collect-stage", 7000);
-    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan, executionStats);
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
 
     const auto filter = FindPlanNodeByKv(simplifiedPlan, "Name", "Filter");
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
@@ -803,8 +797,11 @@ Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
     UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, fullScanPlan);
     UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), fullScanPlan);
     UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, fullScanPlan);
-    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Cpu"), fullScanPlan);
-    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Cpu").GetDoubleSafe() >= 0, fullScanPlan);
+    const auto cpuValues = FindPlanNodes(fullScanPlan, "A-Cpu");
+    UNIT_ASSERT_C(!cpuValues.empty(), fullScanPlan);
+    for (const auto& cpu : cpuValues) {
+        UNIT_ASSERT_C(cpu.GetDoubleSafe() >= 0, fullScanPlan);
+    }
 
     const auto limitedPlan = execute(R"(
         SELECT Key, Value1 FROM `/Root/TwoShard` LIMIT 3;
@@ -846,11 +843,11 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
         *result.GetStats()->GetPlan());
     const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
-    const auto collect = FindPlanNodeByTypeAndStat(plan.GetMapSafe().at("Plan"), "Collect", "CpuTimeUs");
+    const auto collect = FindPlanNodeByTypeAndStats(
+        plan.GetMapSafe().at("Plan"), "Collect", {"Table", "CpuTimeUs"});
     UNIT_ASSERT_C(collect.IsDefined(), plan);
     UNIT_ASSERT_C(!collect.GetMapSafe().contains("Operators"), plan);
     const auto& collectStats = collect.GetMapSafe().at("Stats").GetMapSafe();
-    UNIT_ASSERT_C(collectStats.contains("Table"), plan);
     const auto& cpuTime = collectStats.at("CpuTimeUs");
     UNIT_ASSERT_C(cpuTime.IsMap(), plan);
     UNIT_ASSERT_C(cpuTime.GetMapSafe().at("Max").GetDoubleSafe() >= 0, plan);

@@ -139,13 +139,8 @@ class PrSyncCreator:
 
         for path in self.overwrite_exclude:
             self.logger.info(f"Preserving excluded path {path} from {self.base_branch}")
-            result = self.git_run("checkout", self.base_branch, "--", path, fail=False)
-            if result.returncode == 0:
-                self.git_run("add", path)
-            else:
-                self.logger.warning(
-                    f"Failed to restore excluded path {path} from {self.base_branch}, leaving overwritten state"
-                )
+            self.git_run("checkout", self.base_branch, "--", path)
+            self.git_run("add", path)
 
     def create_new_pr(self):
         dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"

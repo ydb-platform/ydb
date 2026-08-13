@@ -2070,6 +2070,11 @@ private:
                 for (const auto& col: indexDescription.KeyColumns) {
                     lookupColumnsSet.insert(col);
                 }
+                if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    for (const auto& col: indexDescription.DataColumns) {
+                        lookupColumnsSet.insert(col);
+                    }
+                }
                 // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
                 // must be read back from the existing row (it is not part of the user-supplied columns).
                 const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);

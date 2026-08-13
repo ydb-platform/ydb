@@ -4238,29 +4238,36 @@ Y_UNIT_TEST(CreateCompactRelevancePrefixedRejected) {
 
 // Creates an integer-PK table with an inline prefixed fulltext index (online write maintenance path),
 // seeded with one row per user. Used by the INSERT/UPSERT/UPDATE/REPLACE tests below.
-static void SetupPrefixedDocs(NYdb::NQuery::TQueryClient& db) {
+static void SetupPrefixedDocs(NYdb::NQuery::TQueryClient& db, bool covered = false) {
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
     };
     exec(R"sql(
         CREATE TABLE `/Root/Docs` (
-            Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key),
-            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (UserId, Text)
-                WITH (tokenizer=standard, use_filter_lowercase=true)
+            Key Uint64,
+            UserId Uint64,
+            Text Utf8,
+            Data Utf8,
+            PRIMARY KEY (Key)
         );
     )sql");
     exec(R"sql(
-        UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
-            (1, 100, "cats love to play"),
-            (2, 200, "cats love milk");
+        UPSERT INTO `/Root/Docs` (Key, UserId, Text, Data) VALUES
+            (1, 100, "cats love to play", "play data"),
+            (2, 200, "cats love milk", "milk data");
     )sql");
+    exec(Sprintf(R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX fulltext_idx GLOBAL USING %s
+        ON (UserId, Text) %s
+        WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql", covered ? "fulltext_relevance" : "fulltext_plain", covered ? "COVER (Data)" : ""));
 }
 
-Y_UNIT_TEST_TWIN(PrefixedInsert, Compact) {
+Y_UNIT_TEST_QUAD(PrefixedInsert, Compact, Covered) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db);
+    SetupPrefixedDocs(db, Covered);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4272,21 +4279,26 @@ Y_UNIT_TEST_TWIN(PrefixedInsert, Compact) {
         return NYdb::FormatResultSetYson(r.GetResultSet(0));
     };
 
-    exec(R"sql(INSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES (3, 100, "cats are fast");)sql");
+    exec(R"sql(INSERT INTO `/Root/Docs` (Key, UserId, Text, Data) VALUES (3, 100, "cats are fast", "fast data");)sql");
 
     // The new row joins user 100's "cats" results; user 200 stays isolated.
-    CompareYson("[[[1u]];[[3u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[1u];[\"play data\"]];[[3u];[\"fast data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[2u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
+    if (Covered) {
+        CompareYson("[[[1u];[\"play data\"]];[[2u];[\"milk data\"]];[[3u];[\"fast data\"]]]", selectKeys(R"sql(
+            SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
+            ORDER BY Key;)sql"));
+    }
 }
 
-Y_UNIT_TEST_TWIN(PrefixedUpsert, Compact) {
+Y_UNIT_TEST_QUAD(PrefixedUpsert, Compact, Covered) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db);
+    SetupPrefixedDocs(db, Covered);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4300,27 +4312,32 @@ Y_UNIT_TEST_TWIN(PrefixedUpsert, Compact) {
 
     // Insert a new row (3) and overwrite an existing one (1), changing its tokens.
     exec(R"sql(
-        UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
-            (3, 100, "cats sleep all day"),
-            (1, 100, "birds sing softly");
+        UPSERT INTO `/Root/Docs` (Key, UserId, Text, Data) VALUES
+            (3, 100, "cats sleep all day", "sleep data"),
+            (1, 100, "birds sing softly", "sing data");
     )sql");
 
     // Row 1's old "cats" token is gone, replaced by "birds"; row 3 is added; user 200 untouched.
-    CompareYson("[[[3u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[3u];[\"sleep data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[1u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[1u];[\"sing data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
-    CompareYson("[[[2u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
+    if (Covered) {
+        CompareYson("[[[1u];[\"sing data\"]];[[2u];[\"milk data\"]];[[3u];[\"sleep data\"]]]", selectKeys(R"sql(
+            SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
+            ORDER BY Key;)sql"));
+    }
 }
 
-Y_UNIT_TEST_TWIN(PrefixedUpdate, Compact) {
+Y_UNIT_TEST_QUAD(PrefixedUpdate, Compact, Covered) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db);
+    SetupPrefixedDocs(db, Covered);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4335,21 +4352,29 @@ Y_UNIT_TEST_TWIN(PrefixedUpdate, Compact) {
     // Change the indexed text of an existing row; the index must drop old tokens and add new ones.
     exec(R"sql(UPDATE `/Root/Docs` SET Text = "birds sing softly" WHERE Key = 1;)sql");
 
+    // Change only the covered column of another row
+    exec(R"sql(UPDATE `/Root/Docs` SET Data = "love data" WHERE Key = 2;)sql");
+
     CompareYson("[]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[1u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[1u];[\"play data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
-    CompareYson("[[[2u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[2u];[\"love data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
+    if (Covered) {
+        CompareYson("[[[1u];[\"play data\"]];[[2u];[\"love data\"]]]", selectKeys(R"sql(
+            SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
+            ORDER BY Key;)sql"));
+    }
 }
 
-Y_UNIT_TEST_TWIN(PrefixedReplace, Compact) {
+Y_UNIT_TEST_QUAD(PrefixedReplace, Compact, Covered) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db);
+    SetupPrefixedDocs(db, Covered);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4363,20 +4388,25 @@ Y_UNIT_TEST_TWIN(PrefixedReplace, Compact) {
 
     // REPLACE rewrites the whole row: existing row 1 gets new tokens, a new row 3 is added.
     exec(R"sql(
-        REPLACE INTO `/Root/Docs` (Key, UserId, Text) VALUES
-            (1, 100, "birds sing softly"),
-            (3, 100, "cats are fast");
+        REPLACE INTO `/Root/Docs` (Key, UserId, Text, Data) VALUES
+            (1, 100, "birds sing softly", "sing data"),
+            (3, 100, "cats are fast", "fast data");
     )sql");
 
-    CompareYson("[[[3u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[3u];[\"fast data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[1u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[1u];[\"sing data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
-    CompareYson("[[[2u]]]", selectKeys(R"sql(
-        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+    CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
+    if (Covered) {
+        CompareYson("[[[1u];[\"sing data\"]];[[2u];[\"milk data\"]];[[3u];[\"fast data\"]]]", selectKeys(R"sql(
+            SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
+            ORDER BY Key;)sql"));
+    }
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedRowIdComplexKey, Compact) {

@@ -1121,9 +1121,9 @@ public:
             TString descriptionIcon = BuildDescriptionIcon(field);
             out << "<div class='row'>";
             if (localOverrided) {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << ":</label>" << descriptionIcon << "</div>";
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << "</label>" << descriptionIcon << ":</div>";
             } else {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "' style='font-weight:normal'>" << param << ":</label>" << descriptionIcon << "</div>";
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "' style='font-weight:normal'>" << param << "</label>" << descriptionIcon << ":</div>";
             }
 
             switch (field->cpp_type()) {

@@ -239,31 +239,95 @@ Y_UNIT_TEST(TestStagePublishBeforeRegister) {
     TTestSetup setup;
     auto runtime = setup.GetRuntime();
 
-    {
-        auto* stage = new TEvPQ::TEvStageDirectReadData(
-                {"session1", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>()
-        );
-        runtime->Send(setup.ProxyId, TActorId{}, stage);
-    }
     runtime->Send(
             setup.ProxyId, TActorId{},
-            new TEvPQ::TEvPublishDirectRead({"session1", 1, 1}, 1)
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
     );
 
     // Not registered yet — nothing visible.
-    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1), /*status=*/false);
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 1), /*status=*/false);
     UNIT_ASSERT(resp->Error);
 
     runtime->Send(
             setup.ProxyId, TActorId{},
-            new TEvPQ::TEvRegisterDirectReadSession({"session1", 1}, 1)
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
     );
 
-    resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1));
+    resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 1));
     UNIT_ASSERT(!resp->Error);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
+
+// Late Stage/Publish after Deregister must not be buffered (would leak until actor death).
+Y_UNIT_TEST(TestLateStageAfterDeregisterNotBuffered) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvDeregisterDirectReadSession({"session", 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 2)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 2));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
+}
+
+// Stage-before-Register pending must be dropped if Deregister arrives without Register.
+Y_UNIT_TEST(TestPendingDroppedOnDeregisterWithoutRegister) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvDeregisterDirectReadSession({"session", 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 1));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
 }
 } // Test suite
 

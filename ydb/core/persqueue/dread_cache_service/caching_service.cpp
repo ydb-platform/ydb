@@ -120,8 +120,15 @@ private:
             return;
 
         assignIter->second.erase(ev->Get()->ReadKey.PartitionSessionId);
-        PendingBySession.erase(ev->Get()->ReadKey);
-        ServerSessions.erase(ev->Get()->ReadKey);
+        const auto& key = ev->Get()->ReadKey;
+        auto sessionIter = ServerSessions.find(key);
+        if (!sessionIter.IsEnd()) {
+            MarkSessionRetired(key, sessionIter->second.Generation);
+            ServerSessions.erase(sessionIter);
+        } else {
+            // Drop any Stage/Publish that arrived before Register for this dead binding.
+            PendingBySession.erase(key);
+        }
     }
 
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {
@@ -132,17 +139,21 @@ private:
     void HandleDeregister(TEvPQ::TEvDeregisterDirectReadSession::TPtr& ev) {
         const auto& key = ev->Get()->Session;
         const auto& ctx = ActorContext();
+        const auto generation = ev->Get()->Generation;
 
-        auto destroyDone = DestroyServerSession(ServerSessions.find(key), ev->Get()->Generation);
+        auto destroyDone = DestroyServerSession(ServerSessions.find(key), generation);
+        // Always retire this generation so late Stage/Publish cannot re-create PendingBySession
+        // after Deregister/Release (or after Stage-before-Register for a session that never
+        // registered and then died).
+        MarkSessionRetired(key, generation);
         if (destroyDone) {
-            PendingBySession.erase(key);
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
                 {"deregistered", key.SessionId});
         } else {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server session with generation ignored",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
-                {"Generation", ev->Get()->Generation});
+                {"Generation", generation});
             return;
         }
     }
@@ -152,6 +163,14 @@ private:
         auto sessionKey = MakeSessionKey(ev->Get());
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
+            if (IsSessionGenerationRetired(sessionKey, ev->Get()->TabletGeneration)) {
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop stage for retired session generation",
+                    {"session", sessionKey.SessionId},
+                    {"partitionSessionId", sessionKey.PartitionSessionId},
+                    {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
+                    {"TabletGeneration", ev->Get()->TabletGeneration});
+                return;
+            }
             // LOGBROKER-10590: CreateSession Register is fire-and-forget; Stage can arrive first.
             // Dropping it permanently leaves tablet inFlight without client-visible DirectRead.
             YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer stage for unregistered session",
@@ -181,6 +200,14 @@ private:
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
+            if (IsSessionGenerationRetired(key, generation)) {
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop publish for retired session generation",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
+                return;
+            }
             YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer publish for unregistered session",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
@@ -281,6 +308,7 @@ private:
                 {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
 
+            ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else if (sessionsIter->second.Generation == generation) {
@@ -288,12 +316,14 @@ private:
                 {"session", key.SessionId},
                 {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
+            ClearRetiredSession(key);
             FlushPendingDirectReads(key);
         } else if (DestroyServerSession(sessionsIter, generation)) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
+            ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else {
@@ -391,6 +421,21 @@ private:
             PublishToSession(sessionIter, readId, generation);
         }
         PendingBySession.erase(pendingIter);
+    }
+
+    void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {
+        auto& retiredGeneration = RetiredSessionGeneration[key];
+        retiredGeneration = Max(retiredGeneration, generation);
+        PendingBySession.erase(key);
+    }
+
+    void ClearRetiredSession(const TReadSessionKey& key) {
+        RetiredSessionGeneration.erase(key);
+    }
+
+    bool IsSessionGenerationRetired(const TReadSessionKey& key, ui32 generation) const {
+        auto it = RetiredSessionGeneration.find(key);
+        return !it.IsEnd() && generation <= it->second;
     }
 
     template<class TEv>
@@ -650,6 +695,9 @@ private:
 
     TSessionsMap ServerSessions;
     THashMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
+    // Highest generation for which the session was Deregistered/Released. Late Stage/Publish
+    // with generation <= this value must not re-create PendingBySession after teardown.
+    THashMap<TReadSessionKey, ui32> RetiredSessionGeneration;
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 
     ::NMonitoring::TDynamicCounterPtr Counters;

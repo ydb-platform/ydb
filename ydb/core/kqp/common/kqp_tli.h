@@ -175,7 +175,7 @@ struct TTliLogParams {
 };
 
 inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ctx) {
-    if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TLI, 0)) {
         return;
     }
 

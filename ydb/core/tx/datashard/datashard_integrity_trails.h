@@ -67,7 +67,7 @@ inline void WriteTableRange(const NKikimr::TTableRange& range, const TVector<NSc
 }
 
 inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NMiniKQL::IEngineFlat::TValidationInfo& keys) {
-    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
+    if (IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
         if (keys.HasWrites()) {
             const int batchSize = 10;
             bool first = true;

@@ -103,6 +103,9 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
 
 // DataExecuter
 inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebugStr, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+        return;
+    }
     auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "Executer"},
         {"type", "Request"},
@@ -175,6 +178,9 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
 
 // WriteActor,BufferActor
 inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx, const TStringBuf component) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+        return;
+    }
     auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", component},
         {"type", txType},

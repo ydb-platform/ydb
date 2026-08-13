@@ -2992,22 +2992,50 @@ TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
 NKikimrDataEvents::TEvWriteResult UncommittedWrite(
         TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
         const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 writerIndex,
+        const TVector<TUncommittedWriteOp>& ops,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected)
+{
+    UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+    UNIT_ASSERT(!ops.empty());
+
+    auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
+        NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+    req->SetLockId(lockTxId, lockNodeId);
+    const std::vector<ui32> columnIds = {1, 2};
+
+    for (const auto& op : ops) {
+        TVector<TString> stringValues;
+        TVector<TCell> cells;
+        AddValueToCells(op.Key, columns[0].Type, cells, stringValues);
+        AddValueToCells(op.Value, columns[1].Type, cells, stringValues);
+        TSerializedCellMatrix matrix(cells, 1, 2);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+            .AddDataToPayload(matrix.ReleaseBuffer());
+        req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        if (op.WriteSeqNum) {
+            auto* wsn = req->Record.MutableOperations(req->Record.OperationsSize() - 1)->MutableWriteSeqNum();
+            wsn->SetWriterIndex(writerIndex);
+            wsn->SetWriteSeqNum(op.WriteSeqNum);
+        }
+    }
+
+    return Write(runtime, sender, shard, std::move(req), expected);
+}
+
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
         ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
         ui64 writerIndex, ui64 writeSeqNum,
         NKikimrDataEvents::TEvWriteResult::EStatus expected)
 {
-    auto req = MakeWriteRequestOneKeyValue(std::nullopt,
-        NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-        tableId, columns, key, value);
-    req->SetLockId(lockTxId, lockNodeId);
-    if (writeSeqNum) {
-        auto* op = req->Record.MutableOperations(0);
-        auto* reqWriteSeqNum = op->MutableWriteSeqNum();
-        reqWriteSeqNum->SetWriterIndex(writerIndex);
-        reqWriteSeqNum->SetWriteSeqNum(writeSeqNum);
-    }
-    return Write(runtime, sender, shard, std::move(req), expected);
+    TVector<TUncommittedWriteOp> ops{
+        {key, value, writeSeqNum},
+    };
+    return UncommittedWrite(runtime, sender, shard, tableId, columns,
+        lockTxId, lockNodeId, writerIndex, ops, expected);
 }
 
 // Asserts the lock reports exactly one write seq num and returns it

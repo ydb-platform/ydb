@@ -682,7 +682,7 @@ class KikimrConfigGenerator(object):
             # Enable DbsController tablet
             self.yaml_config.setdefault("system_tablets", {})["dbs_controller"] = [
                 {
-                    "info": {"tablet_id": 72057594037936132}
+                    "info": {}
                 }
             ]
 

@@ -4,8 +4,6 @@
 #include <ydb/core/base/event_filter.h>
 #include <util/generic/hash_set.h>
 
-#include <memory>
-
 class TProgramShouldContinue;
 class IRandomProvider;
 class ITimeProvider;

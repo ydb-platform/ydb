@@ -99,6 +99,11 @@ TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersGroupOrNull() {
 // drop) the helper would hold the client forever, so it arms its own fallback this much later.
 constexpr TDuration DelayedRejectFallbackMargin = TDuration::Seconds(1);
 
+// The FCM answers TEvTryAdmit on every branch of its handler without ever deferring, so this bound
+// is about the service being alive at all, not about how loaded it is — nothing legitimate takes
+// seconds. Deliberately far above any plausible mailbox delay so it can never pre-empt a real answer.
+constexpr TDuration AdmitRpcTimeout = TDuration::Seconds(5);
+
 constexpr TStringBuf OverloadedMessage = "destination node is overloaded";
 constexpr TStringBuf QueueFullMessage = "destination node is overloaded; wait queue full";
 
@@ -106,6 +111,15 @@ constexpr TStringBuf QueueFullMessage = "destination node is overloaded; wait qu
 // RPC here, then starts TLongTxWriteInternal on the same mailbox (forceNoFlowControl).
 // On Wait: hold until Allow (READY drain) or wait-deadline / RejectNow → OVERLOADED.
 class TLongTxWriteFlowControlled: public NActors::TActorBootstrapped<TLongTxWriteFlowControlled> {
+    // Each state arms its own timer, and a timer outlives the state that armed it: leaving
+    // StateWaitAdmit does not cancel its wakeup. Tags let a stale one be ignored instead of being
+    // mistaken for the current state's deadline.
+    enum EWakeupTag : ui64 {
+        WakeupAdmitTimeout = 1,
+        WakeupWaitDeadline = 2,
+        WakeupDelayedRejectFallback = 3,
+    };
+
     TLongTxWrite Tx;
     TCSFlowControlManagerCounters Counters;
     TInstant StartedAt;
@@ -141,15 +155,23 @@ public:
         Counters.OnWaitingAdmitStart();
         // Deadline is the client's absolute cut-off, OperationTimeout its relative budget: the FCM
         // needs both, one for the wait-queue cut-off and one for the percentage-based windows.
+        // FlagTrackDelivery turns "no FCM on this node" into an immediate TEvUndelivered instead of
+        // silence; without it this is the one wait in this actor that nothing would ever end.
         ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
-            std::make_unique<TEvTryAdmit>(std::move(tabletIds), Tx.GetDeadline(), Tx.GetOperationTimeout(), batchSize));
+            std::make_unique<TEvTryAdmit>(std::move(tabletIds), Tx.GetDeadline(), Tx.GetOperationTimeout(), batchSize),
+            NActors::IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateWaitAdmit);
+        ctx.Schedule(AdmitRpcTimeoutLeft(), new NActors::TEvents::TEvWakeup(WakeupAdmitTimeout));
     }
 
 private:
     // clang-format off
+    // TEvUndelivered means there is no FCM to admit against; TEvWakeup covers a reply that was
+    // accepted but never came back. Both fail open, see FailOpenUnadmitted.
     STRICT_STFUNC(StateWaitAdmit,
                   HFunc(TEvTryAdmitResult, HandleAdmitResult)
+                  HFunc(NActors::TEvents::TEvUndelivered, HandleAdmitUndelivered)
+                  HFunc(NActors::TEvents::TEvWakeup, HandleAdmitTimeout)
     )
     STRICT_STFUNC(StateQueued,
                   HFunc(TEvTryAdmitResult, HandleQueuedResult)
@@ -161,6 +183,38 @@ private:
                   HFunc(NActors::TEvents::TEvWakeup, HandleDelayedRejectFallback)
     )
     // clang-format on
+
+    // How long the admit round trip may take before the FCM is presumed absent. Capped by the
+    // wait-queue cut-off so a request with a short budget is never held past the point where being
+    // admitted would have stopped being useful.
+    TDuration AdmitRpcTimeoutLeft() const {
+        const TInstant waitDeadline = TFlowControlManagerServiceOperator::ComputeWaitDeadline(Tx.GetDeadline(), Tx.GetOperationTimeout());
+        const TInstant firesAt = Min(StartedAt + AdmitRpcTimeout, waitDeadline);
+        const TInstant now = TActivationContext::Now();
+        return firesAt > now ? firesAt - now : TDuration::Zero();
+    }
+
+    void HandleAdmitUndelivered(NActors::TEvents::TEvUndelivered::TPtr& /*ev*/, const TActorContext& ctx) {
+        FailOpenUnadmitted(ctx, "flow_control_manager_unavailable");
+    }
+
+    void HandleAdmitTimeout(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != WakeupAdmitTimeout) {
+            return;
+        }
+        FailOpenUnadmitted(ctx, "flow_control_admit_timeout");
+    }
+
+    // No admission decision is coming. Fail open into the plain write path, as the missing-split
+    // branch does: the FCM never defers a reply, so silence means the service is gone rather than
+    // busy, and rejecting the client on our own inability to ask would be inventing backpressure.
+    void FailOpenUnadmitted(const TActorContext& ctx, TStringBuf reason) {
+        Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
+        Counters.OnAdmitSkippedUnavailable();
+        AFL_WARN(NKikimrServices::LONG_TX_SERVICE)("event", "flow_control_admit_skipped")("reason", reason)("path", Tx.GetPath());
+        StartWrite(ctx);
+        Finish(ctx);
+    }
 
     void HandleAdmitResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
         Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
@@ -194,7 +248,8 @@ private:
         // widens exactly when the cluster is loaded enough for the fallback to matter.
         const TInstant fallbackAt = StartedAt + Tx.GetOperationTimeout() + DelayedRejectFallbackMargin;
         const TInstant now = TActivationContext::Now();
-        ctx.Schedule(fallbackAt > now ? fallbackAt - now : TDuration::Zero(), new NActors::TEvents::TEvWakeup());
+        ctx.Schedule(fallbackAt > now ? fallbackAt - now : TDuration::Zero(),
+            new NActors::TEvents::TEvWakeup(WakeupDelayedRejectFallback));
     }
 
     void HandleDelayedRejectCompleted(NActors::TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
@@ -206,7 +261,10 @@ private:
         Finish(ctx);
     }
 
-    void HandleDelayedRejectFallback(NActors::TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+    void HandleDelayedRejectFallback(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != WakeupDelayedRejectFallback) {
+            return;   // the admit-timeout wakeup, outliving the state that armed it
+        }
         ReplyOverloaded(ctx, QueueFullMessage);
         Finish(ctx);
     }
@@ -221,7 +279,7 @@ private:
             CancelAndReject(ctx);
             return;
         }
-        ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup());
+        ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup(WakeupWaitDeadline));
     }
 
     void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
@@ -233,7 +291,10 @@ private:
         Finish(ctx);
     }
 
-    void HandleWaitDeadlineWakeup(NActors::TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+    void HandleWaitDeadlineWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != WakeupWaitDeadline) {
+            return;   // the admit-timeout wakeup, outliving the state that armed it
+        }
         // StateQueued is entered only from EnterQueued, which sets Queued and arms this wakeup, and
         // every path that clears Queued also passes away.
         AFL_VERIFY(Queued);

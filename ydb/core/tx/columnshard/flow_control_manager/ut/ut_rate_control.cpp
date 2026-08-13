@@ -318,6 +318,35 @@ Y_UNIT_TEST_SUITE(TNodeStateMapTest) {
         UNIT_ASSERT(nodes.PickTabletsForRecheck({ 1 }, T0 + TDuration::Seconds(1), period).empty());
         UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0 + period, period).size(), 1);
     }
+
+    Y_UNIT_TEST(ForgetTabletDropsRecheckBookkeepingToo) {
+        constexpr TDuration period = TDuration::Seconds(5);
+        TNodeStateMap nodes;
+        nodes.SetTabletNode(1, 10);
+        nodes.MarkHot(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0, period).size(), 1);
+
+        // The tablet moved away and came back somewhere else. Had the in-flight guard survived, the
+        // relearned tablet would never be picked for a recheck again.
+        nodes.ForgetTablet(1);
+        nodes.SetTabletNode(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0, period).size(), 1);
+    }
+
+    Y_UNIT_TEST(TabletMapIsBounded) {
+        TNodeStateMap nodes;
+        for (ui64 tabletId = 1; tabletId <= TNodeStateMap::MaxTrackedTablets; ++tabletId) {
+            nodes.SetTabletNode(tabletId, 10);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(nodes.TabletCount(), TNodeStateMap::MaxTrackedTablets);
+
+        // One past the cap drops the accumulated history and starts over from the new entry.
+        nodes.SetTabletNode(TNodeStateMap::MaxTrackedTablets + 1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(nodes.TabletCount(), 1);
+        // Re-learning an entry that is already tracked must not trip the cap.
+        nodes.SetTabletNode(TNodeStateMap::MaxTrackedTablets + 1, 11);
+        UNIT_ASSERT_VALUES_EQUAL(nodes.TabletCount(), 1);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
@@ -357,7 +386,7 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
         // full AimdBeta applies.
         controller.NoteWaiterReleased();
         for (int i = 0; i < 10; ++i) {
-            controller.NoteWriteOutcome(MakeState(T0), params, true);
+            controller.NoteWriteOutcome(MakeState(T0), params, EWriteOutcome::Overloaded);
         }
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 5.0, 1e-9);
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateBytes(), 50'000.0, 1e-9);
@@ -371,10 +400,10 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
 
         controller.NoteWaiterReleased();
         for (int i = 0; i < 5; ++i) {
-            controller.NoteWriteOutcome(MakeState(T0), params, true);
+            controller.NoteWriteOutcome(MakeState(T0), params, EWriteOutcome::Overloaded);
         }
         for (int i = 0; i < 5; ++i) {
-            controller.NoteWriteOutcome(MakeState(T0), params, false);
+            controller.NoteWriteOutcome(MakeState(T0), params, EWriteOutcome::Ok);
         }
         // effectiveBeta = 1 - 0.5 * (1 - 0.5) = 0.75
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 7.5, 1e-9);
@@ -388,7 +417,7 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
 
         controller.NoteWaiterReleased();
         for (int i = 0; i < 10; ++i) {
-            controller.NoteWriteOutcome(MakeState(T0), params, true);
+            controller.NoteWriteOutcome(MakeState(T0), params, EWriteOutcome::Overloaded);
         }
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 5.0, 1e-9);
 
@@ -396,7 +425,7 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
         // so nothing may grow yet.
         controller.NoteWaiterReleased();
         for (int i = 0; i < 5; ++i) {
-            controller.NoteWriteOutcome(MakeState(T0 + TDuration::MilliSeconds(100)), params, false);
+            controller.NoteWriteOutcome(MakeState(T0 + TDuration::MilliSeconds(100)), params, EWriteOutcome::Ok);
         }
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 5.0, 1e-9);
 
@@ -405,9 +434,35 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
         const TInstant quiet = T0 + TDuration::Seconds(5);
         controller.NoteWaiterReleased();
         for (int i = 0; i < 5; ++i) {
-            controller.NoteWriteOutcome(MakeState(quiet), params, false);
+            controller.NoteWriteOutcome(MakeState(quiet), params, EWriteOutcome::Ok);
         }
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 9.375, 1e-6);
+    }
+
+    Y_UNIT_TEST(UnknownOutcomesNeitherCutNorCompleteTheCohort) {
+        const auto params = MakeParams();
+        TCSFlowControlManagerCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TDrainRateController controller(counters);
+        controller.Seed(params);
+
+        // Writes that ended without ever hearing back from the shard. Counting them as clean would
+        // let a shard that stopped answering complete this cohort and grow the rate; counting them
+        // as overloaded would invent backpressure out of what may be a network fault.
+        const TInstant quiet = T0 + TDuration::Seconds(5);
+        controller.NoteWaiterReleased();
+        for (int i = 0; i < 20; ++i) {
+            controller.NoteWriteOutcome(MakeState(quiet), params, EWriteOutcome::Unknown);
+        }
+        UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 10.0, 1e-9);
+
+        // The cohort is still open and still empty, so the ten answers that follow are what closes
+        // it — the unknowns did not consume any of its budget.
+        for (int i = 0; i < 9; ++i) {
+            controller.NoteWriteOutcome(MakeState(quiet), params, EWriteOutcome::Ok);
+        }
+        UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 10.0, 1e-9);
+        controller.NoteWriteOutcome(MakeState(quiet), params, EWriteOutcome::Ok);
+        UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 11.0, 1e-9);
     }
 
     Y_UNIT_TEST(StrayOverloadOutsideACohortCutsOnlyASlice) {
@@ -418,7 +473,7 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
 
         // No cohort open: one overload is treated as 1/ceil(rate) of a dirty round, so the cut is
         // a tenth of the full beta rather than a halving.
-        controller.NoteWriteOutcome(MakeState(T0), params, true);
+        controller.NoteWriteOutcome(MakeState(T0), params, EWriteOutcome::Overloaded);
         // effectiveBeta = 1 - 0.1 * (1 - 0.5) = 0.95
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 9.5, 1e-9);
     }
@@ -470,7 +525,7 @@ Y_UNIT_TEST_SUITE(TDrainRateControllerTest) {
         const TInstant quiet = T0 + TDuration::Seconds(5);
         controller.NoteWaiterReleased();
         for (int i = 0; i < 5; ++i) {
-            controller.NoteWriteOutcome(MakeState(quiet), params, false);
+            controller.NoteWriteOutcome(MakeState(quiet), params, EWriteOutcome::Ok);
         }
         // 5 + CubicProbePercent% of Wmax(5)
         UNIT_ASSERT_DOUBLES_EQUAL(controller.GetRateCount(), 5.5, 1e-9);

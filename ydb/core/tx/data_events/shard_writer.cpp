@@ -15,8 +15,18 @@ namespace NKikimr::NEvWrite {
 
 namespace {
 
-bool IsCsFlowControlEnabled() {
-    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+using NColumnShard::NFlowControl::EWriteOutcome;
+using NColumnShard::NFlowControl::TFlowControlManagerServiceOperator;
+
+// A shard that never answered tells us nothing: reporting that as a clean write would let a shard
+// which has stopped responding complete FCM cohorts and push the drain rate up.
+EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId) {
+    if (wasEverOverloaded) {
+        return EWriteOutcome::Overloaded;
+    }
+    // LastResultNodeId is set on every TEvWriteResult before its status is looked at, so zero here
+    // means no reply ever arrived: a timeout or a broken pipe.
+    return lastResultNodeId ? EWriteOutcome::Ok : EWriteOutcome::Unknown;
 }
 
 }   // namespace
@@ -231,27 +241,28 @@ bool IsCsFlowControlEnabled() {
     }
 
     void TShardWriter::ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId) {
-        if (!IsCsFlowControlEnabled()) {
+        if (!TFlowControlManagerServiceOperator::IsEnabled()) {
             return;
         }
-        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
             new NColumnShard::NFlowControl::TEvTabletLocationUpdated(tabletId, nodeId));
     }
 
     void TShardWriter::ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId) {
-        if (!IsCsFlowControlEnabled()) {
+        if (!TFlowControlManagerServiceOperator::IsEnabled()) {
             return;
         }
-        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
             new NColumnShard::NFlowControl::TEvTabletLocationInvalidated(tabletId));
     }
 
     void TShardWriter::ReportWriteOutcomeToFlowControl() {
-        if (!IsCsFlowControlEnabled() || WriteOutcomeReported) {
+        if (!TFlowControlManagerServiceOperator::IsEnabled() || WriteOutcomeReported) {
             return;
         }
         WriteOutcomeReported = true;
-        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
-            new NColumnShard::NFlowControl::TEvWriteOutcome(ShardId, LastResultNodeId, WasEverOverloaded, NumRetries));
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvWriteOutcome(
+                ShardId, LastResultNodeId, ClassifyWriteOutcome(WasEverOverloaded, LastResultNodeId), NumRetries));
     }
 }

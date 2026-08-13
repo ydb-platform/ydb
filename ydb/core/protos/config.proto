@@ -2894,11 +2894,19 @@ message TColumnShardConfig {
         optional double DrainAimdBeta = 7 [default = 0.8];
         optional double DrainCubicRecoveryTargetSec = 8 [default = 10];
         optional double DrainCubicProbePercent = 9 [default = 8];
+        // Drain rate bounds, in admits/sec (DrainRate*) and bytes/sec (DrainRate*Bytes). The rate
+        // between them is learned from write outcomes, never nailed to a number here.
         optional double DrainRateMin = 10 [default = 5];
+        // 0 means no ceiling: the rate is capped by the throughput actually being served, which is
+        // what the controller is for. Set a non-zero value only to impose an external limit.
         optional double DrainRateMax = 11 [default = 0];
+        // Must not be below DrainRateMin: the FCM seeds the rate (and Wmax, tokens) from it at
+        // construction, before the bounds get a chance to clamp it up.
         optional double DrainRateStart = 12 [default = 50];
         optional double DrainRateMinBytes = 13 [default = 50000000];
+        // 0 means no ceiling, as for DrainRateMax.
         optional double DrainRateMaxBytes = 14 [default = 0];
+        // Must not be below DrainRateMinBytes, as for DrainRateStart.
         optional double DrainRateStartBytes = 15 [default = 50000000];
     }
 

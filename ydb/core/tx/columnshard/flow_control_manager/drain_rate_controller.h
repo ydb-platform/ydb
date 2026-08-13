@@ -107,7 +107,7 @@ public:
     // its learned value, observation only re-seeds the *starting* rate at the next edge.
     void NoteQueueEmpty();
 
-    void NoteWriteOutcome(const TDrainState& state, const TDrainRateParams& params, bool overloaded);
+    void NoteWriteOutcome(const TDrainState& state, const TDrainRateParams& params, EWriteOutcome outcome);
     // Empty -> non-empty hot edge: drop the in-flight cohort and apply a full cut.
     void NoteFirstHotNode(const TDrainState& state, const TDrainRateParams& params);
     void NoteHotNode(TInstant now);
@@ -135,7 +135,7 @@ private:
     bool IsQuietSinceHot(const TDrainState& state) const;
     bool CanGrowNow(const TDrainState& state) const;
 
-    void NoteCohortOutcome(const TDrainState& state, bool overloaded);
+    void NoteCohortOutcome(const TDrainState& state, EWriteOutcome outcome);
     void ResetCohort();
     void CloseCohort(const TDrainState& state);
     void CutRateByOverloadFraction(const TDrainState& state, double overloadFraction);

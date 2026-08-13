@@ -57,7 +57,6 @@ class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {
     bool IsNodeOverloaded() const;
     void SyncPublication(bool force);
     bool PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status);
-    static bool IsCsFlowControlEnabled();
 
 public:
     TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);

@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 
@@ -13,9 +14,7 @@ namespace {
 std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{ 0 };
 std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
 
-bool IsCsFlowControlEnabled() {
-    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
-}
+using NFlowControl::TFlowControlManagerServiceOperator;
 
 void SendToOverloadManager(NActors::IEventBase* event) {
     auto* actorSystem = NActors::TActivationContext::ActorSystem();
@@ -73,7 +72,7 @@ void TOverloadManagerServiceOperator::SetCompactionOverloaded(bool overloaded) {
 }
 
 void TOverloadManagerServiceOperator::SyncNodeOverloadPublication() {
-    if (!IsCsFlowControlEnabled()) {
+    if (!TFlowControlManagerServiceOperator::IsEnabled()) {
         return;
     }
     SendToOverloadManager(new TEvSyncNodeOverloadPublication());
@@ -116,7 +115,7 @@ void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 wr
 }
 
 void TOverloadManagerServiceOperator::ReportCompactionOverload(ui64 tabletId, bool overloaded) {
-    if (!IsCsFlowControlEnabled()) {
+    if (!TFlowControlManagerServiceOperator::IsEnabled()) {
         return;
     }
     SendToOverloadManager(new TEvCompactionOverloadState(tabletId, overloaded));

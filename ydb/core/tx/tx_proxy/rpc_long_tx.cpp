@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -282,7 +283,7 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl,
     TInstant deadline, TDuration operationTimeout) {
 
-    if (!forceNoFlowControl && HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl()) {
+    if (!forceNoFlowControl && NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::IsEnabled()) {
         StartLongTxWriteFlowControlled(ctx,
             NColumnShard::NFlowControl::TLongTxWrite(replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult),
                 std::move(batch), std::move(issues), std::move(userCtx), deadline, operationTimeout));

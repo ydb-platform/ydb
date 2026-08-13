@@ -1,5 +1,7 @@
 #pragma once
 
+#include "flow_control_manager_types.h"
+
 #include <ydb/library/signals/owner.h>
 
 #include <util/datetime/base.h>
@@ -35,11 +37,13 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DrainCohortAbortedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOkCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOverloadedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeUnknownCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitAllowedCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitRejectedCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitSkippedNoSplitCount;
+    NMonitoring::TDynamicCounters::TCounterPtr AdmitSkippedUnavailableCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueEnqueuedCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueDrainedCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedDeadlineCount;
@@ -85,10 +89,12 @@ public:
         , DrainCohortAbortedCount(TBase::GetDeriviative("FlowControl/Drain/CohortAborted/Count"))
         , DrainOutcomeOkCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Ok/Count"))
         , DrainOutcomeOverloadedCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Overloaded/Count"))
+        , DrainOutcomeUnknownCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Unknown/Count"))
         , RequestsCount(TBase::GetDeriviative("FlowControl/Requests/Count"))
         , AdmitAllowedCount(TBase::GetDeriviative("FlowControl/Admit/Allowed/Count"))
         , AdmitRejectedCount(TBase::GetDeriviative("FlowControl/Admit/Rejected/Count"))
         , AdmitSkippedNoSplitCount(TBase::GetDeriviative("FlowControl/Admit/SkippedNoSplit/Count"))
+        , AdmitSkippedUnavailableCount(TBase::GetDeriviative("FlowControl/Admit/SkippedUnavailable/Count"))
         , WaitQueueEnqueuedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Enqueued/Count"))
         , WaitQueueDrainedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Drained/Count"))
         , WaitQueueRejectedDeadlineCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedDeadline/Count"))
@@ -143,6 +149,12 @@ public:
 
     void OnAdmitSkippedNoSplit() const {
         AdmitSkippedNoSplitCount->Inc();
+    }
+
+    // The admit request could not be delivered, or was never answered: the write proceeds
+    // unthrottled. Non-zero here means flow control is silently not running on this node.
+    void OnAdmitSkippedUnavailable() const {
+        AdmitSkippedUnavailableCount->Inc();
     }
 
     // WaitQueue/Count and DelayedRejectQueue/Count are gauges owned solely by
@@ -255,12 +267,19 @@ public:
         DrainCohortAbortedCount->Inc();
     }
 
-    // Per-request write outcome reported by TShardWriter.
-    void OnWriteOutcome(bool overloaded) const {
-        if (overloaded) {
-            DrainOutcomeOverloadedCount->Inc();
-        } else {
-            DrainOutcomeOkCount->Inc();
+    // Per-request write outcome reported by TShardWriter. A rising Unknown rate means writes are
+    // ending without an answer, which stalls cohort completion and therefore growth.
+    void OnWriteOutcome(EWriteOutcome outcome) const {
+        switch (outcome) {
+            case EWriteOutcome::Ok:
+                DrainOutcomeOkCount->Inc();
+                break;
+            case EWriteOutcome::Overloaded:
+                DrainOutcomeOverloadedCount->Inc();
+                break;
+            case EWriteOutcome::Unknown:
+                DrainOutcomeUnknownCount->Inc();
+                break;
         }
     }
 

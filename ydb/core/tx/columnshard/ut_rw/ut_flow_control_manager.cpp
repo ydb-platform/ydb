@@ -200,7 +200,11 @@ public:
     // Emulate TShardWriter reporting a terminal per-request write outcome. This is the
     // only feedback that moves the drain rate, so tests drive it directly.
     void SendWriteOutcome(ui64 tabletId, ui32 nodeId, bool overloaded, ui32 retries = 0) {
-        SendToFlowControlManager(new TEvWriteOutcome(tabletId, nodeId, overloaded, retries));
+        SendWriteOutcome(tabletId, nodeId, overloaded ? EWriteOutcome::Overloaded : EWriteOutcome::Ok, retries);
+    }
+
+    void SendWriteOutcome(ui64 tabletId, ui32 nodeId, EWriteOutcome outcome, ui32 retries = 0) {
+        SendToFlowControlManager(new TEvWriteOutcome(tabletId, nodeId, outcome, retries));
         Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
     }
 
@@ -2311,12 +2315,27 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         const ui32 overloadedBeforeRefresh = overloadedCount;
         const ui32 readyBeforeRefresh = readyCount;
 
-        // Simulate periodic ListNodes refresh: must re-publish READY (current truth), not stale OVERLOADED.
+        // Periodic ListNodes refresh while READY: must not re-broadcast. A fresh FCM already
+        // assumes everyone is cool (empty HotNodes), so a forced READY conveys nothing and used
+        // to cost O(N) messages per node every minute on a healthy cluster.
         SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(overloadedCount, overloadedBeforeRefresh);
-        UNIT_ASSERT_C(readyCount > readyBeforeRefresh, "refresh should re-push READY from current state");
+        UNIT_ASSERT_VALUES_EQUAL(readyCount, readyBeforeRefresh);
+
+        // While OVERLOADED the same refresh must re-assert: an FCM that missed the edge (or came
+        // up after it) has no other way to learn that this node is hot.
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        const ui32 overloadedBeforeHotRefresh = overloadedCount;
+        UNIT_ASSERT_C(overloadedBeforeHotRefresh > overloadedBeforeRefresh, "expected OVERLOADED on re-enter");
+
+        SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(overloadedCount > overloadedBeforeHotRefresh, "refresh must re-push OVERLOADED so late FCMs learn the hot node");
+        UNIT_ASSERT_VALUES_EQUAL(readyCount, readyBeforeRefresh);
     }
 
     Y_UNIT_TEST(OverloadManagerPushesToAllCachedNodes) {

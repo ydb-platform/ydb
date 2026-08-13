@@ -47,6 +47,11 @@ public:
         return NActors::TActorId(nodeId, "FlowCtrlMng");
     }
 
+    // Single source of truth for "is flow control on". Read from four subsystems (the write path,
+    // the shard writer, and both halves of the overload manager), so any future qualification of
+    // this condition has one place to happen rather than four.
+    static bool IsEnabled();
+
     static std::unique_ptr<NActors::IActor> CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 
     // The one place that decides where FCM counters live, so the service initializer and the

@@ -362,21 +362,29 @@ void TDrainRateController::ResetCohort() {
     CohortOverloadCount = 0;
 }
 
-void TDrainRateController::NoteWriteOutcome(const TDrainState& state, const TDrainRateParams& params, bool overloaded) {
+void TDrainRateController::NoteWriteOutcome(const TDrainState& state, const TDrainRateParams& params, EWriteOutcome outcome) {
     // If the outcome arrives while the queue is empty (fast-path traffic), remember that the
     // observed throughput was already causing overload, so the next empty -> non-empty transition
     // seeds the rates more cautiously.
-    if (WasQueueEmpty && overloaded) {
+    if (WasQueueEmpty && outcome == EWriteOutcome::Overloaded) {
         ObservedOverload = true;
     }
-    Counters.OnWriteOutcome(overloaded);
+    Counters.OnWriteOutcome(outcome);
     // Outcomes drive growth/cuts together with hot-node edges. Re-read bounds here, otherwise the
     // RMax/RMin/CUBIC knobs stay at their construction-time seed.
     SyncBounds(params);
-    NoteCohortOutcome(state, overloaded);
+    NoteCohortOutcome(state, outcome);
 }
 
-void TDrainRateController::NoteCohortOutcome(const TDrainState& state, bool overloaded) {
+void TDrainRateController::NoteCohortOutcome(const TDrainState& state, EWriteOutcome outcome) {
+    if (outcome == EWriteOutcome::Unknown) {
+        // A write that never heard back is evidence of nothing, so it neither cuts nor counts
+        // toward the cohort. The cohort simply stays short of its target, which is the right
+        // response: growth stops until real answers come back, without inventing a cut from what
+        // may be a network fault.
+        return;
+    }
+    const bool overloaded = outcome == EWriteOutcome::Overloaded;
     if (overloaded) {
         // Opens the same cooldown a hot node does: growth must wait for a quiet window.
         LastOverloadOutcomeAt = state.Now;

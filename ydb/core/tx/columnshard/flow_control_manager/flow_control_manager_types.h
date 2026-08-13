@@ -20,6 +20,19 @@ enum class EAdmitDecision {
     DelayedReject,   // Queue is full; drop Arrow batch, send OVERLOADED after delay
 };
 
+// What a finished shard write learned about its destination.
+//
+// Unknown is not a quieter kind of Ok: a write that ended without ever hearing back (timeout,
+// broken pipe) carries no evidence in either direction. Counting it as clean is what would let a
+// shard that stopped answering altogether complete cohorts and drive the rate *up*, which is the
+// worst possible response. Counting it as overloaded would be wrong too, since the cause may be a
+// network fault that says nothing about the destination's capacity — so it counts as neither.
+enum class EWriteOutcome {
+    Ok,
+    Overloaded,
+    Unknown,
+};
+
 class TLongTxWrite {
     YDB_READONLY_DEF(TActorId, ReplyTo);
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);

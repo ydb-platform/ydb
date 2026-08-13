@@ -121,6 +121,10 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
     return ParamsFromConfig(DefaultFlowControlConfig());
 }
 
+bool TFlowControlManagerServiceOperator::IsEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+}
+
 std::unique_ptr<NActors::IActor> TFlowControlManagerServiceOperator::CreateService(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup) {
     return std::make_unique<TFlowControlManager>(countersGroup);

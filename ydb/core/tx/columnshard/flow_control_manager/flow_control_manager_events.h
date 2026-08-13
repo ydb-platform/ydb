@@ -153,20 +153,20 @@ public:
 // overload at all. Unlike the node-level TEvNodeOverloadStatus this is per request,
 // immediate and exactly attributable, which is what makes timer-free growth possible.
 //
-// Overloaded must be true if the write was EVER overloaded, even when a later retry
+// The outcome must be Overloaded if the write was EVER overloaded, even when a later retry
 // succeeded: otherwise retry-by-subscription would launder overload into success and
 // the rate would grow exactly when it should not.
 class TEvWriteOutcome: public NActors::TEventLocal<TEvWriteOutcome, EvWriteOutcome> {
     YDB_READONLY(ui64, TabletId, 0);
     YDB_READONLY(ui32, NodeId, 0);
-    YDB_READONLY(bool, Overloaded, false);
+    YDB_READONLY(EWriteOutcome, Outcome, EWriteOutcome::Ok);
     YDB_READONLY(ui32, Retries, 0);
 
 public:
-    TEvWriteOutcome(ui64 tabletId, ui32 nodeId, bool overloaded, ui32 retries)
+    TEvWriteOutcome(ui64 tabletId, ui32 nodeId, EWriteOutcome outcome, ui32 retries)
         : TabletId(tabletId)
         , NodeId(nodeId)
-        , Overloaded(overloaded)
+        , Outcome(outcome)
         , Retries(retries)
     {
     }

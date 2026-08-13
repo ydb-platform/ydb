@@ -24,6 +24,25 @@ bool TNodeStateMap::MarkReady(ui32 nodeId, ui64 generation) {
     return wasHot && HotNodes.empty();
 }
 
+void TNodeStateMap::SetTabletNode(ui64 tabletId, ui32 nodeId) {
+    if (TabletToNode.size() >= MaxTrackedTablets && !TabletToNode.contains(tabletId)) {
+        // Wholesale rather than an eviction policy: there is no access order to evict by, and no
+        // entry is more valuable than another. Everything is relearned from the write path within
+        // one round of traffic, and until then the affected tablets are simply admitted.
+        TabletToNode.clear();
+        LastRecheck.clear();
+    }
+    TabletToNode[tabletId] = nodeId;
+}
+
+void TNodeStateMap::ForgetTablet(ui64 tabletId) {
+    TabletToNode.erase(tabletId);
+    LastRecheck.erase(tabletId);
+    // A resolve may still be in flight for this tablet; its FinishRecheck is a no-op then, and
+    // dropping the guard early can at worst cost one duplicate resolve.
+    RecheckInFlight.erase(tabletId);
+}
+
 bool TNodeStateMap::IsAdmitAllowed(const TVector<ui64>& tabletIds) const {
     for (const ui64 tabletId : tabletIds) {
         const auto* nodeId = TabletToNode.FindPtr(tabletId);

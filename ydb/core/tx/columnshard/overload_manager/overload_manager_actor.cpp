@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
+#include <ydb/library/services/services.pb.h>
+
 namespace NKikimr::NColumnShard::NOverload {
 
 TOverloadManager::TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
@@ -17,10 +19,6 @@ void TOverloadManager::Bootstrap() {
     Become(&TThis::StateMain);
     RequestNodesList();
     Schedule(NodesListRefreshPeriod, new NActors::TEvents::TEvWakeup());
-}
-
-bool TOverloadManager::IsCsFlowControlEnabled() {
-    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
 }
 
 void TOverloadManager::RequestNodesList() {
@@ -38,7 +36,7 @@ bool TOverloadManager::IsNodeOverloaded() const {
 }
 
 bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status) {
-    if (!IsCsFlowControlEnabled()) {
+    if (!NFlowControl::TFlowControlManagerServiceOperator::IsEnabled()) {
         return false;
     }
 
@@ -55,7 +53,11 @@ bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNod
         selfNodeId = *CachedNodeIds.begin();
     }
     if (!selfNodeId) {
+        // Not a delay: every later attempt re-derives the same zero, so flow control never learns
+        // this node's status and the only symptom is a gauge that never moves. Say so out loud.
         NeedPublicationFlush = true;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "overload_status_publication_skipped")("reason", "self_node_id_unresolved")(
+            "cached_nodes", CachedNodeIds.size());
         return false;
     }
 
@@ -70,13 +72,18 @@ bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNod
 }
 
 void TOverloadManager::SyncPublication(bool force) {
-    if (!IsCsFlowControlEnabled()) {
+    if (!NFlowControl::TFlowControlManagerServiceOperator::IsEnabled()) {
         return;
     }
 
     const auto want = IsNodeOverloaded() ? NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED
                                          : NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY;
-    if (!force && !NeedPublicationFlush && LastSentStatus == want) {
+    // A forced READY re-broadcast carries no information: an FCM that missed the edge, or came up
+    // fresh after a restart, starts with an empty hot set, which already means "everyone is READY".
+    // Only OVERLOADED has to be re-asserted periodically, so on a healthy cluster the 60s refresh
+    // costs nothing instead of N messages per node per minute.
+    const bool informative = force && want == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED;
+    if (!informative && !NeedPublicationFlush && LastSentStatus == want) {
         return;
     }
     PublishToFlowControlManagers(want);
@@ -152,7 +159,9 @@ void TOverloadManager::Handle(const NActors::TEvInterconnect::TEvNodesInfo::TPtr
     for (const auto& node : ev->Get()->Nodes) {
         CachedNodeIds.insert(node.NodeId);
     }
-    // Refresh pushes *current* write+compaction truth, never a stale OVERLOADED snapshot.
+    // Refresh pushes *current* write+compaction truth, never a stale OVERLOADED snapshot. The node
+    // list may have grown, and an FCM that never heard from this node has to learn an OVERLOADED
+    // one; a READY one it already assumes, so SyncPublication treats only OVERLOADED as forcible.
     SyncPublication(true);
 }
 

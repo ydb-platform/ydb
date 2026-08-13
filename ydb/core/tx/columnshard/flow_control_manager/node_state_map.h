@@ -19,6 +19,13 @@ class TNodeStateMap {
     THashSet<ui64> RecheckInFlight;
 
 public:
+    // The tablet-keyed maps only ever grow through the write path: nothing tells FCM that a tablet
+    // it once wrote to will never be written to again, so on a long-lived node with a churning set
+    // of tables they accumulate history rather than a working set. Far above any realistic fan-out,
+    // so reaching it means the map has stopped describing the present. Dropping locations is safe
+    // by construction — an unknown tablet fails open and is relearned from the next write.
+    static constexpr size_t MaxTrackedTablets = 100'000;
+
     bool AnyHot() const {
         return !HotNodes.empty();
     }
@@ -37,13 +44,11 @@ public:
     // this call cleared the last hot node; a READY for a node that was not hot reports nothing.
     bool MarkReady(ui32 nodeId, ui64 generation);
 
-    void SetTabletNode(ui64 tabletId, ui32 nodeId) {
-        TabletToNode[tabletId] = nodeId;
-    }
+    void SetTabletNode(ui64 tabletId, ui32 nodeId);
 
-    void ForgetTablet(ui64 tabletId) {
-        TabletToNode.erase(tabletId);
-    }
+    // Forgets everything keyed by this tablet, not just its location: the recheck bookkeeping is
+    // keyed the same way, and leaving it behind is how a map that is supposed to shrink grows.
+    void ForgetTablet(ui64 tabletId);
 
     // Every write in the request must be allowed: one hot node gates the whole request, since the
     // client cannot partially succeed. Tablets with unknown location are skipped (fail open).

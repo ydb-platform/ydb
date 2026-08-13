@@ -304,7 +304,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
 void TFlowControlManager::Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, const TActorContext& ctx) {
     // Closed-loop feedback, together with the hot-node edges in Handle(TEvNodeOverloadStatus).
     const TInstant now = TActivationContext::Now();
-    Drain.NoteWriteOutcome(MakeDrainState(now), TFlowControlManagerServiceOperator::GetDrainRateParams(), ev->Get()->GetOverloaded());
+    Drain.NoteWriteOutcome(MakeDrainState(now), TFlowControlManagerServiceOperator::GetDrainRateParams(), ev->Get()->GetOutcome());
     // A cohort close may have raised the rate, so re-evaluate eligibility.
     ScheduleDrainEligible(ctx);
 }

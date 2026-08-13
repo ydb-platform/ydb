@@ -668,3 +668,5 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
+
+{% include [not_allow_for_olap_note](../../../_includes/not_allow_for_olap_note.md) %}

@@ -217,7 +217,7 @@ void TMessageEnricherActor::ProcessQueue() {
 
     auto minOffset = SortedEntries[NextEntryIdx].Offset;
     auto count = 1;
-    LOG_D("Fetching from offset " << minOffset << " count " << count << " from " << TabletId);
+    LOG_D("Fetching from offset", {"minOffset", minOffset}, {"count", count}, {"tabletId", TabletId});
     SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, minOffset, count));
 }
 

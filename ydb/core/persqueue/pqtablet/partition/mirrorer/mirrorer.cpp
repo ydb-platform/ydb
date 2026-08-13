@@ -664,7 +664,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     if (EndOffset != StreamStatus->GetEndOffset() && staleStatus != EStaleReadStatus::AllCommitted) {
         return;
     }
-    LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
+    LOG_I("update write timestamp from original topic", {"streamStatus", StreamStatus->DebugString()});
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicConverter->GetClientsideName());

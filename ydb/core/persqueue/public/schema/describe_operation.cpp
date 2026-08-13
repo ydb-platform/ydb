@@ -53,7 +53,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Bootstrap " << Settings.Path);
+        LOG_D("Bootstrap", {"path", Settings.Path});
         RequestStartTime = TActivationContext::Now();
         Schedule(RequestTimeout, new TEvents::TEvWakeup(RequestTimeoutWakeupTag));
 
@@ -164,7 +164,7 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberActorId = {};
         TopicInfo = std::move(ev->Get()->Topics.begin()->second);
-        LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status);
+        LOG_D("Handle TEvDescribeTopicsResponse", {"status", TopicInfo.Status});
 
         if (TopicInfo.Status != NDescriber::EStatus::SUCCESS) {
             const auto status = [&]() {
@@ -268,7 +268,7 @@ private:
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev) {
         const auto tabletId = ev->Cookie;
-        LOG_D("Handle TEvStatusResponse. TabletId=" << tabletId);
+        LOG_D("Handle TEvStatusResponse", {"tabletId", tabletId});
         if (!TabletsInflight.contains(tabletId)) {
             return;
         }
@@ -284,8 +284,7 @@ private:
             }
         }
         if (doRestart) {
-            LOG_D("StatusResponse requires retry. TabletId=" << tabletId
-                                                             << " parts=" << record.PartResultSize());
+            LOG_D("StatusResponse requires retry", {"tabletId", tabletId}, {"parts", record.PartResultSize()});
             ScheduleStatsRetry(tabletId);
             return;
         }
@@ -350,7 +349,7 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_D("Handle TEvDeliveryProblem. TabletId=" << ev->Get()->TabletId);
+        LOG_D("Handle TEvDeliveryProblem", {"tabletId", ev->Get()->TabletId});
         if (!OnUndelivered(ev)) {
             return;
         }
@@ -373,7 +372,7 @@ private:
             return true;
         }
 
-        LOG_D("Waiting for tablets inflight: " << JoinSeq(", ", TabletsInflight));
+        LOG_D("Waiting for tablets inflight", {"tabletsInflight", JoinSeq(", ", TabletsInflight)});
         return false;
     }
 
@@ -393,7 +392,7 @@ private:
                     partitionIds.push_back(partition.GetPartitionId());
                 }
             }
-            LOG_D("PartitionsLocation " << ReadBalancerTabletId << " partitions " << JoinSeq(", ", partitionIds));
+            LOG_D("PartitionsLocation", {"readBalancerTabletId", ReadBalancerTabletId}, {"partitions", JoinSeq(", ", partitionIds)});
             SendToTablet(
                 ReadBalancerTabletId,
                 new TEvPersQueue::TEvGetPartitionsLocation(partitionIds, remaining));
@@ -401,7 +400,7 @@ private:
         if (!ReadSessionsReceived && Settings.IncludeStats) {
             auto ev = Strategy->CreateReadSessionsInfoRequest();
             if (ev) {
-                LOG_D("ReadSessionsInfo " << ReadBalancerTabletId);
+                LOG_D("ReadSessionsInfo", {"readBalancerTabletId", ReadBalancerTabletId});
                 SendToTablet(ReadBalancerTabletId, ev.release());
             } else {
                 ReadSessionsReceived = true;
@@ -411,7 +410,7 @@ private:
     }
 
     void RequestStats(ui64 tabletId) {
-        LOG_D("Stats " << tabletId);
+        LOG_D("Stats", {"tabletId", tabletId});
         StatsBackoff.try_emplace(tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
         SendToTablet(tabletId, Strategy->CreateStatusRequest().release(), tabletId);
         TabletsInflight.insert(tabletId);
@@ -425,7 +424,7 @@ private:
         auto [it, _] = StatsBackoff.try_emplace(
             tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
         if (!it->second.HasMore()) {
-            LOG_W("Stats retries exceeded for tablet " << tabletId);
+            LOG_W("Stats retries exceeded for tablet", {"tabletId", tabletId});
             StatsRetryPending.erase(tabletId);
             TabletsInflight.erase(tabletId);
             ReplyWithError(
@@ -438,7 +437,7 @@ private:
             return;
         }
         const auto delay = it->second.Next();
-        LOG_D("Stats retry " << tabletId << " " << it->second.GetIteration() << " in " << delay);
+        LOG_D("Stats retry", {"tabletId", tabletId}, {"iteration", it->second.GetIteration()}, {"delay", delay});
         Schedule(delay, new TEvents::TEvWakeup(tabletId));
     }
 
@@ -479,9 +478,7 @@ private:
         }
         BalancerRetryPending = true;
         const auto delay = LocationsBackoff.Next();
-        LOG_D("Balancer retry " << LocationsBackoff.GetIteration() << " in " << delay
-                                << " needLocation=" << !LocationsReceived
-                                << " needSessions=" << !ReadSessionsReceived);
+        LOG_D("Balancer retry", {"iteration", LocationsBackoff.GetIteration()}, {"delay", delay}, {"needLocation", !LocationsReceived}, {"needSessions", !ReadSessionsReceived});
         Schedule(delay, new TEvents::TEvWakeup(BalancerRetryWakeupTag));
     }
 

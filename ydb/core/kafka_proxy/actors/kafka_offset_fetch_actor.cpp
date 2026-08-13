@@ -590,6 +590,12 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
         for (const auto& requestTopic: requestGroup.Topics) {
             TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topic
                                     = GetOffsetResponseForTopic(requestTopic, *requestGroup.GroupId);
+            // Kafka clients treat RESOURCE_NOT_FOUND as fatal on OffsetFetch.
+            for (auto& partition : topic.Partitions) {
+                if (partition.ErrorCode == RESOURCE_NOT_FOUND) {
+                    partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
+                }
+            }
             group.Topics.push_back(topic);
         }
         response->Groups.push_back(group);

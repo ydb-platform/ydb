@@ -2045,7 +2045,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
             }
         }
 
@@ -3441,7 +3441,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
             }
 
             {
@@ -3456,7 +3456,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
             }
 
             {
@@ -3484,12 +3484,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto msg = client.OffsetFetch(request);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[2].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
             }
 
@@ -3507,7 +3507,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
             }
 
             {
@@ -3580,7 +3580,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg1 = client.OffsetFetch(newConsumer3, topicsToPartions1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
 
 
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);

@@ -113,3 +113,27 @@ SELECT
 
 {% endif %}
 
+## INSERT INTO ... RETURNING {insert-into-returning}
+ 
+Используется для вставки строк и одновременного возврата значений из них. Это позволяет получить информацию о вставленных записях за один запрос, избавляя от необходимости выполнять последующий SELECT.
+
+### Примеры
+
+* Возврат всех значений вставленной строки
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES 
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```
+

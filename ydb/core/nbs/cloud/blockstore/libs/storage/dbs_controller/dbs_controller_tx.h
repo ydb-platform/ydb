@@ -17,8 +17,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
     xxx(InitSchema, __VA_ARGS__)                         \
     xxx(LoadState, __VA_ARGS__)                          \
     xxx(UpdateDDiskMap, __VA_ARGS__)                     \
-    xxx(GetPartitionsForNode, __VA_ARGS__)               \
-    xxx(GetNodesForPartition, __VA_ARGS__)
+    xxx(RemoveTabletDDiskMap, __VA_ARGS__)               \
+    xxx(GetPartitionsForNode, __VA_ARGS__)
 
 // BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS
 
@@ -60,7 +60,20 @@ struct TTxDbsController
         const ui64 PartitionTabletId;
         const NProto::TPartitionDDisks DDisks;
 
-        TVector<TDbsControllerDatabase::TRecordKey> TabletRecordsKeys;
+        THashMap<
+            TDbsControllerDatabase::TInverseKey,
+            TVector<TDbsControllerDatabase::TDirectKey>>
+            RelationsToAdd;
+
+        THashMap<
+            TDbsControllerDatabase::TInverseKey,
+            THashSet<TDbsControllerDatabase::TDirectKey>>
+            RelationsToRemove;
+
+        THashMap<
+            TDbsControllerDatabase::TInverseKey,
+            NProto::TDDiskDirectBlockGroups>
+            InverseRecordsPreloaded;
 
         explicit TUpdateDDiskMap(
             NBS::NStorage::TRequestInfoPtr requestInfo,
@@ -73,7 +86,41 @@ struct TTxDbsController
 
         void Clear()
         {
-            TabletRecordsKeys.clear();
+            RelationsToAdd.clear();
+            RelationsToRemove.clear();
+            InverseRecordsPreloaded.clear();
+        }
+    };
+
+    //
+    // RemoveTabletDDiskMap
+    //
+    struct TRemoveTabletDDiskMap
+    {
+        const NBS::NStorage::TRequestInfoPtr RequestInfo;
+
+        const ui64 PartitionTabletId;
+
+        TVector<TDbsControllerDatabase::TDirectKey> DirectKeys;
+        TVector<TDbsControllerDatabase::TInverseKey> InverseKeys;
+
+        THashMap<
+            TDbsControllerDatabase::TInverseKey,
+            NProto::TDDiskDirectBlockGroups>
+            InverseRecordsPreloaded;
+
+        explicit TRemoveTabletDDiskMap(
+            NBS::NStorage::TRequestInfoPtr requestInfo,
+            const ui64 partitionTabletId)
+            : RequestInfo(std::move(requestInfo))
+            , PartitionTabletId(partitionTabletId)
+        {}
+
+        void Clear()
+        {
+            DirectKeys.clear();
+            InverseKeys.clear();
+            InverseRecordsPreloaded.clear();
         }
     };
 
@@ -99,31 +146,6 @@ struct TTxDbsController
         void Clear()
         {
             Tablets.clear();
-        }
-    };
-
-    //
-    // GetNodesForPartition
-    //
-    struct TGetNodesForPartition
-    {
-        const NBS::NStorage::TRequestInfoPtr RequestInfo;
-
-        const ui64 TabletId;
-
-        // Output
-        TVector<ui32> Nodes;
-
-        explicit TGetNodesForPartition(
-            NBS::NStorage::TRequestInfoPtr requestInfo,
-            const ui64 tabletId)
-            : RequestInfo(std::move(requestInfo))
-            , TabletId(tabletId)
-        {}
-
-        void Clear()
-        {
-            Nodes.clear();
         }
     };
 };

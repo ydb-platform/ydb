@@ -5,6 +5,8 @@
 
 namespace NKikimr::NKqp::NExternalDataSource {
 
+constexpr size_t MaxIamSubjectIdSize = 50;
+
 yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation)
@@ -58,26 +60,34 @@ TString NormalizeIamSubject(TString subjectId) {
     return subjectId;
 }
 
-bool IsVerifiedIamDelegationSubject(const NACLib::TUserToken& token) {
-    if (!token.HasAuthType() || token.GetAuthType() != "AccessService" ||
-        NormalizeIamSubject(token.GetUserSID()).empty() ||
-        token.GetOriginalUserToken().empty() || token.GetSerializedToken().empty())
-    {
-        return false;
+std::optional<TIamCallerIdentity> ParseIamCallerIdentity(
+    const NACLib::TUserToken& token)
+{
+    NACLibProto::TUserToken currentToken;
+    if (!currentToken.ParseFromString(token.SerializeAsString()) ||
+        !currentToken.HasAuthType() || currentToken.GetAuthType() != "AccessService" ||
+        currentToken.GetOriginalUserToken().empty() || token.GetSerializedToken().empty()) {
+        return std::nullopt;
     }
 
     NACLibProto::TUserToken serializedToken;
-    return serializedToken.ParseFromString(token.GetSerializedToken()) &&
-        serializedToken.HasAuthType() &&
-        serializedToken.GetAuthType() == token.GetAuthType() &&
-        serializedToken.GetUserSID() == token.GetUserSID() &&
-        serializedToken.GetOriginalUserToken() == token.GetOriginalUserToken();
-}
+    if (!serializedToken.ParseFromString(token.GetSerializedToken()) ||
+        !serializedToken.HasAuthType() ||
+        serializedToken.GetAuthType() != currentToken.GetAuthType() ||
+        serializedToken.GetUserSID() != currentToken.GetUserSID() ||
+        serializedToken.GetOriginalUserToken() != currentToken.GetOriginalUserToken())
+    {
+        return std::nullopt;
+    }
 
-TString GetIamDelegationBearerToken(const NACLib::TUserToken& token) {
-    return IsVerifiedIamDelegationSubject(token)
-        ? token.GetOriginalUserToken()
-        : TString{};
+    TString subjectId = NormalizeIamSubject(serializedToken.GetUserSID());
+    if (subjectId.empty() || subjectId.size() > MaxIamSubjectIdSize) {
+        return std::nullopt;
+    }
+    return TIamCallerIdentity{
+        .BearerToken = serializedToken.GetOriginalUserToken(),
+        .SubjectId = std::move(subjectId),
+    };
 }
 
 TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBuf uniqueId) {

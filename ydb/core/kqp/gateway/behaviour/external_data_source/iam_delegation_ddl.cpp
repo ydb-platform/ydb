@@ -5,7 +5,6 @@
 #include "iam_delegation_ddl_bridge.h"
 
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 
 #include <ydb/library/actors/async/async.h>
@@ -42,19 +41,17 @@ TIamDelegationSettings GetIamDelegationSettings(NActors::TActorSystem* actorSyst
     return settings;
 }
 
-TString GetIamSubject(const NACLib::TUserToken& token) {
-    return NormalizeIamSubject(token.GetUserSID());
+std::optional<TIamCallerIdentity> GetIamCallerIdentity(const TContext& context) {
+    const auto& userToken = context.GetUserToken();
+    return userToken
+        ? ParseIamCallerIdentity(*userToken)
+        : std::nullopt;
 }
 
-TStatus ValidateIamDelegationSubject(const TContext& context) {
-    const auto& userToken = context.GetUserToken();
-    if (!userToken || !IsVerifiedIamDelegationSubject(*userToken))
-    {
-        return TStatus::Fail(
-            NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
-            "IAM delegation requires a verified cloud IAM user token");
-    }
-    return TStatus::Success();
+TStatus InvalidIamCallerIdentityStatus() {
+    return TStatus::Fail(
+        NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
+        "IAM delegation requires a serializable cloud IAM user token");
 }
 
 struct TEvIamDelegationDdl {
@@ -78,72 +75,52 @@ protected:
     {}
 
     NActors::async<TIamDelegationResult> SetupDelegation(
-        const TIamDelegation& delegation)
+        const TIamDelegation& delegation,
+        const TIamCallerIdentity& caller)
     {
-        const auto& userToken = Context.GetUserToken();
-        const TString token = userToken
-            ? GetIamDelegationBearerToken(*userToken)
-            : TString{};
-        if (token.empty()) {
-            co_return TIamDelegationResult{
-                false,
-                "IAM delegation requires the initiating user's IAM bearer token",
-            };
-        }
         EnsureServiceControl();
 
-        const TString subject = GetIamSubject(*Context.GetUserToken());
-
         auto ensure = MakeHolder<NCloud::TEvServiceControl::TEvEnsureEnabledRequest>();
-        ensure->Token = token;
+        ensure->Token = caller.BearerToken;
         ensure->Request = MakeEnsureEnabledRequest(DelegationSettings, delegation);
         this->Send(ServiceControl, ensure.Release(), 0, EnsureCookie);
 
         const auto ensureResponse = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvEnsureEnabledResponse>(EnsureCookie);
         if (auto result = co_await WaitForOperation(
-                *ensureResponse->Get(), "EnsureEnabled", token);
+                *ensureResponse->Get(), "EnsureEnabled", caller);
             !result.Success)
         {
             co_return result;
         }
 
         auto setup = MakeHolder<NCloud::TEvServiceControl::TEvSetupDelegationRequest>();
-        setup->Token = token;
+        setup->Token = caller.BearerToken;
         setup->Request = MakeSetupDelegationRequest(
-            DelegationSettings, delegation, subject);
+            DelegationSettings, delegation, caller.SubjectId);
         this->Send(ServiceControl, setup.Release(), 0, DelegationCookie);
 
         const auto setupResponse = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvSetupDelegationResponse>(DelegationCookie);
         co_return co_await WaitForOperation(
-            *setupResponse->Get(), "SetupDelegation", token);
+            *setupResponse->Get(), "SetupDelegation", caller);
     }
 
     NActors::async<TIamDelegationResult> RevokeDelegation(
-        const TIamDelegation& delegation)
+        const TIamDelegation& delegation,
+        const TIamCallerIdentity& caller)
     {
-        const auto& userToken = Context.GetUserToken();
-        const TString token = userToken
-            ? GetIamDelegationBearerToken(*userToken)
-            : TString{};
-        if (token.empty()) {
-            co_return TIamDelegationResult{
-                false,
-                "IAM delegation requires the initiating user's IAM bearer token",
-            };
-        }
         EnsureServiceControl();
 
         auto revoke = MakeHolder<NCloud::TEvServiceControl::TEvRevokeDelegationRequest>();
-        revoke->Token = token;
+        revoke->Token = caller.BearerToken;
         revoke->Request = MakeRevokeDelegationRequest(DelegationSettings, delegation);
         this->Send(ServiceControl, revoke.Release(), 0, DelegationCookie);
 
         const auto response = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvRevokeDelegationResponse>(DelegationCookie);
         co_return co_await WaitForOperation(
-            *response->Get(), "RevokeDelegation", token);
+            *response->Get(), "RevokeDelegation", caller);
     }
 
     TStatus DelegationStatus(const TIamDelegationResult& result) const {
@@ -194,7 +171,7 @@ private:
     NActors::async<TIamDelegationResult> WaitForOperation(
         const TResponse& response,
         TStringBuf method,
-        const TString& token)
+        const TIamCallerIdentity& caller)
     {
         if (!response.Status.Ok()) {
             co_return TIamDelegationResult{
@@ -218,7 +195,7 @@ private:
             EnsureOperationService();
 
             auto get = MakeHolder<NCloud::TEvServiceControl::TEvGetOperationRequest>();
-            get->Token = token;
+            get->Token = caller.BearerToken;
             // Keep polling the operation id returned by the mutating RPC. A
             // sparse Get response does not change the identity of the
             // accepted operation and must not make us abandon it.
@@ -297,23 +274,21 @@ private:
             co_return;
         }
 
-        AddIamPathVersionPrecondition(
-            SchemeTx, described.SnapshotPathId, described.SnapshotPathVersion);
-
+        std::optional<TIamCallerIdentity> caller;
         if (IsManagedIamDelegation(described.Delegation)) {
-            auto status = ValidateIamDelegationSubject(Context);
-            if (status.IsFail()) {
-                Finish(std::move(status));
+            AddIamPathVersionPrecondition(
+                SchemeTx, described.SnapshotPathId, described.SnapshotPathVersion);
+            caller = GetIamCallerIdentity(Context);
+            if (!caller) {
+                Finish(InvalidIamCallerIdentityStatus());
                 co_return;
             }
         }
 
         const auto schemeStatus = co_await AwaitLegacyDdl(
             ExecuteLegacyDdl(SchemeTx, Context), SelfId());
-        if (!schemeStatus.IsFail() && !described.NotFound &&
-            IsManagedIamDelegation(described.Delegation))
-        {
-            co_await RevokeDelegation(described.Delegation);
+        if (!schemeStatus.IsFail() && !described.NotFound && caller) {
+            co_await RevokeDelegation(described.Delegation, *caller);
         }
         Finish(schemeStatus);
     }
@@ -360,21 +335,21 @@ private:
             co_return;
         }
 
-        AddIamPathVersionPrecondition(
-            SchemeTx, previous.SnapshotPathId, previous.SnapshotPathVersion);
-
+        std::optional<TIamCallerIdentity> caller;
         if (IsManagedIamDelegation(previous.Delegation)) {
-            auto status = ValidateIamDelegationSubject(Context);
-            if (status.IsFail()) {
-                Finish(std::move(status));
+            AddIamPathVersionPrecondition(
+                SchemeTx, previous.SnapshotPathId, previous.SnapshotPathVersion);
+            caller = GetIamCallerIdentity(Context);
+            if (!caller) {
+                Finish(InvalidIamCallerIdentityStatus());
                 co_return;
             }
         }
 
         const auto schemeStatus = co_await AwaitLegacyDdl(
             ExecuteLegacyDdl(SchemeTx, Context), SelfId());
-        if (!schemeStatus.IsFail() && IsManagedIamDelegation(previous.Delegation)) {
-            co_await RevokeDelegation(previous.Delegation);
+        if (!schemeStatus.IsFail() && caller) {
+            co_await RevokeDelegation(previous.Delegation, *caller);
         }
         Finish(schemeStatus);
     }
@@ -424,9 +399,9 @@ private:
                 "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
             co_return;
         }
-        auto status = ValidateIamDelegationSubject(Context);
-        if (status.IsFail()) {
-            Finish(std::move(status));
+        auto caller = GetIamCallerIdentity(Context);
+        if (!caller) {
+            Finish(InvalidIamCallerIdentityStatus());
             co_return;
         }
         if (SchemeTx.GetCreateExternalDataSource().GetSourceType() !=
@@ -478,7 +453,7 @@ private:
             .ServiceAccountId = iam.GetServiceAccountId(),
             .ReferrerId = iam.GetDelegationReferrerId(),
         };
-        const auto setup = co_await SetupDelegation(staged);
+        const auto setup = co_await SetupDelegation(staged, *caller);
         if (!setup.Success) {
             Finish(DelegationStatus(setup));
             co_return;
@@ -491,9 +466,9 @@ private:
             previous.Delegation,
             staged);
         if (cleanup == EDelegationCleanup::Staged) {
-            co_await RevokeDelegation(staged);
+            co_await RevokeDelegation(staged, *caller);
         } else if (cleanup == EDelegationCleanup::Previous) {
-            co_await RevokeDelegation(previous.Delegation);
+            co_await RevokeDelegation(previous.Delegation, *caller);
         }
         Finish(std::move(schemeStatus));
     }

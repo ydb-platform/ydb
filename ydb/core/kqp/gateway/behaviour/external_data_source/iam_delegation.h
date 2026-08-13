@@ -7,6 +7,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp::NExternalDataSource {
 
 struct TIamDelegationSettings {
@@ -28,6 +30,11 @@ struct TIamDelegation {
 struct TIamDelegationResult {
     bool Success = false;
     TString Error;
+};
+
+struct TIamCallerIdentity {
+    TString BearerToken;
+    TString SubjectId;
 };
 
 enum class EDelegationCleanup {
@@ -56,8 +63,8 @@ yandex::cloud::priv::iam::v1::RevokeDelegationRequest MakeRevokeDelegationReques
     const TIamDelegation& delegation);
 
 TString NormalizeIamSubject(TString subjectId);
-bool IsVerifiedIamDelegationSubject(const NACLib::TUserToken& token);
-TString GetIamDelegationBearerToken(const NACLib::TUserToken& token);
+std::optional<TIamCallerIdentity> ParseIamCallerIdentity(
+    const NACLib::TUserToken& token);
 TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBuf uniqueId);
 EIamOperationState ClassifyIamOperation(
     const ydb::yc::priv::operation::Operation& operation);

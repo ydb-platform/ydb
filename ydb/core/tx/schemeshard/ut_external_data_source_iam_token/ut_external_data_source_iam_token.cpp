@@ -240,9 +240,12 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
         UNIT_ASSERT_C(!capturedSerializedToken.empty(),
             "no user token on the modify-scheme event at schemeshard");
 
-        NACLib::TUserToken parsed(capturedSerializedToken);   // same as schemeshard ParseUserToken
-        UNIT_ASSERT_VALUES_EQUAL(parsed.GetUserSID(), "user1@as");
-        UNIT_ASSERT_VALUES_EQUAL_C(parsed.GetOriginalUserToken(), iamToken,
+        NACLibProto::TUserToken transportedToken;
+        UNIT_ASSERT_C(transportedToken.ParseFromString(capturedSerializedToken),
+            "the user token at schemeshard must be deserializable");
+        UNIT_ASSERT_VALUES_EQUAL(transportedToken.GetAuthType(), "AccessService");
+        UNIT_ASSERT_VALUES_EQUAL(transportedToken.GetUserSID(), "user1@as");
+        UNIT_ASSERT_VALUES_EQUAL_C(transportedToken.GetOriginalUserToken(), iamToken,
             "the raw IAM token must be present in the TUserToken at the schemeshard operation");
 
         runCall([&] { driver.Stop(true); return true; });

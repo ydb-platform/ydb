@@ -86,17 +86,19 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(NormalizeIamSubject("user-id@as@as"), "user-id@as");
     }
 
-    Y_UNIT_TEST(VerifiedSubjectRequiresAndReturnsUserBearerToken) {
+    Y_UNIT_TEST(CallerIdentityRequiresSerializableUserToken) {
         NACLib::TUserToken accessServiceUser({
             .OriginalUserToken = "user-iam-token",
             .UserSID = "user-id@as",
             .AuthType = "AccessService",
         });
-        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(accessServiceUser));
+        UNIT_ASSERT(!ParseIamCallerIdentity(accessServiceUser));
+
         accessServiceUser.SaveSerializationInfo();
-        UNIT_ASSERT(IsVerifiedIamDelegationSubject(accessServiceUser));
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetIamDelegationBearerToken(accessServiceUser), "user-iam-token");
+        const auto identity = ParseIamCallerIdentity(accessServiceUser);
+        UNIT_ASSERT(identity);
+        UNIT_ASSERT_VALUES_EQUAL(identity->BearerToken, "user-iam-token");
+        UNIT_ASSERT_VALUES_EQUAL(identity->SubjectId, "user-id");
 
         NACLibProto::TUserToken deserializedToken;
         UNIT_ASSERT(deserializedToken.ParseFromString(
@@ -104,14 +106,25 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(
             deserializedToken.GetOriginalUserToken(), "user-iam-token");
         UNIT_ASSERT_VALUES_EQUAL(deserializedToken.GetUserSID(), "user-id@as");
+        UNIT_ASSERT_VALUES_EQUAL(deserializedToken.GetAuthType(), "AccessService");
 
+        const NACLib::TUserToken transportedUser(
+            accessServiceUser.GetSerializedToken());
+        const auto transportedIdentity = ParseIamCallerIdentity(transportedUser);
+        UNIT_ASSERT(transportedIdentity);
+        UNIT_ASSERT_VALUES_EQUAL(
+            transportedIdentity->BearerToken, identity->BearerToken);
+        UNIT_ASSERT_VALUES_EQUAL(
+            transportedIdentity->SubjectId, identity->SubjectId);
+    }
+
+    Y_UNIT_TEST(CallerIdentityRejectsIncompleteOrNonIamToken) {
         NACLib::TUserToken missingBearer({
             .UserSID = "user-id@as",
             .AuthType = "AccessService",
         });
         missingBearer.SaveSerializationInfo();
-        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingBearer));
-        UNIT_ASSERT(GetIamDelegationBearerToken(missingBearer).empty());
+        UNIT_ASSERT(!ParseIamCallerIdentity(missingBearer));
 
         NACLib::TUserToken loginUser({
             .OriginalUserToken = "user-iam-token",
@@ -119,14 +132,34 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
             .AuthType = "Login",
         });
         loginUser.SaveSerializationInfo();
-        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(loginUser));
+        UNIT_ASSERT(!ParseIamCallerIdentity(loginUser));
 
         NACLib::TUserToken missingSubject({
             .OriginalUserToken = "user-iam-token",
             .AuthType = "AccessService",
         });
         missingSubject.SaveSerializationInfo();
-        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingSubject));
+        UNIT_ASSERT(!ParseIamCallerIdentity(missingSubject));
+    }
+
+    Y_UNIT_TEST(CallerIdentityEnforcesIamSubjectLimit) {
+        NACLib::TUserToken longestAllowed({
+            .OriginalUserToken = "user-iam-token",
+            .UserSID = TString(50, 'a') + "@as",
+            .AuthType = "AccessService",
+        });
+        longestAllowed.SaveSerializationInfo();
+        const auto identity = ParseIamCallerIdentity(longestAllowed);
+        UNIT_ASSERT(identity);
+        UNIT_ASSERT_VALUES_EQUAL(identity->SubjectId.size(), 50);
+
+        NACLib::TUserToken tooLong({
+            .OriginalUserToken = "user-iam-token",
+            .UserSID = TString(51, 'a') + "@as",
+            .AuthType = "AccessService",
+        });
+        tooLong.SaveSerializationInfo();
+        UNIT_ASSERT(!ParseIamCallerIdentity(tooLong));
     }
 
     Y_UNIT_TEST(UnfinishedIamOperationMustBePolled) {

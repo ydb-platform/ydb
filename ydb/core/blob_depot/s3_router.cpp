@@ -304,17 +304,20 @@ namespace NKikimr::NBlobDepot {
 
                 TVector<ui64> latencies;
                 TakeLatencies(Stats.BalancerRoute, latencies);
-                for (const ui64 latencyMs : latencies) {
+                for (auto&& latencyMs : latencies) {
                     record.AddBalancerLatencyMs(latencyMs);
                 }
+
                 TakeLatencies(Stats.NonBalancerRoute, latencies);
-                for (const ui64 latencyMs : latencies) {
+                for (auto&& latencyMs : latencies) {
                     record.AddNonBalancerLatencyMs(latencyMs);
                 }
+
                 with_lock (Stats.BalancerResolveLatencyLock) {
                     latencies.swap(Stats.BalancerResolveLatencyMs);
                 }
-                for (const ui64 latencyMs : latencies) {
+
+                for (auto&& latencyMs : latencies) {
                     record.AddBalancerResolveLatencyMs(latencyMs);
                 }
 

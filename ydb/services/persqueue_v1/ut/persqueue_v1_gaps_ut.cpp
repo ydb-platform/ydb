@@ -469,11 +469,12 @@ Y_UNIT_TEST(StreamWriteRejectsEmptyAndMissingDatabase) {
     server.AnnoyingClient->GrantConnect("root@builtin");
     auto stub = MakeTopicStub(server);
 
-    Sleep(TDuration::Seconds(1));
-
     for (const auto& database : {TMaybe<TString>(TString()), TMaybe<TString>()}) {
+        // Rejection happens on stream accept (before any client message) via WriteAndFinish(BAD_REQUEST).
+        // Do not Write first: that races with server finish and can return false flakily.
         auto session = TStreamWriteSession::Open(*stub, database, /*withAuthTicket=*/true);
-        auto resp = InitStreamWrite(*session->Stream, TString(DefaultTopicShortName), "producer-empty-db");
+        Ydb::Topic::StreamWriteMessage::FromServer resp;
+        UNIT_ASSERT_C(session->Stream->Read(&resp), "expected BAD_REQUEST on accept");
         UNIT_ASSERT_VALUES_EQUAL_C(resp.status(), Ydb::StatusIds::BAD_REQUEST, resp);
     }
 }
@@ -484,13 +485,10 @@ Y_UNIT_TEST(StreamReadRejectsEmptyAndMissingDatabase) {
     auto stub = MakeTopicStub(server);
 
     for (const auto& database : {TMaybe<TString>(TString()), TMaybe<TString>()}) {
+        // Same as StreamWrite: empty/missing database is rejected on accept.
         auto session = TStreamReadSession::Open(*stub, database, /*withAuthTicket=*/true);
-        auto resp = InitStreamRead(
-            *session->Stream,
-            TString(DefaultTopicShortName),
-            TString(DefaultConsumer),
-            /*autoPartitioningSupport=*/false,
-            /*partitionIds=*/{0});
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+        UNIT_ASSERT_C(session->Stream->Read(&resp), "expected BAD_REQUEST on accept");
         UNIT_ASSERT_VALUES_EQUAL_C(resp.status(), Ydb::StatusIds::BAD_REQUEST, resp);
     }
 }

@@ -35,6 +35,7 @@ struct TStorageOptions
     bool DiscardEnabled = false;
     ui32 MaxZeroBlocksSubRequestSize = 0;
     ui32 OptimalIoSize = 0;
+    ui32 Generation = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

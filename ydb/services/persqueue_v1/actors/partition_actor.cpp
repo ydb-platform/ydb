@@ -1,6 +1,7 @@
 #include "partition_actor.h"
 #include "persqueue_utils.h"
 #include "fill_batched_data_offset.h"
+#include "fill_batched_data.h"
 
 #include <limits>
 #include <ydb/core/persqueue/common/actor.h>
@@ -532,7 +533,7 @@ template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
+        const NPersQueue::TTopicConverterPtr& topic) {
     constexpr EProtocol Protocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch> ? EProtocol::PQv1 : EProtocol::Topic;
     auto* partitionData = data->add_partition_data();
 
@@ -585,7 +586,7 @@ bool FillBatchedData(
         TString sourceId;
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
-                YDB_LOG_ERROR_CTX(ctx, "Read bad sourceId from offset seqNo sourceId",
+                YDB_LOG_ERROR("Read bad sourceId from offset seqNo sourceId",
                     {"partition", Partition},
                     {"offset", r.GetOffset()},
                     {"seqNo", r.GetSeqNo()},
@@ -676,6 +677,18 @@ bool FillBatchedData(
     return hasData;
 }
 
+template bool FillBatchedData<PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch>(
+        PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch* data,
+        const NKikimrClient::TCmdReadResult& res,
+        const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
+        const NPersQueue::TTopicConverterPtr& topic);
+
+template bool FillBatchedData<Topic::StreamReadMessage::ReadResponse>(
+        Topic::StreamReadMessage::ReadResponse* data,
+        const NKikimrClient::TCmdReadResult& res,
+        const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
+        const NPersQueue::TTopicConverterPtr& topic);
+
 void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
     NotCommitedToFinishParents.erase(ev->Get()->ParentPartitionId);
     MakeCommit(ctx);
@@ -756,7 +769,30 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
         case EDirectReadRestoreStage::Prepare:
             PARTITION_ENSURE(RestoredDirectReadId != 0)
                 ("restored_direct_read_id", RestoredDirectReadId);
-            if (!result.HasCmdPrepareReadResult() || DirectReadsToRestore.empty() || DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
+            // Late/duplicate non-Prepare is possible after nested pipe restart — soft-ignore.
+            if (!result.HasCmdPrepareReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PrepareReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Prepare is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToRestore.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Prepare with empty DirectReadsToRestore",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"response_cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
+                CloseSessionAndDie(
+                    TStringBuilder() << "direct read restore Prepare with empty DirectReadsToRestore"
+                        << ", session=" << Session
+                        << ", session_cookie=" << Cookie,
+                    PersQueue::ErrorCode::ERROR, ctx);
+                return;
+            }
+            if (DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PrepareReadResult, got",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},
@@ -780,24 +816,77 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             PARTITION_ENSURE(RestoredDirectReadId != 0)
                 ("restored_direct_read_id", RestoredDirectReadId);
 
-            PARTITION_ENSURE(result.HasCmdPublishReadResult())
-                ("result", result.ShortDebugString());
-            PARTITION_ENSURE(*DirectReadsToPublish.begin() == result.GetCmdPublishReadResult().GetDirectReadId())
-                ("expected_direct_read_id", *DirectReadsToPublish.begin())
-                ("got_direct_read_id", result.GetCmdPublishReadResult().GetDirectReadId());
+            // Late/duplicate Prepare (or other non-Publish) is possible after nested pipe restart:
+            // restore may re-send Prepare for the same id while a previous Prepare is still delivered
+            // after we have already moved to Publish. Soft-ignore like Prepare stage.
+            if (!result.HasCmdPublishReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PublishReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Publish is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToPublish.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Publish with empty DirectReadsToPublish",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"response_cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
+                CloseSessionAndDie(
+                    TStringBuilder() << "direct read restore Publish with empty DirectReadsToPublish"
+                        << ", session=" << Session
+                        << ", session_cookie=" << Cookie,
+                    PersQueue::ErrorCode::ERROR, ctx);
+                return;
+            }
+            if (*DirectReadsToPublish.begin() != result.GetCmdPublishReadResult().GetDirectReadId()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PublishReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
             DirectReadsToPublish.erase(DirectReadsToPublish.begin());
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
             }
             return;
         case EDirectReadRestoreStage::Forget:
-            PARTITION_ENSURE(RestoredDirectReadId != 0)
-                ("restored_direct_read_id", RestoredDirectReadId);
-            PARTITION_ENSURE(result.HasCmdForgetReadResult())
-                ("result", result.ShortDebugString());
-            PARTITION_ENSURE(*DirectReadsToForget.begin() == result.GetCmdForgetReadResult().GetDirectReadId())
-                ("expected_direct_read_id", *DirectReadsToForget.begin())
-                ("got_direct_read_id", result.GetCmdForgetReadResult().GetDirectReadId());
+            // RestoredDirectReadId may be 0: forget-first after nested pipe restart does not
+            // assign it (see SendNextRestorePrepareOrForget), while DirectReadsToForget is kept.
+            // Late Prepare/Publish (or other non-Forget / wrong id) is possible after nested pipe
+            // restart — soft-ignore like Prepare/Publish stages.
+            if (!result.HasCmdForgetReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect ForgetReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Forget is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToForget.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Forget with empty DirectReadsToForget",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"response_cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
+                CloseSessionAndDie(
+                    TStringBuilder() << "direct read restore Forget with empty DirectReadsToForget"
+                        << ", session=" << Session
+                        << ", session_cookie=" << Cookie,
+                    PersQueue::ErrorCode::ERROR, ctx);
+                return;
+            }
+            if (*DirectReadsToForget.begin() != result.GetCmdForgetReadResult().GetDirectReadId()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect ForgetReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
             DirectReadsToForget.erase(DirectReadsToForget.begin());
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
@@ -811,11 +900,28 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         ("direct_read_restore_stage", static_cast<int>(DirectReadRestoreStage));
 
     PARTITION_ENSURE(DirectRead);
+    if (!PipeClient)
+        return; // Pipe was already destroyed, direct read session is being restored. Will resend this request afterwards;
+
+    // Duplicate/stale Prepare is possible after pipe restart: ResendRecentRequests may
+    // re-send CurrentRequest while a previous CmdPrepareReadResult is still delivered.
+    // First response clears RequestInfly (and Publish may already advance DirectReadId).
+    // Check !RequestInfly before DirectReadId ENSURE: a post-Publish duplicate for the old
+    // id is normally dropped earlier by cookie!=ReadOffset, but if it still reaches here
+    // we must soft-ignore instead of PARTITION_ENSURE(DirectReadId).
+    if (!RequestInfly) {
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited prepare-response for direct read id",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"directReadId", res.GetDirectReadId()},
+            {"readOffset", ReadOffset},
+            {"readGuid", ReadGuid});
+        return;
+    }
+
     PARTITION_ENSURE(res.GetDirectReadId() == DirectReadId)
         ("got_direct_read_id", res.GetDirectReadId())
         ("direct_read_id", DirectReadId);
-    if (!PipeClient)
-        return; // Pipe was already destroyed, direct read session is being restored. Will resend this request afterwards;
 
     EndOffset = res.GetEndOffset();
     SizeLag = res.GetSizeLag();
@@ -835,8 +941,6 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         {"directReadId", DirectReadId});
 
     SendPublishDirectRead(DirectReadId, ctx);
-
-    PARTITION_ENSURE(RequestInfly);
 
     CurrentRequest.Clear();
     RequestInfly = false;
@@ -911,11 +1015,11 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     if (Protocol == EProtocol::PQv1) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
         hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
-            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic);
     } else {
         StreamReadMessage::ReadResponse* data = response.mutable_read_response();
         hasData = FillBatchedData<StreamReadMessage::ReadResponse>(
-            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
@@ -1839,13 +1943,19 @@ void TPartitionActor::Die(const TActorContext& ctx) {
     TActorBootstrapped<TPartitionActor>::Die(ctx);
 }
 
+void TPartitionActor::CloseSessionAndDie(const TString& reason, PersQueue::ErrorCode::ErrorCode code,
+                                         const TActorContext& ctx) {
+    ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(reason, code));
+    Die(ctx);
+}
+
 bool TPartitionActor::OnUnhandledException(const std::exception& exc) {
     NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "[" << Session <<"][" << Partition << "] ", exc);
 
-    ActorContext().Send(ParentId, new TEvPQProxy::TEvCloseSession(
-        TStringBuilder() << "unexpected error: " << exc.what(), PersQueue::ErrorCode::ERROR));
-
-    this->Die(ActorContext());
+    CloseSessionAndDie(
+        TStringBuilder() << "unexpected error: " << exc.what(),
+        PersQueue::ErrorCode::ERROR,
+        ActorContext());
 
     return true;
 }

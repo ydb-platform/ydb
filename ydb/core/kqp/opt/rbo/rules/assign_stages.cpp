@@ -233,7 +233,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         TKqpStreamLookupSettings settings;
         NYql::TExprNode::TPtr inputTypeNode;
         if (lookup->IsJoin()) {
-            settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+            settings.Strategy = lookup->JoinKind == "LeftSemi" ? EStreamLookupStrategyType::LookupSemiJoinRows : EStreamLookupStrategyType::LookupJoinRows;
             // For point prefix lookup we allow null keys with it size.
             settings.AllowNullKeysPrefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
         } else {

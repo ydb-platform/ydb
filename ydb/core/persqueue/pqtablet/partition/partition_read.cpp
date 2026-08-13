@@ -875,13 +875,12 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
-    auto replyTo = ReplyTo(read->Cookie, read->ReplyTo);
-
+    // Pass unresolved read->ReplyTo: ReplyError uses !!replyTo as IsInternal (see TEvRead::IsInternal).
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0",
-                   replyTo);
+                   read->ReplyTo);
         return;
     }
     if (read->Offset < GetStartOffset() && !read->IsInternal()) {
@@ -901,7 +900,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
             "client requested not from first part, and this part is lost",
-            replyTo);
+            read->ReplyTo);
         return;
       }
     }
@@ -918,7 +917,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
                                       read->Offset << ", " << read->PartNo << " EndOffset " << GetEndOffset(),
-                                      replyTo);
+                                      read->ReplyTo);
         return;
     }
 
@@ -931,7 +930,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
+                TStringBuilder() << "no such session '" << read->SessionId << "'", read->ReplyTo);
             return;
         }
     }
@@ -1015,7 +1014,8 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     if (offset > GetEndOffset()) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->Cookie, read->ReplyTo));
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(),
+            read->ReplyTo);
         return;
     }
 

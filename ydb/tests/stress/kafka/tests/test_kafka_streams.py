@@ -18,7 +18,10 @@ class TestYdbTopicWorkload(StressFixture):
             "enable_topic_compactification_by_key",
         ]
         if request.node.name == "test_batched_source":
-            extra_feature_flags.append("enable_topic_messages_batching")
+            extra_feature_flags.extend([
+                "enable_topic_write_offset_delta_in_keys",
+                "enable_topic_messages_batching",
+            ])
         yield from self.setup_cluster(
             kafka_api_port=self.kafka_api_port,
             extra_feature_flags=extra_feature_flags,

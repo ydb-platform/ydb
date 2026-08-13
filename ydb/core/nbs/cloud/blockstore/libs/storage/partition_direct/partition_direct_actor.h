@@ -16,6 +16,7 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/bscontroller/types.h>

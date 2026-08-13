@@ -12,6 +12,7 @@ SRCS(
 
 
 PEERDIR(
+    ydb/core/base
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/public/counters

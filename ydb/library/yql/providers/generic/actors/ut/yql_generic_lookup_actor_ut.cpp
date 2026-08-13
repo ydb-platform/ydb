@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         loggerConfig.set_allcomponentslevel(::NYql::NProto::TLoggingConfig_ELevel::TLoggingConfig_ELevel_TRACE);
         NYql::NLog::InitLogger(loggerConfig, false);
 
-        TTestActorRuntimeBase runtime(1, 1, true);
+        TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto edge = runtime.AllocateEdgeActor();
 

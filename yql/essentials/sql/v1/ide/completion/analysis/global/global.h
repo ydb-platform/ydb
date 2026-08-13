@@ -53,13 +53,12 @@ struct TGlobalContext {
     TMaybe<TColumnContext> Column;
 };
 
-// TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
 class IGlobalAnalysis {
 public:
     using TPtr = THolder<IGlobalAnalysis>;
 
     virtual ~IGlobalAnalysis() = default;
-    virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) = 0;
+    virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const = 0;
 };
 
 IGlobalAnalysis::TPtr MakeGlobalAnalysis();

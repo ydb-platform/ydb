@@ -298,7 +298,8 @@ namespace TEvKeyValue {
             REPEAT,
             CHECK_TRASH,
             WAIT_FOR_GC,
-            FINISH,
+            SUCCESS,
+            ERROR,
         };
         EResult Result;
         const TLogoBlobID BlobId;
@@ -334,8 +335,12 @@ namespace TEvKeyValue {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::WAIT_FOR_GC);
         }
 
-        static std::unique_ptr<TEvAdvanceMoveDataResult> Finish() {
-            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::FINISH);
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Success() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::SUCCESS);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Error() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::ERROR);
         }
     };
 

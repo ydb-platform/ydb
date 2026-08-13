@@ -7,6 +7,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+NProto::TError MakeWriteClientDestroyedError()
+{
+    return MakeError(E_REJECTED, "WriteClient destroyed");
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TWriteRequestBundle::TWriteRequestBundle(
     NActors::TActorSystem* const actorSystem,
     IWriteClientWeakPtr writeClient,
@@ -44,8 +55,8 @@ void TWriteRequestBundle::Reply(
                 .RequestedWrites = requestedWrites,
                 .CompletedWrites = completedWrites});
     } else {
-        SendFinalReply(
-            TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+        SendFinalReply(TWriteBlocksLocalResponse{
+            .Error = MakeWriteClientDestroyedError()});
     }
 }
 

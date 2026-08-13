@@ -683,6 +683,9 @@ protected:
         for (const auto& groupId : ev->Get()->Record.GetGroups()) {
             moveDataGroups.insert(groupId);
         }
+        if (!ValidateMoveDataGroups(moveDataGroups, ev->Sender)) {
+            return;
+        }
         State.StartMoveData(std::move(moveDataGroups), ev->Sender);
         Execute(new TTxAdvanceMoveData(this));
     }
@@ -724,6 +727,13 @@ protected:
                 Send(SelfId(), new TEvKeyValue::TEvCheckTrash);
                 break;
 
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::ERROR:
+                YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::ERROR",
+                    {"keyValue", TabletID()});
+                Become(&TThis::StateBroken);
+                Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
+                break;
+
             default:
                 Y_ABORT();
         }
@@ -757,11 +767,18 @@ protected:
                     {"keyValue", TabletID()});
                 break;
 
-            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::FINISH:
-                YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::FINISH",
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::SUCCESS:
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::SUCCESS",
                     {"keyValue", TabletID()});
                 // now proceed with basic executor
                 Executor()->StartMoveDataVacuumFromOwner();
+                break;
+
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::ERROR:
+                YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::ERROR",
+                    {"keyValue", TabletID()});
+                Become(&TThis::StateBroken);
+                Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
                 break;
 
             default:
@@ -824,16 +841,20 @@ public:
 
         State.FinishMoveData(ctx);
 
-        if (!MoveDataRequestsQueue.empty()) {
+        while (!MoveDataRequestsQueue.empty()) {
             TEvTablet::TEvMoveData::TPtr ev = MoveDataRequestsQueue.front();
             TSet<ui32> moveDataGroups;
             for (const auto& groupId : ev->Get()->Record.GetGroups()) {
                 moveDataGroups.insert(groupId);
             }
-            State.StartMoveData(std::move(moveDataGroups), ev->Sender);
+            auto sender = ev->Sender;
             MoveDataRequestsQueue.pop_front();
-
+            if (!ValidateMoveDataGroups(moveDataGroups, sender)) {
+                continue;
+            }
+            State.StartMoveData(std::move(moveDataGroups), sender);
             Execute(new TTxAdvanceMoveData(this));
+            break;
         }
     }
 
@@ -926,6 +947,25 @@ public:
     }
 
     bool ReassignChannelsEnabled() const override {
+        return true;
+    }
+
+    bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const {
+        ui32 channelId = 0;
+        for (const auto& channel : Info()->Channels) {
+            if (moveDataGroups.contains(channel.LatestEntry()->GroupID)) {
+                TString errorReason = TStringBuilder()
+                    << "Group " << channel.LatestEntry()->GroupID
+                    << " is in latest history entry in channel " << channelId
+                    << " for tablet " << TabletID();
+                Send(sender, new TEvTablet::TEvMoveDataResponse(
+                    TabletID(),
+                    NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
+                    errorReason));
+                return false;
+            }
+            ++channelId;
+        }
         return true;
     }
 };

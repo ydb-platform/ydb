@@ -123,6 +123,7 @@
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
@@ -1156,6 +1157,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::BlobDepot] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData.UserPoolId,
+                TMailboxType::ReadAsFilled, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::TestShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NKikimr::NTestShard::CreateTestShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -1274,12 +1279,12 @@ namespace Tests {
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), appData.Counters);
+            auto* actor = NConveyor::CreateService<NConveyor::TScanConveyorPolicy>(NConveyor::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
+            auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

@@ -97,6 +97,10 @@ Builds the documentation and starts a local HTTP server to preview the results.
 
 Press `Ctrl+C` to stop the server.
 
+## LLM indexes (`llms.txt`)
+
+Diplodoc generates per-locale indexes (`/docs/{en|ru}/llms.txt` and `llms-full.txt`). The hub [`llms.txt`](./llms.txt) links agents to those indexes for the **default stable** (no `?version=`; currently `v26.1`), the **`main` trunk**, and each **stable** (`?version=vX.Y`). Keep the stable list in the hub up to date when new release lines appear.
+
 ## File Structure
 
 The documentation source files are organized as Markdown files with YAML configuration, following the Diplodoc documentation format. The built documentation includes both English (`en`) and Russian (`ru`) versions.

@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "storage.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/public.h>
 
@@ -9,11 +11,19 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IStoragePtr CreateDurableStorageWrapper(
+struct IDurableStorage: public IStorage
+{
+    virtual void RestartRequests(ui32 generation) = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+IDurableStoragePtr CreateDurableStorageWrapper(
     ILoggingServicePtr logging,
     IStoragePtr storage,
     ITimerPtr timer,
-    ISchedulerPtr scheduler);
+    ISchedulerPtr scheduler,
+    ui32 generation);
 
 ////////////////////////////////////////////////////////////////////////////////
 

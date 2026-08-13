@@ -11,6 +11,7 @@ TEST_SRCS(
     test_catalog_annotations.py
     test_guard_invariants.py
     test_orchestrator_api.py
+    test_metrics.py
 )
 
 PEERDIR(

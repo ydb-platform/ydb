@@ -29,7 +29,8 @@ struct TTestEnvironment
     std::shared_ptr<TTestStorage> Storage;
     std::shared_ptr<TTestScheduler> Scheduler;
     std::shared_ptr<TTestTimer> Timer;
-    IStoragePtr Wrapper;
+    ui32 Generation = 1;
+    IDurableStoragePtr Wrapper;
 
     // Deferred promises returned by the underlying storage for every attempt.
     TDeque<TPromise<TReadBlocksLocalResponse>> ReadPromises;
@@ -52,7 +53,8 @@ struct TTestEnvironment
             std::move(logging),
             Storage,
             Timer,
-            Scheduler);
+            Scheduler,
+            Generation);
 
         Storage->ReadBlocksLocalHandler =
             [&](TCallContextPtr callContext,
@@ -370,6 +372,172 @@ Y_UNIT_TEST_SUITE(TDurableStorageWrapperTest)
         UNIT_ASSERT_VALUES_EQUAL(1, env.Storage->ErrorCount);
         env.Wrapper->ReportIOError();
         UNIT_ASSERT_VALUES_EQUAL(2, env.Storage->ErrorCount);
+    }
+
+    Y_UNIT_TEST(ShouldRestartInflightRequestsWithNewGeneration)
+    {
+        TTestEnvironment env;
+
+        // Two requests are in flight against the underlying storage and none
+        // of them has completed yet.
+        auto future1 = env.Wrapper->ZeroBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeZeroRequest());
+        auto future2 = env.Wrapper->ZeroBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeZeroRequest());
+
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroPromises.size());
+        UNIT_ASSERT(!future1.HasValue());
+        UNIT_ASSERT(!future2.HasValue());
+
+        // Tablet restarts with a newer generation: every inflight request must
+        // be re-issued immediately, without waiting for any backoff.
+        env.Wrapper->RestartRequests(env.Generation + 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(4, env.ZeroCount);
+        UNIT_ASSERT_VALUES_EQUAL(4, env.ZeroPromises.size());
+        UNIT_ASSERT(!future1.HasValue());
+        UNIT_ASSERT(!future2.HasValue());
+
+        // The re-issued (new generation) attempts succeed and complete the
+        // original futures.
+        env.ZeroPromises[2].SetValue(TZeroBlocksLocalResponse());
+        env.ZeroPromises[3].SetValue(TZeroBlocksLocalResponse());
+
+        UNIT_ASSERT(future1.HasValue());
+        UNIT_ASSERT(future2.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            future1.GetValue(WaitTimeout).Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            future2.GetValue(WaitTimeout).Error.GetCode());
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreResponseFromOutdatedGeneration)
+    {
+        TTestEnvironment env;
+
+        auto future = env.Wrapper->ZeroBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeZeroRequest());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, env.ZeroCount);
+        UNIT_ASSERT(!future.HasValue());
+
+        // Tablet restarts, re-issuing the inflight request under a new
+        // generation.
+        env.Wrapper->RestartRequests(env.Generation + 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroPromises.size());
+        UNIT_ASSERT(!future.HasValue());
+
+        // A late success arrives for the original (outdated generation)
+        // attempt. It must be ignored: the request stays inflight waiting for
+        // the new generation response.
+        env.ZeroPromises[0].SetValue(TZeroBlocksLocalResponse());
+        UNIT_ASSERT(!future.HasValue());
+
+        // The response from the current generation actually completes the
+        // request.
+        env.ZeroPromises[1].SetValue(TZeroBlocksLocalResponse());
+        UNIT_ASSERT(future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            future.GetValue(WaitTimeout).Error.GetCode());
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreOutdatedFailureAndNotScheduleRetry)
+    {
+        TTestEnvironment env;
+
+        auto future = env.Wrapper->ZeroBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeZeroRequest());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, env.ZeroCount);
+
+        // Restart under a new generation re-issues the request.
+        env.Wrapper->RestartRequests(env.Generation + 1);
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroCount);
+
+        // A retriable failure arrives for the outdated generation attempt. It
+        // must be dropped without scheduling any additional retry.
+        env.ZeroPromises[0].SetValue(
+            TZeroBlocksLocalResponse{.Error = MakeError(E_REJECTED)});
+        env.Scheduler->RunAllScheduledTasks();
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ZeroCount);
+        UNIT_ASSERT(!future.HasValue());
+
+        // The current generation attempt succeeds and completes the request.
+        env.ZeroPromises[1].SetValue(TZeroBlocksLocalResponse());
+        UNIT_ASSERT(future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            future.GetValue(WaitTimeout).Error.GetCode());
+    }
+
+    Y_UNIT_TEST(ShouldRestartReadAndWriteRequests)
+    {
+        TTestEnvironment env;
+
+        auto readFuture = env.Wrapper->ReadBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeReadRequest());
+        auto writeFuture = env.Wrapper->WriteBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeWriteRequest());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, env.ReadCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, env.WriteCount);
+
+        // Restart must re-issue inflight requests of every operation type.
+        env.Wrapper->RestartRequests(env.Generation + 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, env.ReadCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, env.WriteCount);
+        UNIT_ASSERT(!readFuture.HasValue());
+        UNIT_ASSERT(!writeFuture.HasValue());
+
+        env.ReadPromises.back().SetValue(TReadBlocksLocalResponse());
+        env.WritePromises.back().SetValue(TWriteBlocksLocalResponse());
+
+        UNIT_ASSERT(readFuture.HasValue());
+        UNIT_ASSERT(writeFuture.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            readFuture.GetValue(WaitTimeout).Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            writeFuture.GetValue(WaitTimeout).Error.GetCode());
+    }
+
+    Y_UNIT_TEST(ShouldDoNothingWhenRestartingWithoutInflightRequests)
+    {
+        TTestEnvironment env;
+
+        // No inflight requests: restart is a no-op and no new attempts are
+        // issued against the underlying storage.
+        env.Wrapper->RestartRequests(env.Generation + 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(0, env.ReadCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, env.WriteCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, env.ZeroCount);
+
+        // A request issued after the restart works against the new generation.
+        auto future = env.Wrapper->ZeroBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            env.MakeZeroRequest());
+        UNIT_ASSERT_VALUES_EQUAL(1, env.ZeroCount);
+
+        env.ZeroPromises.back().SetValue(TZeroBlocksLocalResponse());
+        UNIT_ASSERT(future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            future.GetValue(WaitTimeout).Error.GetCode());
     }
 }
 

@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
+    ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper

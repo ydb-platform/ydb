@@ -1,6 +1,8 @@
 #include "impl.h"
 #include "cluster_balancing.h"
 
+#include <ydb/core/util/format.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
 #include <ydb/core/base/mon_auth.h>

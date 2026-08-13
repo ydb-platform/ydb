@@ -11,6 +11,7 @@
 #include "antlr_token.h"
 #include "secret_settings.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 #include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
@@ -331,27 +332,38 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
-            TNodePtr node = YqlSelectOrLegacy(
-                [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(*this, stmt);
-                },
-                [&]() -> TNodePtr {
-                    Ctx_.BodyPart();
+            const auto selectKind = Unpack(stmt.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetRule_select_kind_parenthesis1());
 
-                    TPosition pos;
-                    TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
-                    if (!source) {
-                        return nullptr;
-                    }
+            const auto buildLegacy = [&](const auto& stmt) -> TNodePtr {
+                Ctx_.BodyPart();
 
-                    return BuildSelectResult(
-                        pos,
-                        std::move(source),
-                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
-                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                        Ctx_.Scoped);
-                },
-                Ctx_.TokenPosition(Beginning(stmt)));
+                TPosition pos;
+                TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
+                if (!source) {
+                    return nullptr;
+                }
+
+                return BuildSelectResult(
+                    pos,
+                    std::move(source),
+                    Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                    Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                    Ctx_.Scoped);
+            };
+
+            TNodePtr node;
+            if (IsOnlySelect(stmt) && !selectKind.GetRule_select_kind1().GetBlock2().HasAlt3()) {
+                node = buildLegacy(stmt);
+            } else {
+                node = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        return BuildYqlSelectStatement(*this, stmt);
+                    },
+                    [&]() -> TNodePtr {
+                        return buildLegacy(stmt);
+                    },
+                    Ctx_.TokenPosition(Beginning(stmt)));
+            }
 
             if (!node) {
                 return false;
@@ -2753,6 +2765,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             if (!AlterTableDropStatistics(dropStatistics, params)) {
                 return false;
             }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction26: {
+            // REBUILD INDEX
+            const auto& rebuildRule = node.GetAlt_alter_table_action26().GetRule_alter_table_rebuild_index1();
+
+            if (!AlterTableRebuildIndex(rebuildRule, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3179,6 +3201,21 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
+    }
+
+    return true;
+}
+
+bool TSqlQuery::AlterTableRebuildIndex(const TRule_alter_table_rebuild_index& node, TAlterTableParameters& params) {
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    params.RebuildIndexes.emplace_back(indexName, TIndexDescription::EType::GlobalVectorKmeansTree);
+    auto& index = params.RebuildIndexes.back();
+
+    // Parse optional WITH (settings) clause
+    if (node.HasBlock4()) {
+        if (!FillIndexSettings(node.GetBlock4().GetRule_with_index_settings1(), index.IndexSettings)) {
+            return false;
+        }
     }
 
     return true;
@@ -4286,6 +4323,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         /*isYqlSelectCompatible=*/false),
 
     // bool fields.
+    TABLE_ELEM(
+        "EvaluateExprCache",
+        EvaluateExprCache,
+        /*value=*/true,
+        /*isYqlSelectCompatible=*/true),
     TABLE_ELEM(
         "RefSelect",
         PragmaRefSelect,

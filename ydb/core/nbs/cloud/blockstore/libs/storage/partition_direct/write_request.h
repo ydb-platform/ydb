@@ -69,6 +69,7 @@ private:
     [[nodiscard]] THostMask GetRunningDirectWrites() const;
 
     TString ExtendedDebugState() const;
+    TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* ActorSystem;
     const EWriteMode WriteMode;

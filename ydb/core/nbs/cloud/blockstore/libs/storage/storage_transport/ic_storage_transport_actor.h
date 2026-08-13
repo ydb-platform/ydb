@@ -51,6 +51,9 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvDeleteTabletChunks>>
+        DeleteTabletChunksRequests;
+
     struct TWriteToManyPBuffersReqInfo
     {
         std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
@@ -168,6 +171,16 @@ private:
         const NActors::TActorContext& ctx);
     void HandleListPersistentBufferResult(
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleDeleteTabletChunks(
+        const TEvTransportPrivate::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksUndelivery(
+        const NKikimr::NDDisk::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksResult(
+        const NKikimr::NDDisk::TEvDeleteTabletChunksResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void PassAway() override;

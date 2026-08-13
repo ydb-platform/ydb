@@ -1,5 +1,6 @@
 import array
 import asyncio
+import logging
 import struct
 import sys
 from collections.abc import Callable, Generator, MutableSequence, Sequence
@@ -8,6 +9,8 @@ from typing import Any
 
 from clickhouse_connect.driver.exceptions import DataError, ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.types import Closable
+
+logger = logging.getLogger(__name__)
 
 must_swap = sys.byteorder == "big"
 int_size = array.array("i").itemsize
@@ -175,6 +178,30 @@ def coerce_bool(val: str | bool | None) -> bool:
     if not val:
         return False
     return val is True or (isinstance(val, str) and val.lower() in ("true", "1", "y", "yes"))
+
+
+def version_at_least(server_version: str | None, required_version: str) -> bool:
+    """
+    Determine whether server_version is at least required_version.
+    Non-numeric version parts are ignored so Altinity Stable versions
+    like 22.8.15.25.altinitystable compare correctly.
+    """
+    try:
+        server_parts = [int(x) for x in (server_version or "").split(".") if x.isnumeric()]
+        server_parts.extend([0] * (4 - len(server_parts)))
+        required_parts = [int(x) for x in required_version.split(".")]
+        required_parts.extend([0] * (4 - len(required_parts)))
+    except ValueError:
+        logger.warning(
+            "Server %s or requested version %s does not match format of numbers separated by dots", server_version, required_version
+        )
+        return False
+    for server_part, required_part in zip(server_parts, required_parts):
+        if server_part > required_part:
+            return True
+        if server_part < required_part:
+            return False
+    return True
 
 
 def first_value(column: Sequence, nullable: bool = True):

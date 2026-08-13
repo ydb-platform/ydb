@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 #ifndef MKQL_DISABLE_CODEGEN
 using namespace llvm;
@@ -17,12 +16,12 @@ Value* GenerateUnaryWithoutCheck(Value* arg, const TCodegenContext& ctx, BasicBl
 Value* GenerateUnaryWithCheck(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, TUnaryGenFunc generator);
 
 template<bool CheckLeft, bool CheckRight>
-Value* GenerateBinary(Value* lhs, Value* rhs, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator);
+Value* GenerateBinary(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator);
 
-Value* GenerateAggregate(Value* lhs, Value* rhs, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator);
+Value* GenerateAggregate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator);
 
-Value* GenerateCompareAggregate(Value* lhs, Value* rhs, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator,
-                                CmpInst::Predicate simple);
+Value* GenerateCompareAggregate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator,
+                                CmpInst::Predicate predicate);
 
 template<bool CheckFirst>
 Value* GenerateTernary(Value* first, Value* second, Value* third, const TCodegenContext& ctx, BasicBlock*& block, 
@@ -33,6 +32,4 @@ std::string GetFuncNameForType(const char* name);
 
 #endif
 
-}
-}
-
+} // namespace NKikimr::NMiniKQL

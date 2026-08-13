@@ -9,8 +9,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -18,10 +17,10 @@ class TBlockIfScalarWrapper: public TMutableComputationNode<TBlockIfScalarWrappe
 public:
     class TArrowNode: public IArrowKernelComputationNode {
     public:
-        TArrowNode(const TBlockIfScalarWrapper* parent)
+        explicit TArrowNode(const TBlockIfScalarWrapper* parent)
             : Parent_(parent)
-            , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes))
-            , Kernel_(ConvertToInputTypes(parent->ArgsTypes), ConvertToOutputType(parent->ResultType), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes_))
+            , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ResultType_), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                 *res = parent->CalculateImpl(MakeDatumProvider(batch.values[0]), MakeDatumProvider(batch.values[1]), MakeDatumProvider(batch.values[2]), *ctx->memory_pool());
                 return arrow::Status::OK();
             })
@@ -34,22 +33,22 @@ public:
             return "If";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow::compute::ScalarKernel& GetArrowKernel() const override {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const override {
             return ArgsValuesDescr_;
         }
 
-        const IComputationNode* GetArgument(ui32 index) const {
+        const IComputationNode* GetArgument(ui32 index) const override {
             switch (index) {
                 case 0:
-                    return Parent_->Pred;
+                    return Parent_->Pred_;
                 case 1:
-                    return Parent_->Then;
+                    return Parent_->Then_;
                 case 2:
-                    return Parent_->Else;
+                    return Parent_->Else_;
                 default:
                     throw yexception() << "Bad argument index";
             }
@@ -65,13 +64,13 @@ public:
     TBlockIfScalarWrapper(TComputationMutables& mutables, IComputationNode* pred, IComputationNode* thenNode, IComputationNode* elseNode, TType* resultType,
                           bool thenIsScalar, bool elseIsScalar, const TVector<TType*>& argsTypes)
         : TMutableComputationNode(mutables)
-        , Pred(pred)
-        , Then(thenNode)
-        , Else(elseNode)
-        , ResultType(resultType)
-        , ThenIsScalar(thenIsScalar)
-        , ElseIsScalar(elseIsScalar)
-        , ArgsTypes(argsTypes)
+        , Pred_(pred)
+        , Then_(thenNode)
+        , Else_(elseNode)
+        , ResultType_(resultType)
+        , ThenIsScalar_(thenIsScalar)
+        , ElseIsScalar_(elseIsScalar)
+        , ArgsTypes_(argsTypes)
     {
     }
 
@@ -87,7 +86,7 @@ public:
         const bool predScalarValue = GetPrimitiveScalarValue<bool>(*predValue.scalar());
         auto result = predScalarValue ? thenProv() : elseProv();
 
-        if (ThenIsScalar == ElseIsScalar || (predScalarValue ? !ThenIsScalar : !ElseIsScalar)) {
+        if (ThenIsScalar_ == ElseIsScalar_ || (predScalarValue ? !ThenIsScalar_ : !ElseIsScalar_)) {
             // can return result as-is
             return result;
         }
@@ -98,7 +97,7 @@ public:
         std::shared_ptr<arrow::Scalar> resultScalar = result.scalar();
 
         TVector<std::shared_ptr<arrow::ArrayData>> resultArrays;
-        auto itemType = AS_TYPE(TBlockType, ResultType)->GetItemType();
+        auto itemType = AS_TYPE(TBlockType, ResultType_)->GetItemType();
         ForEachArrayData(otherDatum, [&](const std::shared_ptr<arrow::ArrayData>& otherData) {
             auto chunk = MakeArrayFromScalar(*resultScalar, otherData->length, itemType, memoryPool);
             ForEachArrayData(chunk, [&](const auto& array) {
@@ -109,23 +108,23 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(MakeDatumProvider(Pred, ctx), MakeDatumProvider(Then, ctx), MakeDatumProvider(Else, ctx), ctx.ArrowMemoryPool), ctx.RuntimeSettings.DatumValidation.Get());
+        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(MakeDatumProvider(Pred_, ctx), MakeDatumProvider(Then_, ctx), MakeDatumProvider(Else_, ctx), ctx.ArrowMemoryPool), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Pred);
-        DependsOn(Then);
-        DependsOn(Else);
+        DependsOn(Pred_);
+        DependsOn(Then_);
+        DependsOn(Else_);
     }
 
-    IComputationNode* const Pred;
-    IComputationNode* const Then;
-    IComputationNode* const Else;
-    TType* const ResultType;
-    const bool ThenIsScalar;
-    const bool ElseIsScalar;
-    const TVector<TType*> ArgsTypes;
+    IComputationNode* const Pred_;
+    IComputationNode* const Then_;
+    IComputationNode* const Else_;
+    TType* const ResultType_;
+    const bool ThenIsScalar_;
+    const bool ElseIsScalar_;
+    const TVector<TType*> ArgsTypes_;
 };
 
 template <bool ThenIsScalar, bool ElseIsScalar>
@@ -152,7 +151,7 @@ public:
     };
 
     explicit TIfBlockExec(TType* type)
-        : Type(type)
+        : Type_(type)
     {
     }
 
@@ -187,7 +186,7 @@ public:
         const std::shared_ptr<arrow::ArrayData>& pred = predDatum.array();
 
         const size_t len = pred->length;
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type, *ctx->memory_pool(), len, nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type_, *ctx->memory_pool(), len, /*pgBuilder=*/nullptr);
         const ui8* predValues = pred->GetValues<uint8_t>(1);
         for (size_t i = 0; i < len; ++i) {
             if constexpr (!ThenIsScalar) {
@@ -207,7 +206,7 @@ public:
     }
 
 private:
-    TType* const Type;
+    TType* const Type_;
 };
 
 template <bool ThenIsScalar, bool ElseIsScalar>
@@ -275,5 +274,4 @@ IComputationNode* WrapBlockIf(TCallable& callable, const TComputationNodeFactory
     return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

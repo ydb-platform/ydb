@@ -4,7 +4,11 @@
 #include "group_layout_checker.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/utility.h>
+
+#include <ydb/core/protos/whiteboard_flags.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr::NBsController {
 

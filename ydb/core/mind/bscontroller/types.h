@@ -5,6 +5,13 @@
 #include "scheme.h"
 #include "diff.h"
 
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> // NTabletFlatExecutor
+
+// protobuf forward declarations
+namespace NKikimrBlobStorage::NDDisk {
+    class TDDiskId;
+};
+
 namespace NKikimr::NBsController {
     struct TDDiskId;
     struct TPDiskId;
@@ -183,11 +190,7 @@ namespace NKikimr {
                 , DDiskSlotId(ddiskSlotId)
             {}
 
-            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb)
-                : NodeId(pb.GetNodeId())
-                , PDiskId(pb.GetPDiskId())
-                , DDiskSlotId(pb.GetDDiskSlotId())
-            {}
+            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb);
 
             TDDiskId &operator=(const TDDiskId &other) = default;
 
@@ -203,11 +206,7 @@ namespace NKikimr {
                 return TPDiskId(NodeId, PDiskId);
             }
 
-            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const {
-                pb->SetNodeId(NodeId);
-                pb->SetPDiskId(PDiskId);
-                pb->SetDDiskSlotId(DDiskSlotId);
-            }
+            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const;
 
             friend constexpr std::strong_ordering operator <=>(const TDDiskId& x, const TDDiskId& y) = default;
         };

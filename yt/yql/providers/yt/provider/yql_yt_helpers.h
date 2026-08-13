@@ -127,6 +127,11 @@ NNodes::TYtSectionList RemoveYtQLFilters(NNodes::TYtSectionList sections, TExprC
 
 NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output, bool takeFirstInHybrid = false);
 
+// Column names with the SystemMemberPrefix are reserved for YQL internals (auxiliary sort columns,
+// system columns), so user data must neither expose nor accept them. Returns the first such column of
+// rowType, or Nothing() if there are none or the ban is not yet active for the current language version.
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state);
+
 inline bool IsUnorderedOutput(NNodes::TYtOutput out) {
     return out.Mode() && FromString<EYtSettingType>(out.Mode().Cast().Value()) == EYtSettingType::Unordered;
 }

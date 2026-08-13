@@ -18,7 +18,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "hwy/aligned_allocator.h"  // IsAligned
 #include "hwy/base.h"
+#include "hwy/contrib/sort/vqsort.h"
 #include "hwy/detect_compiler_arch.h"
 
 // clang-format off
@@ -26,14 +28,12 @@
 #define HWY_TARGET_INCLUDE "hwy/contrib/sort/sort_unit_test.cc"  // NOLINT
 // clang-format on
 #include "hwy/foreach_target.h"  // IWYU pragma: keep
-// After foreach_target
-#include "hwy/aligned_allocator.h"  // IsAligned
+#include "hwy/highway.h"
+// After highway.h
 #include "hwy/contrib/sort/algo-inl.h"
 #include "hwy/contrib/sort/result-inl.h"
 #include "hwy/contrib/sort/traits128-inl.h"
 #include "hwy/contrib/sort/vqsort-inl.h"  // BaseCase
-#include "hwy/contrib/sort/vqsort.h"
-#include "hwy/highway.h"
 #include "hwy/print-inl.h"
 #include "hwy/tests/test_util-inl.h"
 
@@ -558,8 +558,8 @@ static void TestAllGenerator() {}
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(SortTest);
 HWY_EXPORT_AND_TEST_P(SortTest, TestAllFloatLargerSmaller);
 HWY_EXPORT_AND_TEST_P(SortTest, TestAllFloatInf);
@@ -568,6 +568,7 @@ HWY_EXPORT_AND_TEST_P(SortTest, TestAllBaseCase);
 HWY_EXPORT_AND_TEST_P(SortTest, TestAllPartition);
 HWY_EXPORT_AND_TEST_P(SortTest, TestAllGenerator);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
+HWY_TEST_MAIN();
 #endif  // HWY_ONCE

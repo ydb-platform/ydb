@@ -24,7 +24,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     : ActorSystem(actorSystem)
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", "MultiRead"}, {"r", request->Headers.Range.Print()}}))
+          {{"t", "MultiRead"}, {"r", request->Headers.Range}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
@@ -39,7 +39,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
 
     auto guard = SgList.Acquire();
     if (!guard) {
-        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        Reply(MakeCanNotAcquireDataError(), 0);
         return;
     }
 
@@ -146,7 +146,7 @@ void TReadMultipleLocationRequestExecutor::Reply(
             "%s SubRequest: %zu, Error: %s",
             LogTitle.GetWithTime().c_str(),
             index,
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,

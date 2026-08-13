@@ -4,7 +4,7 @@ from ymake import Unit, macro
 
 
 @macro
-def BUNDLE(unit: Unit, *args: tuple[str, ...]):
+def BUNDLE(unit: Unit, *args: str):
     """
     @usage BUNDLE(<Dir [SUFFIX Suffix] [NAME Name]>...)
 

@@ -401,6 +401,8 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         {"selfId", ctx.SelfID});
 
     InitControls();
+    VectorIndexHnswCacheMemoryTracker->SetLimit(
+        AppData(ctx)->DataShardConfig.GetVectorIndexHnswCacheMaxSize());
 
     // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once

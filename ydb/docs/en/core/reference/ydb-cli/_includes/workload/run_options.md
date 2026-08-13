@@ -2,8 +2,8 @@
 
 | Name | Description | Default value |
 |---|---|---|
-| `--dry-run` | Do not execute initialization queries, but only display their text. | |
-| `--check-canonical` or `-c` | Use special version of queries (they have deterministic answers) and compare results with canonical ones. | |
+| `--dry-run` | Do not execute initialization queries, but only display their text. |  |
+| `--check-canonical` or `-c` | Use special version of queries (they have deterministic answers) and compare results with canonical ones. |  |
 | `--output <value>` | The name of the file where the query execution results will be saved. | `results.out` |
 | `--iterations <value>` | The number of times each load query will be executed. | `1` |
 | `--json <name>` | The name of the file where query execution statistics will be saved in `json` format. | Not saved by default |
@@ -14,7 +14,7 @@
 | `--retries` | Max retry count for every request. | `0` |
 | `--include` | Names, numbers or ranges of query numbers to be executed as part of the load. Specified as a comma-separated list, e.g.: `1,2,4-6`. | All queries executed |
 | `--exclude` | Names, numbers or ranges of query numbers to be excluded from the load. Specified as a comma-separated list, e.g.: `1,2,4-6`. | None excluded by default |
-| `--verbose` or `-v` | Print additional information to the screen during query execution. | |
+| `--verbose` or `-v` | Print additional information to the screen during query execution. |  |
 | `--global-timeout <value>` | Global timeout for all queries. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds. | Not specified by default. The time is unlimited. |
 | `--request-timeout <value>` | Timeout for each iteration of each query. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds. | Not specified by default. The time is unlimited. |
 | `--threads <value>` or `-t <value>` | The number of parallel threads generating the load. Zero means that queries will be executed in the main thread; otherwise, queries will be mixed. | `0` |

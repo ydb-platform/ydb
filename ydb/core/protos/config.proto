@@ -2183,6 +2183,19 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+        optional uint64 StaticGroupChunkReservePerMille = 8 [(ControlOptions) = {
+            Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 500 }];
+        optional uint64 UseDeviceOverestimationRatioMerged = 9 [(ControlOptions) = {
+            Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
+                          "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
+                          "overestimation metric instead of the legacy PDisk-only computation. "
+                          "Disable to revert to the old (legacy) metric computation without a cluster restart.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TBlobStorageControllerControls {
@@ -3365,6 +3378,8 @@ message TUdfStoreConfig {
     optional string KvStorageMedia = 2 [default = "ssd"];
     optional bool EnableUnsafeNativeUdf = 3 [default = false];
     optional string UnsafeNativeUdfDir = 4;
+    optional bool EnableWasmUdf = 5 [default = false];
+    optional string WasmCpuSpecOverride = 6;
 }
 
 message TAppConfig {
@@ -3421,6 +3436,7 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
+    optional TTracingConfig UserFacingTracingConfig = 123;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;

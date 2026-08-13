@@ -290,6 +290,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     auto eventPtr = ev->Release();
     TString topicName = eventPtr->TopicName;
+    const bool topicExists = eventPtr->Status == NONE_ERROR;
     TopicsToResponses[topicName] = eventPtr;
     bool topicNotCreatedYet = false;
     auto& topicGroupRequests = GroupRequests[topicName];
@@ -304,7 +305,8 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
             }
             TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
             TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
+            if (topicExists &&
+                topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
                 Context->Config.GetAutoCreateConsumersEnable()) {
                 // consumer is not assigned to the topic case
                 TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
@@ -312,7 +314,8 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                                                                         topicName,
                                                                         groupId);
                 break;
-            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
+            } else if (!topicExists &&
+                        topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
                         Context->Config.GetAutoCreateTopicsEnable()) {
                 // topic or partition does not exist case
                 CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
@@ -590,12 +593,6 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
         for (const auto& requestTopic: requestGroup.Topics) {
             TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topic
                                     = GetOffsetResponseForTopic(requestTopic, *requestGroup.GroupId);
-            // Kafka clients treat RESOURCE_NOT_FOUND as fatal on OffsetFetch.
-            for (auto& partition : topic.Partitions) {
-                if (partition.ErrorCode == RESOURCE_NOT_FOUND) {
-                    partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
-                }
-            }
             group.Topics.push_back(topic);
         }
         response->Groups.push_back(group);
@@ -637,14 +634,14 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    partition.ErrorCode = RESOURCE_NOT_FOUND;
+                    partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
                     YDB_LOG_ERROR("Group not found for topic",
                         {LogPrefix()},
                         {"groupId", groupId},
                         {"topicName", topicName});
                 }
             } else {
-                partition.ErrorCode = RESOURCE_NOT_FOUND;
+                partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
                 YDB_LOG_ERROR("Partition not found for topic",
                     {LogPrefix()},
                     {"requestPartition", requestPartition},

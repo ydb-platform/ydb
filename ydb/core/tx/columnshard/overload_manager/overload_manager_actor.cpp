@@ -62,6 +62,8 @@ bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNod
     }
 
     ++OverloadStatusGeneration;
+    // Generation is monotonic within a process and starts at Now().GetValue(), so a restarted OM
+    // supersedes any LastGeneration a remote FCM retained from the previous incarnation.
     for (const ui32 nodeId : CachedNodeIds) {
         Send(NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(nodeId),
             new NFlowControl::TEvNodeOverloadStatus(selfNodeId, status, OverloadStatusGeneration));

@@ -242,11 +242,10 @@ private:
 
     void EnterDelayedReject(const TActorContext& ctx) {
         Become(&TThis::StateDelayedReject);
-        // The FCM derives its reject instant from the client's operation start, so the fallback has
-        // to be anchored the same way. Measured from now it would fire the margin plus whatever the
-        // navigate, split and admit round-trip already spent after the FCM's own timer, and that gap
-        // widens exactly when the cluster is loaded enough for the fallback to matter.
-        const TInstant fallbackAt = StartedAt + Tx.GetOperationTimeout() + DelayedRejectFallbackMargin;
+        // Anchor to the client's absolute Deadline, not to StartedAt: the helper only boots after
+        // navigate/split upstream, so StartedAt + OperationTimeout can land after the client has
+        // already given up. The margin covers a lost FCM TEvCompleted past that cut-off.
+        const TInstant fallbackAt = Tx.GetDeadline() + DelayedRejectFallbackMargin;
         const TInstant now = TActivationContext::Now();
         ctx.Schedule(fallbackAt > now ? fallbackAt - now : TDuration::Zero(),
             new NActors::TEvents::TEvWakeup(WakeupDelayedRejectFallback));
@@ -314,8 +313,19 @@ private:
     void StartWrite(const TActorContext& ctx) {
         // Time already burned in the admit RPC and the wait queue belongs to the client's budget,
         // so the write gets what is left of it rather than a fresh full timeout.
-        const TDuration elapsed = TActivationContext::Now() - StartedAt;
+        const TInstant now = TActivationContext::Now();
+        if (now >= Tx.GetDeadline()) {
+            ReplyOverloaded(ctx, OverloadedMessage);
+            Finish(ctx);
+            return;
+        }
+        const TDuration elapsed = now - StartedAt;
         const TDuration remainingTimeout = Tx.GetOperationTimeout() > elapsed ? Tx.GetOperationTimeout() - elapsed : TDuration::Zero();
+        if (remainingTimeout == TDuration::Zero()) {
+            ReplyOverloaded(ctx, OverloadedMessage);
+            Finish(ctx);
+            return;
+        }
         // forceNoFlowControl stops the write from re-entering flow control here.
         DoLongTxWriteSameMailbox(ctx, Tx.GetReplyTo(), Tx.GetLongTxId(), Tx.GetDedupId(), Tx.GetDatabaseName(), Tx.GetPath(),
             Tx.GetNavigateResult(), Tx.GetBatch(), Tx.GetIssues(), Tx.GetUserCtx(), /*forceNoFlowControl=*/true, Tx.GetDeadline(),

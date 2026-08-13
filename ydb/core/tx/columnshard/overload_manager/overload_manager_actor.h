@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
 
 #include <optional>
@@ -23,7 +24,10 @@ class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {
     TOverloadSubscribers OverloadSubscribers;
     THashSet<ui32> CachedNodeIds;
     THashSet<ui64> CompactionOverloadedTablets;
-    ui64 OverloadStatusGeneration = 0;
+    // Seeded from wall clock at construction so a restarted publisher starts above any generation
+    // a surviving remote FCM may have stored in LastGeneration (N28). A counter that restarted at
+    // zero would be ignored until it caught up — potentially forever for a cool node.
+    ui64 OverloadStatusGeneration = TInstant::Now().GetValue();
     // Last status we successfully pushed to FCMs (not set when push was deferred).
     std::optional<NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus> LastSentStatus;
     bool NeedPublicationFlush = false;

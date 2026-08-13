@@ -193,8 +193,19 @@ public:
         SendToFlowControlManager(new TEvTabletLocationUpdated(tabletId, nodeId));
     }
 
-    void SeedNodeOverloadStatus(ui32 nodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status, ui64 generation = 1) {
+    // Monotonic seed for TEvNodeOverloadStatus. OM now publishes with generations based on
+    // Now().GetValue(), so a hard-coded 1 is treated as stale by FCM's LastGeneration watermark.
+    ui64 LastSeededOverloadGeneration = 0;
+
+    // generation == 0 (default) picks the next value above both the wall clock and prior seeds.
+    // Returns the generation actually sent so callers can reuse it.
+    ui64 SeedNodeOverloadStatus(ui32 nodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status, ui64 generation = 0) {
+        if (generation == 0) {
+            generation = Max(TInstant::Now().GetValue(), LastSeededOverloadGeneration) + 1;
+        }
+        LastSeededOverloadGeneration = Max(LastSeededOverloadGeneration, generation);
         SendToFlowControlManager(new TEvNodeOverloadStatus(nodeId, status, generation));
+        return generation;
     }
 
     // Emulate TShardWriter reporting a terminal per-request write outcome. This is the
@@ -475,7 +486,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         UNIT_ASSERT(!writeObserved);
 
-        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
 
         const auto completed = env.WaitCompleted();
         UNIT_ASSERT(writeObserved);
@@ -587,7 +598,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         const ui64 waiterA = admitA->Get()->GetWaiterId();
 
         // A becomes DrainScheduled (token reserved) with 100ms jitter; no sibling yet ⇒ no ContinueDrain.
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Drained/Count"), 0);
 
@@ -660,7 +671,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_C(env.ReadFcmValue("FlowControl/Drain/TokensBytes") >= static_cast<i64>(batchSize),
             TStringBuilder() << "TokensBytes=" << env.ReadFcmValue("FlowControl/Drain/TokensBytes"));
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Drained/Count"), 1);
@@ -782,7 +793,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(afterCut, 80);
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -824,7 +835,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
         // empty→hot cut 10→5; open a cohort by draining after READY, then go hot again.
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -832,7 +843,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         }
         const i64 rateAfterDrain = env.ReadFcmValue("FlowControl/Drain/RefillRate");
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         const i64 rateWhileHot = env.ReadFcmValue("FlowControl/Drain/RefillRate");
         UNIT_ASSERT_C(rateWhileHot <= rateAfterDrain, TStringBuilder() << rateWhileHot << " vs " << rateAfterDrain);
@@ -939,7 +950,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL((int)admit->Get()->GetDecision(), (int)EAdmitDecision::Wait);
         }
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         // One Allow from drain (consumed by edge actor as TryAdmitResult).
         {
@@ -1017,7 +1028,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
         }
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
 
         // Exactly one drain Allow before time advances enough for another token.
@@ -1035,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         // Advance sim time so the token bucket refills, then nudge drain scheduling.
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1066,7 +1077,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
         }
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1075,8 +1086,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         // OVERLOADED marks the node hot (gates admits) and cuts rate when HotNodes goes
         // empty→non-empty; further READY still drains the remaining waiters.
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/2);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(100));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         {
@@ -1109,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         // No waiters in queue. Repeatedly poke ScheduleDrainEligible via READY + time.
         for (int i = 0; i < 5; ++i) {
-            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1 + i);
+            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
             runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         }
@@ -1150,7 +1161,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         fc->SetDrainAimdBeta(0.5);
 
         // Drive a drain cycle (RefillTokens -> SyncDrainBounds) via STATUS_READY.
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
@@ -1187,7 +1198,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         const ui32 nodeA = 42;
         env.SeedTabletLocation(tabletA, nodeA);
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
@@ -1222,7 +1233,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         env.SeedTabletLocation(tabletA, nodeA);
         env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1258,7 +1269,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
 
         const ui32 nodeA = 42;
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
@@ -1288,7 +1299,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
 
         // Release the waiter so a cohort opens (target 1).
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1329,7 +1340,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1373,7 +1384,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             const auto res = env.TryAdmit({ tabletA }, TDuration::Seconds(600), batchSize);
             UNIT_ASSERT_VALUES_EQUAL((int)res->Get()->GetDecision(), (int)EAdmitDecision::Wait);
         }
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 1000);
 
@@ -1426,7 +1437,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 100);
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(5));
 
         int allowed = 0;
@@ -1467,7 +1478,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1515,7 +1526,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
             UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
             {
                 const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1544,11 +1555,11 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             drain.RMin = static_cast<double>(afterCut);
             drain.RMinBytes = static_cast<double>(env.ReadFcmValue("FlowControl/Drain/RefillRateBytes"));
             ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
-            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
+            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
             UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), afterCut);
             UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/2);
+            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
             {
                 const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1603,7 +1614,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1630,10 +1641,10 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         // Raise RMin so the empty→hot AimdBeta cut clamps to RStart instead of cutting further.
         drain.RMin = 100.0;
         ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/2);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1675,7 +1686,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1761,7 +1772,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(
             (int)env.TryAdmit({ tabletA }, TDuration::Seconds(60), largeBatch)->Get()->GetDecision(), (int)EAdmitDecision::Wait);
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             // Small head drains immediately from the seeded cohort.
@@ -1802,7 +1813,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
         {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
@@ -1839,7 +1850,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
         }
 
-        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         // Past the hot cooldown, so only cohort completeness decides growth here.
         runtime.AdvanceCurrentTime(TDuration::Seconds(3));
@@ -1867,7 +1878,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         TFlowControlManagerTestEnv env(runtime);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
-        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
 
         env.StartLongTxWrite(env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch()));
 

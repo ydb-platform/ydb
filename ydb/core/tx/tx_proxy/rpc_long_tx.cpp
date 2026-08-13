@@ -59,13 +59,15 @@ public:
         const TString& token,
         const TLongTxId& longTxId,
         const TString& dedupId,
-        TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TDuration writeTimeout = TDuration::Seconds(20))
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
         , UserCtx(userCtx)
+        , WriteTimeout(writeTimeout)
         , Counters(std::make_shared<NEvWrite::TCSUploadCounters>())  {
         if (token) {
             UserToken.emplace(token);
@@ -83,6 +85,10 @@ protected:
         if (resp.ErrorCount > 0) {
             // TODO: map to a correct error
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
+        }
+
+        if (WriteTimeout == TDuration::Zero()) {
+            return ReplyError(Ydb::StatusIds::TIMEOUT, "operation timeout exhausted before shard writes started");
         }
 
         auto& entry = resp.ResultSet[0];
@@ -132,7 +138,7 @@ protected:
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
                 this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId,
-                    shardInfo, ActorSpan, InternalController, ++writeIdx, TDuration::Seconds(20), UserCtx));
+                    shardInfo, ActorSpan, InternalController, ++writeIdx, WriteTimeout, UserCtx));
             }
         }
         pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());
@@ -199,6 +205,9 @@ private:
     NWilson::TProfileSpan ActorSpan;
     NEvWrite::TWritersController::TPtr InternalController;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    // Per-shard write budget. Post-admit callers pass what remains of the client timeout so wait
+    // time is not refunded as a fresh 20s; the legacy BulkUpsert path keeps the historical 20s cap.
+    TDuration WriteTimeout;
     std::shared_ptr<NEvWrite::TCSUploadCounters> Counters;
 };
 
@@ -232,8 +241,9 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx)
-        : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx)
+        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TDuration writeTimeout = TDuration::Seconds(20))
+        : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx, writeTimeout)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
@@ -288,8 +298,13 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
             NColumnShard::NFlowControl::TLongTxWrite(replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult),
                 std::move(batch), std::move(issues), std::move(userCtx), deadline, operationTimeout));
     } else {
+        // Honour the caller's remaining budget (post-admit path passes what is left after wait).
+        // Cap at the historical 20s shard default so a full BulkUpsert timeout does not silently
+        // stretch each shard write from 20s to minutes.
+        const TDuration writeTimeout = Min(TDuration::Seconds(20), operationTimeout);
         ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(
-            replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues), std::move(userCtx)));
+            replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues),
+            std::move(userCtx), writeTimeout));
     }
 }
 

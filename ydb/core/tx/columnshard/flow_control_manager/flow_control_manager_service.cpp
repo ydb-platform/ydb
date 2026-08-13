@@ -81,6 +81,11 @@ void FillFromConfig(TFlowControlManagerServiceOperator::TDrainRateParams& params
     // 0 = no limit (EffectiveRMax → +inf).
     params.RMax = cfg.GetDrainRateMax();
     params.RStart = PositiveOrDefaultStart(cfg.GetDrainRateStart(), defaults.GetDrainRateStart());
+    // Match SetDrainRateParams: Start must not sit below Min, otherwise construction seeds the rate
+    // (and Wmax / tokens) below the floor until the first SyncBounds.
+    if (params.RMin > 0.0) {
+        params.RStart = Max(params.RStart, params.RMin);
+    }
     params.AimdBeta = cfg.GetDrainAimdBeta();
     params.CubicRecoveryTargetSec = cfg.GetDrainCubicRecoveryTargetSec();
     params.CubicProbePercent = cfg.GetDrainCubicProbePercent();
@@ -88,6 +93,9 @@ void FillFromConfig(TFlowControlManagerServiceOperator::TDrainRateParams& params
     // 0 = no limit (EffectiveRMaxBytes → +inf).
     params.RMaxBytes = cfg.GetDrainRateMaxBytes();
     params.RStartBytes = PositiveOrDefaultStart(cfg.GetDrainRateStartBytes(), defaults.GetDrainRateStartBytes());
+    if (params.RMinBytes > 0.0) {
+        params.RStartBytes = Max(params.RStartBytes, params.RMinBytes);
+    }
     params.AimdBetaBytes = params.AimdBeta;
 }
 

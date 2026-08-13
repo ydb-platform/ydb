@@ -283,6 +283,20 @@ Y_UNIT_TEST_SUITE(TNodeStateMapTest) {
         UNIT_ASSERT(nodes.AnyHot());
     }
 
+    Y_UNIT_TEST(HighGenerationFromRestartSupersedesOldWatermark) {
+        TNodeStateMap nodes;
+        // Pre-restart publishes left a high watermark on a surviving FCM.
+        UNIT_ASSERT(nodes.MarkHot(1, 10'000));
+        UNIT_ASSERT(nodes.MarkReady(1, 10'000));
+        // A counter that restarted at zero would be ignored forever on a cool node.
+        UNIT_ASSERT(!nodes.MarkHot(1, 1));
+        UNIT_ASSERT(!nodes.AnyHot());
+        // Seeding the publisher from wall clock (or any value above the old watermark) lets the
+        // first post-restart OVERLOADED take effect immediately.
+        UNIT_ASSERT(nodes.MarkHot(1, TInstant::Now().GetValue()));
+        UNIT_ASSERT(nodes.AnyHot());
+    }
+
     Y_UNIT_TEST(UnknownTabletFailsOpen) {
         TNodeStateMap nodes;
         nodes.MarkHot(1, 1);

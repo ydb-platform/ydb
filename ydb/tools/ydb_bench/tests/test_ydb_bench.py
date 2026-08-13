@@ -1720,6 +1720,9 @@ class WebTest(unittest.TestCase):
                     self.assertTrue(response.read().startswith(b"PK"))
             self.assertEqual(len(temporary_paths), 1)
             self.assertTrue(temporary_paths[0].name.startswith("ydb-bench-export-"))
+            deadline = time.monotonic() + 2
+            while temporary_paths[0].exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
             self.assertFalse(temporary_paths[0].exists())
             self.assertTrue(read_sizes)
             self.assertEqual(set(read_sizes), {web._STREAM_CHUNK_SIZE})

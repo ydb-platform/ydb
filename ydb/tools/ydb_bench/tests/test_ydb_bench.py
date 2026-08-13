@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
+from ydb.tools.ydb_bench.lib import actors_core, runner
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -454,7 +455,6 @@ class YdbBenchTest(unittest.TestCase):
         output.mkdir()
         events = []
 
-        from ydb.tools.ydb_bench.lib import actors_core
         original_atomic_write_text = actors_core.atomic_write_text
 
         def write_or_fail(path, contents):
@@ -999,9 +999,9 @@ class YdbBenchTest(unittest.TestCase):
         process.returncode = 0
         command = ("benchmark", "--flag", "value with spaces")
 
-        with mock.patch.object(os, "sched_setaffinity", create=True), mock.patch(
-            "ydb.tools.ydb_bench.lib.runner.shutil.which", return_value="/usr/bin/taskset"
-        ), mock.patch("ydb.tools.ydb_bench.lib.runner.subprocess.Popen", return_value=process) as popen:
+        with mock.patch.object(os, "sched_setaffinity", create=True), mock.patch.object(
+            runner.shutil, "which", return_value="/usr/bin/taskset"
+        ), mock.patch.object(runner.subprocess, "Popen", return_value=process) as popen:
             result = run_command(command, {}, timeout_seconds=1, cpu_affinity=(4, 2, 4))
 
         self.assertEqual(
@@ -1227,8 +1227,8 @@ class YdbBenchTest(unittest.TestCase):
             affinity_modes=("spread-numa-pack-chiplet",),
         )
 
-        with mock.patch(
-            "ydb.tools.ydb_bench.lib.actors_core.discover_topology", return_value=topology
+        with mock.patch.object(
+            actors_core, "discover_topology", return_value=topology
         ), mock.patch.object(os, "sched_setaffinity", create=True), self.assertRaisesRegex(
             BenchmarkError, "none of the selected affinity modes is supported"
         ):

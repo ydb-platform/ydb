@@ -333,17 +333,18 @@ class YdbBenchTest(unittest.TestCase):
                 part-size-kb: [512]
                 duration: 1
                 repetitions: 2
-                affinity: [none]
+                affinity: [none, pack-numa]
             """
         ))
         configuration = loaded.runs[0]
         self.assertIs(configuration.benchmark, MEMORY_BENCHMARK)
         self.assertEqual(configuration.parameters["random-percent"], (0, 50))
         plan = build_run_plan(loaded)
-        self.assertEqual(len(plan.steps), 16)
+        self.assertEqual(len(plan.steps), 32)
         self.assertEqual(plan.steps[0].parameters["random-percent"], 0)
         self.assertEqual(plan.steps[-1].parameters["random-mode"], "write")
         self.assertEqual({step.threads for step in plan.steps}, {1, 2})
+        self.assertEqual({step.affinity for step in plan.steps}, {"none", "pack-numa"})
 
     def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
         pending = {"id": "step-1", "state": "pending", "artifacts": []}
@@ -1195,6 +1196,7 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][0]["rows"][1]["threads"], 2)
         self.assertIsNone(value["series"][0]["cpus"])
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
+        self.assertIn("dimension_metadata", value)
 
     def test_web_static_api_is_csp_protected_and_read_only(self):
         self._manifest(self.root / "complete")
@@ -1219,8 +1221,23 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"ranges such as 1-16", script)
                 self.assertIn(b"function compactIntegerRanges", script)
                 self.assertIn(b"benchmarkChanged", script)
+                self.assertIn(b"classList.contains('affinity')", script)
+                self.assertIn(b"parameter.minimum??1", script)
+                self.assertIn(b"function parameterCases", script)
+                self.assertIn(b"class=parameter-choice", script)
                 self.assertIn(b"Incomplete data:", script)
                 self.assertIn(b"function mountChartBuilder", script)
+                self.assertIn(b"function mountSingleChart", script)
+                self.assertIn(b"function expandedSeries", script)
+                self.assertIn(b"Add line row", script)
+                self.assertIn(b"class=query-row", script)
+                self.assertIn(b"Add chart", script)
+                self.assertIn(b"function globLabelMatch", script)
+                self.assertIn(b"25|50|75", script)
+                self.assertIn(b"data-metric=\"combined\"", script)
+                self.assertIn(b"Configure chart", script)
+                self.assertIn(b"class=modal-backdrop", script)
+                self.assertIn(b"role=dialog", script)
                 self.assertIn(b"function bindChartTooltips", script)
                 self.assertIn(b"rightItem.value-leftItem.value", script)
                 self.assertIn(b'chart-color-', script)

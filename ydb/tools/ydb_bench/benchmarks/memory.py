@@ -11,10 +11,12 @@ from ydb.tools.ydb_bench.benchmarks.registry import (
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
 
-DIMENSIONS = tuple(DimensionDefinition(name, "string" if name == "random_mode" else "integer") for name in (
-    "threads", "random_percent", "random_mode", "buffer_size_mb", "part_size_kb",
-    "sequential_threads", "random_threads",
-))
+DIMENSIONS = (
+    DimensionDefinition("threads"), DimensionDefinition("random_percent"),
+    DimensionDefinition("random_mode", "string"), DimensionDefinition("buffer_size_mb"),
+    DimensionDefinition("part_size_kb"), DimensionDefinition("sequential_threads", series=False),
+    DimensionDefinition("random_threads", series=False),
+)
 METRICS = tuple(MetricDefinition(name, unit) for name, unit in (
     ("sequential_operations", "operations"), ("random_operations", "operations"),
     ("sequential_payload_bytes", "bytes"), ("random_payload_bytes", "bytes"),

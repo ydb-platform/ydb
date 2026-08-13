@@ -24,6 +24,7 @@ class DimensionDefinition:
     name: str
     value_type: str = "integer"
     description: str = ""
+    series: bool = True
 
 
 @dataclass(frozen=True)

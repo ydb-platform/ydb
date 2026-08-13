@@ -87,33 +87,45 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
     }
 
     Y_UNIT_TEST(VerifiedSubjectRequiresAndReturnsUserBearerToken) {
-        const NACLib::TUserToken accessServiceUser({
+        NACLib::TUserToken accessServiceUser({
             .OriginalUserToken = "user-iam-token",
             .UserSID = "user-id@as",
             .AuthType = "AccessService",
         });
+        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(accessServiceUser));
+        accessServiceUser.SaveSerializationInfo();
         UNIT_ASSERT(IsVerifiedIamDelegationSubject(accessServiceUser));
         UNIT_ASSERT_VALUES_EQUAL(
             GetIamDelegationBearerToken(accessServiceUser), "user-iam-token");
 
-        const NACLib::TUserToken missingBearer({
+        NACLibProto::TUserToken deserializedToken;
+        UNIT_ASSERT(deserializedToken.ParseFromString(
+            accessServiceUser.GetSerializedToken()));
+        UNIT_ASSERT_VALUES_EQUAL(
+            deserializedToken.GetOriginalUserToken(), "user-iam-token");
+        UNIT_ASSERT_VALUES_EQUAL(deserializedToken.GetUserSID(), "user-id@as");
+
+        NACLib::TUserToken missingBearer({
             .UserSID = "user-id@as",
             .AuthType = "AccessService",
         });
+        missingBearer.SaveSerializationInfo();
         UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingBearer));
         UNIT_ASSERT(GetIamDelegationBearerToken(missingBearer).empty());
 
-        const NACLib::TUserToken loginUser({
+        NACLib::TUserToken loginUser({
             .OriginalUserToken = "user-iam-token",
             .UserSID = "user-id@as",
             .AuthType = "Login",
         });
+        loginUser.SaveSerializationInfo();
         UNIT_ASSERT(!IsVerifiedIamDelegationSubject(loginUser));
 
-        const NACLib::TUserToken missingSubject({
+        NACLib::TUserToken missingSubject({
             .OriginalUserToken = "user-iam-token",
             .AuthType = "AccessService",
         });
+        missingSubject.SaveSerializationInfo();
         UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingSubject));
     }
 

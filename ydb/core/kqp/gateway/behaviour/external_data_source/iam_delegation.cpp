@@ -59,9 +59,19 @@ TString NormalizeIamSubject(TString subjectId) {
 }
 
 bool IsVerifiedIamDelegationSubject(const NACLib::TUserToken& token) {
-    return token.HasAuthType() && token.GetAuthType() == "AccessService" &&
-        !NormalizeIamSubject(token.GetUserSID()).empty() &&
-        !token.GetOriginalUserToken().empty();
+    if (!token.HasAuthType() || token.GetAuthType() != "AccessService" ||
+        NormalizeIamSubject(token.GetUserSID()).empty() ||
+        token.GetOriginalUserToken().empty() || token.GetSerializedToken().empty())
+    {
+        return false;
+    }
+
+    NACLibProto::TUserToken serializedToken;
+    return serializedToken.ParseFromString(token.GetSerializedToken()) &&
+        serializedToken.HasAuthType() &&
+        serializedToken.GetAuthType() == token.GetAuthType() &&
+        serializedToken.GetUserSID() == token.GetUserSID() &&
+        serializedToken.GetOriginalUserToken() == token.GetOriginalUserToken();
 }
 
 TString GetIamDelegationBearerToken(const NACLib::TUserToken& token) {

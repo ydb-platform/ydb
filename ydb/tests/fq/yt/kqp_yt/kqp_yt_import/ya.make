@@ -18,8 +18,8 @@ DEPENDS(
 )
 
 DATA(
-    arcadia/ydb/tests/fq/yt/cfg
-    arcadia/ydb/tests/fq/yt/kqp_yt_import
+    arcadia/ydb/tests/fq/yt/kqp_yt/cfg
+    arcadia/ydb/tests/fq/yt/kqp_yt/kqp_yt_import
 )
 
 PEERDIR(

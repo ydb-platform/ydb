@@ -11,6 +11,8 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
+#include <new>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -310,10 +312,14 @@ public:
 
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
-    void operator delete(void *mem, std::size_t sz) {
-        auto ptr = (TSelectRangeLazyRow*)mem;
-        auto extraSize = ptr->Size() * sizeof(NUdf::TUnboxedValue) + ptr->GetMaskSize() * sizeof(ui64);
-        TBase::FreeWithSize(mem, sz + extraSize);
+    // Destroying delete: reads Size()/GetMaskSize() before running the destructor, since
+    // with -fsanitize-memory-use-after-dtor the destructor poisons the object's storage.
+    void operator delete(TSelectRangeLazyRow* self, std::destroying_delete_t) {
+        const auto fullSize = sizeof(TSelectRangeLazyRow)
+            + self->Size() * sizeof(NUdf::TUnboxedValue)
+            + self->GetMaskSize() * sizeof(ui64);
+        self->~TSelectRangeLazyRow();
+        TBase::FreeWithSize(self, fullSize);
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;

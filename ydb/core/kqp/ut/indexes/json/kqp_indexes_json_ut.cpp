@@ -33,6 +33,7 @@ TKikimrRunner KikimrJsonRowIdCompact() {
     featureFlags.SetEnableCompactFulltextIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return TKikimrRunner(settings);
 }
 
@@ -2085,7 +2086,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(TruncateTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableJsonIndex(true);
-        featureFlags.SetEnableTruncateTable(true);
 
         auto kikimr = TKikimrRunner(TKikimrSettings().SetFeatureFlags(featureFlags));
         auto db = kikimr.GetQueryClient();

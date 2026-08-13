@@ -1,6 +1,6 @@
 #include "aggregator_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::STATISTICS, "[" << Self->TabletID() << "][AnalyzeOp] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -22,6 +22,11 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
         const TString& operationId = record.GetOperationId();
         const TString& dbName = record.GetDatabaseName();
 
+        YDB_LOG_DEBUG("[AnalyzeOp] TTxAnalyzeOpForget::Execute",
+            {"tabletId", Self->TabletID()},
+            {"opId", operationId.Quote()},
+            {"dbName", dbName});
+
         auto* op = Self->ForceTraversalOperation(operationId);
         if (!op || op->DatabaseName != dbName) {
             Result = EResult::NotFound;
@@ -41,7 +46,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_N("TTxAnalyzeOpForget::Complete opId=" << record.GetOperationId().Quote());
+        YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpForget::Complete",
+            {"tabletId", Self->TabletID()},
+            {"opId", record.GetOperationId().Quote()});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpForgetResponse>();
         auto& rec = response->Record;

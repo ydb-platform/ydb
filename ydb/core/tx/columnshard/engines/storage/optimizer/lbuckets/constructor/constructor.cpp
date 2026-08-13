@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
 NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(
@@ -23,7 +25,9 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasLBuckets()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse l-buckets optimizer from proto")("proto", proto.DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse l-buckets optimizer from proto"},
+            {"proto", proto.DebugString()});
         return false;
     }
     return true;

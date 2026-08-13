@@ -157,4 +157,10 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         memcpy(x + 7, &nodeId, sizeof(ui32));
         return NActors::TActorId(nodeId, TStringBuf(x, 12));
     }
+
+    inline NActors::TActorId MakeGlobalWorkerManagerActorID(ui32 nodeId) {
+        char x[12] = {'g', 'l', 'o', 'b', 'm', 'a', 'n'};
+        memcpy(x + 7, &nodeId, sizeof(ui32));
+        return NActors::TActorId(nodeId, TStringBuf(x, 12));
+    }
 }

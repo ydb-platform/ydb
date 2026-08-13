@@ -37,6 +37,7 @@ NNodes::TExprBase DqBuildJoin(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     bool pushLeftStage,
+    TTypeAnnotationContext& typeCtx,
     EHashJoinMode hashJoin = EHashJoinMode::Off,
     bool shuffleMapJoin = true,
     bool useGraceCoreForMap = false,
@@ -47,7 +48,7 @@ NNodes::TExprBase DqBuildJoin(
     bool blockHashJoinBuildSideLeft = false
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
+NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

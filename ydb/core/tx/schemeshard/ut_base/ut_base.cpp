@@ -4857,6 +4857,129 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TSet<TString>& expectedNames) {
+            return [expectedNames](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                TSet<TString> names;
+                for (const auto& stat : table.GetMultiColumnStatistics()) {
+                    names.insert(stat.GetName());
+                    // column names must be resolved to ids on persist
+                    UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                    UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                    UNIT_ASSERT(stat.TypesSize() > 0);
+                    for (const auto type : stat.GetTypes()) {
+                        UNIT_ASSERT_EQUAL(
+                            static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                            NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+            };
+        };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            Columns { Name: "b"   Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" ColumnNames: "b" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // ADD STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1", "s2"})});
+
+        // DROP STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "s2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: duplicate statistics name must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: dropping a non-existent statistics must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "nope"
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TString& expectedName) {
+            return [expectedName](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.MultiColumnStatisticsSize(), 1);
+                const auto& stat = table.GetMultiColumnStatistics(0);
+                UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+                UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+            };
+        };
+
+        // CREATE TABLE: MultiColumnStatistics entry with no Types.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s1")});
+
+        // ALTER TABLE ADD STATISTICS: also with no Types.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            DropMultiColumnStatistics: "s1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s2")});
+    }
+
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

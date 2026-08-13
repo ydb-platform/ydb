@@ -27,7 +27,11 @@ public:
 
 
         auto reduceParitionSettings = GetReducePartitionSettings(fmrOperationSpec);
-        auto reducePartitioner = TReducePartitioner(partIdsForTables, partIdStats, reduceBy, reduceParitionSettings);
+        // Same shape as the MapReduce reduce stage: order/merge by SortBy, cut boundaries on the
+        // ReduceBy group. Plain Reduce just has no _yql_key_hash prefix; the partitioner is generic.
+        // An empty SortBy means "sort == reduceBy" (no extra tiebreaker), so fall back to reduceBy.
+        TSortingColumns sortColumns = sortBy.Columns.empty() ? reduceBy : sortBy;
+        auto reducePartitioner = TReducePartitioner(partIdsForTables, partIdStats, sortColumns, reduceBy, reduceParitionSettings);
 
         std::vector<TOperationTableRef> inputTables = operationParams.Input;
 

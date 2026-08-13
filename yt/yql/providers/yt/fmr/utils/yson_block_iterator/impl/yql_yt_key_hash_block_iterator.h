@@ -63,22 +63,27 @@ inline TBuffer BuildRowWithKeyHash(TStringBuf originalRowBytes, ui64 hash) {
 }
 
 // Wraps an IBlockIterator and inserts the computed _yql_key_hash column into each row.
-// FullSortColumns must start with _yql_key_hash; the remaining columns are the reduce key columns
-// used to compute the hash.
+// FullSortColumns must start with _yql_key_hash, followed by the reduce key columns (used to
+// compute the hash), optionally followed by extra tiebreaker columns (e.g. "_yql_sort" for joins)
+// that only affect physical row order within a group, not the hash or grouping itself -
+// numReduceKeyColumns tells us where the reduce key columns end and the tiebreaker columns begin.
 class TKeyHashAddingBlockIterator final: public IBlockIterator {
 public:
     TKeyHashAddingBlockIterator(
         IBlockIterator::TPtr inner,
         std::vector<TString> fullSortColumns,
-        std::vector<ESortOrder> sortOrders
+        std::vector<ESortOrder> sortOrders,
+        size_t numReduceKeyColumns
     )
         : Inner_(std::move(inner))
         , FullSortColumns_(std::move(fullSortColumns))
         , SortOrders_(std::move(sortOrders))
+        , NumReduceKeyColumns_(numReduceKeyColumns)
     {
         Y_ENSURE(!FullSortColumns_.empty() && FullSortColumns_[0] == TString(YqlKeyHashColumn),
                  "_yql_key_hash must be the first sort column");
-        NumReduceKeyColumns_ = FullSortColumns_.size() - 1;
+        Y_ENSURE(NumReduceKeyColumns_ < FullSortColumns_.size(),
+                 "numReduceKeyColumns must leave room for the _yql_key_hash column");
     }
 
     bool NextBlock(TIndexedBlock& out) final {

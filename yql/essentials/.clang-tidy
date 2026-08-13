@@ -317,7 +317,7 @@ Checks: >
   -misc-uniqueptr-reset-release,
   -misc-unused-alias-decls,
   -misc-unused-parameters,
-  -misc-unused-using-decls,
+  misc-unused-using-decls,
   misc-use-anonymous-namespace,
   -modernize-avoid-bind,
   modernize-avoid-c-arrays,

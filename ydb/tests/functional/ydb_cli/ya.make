@@ -10,11 +10,13 @@ TEST_SRCS(
     test_ydb_interactive_sql.py
     test_ydb_profile.py
     test_ydb_recursive_remove.py
+    test_ydb_operation.py
     test_ydb_scheme.py
     test_ydb_scripting.py
     test_ydb_sql.py
     test_ydb_table.py
     test_ydb_tools.py
+    test_ydb_topic_deferred_publish.py
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

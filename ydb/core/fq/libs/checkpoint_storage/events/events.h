@@ -31,6 +31,7 @@ struct TEvCheckpointStorage {
 
         // Internal Storage events.
         EvNewCheckpointSucceeded,
+        EvGcFinished,
 
         EvEnd,
     };
@@ -206,21 +207,45 @@ struct TEvCheckpointStorage {
         NYql::TIssues Issues;
     };
 
-    // note that no response exists
     struct TEvNewCheckpointSucceeded : NActors::TEventLocal<TEvNewCheckpointSucceeded, EvNewCheckpointSucceeded> {
         TEvNewCheckpointSucceeded(
+            NActors::TActorId checkpointCoordinatorId,
             TCoordinatorId coordinatorId,
             TCheckpointId checkpointId,
-            NYql::NDqProto::ECheckpointType type)
-            : CoordinatorId(std::move(coordinatorId))
+            NYql::NDqProto::ECheckpointType type,
+            ui64 cookie)
+            : CheckpointCoordinatorId(checkpointCoordinatorId)
+            , CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , Type(type)
+            , Cookie(cookie)
         {
         }
 
+        NActors::TActorId CheckpointCoordinatorId;
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
         NYql::NDqProto::ECheckpointType Type;
+        ui64 Cookie;
+    };
+
+    // Sent from TActorGC to TStorageProxy when a GC cycle for a graph finishes (success or failure).
+    struct TEvGcFinished : NActors::TEventLocal<TEvGcFinished, EvGcFinished> {
+        explicit TEvGcFinished(
+            NActors::TActorId checkpointCoordinatorId,
+            TCoordinatorId coordinatorId,
+            TCheckpointId checkpointId,
+            ui64 cookie)
+            : CheckpointCoordinatorId(checkpointCoordinatorId)
+            , CoordinatorId(std::move(coordinatorId))
+            , CheckpointId(checkpointId)
+            , Cookie(cookie)
+        {
+        }
+        NActors::TActorId CheckpointCoordinatorId;
+        TCoordinatorId CoordinatorId;
+        TCheckpointId CheckpointId;
+        ui64 Cookie;
     };
 };
 

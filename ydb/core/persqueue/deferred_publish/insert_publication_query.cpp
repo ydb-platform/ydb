@@ -29,7 +29,7 @@ public:
             -- TInsertPublicationQuery::OnRunQuery
             DECLARE $ext_publication_id AS Text;
             DECLARE $writer_identity AS Optional<Text>;
-            DECLARE $created_by AS Optional<Text>;
+            DECLARE $created_by AS Text;
 
             INSERT INTO `)" << PublicationsTablePath() << R"(` (
                 `ext_publication_id`,
@@ -49,10 +49,6 @@ public:
         if (WriterIdentity) {
             writerIdentity = *WriterIdentity;
         }
-        std::optional<std::string> createdBy;
-        if (CreatedBy && CreatedBy != BUILTIN_ACL_NO_USER_SID) {
-            createdBy = CreatedBy;
-        }
 
         NYdb::TParamsBuilder params;
         params
@@ -63,7 +59,7 @@ public:
                 .OptionalUtf8(writerIdentity)
                 .Build()
             .AddParam("$created_by")
-                .OptionalUtf8(createdBy)
+                .Utf8(CreatedBy)
                 .Build();
 
         RunDataQuery(sql, &params);

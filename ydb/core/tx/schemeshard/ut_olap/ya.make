@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib/default
+    ydb/core/kqp/compute_actor
     ydb/core/formats
     ydb/core/tx
     ydb/core/tx/columnshard

@@ -68,7 +68,7 @@ public:
                 {},
                 TVector<NPq::NProto::TDqReadTaskParams>{params},
                 Driver,
-                {},
+                CredentialsFactory,
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),

@@ -10,6 +10,9 @@
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
@@ -69,9 +72,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(
-            group->GroupSizeInUnits,
-            pdisk->SlotSizeInUnits);
+        pdisk->NumActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
     }
 }
 
@@ -113,15 +114,15 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
             const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
-            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
+            const std::optional<TString> diskScope = slot->PDisk ? slot->PDisk->DiskScope : std::nullopt;
+            layout.AddDisk({mapper, location, diskScope, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
         TBlobStorageController *self) const {
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
@@ -158,8 +159,8 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
+bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
+        bool countMaxSlots) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
     std::optional<double> iops;
@@ -174,12 +175,10 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
 
-        ui32 maxSlots = 0;
-        ui32 slotSizeInUnits = 0;
-        pdisk->ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
+        const ui32 maxSlots = pdisk->GetEffectiveExpectedSlotCount();
 
         ui64 vdiskSlotSize = 0;
-        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, slotSizeInUnits);
+        const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
@@ -232,8 +231,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
     return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
-bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+bool TBlobStorageController::TGroupInfo::FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const {
     Y_ABORT_UNLESS(Topology);
     TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
 
@@ -447,6 +445,14 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
                 drive.GetSharedWithOs() != it->second->SharedWithOs ||
                 drive.GetReadCentric() != it->second->ReadCentric ||
                 drive.GetKind() != it->second->Kind) {
+            return false;
+        }
+
+        std::optional<TString> diskScope;
+        if (drive.HasDiskScope()) {
+            diskScope = drive.GetDiskScope();
+        }
+        if (diskScope != it->second->DiskScope) {
             return false;
         }
 
@@ -880,7 +886,6 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
         ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
     }
 
-    PushStaticGroupsToSelfHeal();
     Execute(CreateTxInitScheme());
 }
 
@@ -903,7 +908,7 @@ void TBlobStorageController::ValidateInternalState() {
             if (!vslot->IsBeingDeleted()) {
                 const TGroupInfo* group = FindGroup(vslot->GroupId);
                 Y_ABORT_UNLESS(group);
-                numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk->SlotSizeInUnits);
+                numActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
             }
         }
         Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
@@ -1258,7 +1263,15 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
+        TPDiskId fullPDiskId(nodeId, pdiskId);
+        std::optional<TString> diskScope;
+        if (const TPDiskInfo* pdiskInfo = controller->FindPDisk(fullPDiskId)) {
+            diskScope = pdiskInfo->DiskScope;
+        } else if (const auto it = controller->StaticPDisks.find(fullPDiskId); it != controller->StaticPDisks.end()) {
+            diskScope = it->second.DiskScope;
+        }
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), diskScope,
+            {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();

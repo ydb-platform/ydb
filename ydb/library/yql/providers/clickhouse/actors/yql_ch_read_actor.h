@@ -16,6 +16,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateClickHo
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

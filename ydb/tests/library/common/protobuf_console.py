@@ -108,6 +108,18 @@ class AlterTenantRequest(AbstractProtobufBuilder):
         if soft is not None:
             quotas.data_size_soft_quota = soft
 
+    def add_storage_groups_to_add(self, pool_type, pool_size):
+        pool = self.protobuf.AlterTenantRequest.Request.storage_units_to_add.add()
+        pool.unit_kind = pool_type
+        pool.count = pool_size
+        return self
+
+    def add_storage_groups_to_remove(self, pool_type, pool_size):
+        pool = self.protobuf.AlterTenantRequest.Request.storage_units_to_remove.add()
+        pool.unit_kind = pool_type
+        pool.count = pool_size
+        return self
+
 
 class GetTenantStatusRequest(AbstractProtobufBuilder):
     """

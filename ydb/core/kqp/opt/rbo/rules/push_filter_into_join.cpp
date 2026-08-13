@@ -148,6 +148,45 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     auto leftInput = join->GetLeftInput();
     auto rightInput = join->GetRightInput();
 
+    // When join conditions have been set for the join, replicate constant conditions from left/right side
+    // to the other side. This optimization is enabled for inner joins
+    // FIXME: Check if we can expand this to Left Joins
+   
+    if (join->JoinKind == "Inner") {
+        TVector<TExpression> pushConstantCondsRight;
+        TVector<TExpression> pushConstantCondsLeft;
+
+        // Check if left constant condition on the left key can be pushed to right side
+        for (const auto& expr : pushLeft) {
+            if (expr.MaybeConstantCondition()) {
+                auto iu = expr.GetInputIUs()[0];
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
+                    {return iu == cond.first;}); it != join->JoinKeys.end()) {
+                    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
+                    mapping.insert({iu, it->second});
+                    auto rightExpr = expr.ApplyRenames(mapping);
+                    pushConstantCondsRight.push_back(rightExpr);
+                }
+            }
+        }
+        // Check if right constant condition on the right key can be pushed to left side
+        for (const auto& expr : pushRight) {
+            if (expr.MaybeConstantCondition()) {
+                auto iu = expr.GetInputIUs()[0];
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
+                    {return iu == cond.second;}); it != join->JoinKeys.end()) {
+                    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
+                    mapping.insert({iu, it->first});
+                    auto leftExpr = expr.ApplyRenames(mapping);
+                    pushConstantCondsLeft.push_back(leftExpr);
+                }
+            }
+        }
+
+        pushRight.insert(pushRight.end(), pushConstantCondsRight.begin(), pushConstantCondsRight.end());
+        pushLeft.insert(pushLeft.end(), pushConstantCondsLeft.begin(), pushConstantCondsLeft.end());
+    }
+
     if (pushLeft.size()) {
         auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
         leftInput = MakeIntrusive<TOpFilter>(leftInput, input->Pos, leftExpr);

@@ -204,38 +204,7 @@ protected:
             issues = AddRootIssue(message, issues);
         }
 
-        switch (status.error_code()) {
-            case grpc::OK:
-                return CloseSession(NYdb::EStatus::SUCCESS, issues);
-            case grpc::CANCELLED:
-                return CloseSession(NYdb::EStatus::CANCELLED, issues);
-            case grpc::UNKNOWN:
-                return CloseSession(NYdb::EStatus::UNDETERMINED, issues);
-            case grpc::DEADLINE_EXCEEDED:
-                return CloseSession(NYdb::EStatus::TIMEOUT, issues);
-            case grpc::NOT_FOUND:
-                return CloseSession(NYdb::EStatus::NOT_FOUND, issues);
-            case grpc::ALREADY_EXISTS:
-                return CloseSession(NYdb::EStatus::ALREADY_EXISTS, issues);
-            case grpc::RESOURCE_EXHAUSTED:
-                return CloseSession(NYdb::EStatus::OVERLOADED, issues);
-            case grpc::ABORTED:
-                return CloseSession(NYdb::EStatus::ABORTED, issues);
-            case grpc::OUT_OF_RANGE:
-                return CloseSession(NYdb::EStatus::CLIENT_OUT_OF_RANGE, issues);
-            case grpc::UNIMPLEMENTED:
-                return CloseSession(NYdb::EStatus::UNSUPPORTED, issues);
-            case grpc::UNAVAILABLE:
-                return CloseSession(NYdb::EStatus::UNAVAILABLE, issues);
-            case grpc::INVALID_ARGUMENT:
-            case grpc::FAILED_PRECONDITION:
-                return CloseSession(NYdb::EStatus::PRECONDITION_FAILED, issues);
-            case grpc::UNAUTHENTICATED:
-            case grpc::PERMISSION_DENIED:
-                return CloseSession(NYdb::EStatus::UNAUTHORIZED, issues);
-            default:
-                return CloseSession(NYdb::EStatus::INTERNAL_ERROR, issues);
-        }
+        CloseSession(static_cast<NYdb::EStatus>(NRpcService::GrpcStatusToYdbStatus(status.error_code())), issues);
     }
 
     void HandleWakeup() {

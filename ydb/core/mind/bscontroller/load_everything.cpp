@@ -165,6 +165,13 @@ public:
                 return false;
             }
             while (vslot.IsValid()) {
+                if (vslot.HaveValue<Table::Mood>() && vslot.GetValue<Table::Mood>() == TMood::Delete) {
+                    if (!vslot.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+
                 const auto groupId = vslot.GetValue<Table::GroupID>();
                 auto& record = geometry[groupId];
 
@@ -251,7 +258,6 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
-                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -359,9 +365,9 @@ public:
             if (!disks.IsReady())
                 return false;
             while (!disks.EndOfSet()) {
-                auto getOpt = [&](auto col) {
+                auto getOpt = [&]<template<typename> class TOptional>(auto col) {
                     using TCol = decltype(col);
-                    TMaybe<typename TCol::Type> res;
+                    TOptional<typename TCol::Type> res;
                     if (disks.HaveValue<TCol>()) {
                         res = disks.GetValue<TCol>();
                     }
@@ -402,7 +408,8 @@ public:
 
                 // construct PDisk item
                 Self->AddPDisk(disks.GetKey(), hostId, disks.GetValue<T::Path>(), disks.GetValue<T::Category>(),
-                    disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
+                    disks.GetValue<T::Guid>(), getOpt.operator()<TMaybe>(T::SharedWithOs()),
+                    getOpt.operator()<TMaybe>(T::ReadCentric()), getOpt.operator()<std::optional>(T::DiskScope()),
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
@@ -753,8 +760,16 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
+                TMaybe<TKikimrScopeId> scopeId;
+                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
+                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }

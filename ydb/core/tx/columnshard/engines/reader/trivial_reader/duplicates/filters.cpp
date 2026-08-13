@@ -1,5 +1,7 @@
 #include "filters.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 TFilterAccumulator::TFilterAccumulator(
@@ -19,9 +21,12 @@ TFilterAccumulator::~TFilterAccumulator() {
 
 void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
     AFL_VERIFY(!IsDone());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-    ("component", "duplicates_manager")("type", "filter_ready")("info", DebugString())("portion_id", OriginalRequest->Get()->GetPortionId())(
-        "filter", filter.DebugString());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"type", "filter_ready"},
+        {"info", DebugString()},
+        {"portionId", OriginalRequest->Get()->GetPortionId()},
+        {"filter", filter.DebugString()});
     OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
     Done = true;
     AFL_VERIFY(IsDone());
@@ -145,10 +150,21 @@ void TFiltersStore::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFil
     AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
 }
 
+bool TFiltersStore::AbortWaitingPortion(const ui64 portionId, const TString& error) {
+    auto it = WaitingPortions.find(portionId);
+    if (it == WaitingPortions.end()) {
+        return false;
+    }
+    it->second->Abort(error);
+    WaitingPortions.erase(it);
+    return true;
+}
+
 void TFiltersStore::Abort(const TString& error) {
     for (const auto& [_, constructor] : WaitingPortions) {
         constructor->Abort(error);
     }
+    WaitingPortions.clear();
 }
 
 TFiltersStore::~TFiltersStore() {

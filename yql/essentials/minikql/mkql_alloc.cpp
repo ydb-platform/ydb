@@ -422,6 +422,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
     if (TAllocState::IsDefaultArrowAllocatorUsed()) {
         auto pool = arrow::default_memory_pool();
         Y_ABORT_UNLESS(pool);
+        NYql::NUdf::SanitizerMakeRegionAccessible(reinterpret_cast<void*>(header), fullSize);
         pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         return;
     }

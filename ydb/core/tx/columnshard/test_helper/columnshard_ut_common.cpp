@@ -12,12 +12,16 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/transactions/operators/backup.h>
+#include <ydb/core/tx/columnshard/transactions/operators/restore.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
+
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -401,8 +405,8 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
     return cells;
 }
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
-    const std::set<std::string>& notNullColumns) {
+TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
     const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
     UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
@@ -418,20 +422,8 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
 
     std::vector<TString> mem;
     std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
-    // insert, not ordered
-    for (size_t i = range.first; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
-        for (auto& pos : nullPositions) {
-            cells[pos] = TCell();
-        }
-        for (auto& pos : samePositions) {
-            cells[pos] = MakeTestCell(types[pos], options.SameValue, mem);
-        }
-        NKikimr::TDbTupleRef unused;
-        batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
-    }
-    for (size_t i = range.first + 1; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
+    for (ui64 value : values) {
+        std::vector<TCell> cells = MakeTestCells(types, value, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
@@ -450,6 +442,19 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
     TString blob = batchBuilder.Finish();
     UNIT_ASSERT(!blob.empty());
     return blob;
+}
+
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
+    const std::set<std::string>& notNullColumns) {
+    std::vector<ui64> values;
+    values.reserve(range.second > range.first ? range.second - range.first : 0);
+    for (ui64 i = range.first; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    for (ui64 i = range.first + 1; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    return MakeTestBlobValues(values, columns, options, notNullColumns);
 }
 
 TSerializedTableRange MakeTestRange(
@@ -514,6 +519,80 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         plannerConstructor->SetClassName("tiling++");
         plannerConstructor->MutableTiling()->SetJson("{}");
     }
+}
+
+namespace {
+
+NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, const TString& query) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    auto evTx = new TEvTablet::TEvLocalMKQL;
+    evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, sender, evTx);
+
+    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
+}
+
+}   // namespace
+
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let range %s)
+            (let fields %s)
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
+    const auto result = LocalMiniKQL(runtime, tabletId, query);
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('TxId (Null) (Void))
+            ))
+            (let fields '('TxId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'TxInfo range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountBackgroundSessionsRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('ClassName (Null) (Void))
+                '('Identifier (Null) (Void))
+            ))
+            (let fields '('ClassName))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'BackgroundSessions range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void VerifyNoBackupOrRestoreArtifacts(TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId) {
+    UNIT_ASSERT(csController);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TBackupTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TRestoreTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetBackgroundSessionsCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetTxOperatorsCount(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime, tabletId), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(CountBackgroundSessionsRows(runtime, tabletId), 0u);
 }
 
 }   // namespace NKikimr::NTxUT

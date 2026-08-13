@@ -65,7 +65,7 @@ TEST_F(TNetTest, TransferFourBytes)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    WaitUntilSet(a->Write(TSharedRef::FromString("ping")));
+    WaitUntilSet(a->Write(TSharedRef::FromString(std::string("ping"))));
 
     auto buffer = TSharedMutableRef::Allocate(10);
     ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
@@ -78,10 +78,10 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
     WaitForFast(a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
-        TSharedRef::FromString("p"),
-        TSharedRef::FromString("i"),
-        TSharedRef::FromString("n"),
-        TSharedRef::FromString("g")
+        TSharedRef::FromString(std::string("p")),
+        TSharedRef::FromString(std::string("i")),
+        TSharedRef::FromString(std::string("n")),
+        TSharedRef::FromString(std::string("g"))
     }, TSharedRefArray::TMoveParts{}))).ThrowOnError();
 
     auto buffer = TSharedMutableRef::Allocate(10);

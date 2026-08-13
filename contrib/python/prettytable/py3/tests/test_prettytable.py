@@ -52,107 +52,112 @@ class TestNoneOption:
     def test_no_value_replace_none(self) -> None:
         table = PrettyTable(["Field 1", "Field 2", "Field 3"])
         table.add_row(["value 1", None, "value 2"])
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+---------+---------+
 | Field 1 | Field 2 | Field 3 |
 +---------+---------+---------+
 | value 1 |   None  | value 2 |
 +---------+---------+---------+
 """.strip()
-        )
 
     def test_no_value_replace_none_with_default_field_names(self) -> None:
         table = PrettyTable()
         table.add_row(["value 1", "None", "value 2"])
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+---------+---------+
 | Field 1 | Field 2 | Field 3 |
 +---------+---------+---------+
 | value 1 |   None  | value 2 |
 +---------+---------+---------+
 """.strip()
-        )
 
     def test_replace_none_all(self) -> None:
         table = PrettyTable(
             ["Field 1", "Field 2", "Field 3", "Field 4"], none_format="N/A"
         )
         table.add_row(["value 1", None, "None", ""])
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+---------+---------+---------+
 | Field 1 | Field 2 | Field 3 | Field 4 |
 +---------+---------+---------+---------+
 | value 1 |   N/A   |   N/A   |         |
 +---------+---------+---------+---------+
 """.strip()
-        )
 
     def test_replace_none_by_col(self) -> None:
         table = PrettyTable(["Field 1", "Field 2", "Field 3"])
         table.none_format["Field 2"] = "N/A"
         table.none_format["Field 3"] = ""
         table.add_row(["value 1", None, None])
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+---------+---------+
 | Field 1 | Field 2 | Field 3 |
 +---------+---------+---------+
 | value 1 |   N/A   |         |
 +---------+---------+---------+
 """.strip()
-        )
 
     def test_replace_none_recompute_width(self) -> None:
         table = PrettyTable()
         table.add_row([None])
         table.none_format = "0123456789"
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +------------+
 |  Field 1   |
 +------------+
 | 0123456789 |
 +------------+
 """.strip()
-        )
 
     def test_replace_none_maintain_width_on_recompute(self) -> None:
         table = PrettyTable()
         table.add_row(["Hello"])
         table.none_format = "0123456789"
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+
 | Field 1 |
 +---------+
 |  Hello  |
 +---------+
 """.strip()
-        )
 
     def test_replace_none_recompute_width_multi_column(self) -> None:
         table = PrettyTable()
         table.add_row(["Hello", None, "World"])
         table.none_format = "0123456789"
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+------------+---------+
 | Field 1 |  Field 2   | Field 3 |
 +---------+------------+---------+
 |  Hello  | 0123456789 |  World  |
 +---------+------------+---------+
 """.strip()
-        )
+
+    def test_replace_custom_format_with_none(self) -> None:
+        table = PrettyTable()
+        table.custom_format = {"Field 2": lambda f, v: f"'{v}'"}
+        table.add_row(["Hello", None, "World"])
+        table.none_format = "0123456789"
+        assert table.get_string().strip() == """
++---------+------------+---------+
+| Field 1 |  Field 2   | Field 3 |
++---------+------------+---------+
+|  Hello  | 0123456789 |  World  |
++---------+------------+---------+
+""".strip()
+
+    def test_replace_custom_format_with_none_dict(self) -> None:
+        table = PrettyTable()
+        table.custom_format = {"Field 2": lambda f, v: f"'{v}'"}
+        table.add_row(["Hello", None, "World"])
+        table.none_format = {"Field 2": "0123456789"}
+        assert table.get_string().strip() == """
++---------+------------+---------+
+| Field 1 |  Field 2   | Field 3 |
++---------+------------+---------+
+|  Hello  | 0123456789 |  World  |
++---------+------------+---------+
+""".strip()
 
 
 class TestBuildEquivalence:
@@ -361,6 +366,50 @@ class TestAlignment:
             header=True
         ) == aligned_after_table.get_mediawiki_string(header=True)
 
+    def test_aligned_one_column(self, city_data: PrettyTable) -> None:
+        city_data.align["Population"] = "r"
+        assert city_data.get_string() == """
++-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|  Adelaide | 1295 |    1158259 |      600.5      |
+|  Brisbane | 5905 |    1857594 |      1146.4     |
+|   Darwin  | 112  |     120900 |      1714.7     |
+|   Hobart  | 1357 |     205556 |      619.5      |
+|   Sydney  | 2058 |    4336374 |      1214.8     |
+| Melbourne | 1566 |    3806092 |      646.9      |
+|   Perth   | 5386 |    1554769 |      869.4      |
++-----------+------+------------+-----------------+""".strip()
+
+    def test_aligned_one_column_invalid(self, city_data: PrettyTable) -> None:
+        with pytest.raises(ValueError):
+            city_data.align["Population"] = "unexpected"  # type: ignore[assignment]
+
+    def test_aligned_one_column_invalid_dict(self, city_data: PrettyTable) -> None:
+        with pytest.raises(ValueError):
+            city_data.align = {"Population": "unexpected"}  # type: ignore[dict-item]
+
+    def test_rename_drops_stale_align_keys(self) -> None:
+        table = PrettyTable()
+        table.field_names = ["a", "b", "c"]
+        table.add_row([1, 2, 3])
+        table.align["a"] = "l"
+        table.field_names = ["x", "y", "z"]
+        assert set(table.field_names) == {"x", "y", "z"}
+        for old in ("a", "b", "c"):
+            assert old not in table._align
+            assert old not in table._valign
+        assert table.align["x"] == "l"
+
+    def test_rename_keeps_overlapping_align_keys(self) -> None:
+        table = PrettyTable()
+        table.field_names = ["a", "b", "c"]
+        table.add_row([1, 2, 3])
+        table.field_names = ["x", "b", "z"]
+        assert "b" in table._align
+        assert "a" not in table._align
+        assert "c" not in table._align
+
 
 class TestOptionOverride:
     """Make sure all options are properly overwritten by get_string."""
@@ -415,11 +464,42 @@ class TestOptionAttribute:
         assert city_data.get_string() == city_data[:].get_string()
 
     def test_set_for_one_column(self, city_data: PrettyTable) -> None:
-        city_data.align["Rainfall"] = "l"
-        city_data.max_width["Name"] = 10
-        city_data.int_format["Population"] = "4"
-        city_data.float_format["Area"] = "2.2"
-        assert city_data.get_string() == city_data[:].get_string()
+        city_data.min_width["City name"] = 15
+        city_data.int_format["Area"] = "6"
+        city_data.float_format["Annual Rainfall"] = "6.2"
+        city_data.int_format["Population"] = "10"
+        city_data.align["Annual Rainfall"] = "l"
+        assert city_data.get_string() == """
++-----------------+--------+------------+-----------------+
+|    City name    |  Area  | Population | Annual Rainfall |
++-----------------+--------+------------+-----------------+
+|     Adelaide    |   1295 |    1158259 | 600.50          |
+|     Brisbane    |   5905 |    1857594 | 1146.40         |
+|      Darwin     |    112 |     120900 | 1714.70         |
+|      Hobart     |   1357 |     205556 | 619.50          |
+|      Sydney     |   2058 |    4336374 | 1214.80         |
+|    Melbourne    |   1566 |    3806092 | 646.90          |
+|      Perth      |   5386 |    1554769 | 869.40          |
++-----------------+--------+------------+-----------------+""".strip()
+
+    def test_set_for_one_column2(self, city_data: PrettyTable) -> None:
+        city_data.min_width = {"City name": 15}
+        city_data.int_format = {"Area": "6"}
+        city_data.float_format = {"Annual Rainfall": "6.2"}
+        city_data.int_format = {"Population": "10"}
+        city_data.align = {"Annual Rainfall": "l"}
+        assert city_data.get_string() == """
++-----------------+--------+------------+-----------------+
+|    City name    |  Area  | Population | Annual Rainfall |
++-----------------+--------+------------+-----------------+
+|     Adelaide    |   1295 |    1158259 | 600.50          |
+|     Brisbane    |   5905 |    1857594 | 1146.40         |
+|      Darwin     |    112 |     120900 | 1714.70         |
+|      Hobart     |   1357 |     205556 | 619.50          |
+|      Sydney     |   2058 |    4336374 | 1214.80         |
+|    Melbourne    |   1566 |    3806092 | 646.90          |
+|      Perth      |   5386 |    1554769 | 869.40          |
++-----------------+--------+------------+-----------------+""".strip()
 
     def test_preserve_internal_border(self) -> None:
         table = PrettyTable(preserve_internal_border=True)
@@ -429,16 +509,13 @@ class TestOptionAttribute:
         helper_table.border = False
         helper_table.preserve_internal_border = True
 
-        assert (
-            helper_table.get_string().strip()
-            == """
+        assert helper_table.get_string().strip() == """
    | Field 1 | Field 2 | Field 3  
 ---+---------+---------+---------
  1 | value 1 |  value2 |  value3  
  4 | value 4 |  value5 |  value6  
  7 | value 7 |  value8 |  value9  
 """.strip()  # noqa: W291
-        )
 
 
 @pytest.fixture(scope="module")
@@ -481,6 +558,15 @@ class TestBasic:
         table.add_rows([])
         assert str(city_data) == str(table)
 
+    def test_add_row_toolong(self) -> None:
+        table = PrettyTable(CITY_DATA_HEADER)
+        with pytest.raises(ValueError):
+            table.add_row(["Geelong", 1, 308915, 123.1, 1])
+
+    def test_add_column_invalid(self, city_data: PrettyTable) -> None:
+        with pytest.raises(ValueError):
+            city_data.add_column("City name", ["Geelong", 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
     def _test_no_blank_lines(self, table: PrettyTable) -> None:
         string = table.get_string()
         lines = string.split("\n")
@@ -514,6 +600,33 @@ class TestBasic:
         """All lines in a table should be of the same length, even with a long title."""
         city_data.title = "My table (75 characters wide) " + "=" * 45
         self._test_all_length_equal(city_data)
+
+    def test_multiline_title(self, city_data: PrettyTable) -> None:
+        """A title with \\n should produce multiple bordered title lines."""
+        city_data.title = "Line 1\nLine 2"
+        assert city_data.get_string() == """
++-------------------------------------------------+
+|                      Line 1                     |
+|                      Line 2                     |
++-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|  Adelaide | 1295 |  1158259   |      600.5      |
+|  Brisbane | 5905 |  1857594   |      1146.4     |
+|   Darwin  | 112  |   120900   |      1714.7     |
+|   Hobart  | 1357 |   205556   |      619.5      |
+|   Sydney  | 2058 |  4336374   |      1214.8     |
+| Melbourne | 1566 |  3806092   |      646.9      |
+|   Perth   | 5386 |  1554769   |      869.4      |
++-----------+------+------------+-----------------+
+""".strip()
+
+    def test_multiline_title_html(self, city_data: PrettyTable) -> None:
+        """Multiline titles should use <br> in HTML caption."""
+        city_data.title = "Line 1\nLine 2"
+        html = city_data.get_html_string()
+        assert "<br>" in html
+        assert "<caption>" in html
 
     def test_no_blank_lines_without_border(self, city_data: PrettyTable) -> None:
         """No table should ever have blank lines in it."""
@@ -577,12 +690,12 @@ class TestBasic:
 
     def test_no_blank_lines_with_float_format(self, city_data: PrettyTable) -> None:
         """No table should ever have blank lines in it."""
-        city_data.float_format = "6.2f"
+        city_data.float_format = "6.2"
         self._test_no_blank_lines(city_data)
 
     def test_all_lengths_equal_with_float_format(self, city_data: PrettyTable) -> None:
         """All lines in a table should be of the same length."""
-        city_data.float_format = "6.2f"
+        city_data.float_format = "6.2"
         self._test_all_length_equal(city_data)
 
     def test_no_blank_lines_from_csv(self, city_data_from_csv: PrettyTable) -> None:
@@ -611,6 +724,10 @@ class TestBasic:
     def test_colcount(self, city_data: PrettyTable) -> None:
         assert city_data.colcount == 4
 
+    def test_colcount_empty(self) -> None:
+        table = PrettyTable()
+        assert table.colcount == 0
+
     def test_getitem(self, city_data: PrettyTable) -> None:
         assert (
             city_data[1].get_string()
@@ -624,6 +741,83 @@ class TestBasic:
     def test_invalid_getitem(self, city_data: PrettyTable) -> None:
         with pytest.raises(IndexError):
             assert city_data[10]
+
+    def test_header_style_upper(self) -> None:
+        table = PrettyTable(header_style="upper")
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++---------+---------+---------+
+| FIELD 1 | FIELD 2 | FIELD 3 |
++---------+---------+---------+
+|    1    |    2    |    3    |
++---------+---------+---------+
+""".strip()
+
+    def test_header_style_upper_setter(self) -> None:
+        table = PrettyTable()
+        table.header_style = "upper"
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++---------+---------+---------+
+| FIELD 1 | FIELD 2 | FIELD 3 |
++---------+---------+---------+
+|    1    |    2    |    3    |
++---------+---------+---------+
+""".strip()
+
+    def test_header_style_cap(self) -> None:
+        table = PrettyTable(["cOl oNE", "col two", "COL THREE"], header_style="cap")
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++---------+---------+-----------+
+| Col one | Col two | Col three |
++---------+---------+-----------+
+|    1    |    2    |     3     |
++---------+---------+-----------+
+""".strip()
+
+    def test_header_style_title(self) -> None:
+        table = PrettyTable(["cOl oNE", "col two", "COL THREE"], header_style="title")
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++---------+---------+-----------+
+| Col One | Col Two | Col Three |
++---------+---------+-----------+
+|    1    |    2    |     3     |
++---------+---------+-----------+
+""".strip()
+
+    def test_header_style_lower(self) -> None:
+        table = PrettyTable(header_style="lower")
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++---------+---------+---------+
+| field 1 | field 2 | field 3 |
++---------+---------+---------+
+|    1    |    2    |    3    |
++---------+---------+---------+
+""".strip()
+
+    def test_horizontal_align_char_setter(self) -> None:
+        table = PrettyTable()
+        table.horizontal_align_char = "!"
+        table.add_row([1, 2, 3])
+        assert table.get_string() == """
++ !-----! + !-----! + !-----! +
+| Field 1 | Field 2 | Field 3 |
++ !-----! + !-----! + !-----! +
+|    1    |    2    |    3    |
++ !-----! + !-----! + !-----! +
+""".strip()
+
+    def test_horizontal_align_char_getter(self) -> None:
+        table = PrettyTable()
+        table.horizontal_align_char = ":"
+        assert table.horizontal_align_char == ":"
+
+    def test_header_style_invalid(self) -> None:
+        with pytest.raises(ValueError):
+            PrettyTable(header_style="FooBar")
 
     @pytest.mark.usefixtures("init_db")
     def test_no_blank_lines_from_db(self, db_cursor: sqlite3.Cursor) -> None:
@@ -641,9 +835,37 @@ class TestBasic:
         assert table is not None
         self._test_all_length_equal(table)
 
+    def test_border(self) -> None:
+        table = PrettyTable(border=False)
+        table.add_row([1, 2, "3"])
+        assert table.get_string().strip() == """
+Field 1  Field 2  Field 3 
+    1        2        3    """.strip()  # noqa: W291
+
+    def test_reversesort(self) -> None:
+        table = PrettyTable(["A", "B", "C"], sortby="A", reversesort=True)
+        table.add_row([1, 2, "3"])
+        table.add_row([3, 4, "5"])
+        assert table.get_string().strip() == """
++---+---+---+
+| A | B | C |
++---+---+---+
+| 3 | 4 | 5 |
+| 1 | 2 | 3 |
++---+---+---+""".strip()
+
 
 class TestEmptyTable:
     """Make sure the print_empty option works"""
+
+    def test_print_empty(self) -> None:
+        table = PrettyTable(print_empty=False)
+        assert table.get_string().strip() == ""
+
+    def test_print_empty_setter(self) -> None:
+        table = PrettyTable()
+        table.print_empty = False
+        assert table.get_string().strip() == ""
 
     def test_print_empty_true(self, city_data: PrettyTable) -> None:
         table = PrettyTable()
@@ -742,12 +964,24 @@ def float_pt() -> PrettyTable:
 
 
 class TestFloatFormat:
+    def test_empty(self, float_pt: PrettyTable) -> None:
+        float_pt.float_format = ""
+        assert float_pt.get_string() == """
++----------+----------+
+| Constant |  Value   |
++----------+----------+
+|    Pi    | 3.141593 |
+|    e     | 2.718282 |
+| sqrt(2)  | 1.414214 |
++----------+----------+
+""".strip()
+
     def test_no_decimals(self, float_pt: PrettyTable) -> None:
-        float_pt.float_format = ".0f"
+        float_pt.float_format = ".0"
         assert "." not in float_pt.get_string()
 
     def test_round_to_5dp(self, float_pt: PrettyTable) -> None:
-        float_pt.float_format = ".5f"
+        float_pt.float_format = ".5"
         string = float_pt.get_string()
         assert "3.14159" in string
         assert "3.141592" not in string
@@ -758,7 +992,7 @@ class TestFloatFormat:
         assert "1.414213" not in string
 
     def test_pad_with_2zeroes(self, float_pt: PrettyTable) -> None:
-        float_pt.float_format = "06.2f"
+        float_pt.float_format = "06.2"
         string = float_pt.get_string()
         assert "003.14" in string
         assert "002.72" in string
@@ -768,9 +1002,7 @@ class TestFloatFormat:
 class TestColumnFormattingfromDict:
     def test_set_align_format(self, city_data: PrettyTable) -> None:
         city_data.align = {"Annual Rainfall": "r"}
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
@@ -783,7 +1015,6 @@ class TestColumnFormattingfromDict:
 |   Perth   | 5386 |  1554769   |           869.4 |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
 
     def test_set_valign_format(self, city_data: PrettyTable) -> None:
         table = PrettyTable(
@@ -802,9 +1033,7 @@ class TestColumnFormattingfromDict:
             ]
         )
 
-        assert (
-            table.get_string()
-            == """
+        assert table.get_string() == """
 +---------+----------------------+---------+------------+---------+------------+
 | Field 1 |       Field 2        | Field 3 |  Field 4   | Field 5 |  Field 6   |
 +---------+----------------------+---------+------------+---------+------------+
@@ -818,7 +1047,6 @@ class TestColumnFormattingfromDict:
 |         |                      |         |    diam    |         |    diam    |
 +---------+----------------------+---------+------------+---------+------------+
 """.strip()
-        )
 
     def test_max_width(
         self,
@@ -838,9 +1066,7 @@ class TestColumnFormattingfromDict:
             ]
         )
 
-        assert (
-            table.get_string()
-            == """
+        assert table.get_string() == """
 +---------+----------------------+---------+------------+---------+------------+
 | Field 1 |       Field 2        | Field 3 |  Field 4   | Field 5 |  Field 6   |
 +---------+----------------------+---------+------------+---------+------------+
@@ -854,7 +1080,6 @@ class TestColumnFormattingfromDict:
 |         |                      |         |    diam    |         |    diam    |
 +---------+----------------------+---------+------------+---------+------------+
 """.strip()
-        )
 
     def test_min_width(self, city_data: PrettyTable) -> None:
         city_data.min_width = {
@@ -863,9 +1088,7 @@ class TestColumnFormattingfromDict:
             "Population": 20,
             "Annual Rainfall": 20,
         }
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +----------------------+------------+----------------------+----------------------+
 |      City name       |    Area    |      Population      |   Annual Rainfall    |
 +----------------------+------------+----------------------+----------------------+
@@ -878,13 +1101,10 @@ class TestColumnFormattingfromDict:
 |        Perth         |    5386    |       1554769        |        869.4         |
 +----------------------+------------+----------------------+----------------------+
 """.strip()
-        )
 
     def test_set_int_format(self, city_data: PrettyTable) -> None:
         city_data.int_format = {"Population": "20"}
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +-----------+------+----------------------+-----------------+
 | City name | Area |      Population      | Annual Rainfall |
 +-----------+------+----------------------+-----------------+
@@ -897,13 +1117,43 @@ class TestColumnFormattingfromDict:
 |   Perth   | 5386 |              1554769 |      869.4      |
 +-----------+------+----------------------+-----------------+
 """.strip()
-        )
+
+    def test_set_int_format_overwrite_dict(self, city_data: PrettyTable) -> None:
+        city_data.custom_format = {"Population": lambda f, v: f"'{v}'"}
+        city_data.int_format = {"Population": "20"}
+        assert city_data.get_string() == """
++-----------+------+----------------------+-----------------+
+| City name | Area |      Population      | Annual Rainfall |
++-----------+------+----------------------+-----------------+
+|  Adelaide | 1295 |              1158259 |      600.5      |
+|  Brisbane | 5905 |              1857594 |      1146.4     |
+|   Darwin  | 112  |               120900 |      1714.7     |
+|   Hobart  | 1357 |               205556 |      619.5      |
+|   Sydney  | 2058 |              4336374 |      1214.8     |
+| Melbourne | 1566 |              3806092 |      646.9      |
+|   Perth   | 5386 |              1554769 |      869.4      |
++-----------+------+----------------------+-----------------+
+""".strip()
+
+    def test_set_int_format_overwrite(self, city_data: PrettyTable) -> None:
+        city_data.custom_format = {"Population": lambda f, v: f"'{v}'"}
+        city_data.int_format = "20"
+        assert city_data.get_string() == """
++-----------+----------------------+----------------------+-----------------+
+| City name |         Area         |      Population      | Annual Rainfall |
++-----------+----------------------+----------------------+-----------------+
+|  Adelaide |                 1295 |              1158259 |      600.5      |
+|  Brisbane |                 5905 |              1857594 |      1146.4     |
+|   Darwin  |                  112 |               120900 |      1714.7     |
+|   Hobart  |                 1357 |               205556 |      619.5      |
+|   Sydney  |                 2058 |              4336374 |      1214.8     |
+| Melbourne |                 1566 |              3806092 |      646.9      |
+|   Perth   |                 5386 |              1554769 |      869.4      |
++-----------+----------------------+----------------------+-----------------+""".strip()
 
     def test_set_float_format(self, city_data: PrettyTable) -> None:
         city_data.float_format = {"Annual Rainfall": "4.2"}
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
@@ -916,13 +1166,44 @@ class TestColumnFormattingfromDict:
 |   Perth   | 5386 |  1554769   |      869.40     |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
+
+    def test_set_float_format_overwrite_dict(self, city_data: PrettyTable) -> None:
+        city_data.custom_format = {"Annual Rainfall": lambda f, v: f"'{v}'"}
+        city_data.float_format = {"Annual Rainfall": "4.2"}
+        assert city_data.get_string() == """
++-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|  Adelaide | 1295 |  1158259   |      600.50     |
+|  Brisbane | 5905 |  1857594   |     1146.40     |
+|   Darwin  | 112  |   120900   |     1714.70     |
+|   Hobart  | 1357 |   205556   |      619.50     |
+|   Sydney  | 2058 |  4336374   |     1214.80     |
+| Melbourne | 1566 |  3806092   |      646.90     |
+|   Perth   | 5386 |  1554769   |      869.40     |
++-----------+------+------------+-----------------+
+""".strip()
+
+    def test_set_float_format_overwrite(self, city_data: PrettyTable) -> None:
+        city_data.custom_format = {"Annual Rainfall": lambda f, v: f"'{v}'"}
+        city_data.float_format = "4.2"
+        assert city_data.get_string() == """
++-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|  Adelaide | 1295 |  1158259   |      600.50     |
+|  Brisbane | 5905 |  1857594   |     1146.40     |
+|   Darwin  | 112  |   120900   |     1714.70     |
+|   Hobart  | 1357 |   205556   |      619.50     |
+|   Sydney  | 2058 |  4336374   |     1214.80     |
+| Melbourne | 1566 |  3806092   |      646.90     |
+|   Perth   | 5386 |  1554769   |      869.40     |
++-----------+------+------------+-----------------+
+""".strip()
 
     def test_set_custom_format(self, city_data: PrettyTable) -> None:
         city_data.custom_format = {"Annual Rainfall": lambda f, v: f"{v:.2f}"}
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
@@ -935,22 +1216,18 @@ class TestColumnFormattingfromDict:
 |   Perth   | 5386 |  1554769   |      869.40     |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
 
     def test_set_none_format(self, city_data: PrettyTable) -> None:
         city_data.clear_rows()
         city_data.add_row([None, None, None, None])
         city_data.none_format = {"Annual Rainfall": "N/A"}
-        assert (
-            city_data.get_string()
-            == """
+        assert city_data.get_string() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
 |    None   | None |    None    |       N/A       |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
 
 
 class TestBreakLine:
@@ -1048,6 +1325,22 @@ class TestCsvOutput:
             "value 1,value3\r\n"
             "value 4,value6\r\n"
             "value 7,value9\r\n"
+        )
+
+    def test_csv_formatting(self) -> None:
+        table = PrettyTable()
+        table.add_column("Name", ["Alice", "Bob", "Charlie"])
+        table.add_column("int_format", [7, 0, -42])
+        table.add_column("float_format", [3.14159, 10.0, -2.71828])
+        table.add_column("custom_format", [1234, 0, -5678])
+        table.int_format["int_format"] = "05"
+        table.float_format["float_format"] = ".1"
+        table.custom_format["custom_format"] = lambda f, v: f"{v:,}"
+        assert table.get_csv_string() == (
+            "Name,int_format,float_format,custom_format\r\n"
+            'Alice,00007,3.1,"1,234"\r\n'
+            "Bob,00000,10.0,0\r\n"
+            'Charlie,-0042,-2.7,"-5,678"\r\n'
         )
 
 
@@ -1168,9 +1461,7 @@ class TestCustomFormatter:
 
     def test_use_custom_formatter_for_int(self, city_data: PrettyTable) -> None:
         city_data.custom_format["Annual Rainfall"] = lambda n, v: f"{v:.2f}"
-        assert (
-            city_data.get_string().strip()
-            == """
+        assert city_data.get_string().strip() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
@@ -1183,7 +1474,6 @@ class TestCustomFormatter:
 |   Perth   | 5386 |  1554769   |      869.40     |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
 
     def test_custom_format_multi_type(self) -> None:
         table = PrettyTable(["col_date", "col_str", "col_float", "col_int"])
@@ -1192,9 +1482,7 @@ class TestCustomFormatter:
         table.custom_format["col_date"] = lambda f, v: v.strftime("%d %b %Y")
         table.custom_format["col_float"] = lambda f, v: f"{v:.3f}"
         table.custom_format["col_int"] = lambda f, v: f"{v:,}"
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +-------------+----------+-----------+------------+
 |   col_date  | col_str  | col_float |  col_int   |
 +-------------+----------+-----------+------------+
@@ -1202,7 +1490,6 @@ class TestCustomFormatter:
 | 01 Feb 2021 | February | 54321.123 | 87,654,321 |
 +-------------+----------+-----------+------------+
 """.strip()
-        )
 
     def test_custom_format_multi_type_using_on_function(self) -> None:
         table = PrettyTable(["col_date", "col_str", "col_float", "col_int"])
@@ -1219,9 +1506,7 @@ class TestCustomFormatter:
             return str(value)
 
         table.custom_format = my_format
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +-------------+----------+-----------+------------+
 |   col_date  | col_str  | col_float |  col_int   |
 +-------------+----------+-----------+------------+
@@ -1229,7 +1514,41 @@ class TestCustomFormatter:
 | 01 Feb 2021 | February | 54321.123 | 87,654,321 |
 +-------------+----------+-----------+------------+
 """.strip()
-        )
+
+    def test_overwrite_default_format(self, city_data: PrettyTable) -> None:
+        city_data.float_format = "6.2"
+        city_data.int_format = "10"
+        city_data.custom_format["Annual Rainfall"] = lambda f, v: f"+++{v:.4f}+++"
+        assert city_data.get_string() == """
++-----------+------------+------------+-----------------+
+| City name |    Area    | Population | Annual Rainfall |
++-----------+------------+------------+-----------------+
+|  Adelaide |       1295 |    1158259 |  +++600.5000+++ |
+|  Brisbane |       5905 |    1857594 | +++1146.4000+++ |
+|   Darwin  |        112 |     120900 | +++1714.7000+++ |
+|   Hobart  |       1357 |     205556 |  +++619.5000+++ |
+|   Sydney  |       2058 |    4336374 | +++1214.8000+++ |
+| Melbourne |       1566 |    3806092 |  +++646.9000+++ |
+|   Perth   |       5386 |    1554769 |  +++869.4000+++ |
++-----------+------------+------------+-----------------+""".strip()
+
+    def test_overwrite_default_format_dict(self, city_data: PrettyTable) -> None:
+        city_data.none_format = "N/A"
+        city_data.float_format = "6.2"
+        city_data.int_format = "10"
+        city_data.custom_format = {"Annual Rainfall": lambda f, v: f"+++{v:.4f}+++"}
+        assert city_data.get_string() == """
++-----------+------------+------------+-----------------+
+| City name |    Area    | Population | Annual Rainfall |
++-----------+------------+------------+-----------------+
+|  Adelaide |       1295 |    1158259 |  +++600.5000+++ |
+|  Brisbane |       5905 |    1857594 | +++1146.4000+++ |
+|   Darwin  |        112 |     120900 | +++1714.7000+++ |
+|   Hobart  |       1357 |     205556 |  +++619.5000+++ |
+|   Sydney  |       2058 |    4336374 | +++1214.8000+++ |
+| Melbourne |       1566 |    3806092 |  +++646.9000+++ |
+|   Perth   |       5386 |    1554769 |  +++869.4000+++ |
++-----------+------------+------------+-----------------+""".strip()
 
 
 class TestRepr:
@@ -1289,9 +1608,7 @@ class TestWidth:
         table.add_row([self.colored, self.colored])
         table.add_row(["nothing", "neither"])
         result = table.get_string()
-        assert (
-            result.strip()
-            == f"""
+        assert result.strip() == f"""
 +---------+---------+
 | Field 1 | Field 2 |
 +---------+---------+
@@ -1299,16 +1616,13 @@ class TestWidth:
 | nothing | neither |
 +---------+---------+
 """.strip()
-        )
 
     def test_reset(self) -> None:
         table = PrettyTable(["Field 1", "Field 2"])
         table.add_row(["abc def\033(B", "\033[31mabc def\033[m"])
         table.add_row(["nothing", "neither"])
         result = table.get_string()
-        assert (
-            result.strip()
-            == """
+        assert result.strip() == """
 +---------+---------+
 | Field 1 | Field 2 |
 +---------+---------+
@@ -1316,7 +1630,15 @@ class TestWidth:
 | nothing | neither |
 +---------+---------+
 """.strip()
-        )
+
+    def test_tab_expansion_aligns_columns(self) -> None:
+        """Ensure expandtabs() is used in PrettyTable._format_value()."""
+        table = PrettyTable(["code", "note"])
+        table.add_row(["if x:\n\treturn 1", "tab-indented"])
+        result = table.get_string()
+        assert "\t" not in result
+        line_widths = {len(line) for line in result.splitlines()}
+        assert len(line_widths) == 1
 
     @pytest.mark.parametrize(
         "loops, fields, desired_width, border, internal_border",
@@ -1380,16 +1702,13 @@ class TestWidth:
         table.add_row([0])
 
         # FIXME: Table is wider than table.max_table_width
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +----+
 | Fi |
 +----+
 | 0  |
 +----+
 """.strip()
-        )
 
     def test_max_table_width_wide(self) -> None:
         table = PrettyTable()
@@ -1407,9 +1726,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---+---+---+---+---+------------------------------+
 | F | F | F | F | F |           Field 6            |
 +---+---+---+---+---+------------------------------+
@@ -1420,7 +1737,6 @@ class TestWidth:
 |   |   |   |   |   | dolore magna aliquyam erat,  |
 |   |   |   |   |   |      sed diam voluptua       |
 +---+---+---+---+---+------------------------------+""".strip()
-        )
 
     def test_max_table_width_wide2(self) -> None:
         table = PrettyTable()
@@ -1436,9 +1752,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---+-----------------+---+-----------------+---+-----------------+
 | F |     Field 2     | F |     Field 4     | F |     Field 6     |
 +---+-----------------+---+-----------------+---+-----------------+
@@ -1448,7 +1762,6 @@ class TestWidth:
 | e |    sadipscing   | u |    sadipscing   | o |    sadipscing   |
 | m | elitr, sed diam | m | elitr, sed diam | r | elitr, sed diam |
 +---+-----------------+---+-----------------+---+-----------------+""".strip()
-        )
 
     @pytest.mark.parametrize("set_width_parameter", [True, False])
     def test_table_max_width_wo_header_width(self, set_width_parameter: bool) -> None:
@@ -1496,9 +1809,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+------------+---------+------------+---------+------------+
 | Field 1 |  Field 2   | Field 3 |  Field 4   | Field 5 |  Field 6   |
 +---------+------------+---------+------------+---------+------------+
@@ -1511,7 +1822,6 @@ class TestWidth:
 |         | elitr, sed |         | elitr, sed |         | elitr, sed |
 |         |    diam    |         |    diam    |         |    diam    |
 +---------+------------+---------+------------+---------+------------+""".strip()
-        )
 
     def test_table_width_on_init_with_columns(self) -> None:
         """See also #272"""
@@ -1530,9 +1840,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +---------+------------+---------+------------+---------+------------+
 | Field 1 |  Field 2   | Field 3 |  Field 4   | Field 5 |  Field 6   |
 +---------+------------+---------+------------+---------+------------+
@@ -1545,7 +1853,6 @@ class TestWidth:
 |         | elitr, sed |         | elitr, sed |         | elitr, sed |
 |         |    diam    |         |    diam    |         |    diam    |
 +---------+------------+---------+------------+---------+------------+""".strip()
-        )
 
     def test_table_minwidth_on_init_with_columns(self) -> None:
         table = PrettyTable(["Field 1", "Field 2"], min_width=20)
@@ -1562,7 +1869,7 @@ class TestWidth:
 |       Field 1        |                              Field 2                               |
 +----------------------+--------------------------------------------------------------------+
 |        Lorem         | Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam  |
-+----------------------+--------------------------------------------------------------------+"""  # noqa: E501
++----------------------+--------------------------------------------------------------------+"""
         )
 
     def test_table_min_max_width_on_init_with_columns(self) -> None:
@@ -1590,15 +1897,12 @@ class TestWidth:
         table.field_names = ["Metric", "Initial sol.", "Best sol."]
         table.add_rows([["foo", 1.0 / 3.0, 1.0 / 3.0]])
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +--------+--------------+------------+
 | Metric | Initial sol. | Best sol.  |
 +--------+--------------+------------+
 |  foo   |        0.33  |       0.33 |
 +--------+--------------+------------+""".strip()
-        )
 
     def test_max_table_width_wide_vrules_frame(self) -> None:
         table = PrettyTable()
@@ -1617,9 +1921,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 +--------------------------------------------------+
 | F   F   F   F   F             Field 6            |
 +--------------------------------------------------+
@@ -1630,7 +1932,6 @@ class TestWidth:
 |                     dolore magna aliquyam erat,  |
 |                          sed diam voluptua       |
 +--------------------------------------------------+""".strip()
-        )
 
     def test_max_table_width_wide_vrules_none(self) -> None:
         table = PrettyTable()
@@ -1649,9 +1950,7 @@ class TestWidth:
             ]
         )
 
-        assert (
-            table.get_string().strip()
-            == """
+        assert table.get_string().strip() == """
 ----------------------------------------------------
   F   F   F   F   F             Field 6             
 ----------------------------------------------------
@@ -1662,7 +1961,6 @@ class TestWidth:
                       dolore magna aliquyam erat,   
                            sed diam voluptua        
 ----------------------------------------------------""".strip()  # noqa: W291
-        )
 
 
 class TestFields:
@@ -1673,8 +1971,7 @@ class TestFields:
         )
         for row in CITY_DATA:
             table.add_row(row)
-        assert (
-            """+-----------+-----------------+
+        assert """+-----------+-----------------+
 | City name | Annual Rainfall |
 +-----------+-----------------+
 |  Adelaide |      600.5      |
@@ -1684,9 +1981,7 @@ class TestFields:
 |   Sydney  |      1214.8     |
 | Melbourne |      646.9      |
 |   Perth   |      869.4      |
-+-----------+-----------------+"""
-            == table.get_string().strip()
-        )
++-----------+-----------------+""" == table.get_string().strip()
 
     def test_fields(self) -> None:
         table = PrettyTable()
@@ -1694,8 +1989,7 @@ class TestFields:
         table.fields = ["City name", "Annual Rainfall"]
         for row in CITY_DATA:
             table.add_row(row)
-        assert (
-            """+-----------+-----------------+
+        assert """+-----------+-----------------+
 | City name | Annual Rainfall |
 +-----------+-----------------+
 |  Adelaide |      600.5      |
@@ -1705,9 +1999,7 @@ class TestFields:
 |   Sydney  |      1214.8     |
 | Melbourne |      646.9      |
 |   Perth   |      869.4      |
-+-----------+-----------------+"""
-            == table.get_string().strip()
-        )
++-----------+-----------------+""" == table.get_string().strip()
 
 
 class TestGeneralOutput:
@@ -1815,3 +2107,15 @@ class TestDeprecations:
     ) -> None:
         with pytest.deprecated_call(match=f"the '{name}' constant is deprecated"):
             exec(f"from {module_name} import {name}")
+
+    def test_options_type_deprecation(self) -> None:
+        with pytest.deprecated_call(match="OptionsType"):
+            from prettytable.prettytable import OptionsType
+
+            assert OptionsType is not None
+
+    def test_table_handler_deprecation(self) -> None:
+        with pytest.deprecated_call(match="TableHandler is deprecated"):
+            from prettytable import TableHandler
+
+            TableHandler()

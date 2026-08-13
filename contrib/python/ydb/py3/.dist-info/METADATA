@@ -1,30 +1,41 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: ydb
-Version: 3.29.7
+Version: 3.31.2
 Summary: YDB Python SDK
 Home-page: http://github.com/ydb-platform/ydb-python-sdk
 Author: Yandex LLC
 Author-email: ydb@yandex-team.ru
 License: Apache 2.0
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3 :: Only
+Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE
 License-File: AUTHORS
-Requires-Dist: grpcio >=1.42.0
+Requires-Dist: grpcio>=1.42.0
 Requires-Dist: packaging
-Requires-Dist: protobuf <7.0.0,>=3.13.0
-Requires-Dist: aiohttp <4
-Provides-Extra: opentelemetry
-Requires-Dist: opentelemetry-api >=1.0.0 ; extra == 'opentelemetry'
+Requires-Dist: protobuf<7.0.0,>=3.13.0
+Requires-Dist: aiohttp<4
 Provides-Extra: yc
-Requires-Dist: yandexcloud ; extra == 'yc'
+Requires-Dist: yandexcloud; extra == "yc"
+Provides-Extra: opentelemetry
+Requires-Dist: opentelemetry-api>=1.0.0; extra == "opentelemetry"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 YDB Python SDK
 ---
@@ -47,7 +58,7 @@ Officially supported Python client for YDB.
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - `pip` version 9.0.1 or higher
 
 If necessary, upgrade your version of `pip`:

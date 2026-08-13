@@ -8,6 +8,7 @@ SRCS(
     yql_yt_table_data_service_writer_ut.cpp
     yql_yt_sorted_merge_reader_ut.cpp
     yql_yt_sorting_reader_ut.cpp
+    yql_yt_table_queue_writer_with_lock_ut.cpp
 )
 
 PEERDIR(

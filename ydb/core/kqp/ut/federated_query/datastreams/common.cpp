@@ -1,11 +1,15 @@
 #include "common.h"
 
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -101,6 +105,32 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
         tableServiceConfig.SetDqChannelVersion(2u);
 
+        auto& authConfig = *AppConfig->MutableAuthConfig();
+
+        if (auto vmMetadataEmulatorHost = getenv("VM_METADATA_EMULATOR_HOST")) {
+            auto& localMetadataService = *authConfig.MutableLocalMetadataService();
+            localMetadataService.SetHost(vmMetadataEmulatorHost);
+            localMetadataService.SetPort(FromString<ui16>(getenv("VM_METADATA_EMULATOR_PORT")));
+        }
+
+        if (auto iamEndpoint = getenv("IAM_EMULATOR_ENDPOINT")) {
+            auto& iamServiceControl = *AppConfig->MutableReplicationConfig()->MutableIamServiceControl();
+            iamServiceControl.SetEndpoint(iamEndpoint);
+            iamServiceControl.SetEnableSsl(false);
+
+            iamServiceControl.SetServiceId("ydb");
+            iamServiceControl.SetMicroserviceId("data-plane");
+            iamServiceControl.SetResourceType("resource-manager.cloud");
+
+            authConfig.SetAccessServiceEndpoint(iamEndpoint);
+            authConfig.SetUseAccessServiceTLS(false);
+        }
+
+        {
+            auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
+            featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
+        }
+
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
@@ -110,7 +140,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
             .DynamicNodeCount = DynamicNodeCount,
-            .CredentialsFactory = CreateCredentialsFactory(),
+            .CredentialsFactory = CreateCredentialsFactory(BUILTIN_ACL_ROOT),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
@@ -288,6 +318,18 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
     bool sort,
     bool local,
     bool checkResult) {
+
+    return ReadTopicMessages(topicName, expectedMessages, *GetTopicClient(local), disposition, sort, checkResult);
+}
+
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
+    const std::string& topicName,
+    std::vector<std::string> expectedMessages,
+    NYdb::NTopic::TTopicClient& topicClient,
+    TInstant disposition,
+    bool sort,
+    bool checkResult) {
+
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()
@@ -302,7 +344,7 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         }
     );
 
-    auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
+    auto readSession = topicClient.CreateReadSession(readSettings);
     std::vector<std::pair<std::string, TInstant>> received;
 
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
@@ -902,7 +944,11 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
 
         const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
         if (expectExecutions || row.CheckPlan) {
-            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            if (row.CheckPlan || IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status)) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            } else {
+                UNIT_ASSERT(resultSet.ColumnParser("Plan").GetOptionalUtf8());
+            }
             UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
         }
 
@@ -926,7 +972,7 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
         }
 
         result.ExecutionId = *resultSet.ColumnParser("LastExecutionId").GetOptionalUtf8();
-        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions);
+        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions && IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status));
 
         const auto previousExecutionIds = *resultSet.ColumnParser("PreviousExecutionIds").GetOptionalUtf8();
         NJson::TJsonValue value;
@@ -1023,6 +1069,10 @@ void TTabletKiller::Bootstrap() {
 void TTabletKiller::KillTablet() const {
     RestartTablet(*ActorContext().ActorSystem(), TabletId);
     Schedule(KillerInterval, new TEvents::TEvWakeup());
+}
+
+void TStreamingTestFixture::WaitForClassifierPropagation() {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
 }
 
 } // namespace NKikimr::NKqp

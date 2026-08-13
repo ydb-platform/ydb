@@ -34,6 +34,7 @@ public:
     static THostMask MakeEmpty();
     static THostMask MakeOne(THostIndex host);
     static THostMask MakeAll(size_t hostCount);
+    static THostMask MakeFromRoute(const THostRoute& route);
 
     void Set(THostIndex host);
     void Reset(THostIndex host);

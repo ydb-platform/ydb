@@ -18,6 +18,8 @@ from github_issue_utils import (
 )
 from testowners_utils import normalize_github_team_owners_string
 
+NEW_BRANCH_MONITOR_LOOKBACK_DAYS = 30
+
 
 def _dedupe_monitor_rows(rows):
     """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
@@ -527,11 +529,25 @@ def main():
                 branch_creation_date = None
 
             if branch_creation_date:
-                process_start_date = max(branch_creation_date, default_start_date)
-                print(f"Found branch creation date: {branch_creation_date}")
+                cold_start_date = max(
+                    today - datetime.timedelta(days=NEW_BRANCH_MONITOR_LOOKBACK_DAYS),
+                    default_start_date,
+                )
+                process_start_date = max(branch_creation_date, cold_start_date)
+                print(
+                    f"Found branch creation date: {branch_creation_date}, "
+                    f"collecting from {process_start_date} "
+                    f"(lookback capped at {NEW_BRANCH_MONITOR_LOOKBACK_DAYS} days)"
+                )
             else:
-                process_start_date = max(today - datetime.timedelta(days=7), default_start_date)
-                print(f"No test runs found for branch, using 1 week ago: {process_start_date}")
+                process_start_date = max(
+                    today - datetime.timedelta(days=NEW_BRANCH_MONITOR_LOOKBACK_DAYS),
+                    default_start_date,
+                )
+                print(
+                    f"No test runs found for branch, collecting from {process_start_date} "
+                    f"({NEW_BRANCH_MONITOR_LOOKBACK_DAYS} days ago)"
+                )
 
             date_list = [process_start_date + datetime.timedelta(days=x) for x in range((today - process_start_date).days + 1)]
             print(f"Init new monitor collecting from date {process_start_date}")

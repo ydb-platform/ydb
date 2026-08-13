@@ -9,6 +9,15 @@
 * `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter` — фильтр по n-граммам строковой колонки (`String`, `Utf8`); подходит для поиска подстрок и шаблонов `LIKE` в [колоночных таблицах](../concepts/glossary.md#column-oriented-table).
 
+### Локальные блум-индексы {#row-vs-column}
+
+Тип `bloom_filter` поддерживается как в [строковых](../concepts/glossary.md#row-oriented-table) (OLTP), так и в [колоночных](../concepts/glossary.md#column-oriented-table) (OLAP) таблицах, но реализация различается:
+
+* В строковых таблицах фильтр строится как префиксный фильтр Блума по левому префиксу [первичного ключа](../concepts/glossary.md#primary-key). Индексируемые колонки должны образовывать непрерывное ведущее подмножество колонок первичного ключа. Это ускоряет точечные чтения и сканы по диапазону, ограничивающие ведущие колонки ключа. Для создания префиксного фильтра Блума используйте [ALTER TABLE ... ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom), для удаления — [ALTER TABLE ... DROP INDEX](../yql/reference/syntax/alter_table/indexes.md#drop-index).
+* В колоночных таблицах фильтр строится по значениям индексируемой колонки в каждом фрагменте данных (порции). Он применяется при аналитических сканах для пропуска фрагментов, не содержащих искомое значение.
+
+Тип `bloom_ngram_filter` поддерживается только в колоночных таблицах.
+
 ## Параметры и значения по умолчанию {#parameters}
 
 Полный перечень параметров `WITH (...)` и значений по умолчанию:
@@ -46,6 +55,24 @@ ALTER TABLE events
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
+
+Создание строковой (OLTP) таблицы с префиксными фильтрами Блума по префиксам первичного ключа. В строковых таблицах индексируемые колонки должны образовывать левый префикс первичного ключа:
+
+```yql
+CREATE TABLE orders (
+    customer_id Utf8,
+    order_id Utf8,
+    amount Decimal(10,2),
+    PRIMARY KEY (customer_id, order_id),
+    -- Префиксный фильтр Блума по первой колонке ключа
+    INDEX idx_customer LOCAL USING bloom_filter
+        ON (customer_id)
+        WITH (false_positive_probability = 0.001),
+    -- Префиксный фильтр Блума по всему первичному ключу
+    INDEX idx_full_key LOCAL USING bloom_filter
+        ON (customer_id, order_id)
+);
 ```
 
 Изменение параметров:

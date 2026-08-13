@@ -166,9 +166,10 @@ std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(ui64 passedStep, ui6
     }
 
     if (const auto holder = AppDataVerified().SnapshotRegistryHolder) {
-        if (const auto registry = holder->Get()) {
+        auto registry = holder->Get();
+        if (registry.get()) {
             return CreateRegistryScanSnapshotGuard(
-                passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, registry, AppDataVerified().LongTxServiceConfig);
+                passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, std::move(registry), AppDataVerified().LongTxServiceConfig);
         }
     }
 

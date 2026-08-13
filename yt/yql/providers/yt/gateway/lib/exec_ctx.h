@@ -86,9 +86,9 @@ protected:
     );
 
 public:
-    TString GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const;
-    TString GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
+    TString GetInputSpec(bool ensureOldTypesOnly, bool intermediateInput) const;
+    TString GetOutSpec(bool ensureOldTypesOnly) const;
+    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly) const;
 
     TString GetSessionId() const;
 
@@ -111,7 +111,7 @@ protected:
     void SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings);
 
     template <class TTableType>
-    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
+    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, bool intermediateInput);
 
     virtual void FillRichPathForPullCaseInput(NYT::TRichYPath& path, TYtTableBaseInfo::TPtr tableInfo);
     virtual void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest);

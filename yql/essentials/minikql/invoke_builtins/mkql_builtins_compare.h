@@ -2,6 +2,8 @@
 
 #include "mkql_builtins_impl.h" // Y_IGNORE // Y_IGNORE
 
+#include <array>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -125,15 +127,14 @@ int CompareCustomsWithCleanup(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePo
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
 struct TCompareArgsOpt {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
-const TFunctionParamMetadata TCompareArgsOpt<TInput1, TInput2, IsLeftOptional, IsRightOptional, IsResultOptional>::Value[4] = {
-    {NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {0, 0}};
+const std::array<TFunctionParamMetadata, 4> TCompareArgsOpt<TInput1, TInput2, IsLeftOptional, IsRightOptional, IsResultOptional>::Value = {{{NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {0, 0}}};
 
 template <
     typename TInput1, typename TInput2,

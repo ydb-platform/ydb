@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(Shred) {

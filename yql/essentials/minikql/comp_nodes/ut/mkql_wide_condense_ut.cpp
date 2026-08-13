@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test) {
 Y_UNIT_TEST_LLVM(TestConcatItemsToKey) {
@@ -23,7 +22,7 @@ Y_UNIT_TEST_LLVM(TestConcatItemsToKey) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.AggrConcat(pb.AggrConcat(items.front(), NTest::ConvertValueToLiteralNode(pb, TStringBuf(": "))), items.back())}; },
                                                                     [&](TRuntimeNode::TList items, TRuntimeNode::TList state) { return pb.AggrNotEquals(items.front(), state.front()); },
@@ -57,7 +56,7 @@ Y_UNIT_TEST_LLVM(TestSwitchByBoolFieldAndDontUseKey) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Unwrap(pb.Nth(item, 0U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U]}; },
                                                                     [&](TRuntimeNode::TList items, TRuntimeNode::TList) { return items.back(); },
@@ -80,7 +79,7 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
     const auto data = pb.NewTuple({});
     const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCondense1(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                  [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                                     [](TRuntimeNode::TList items) { return items; },
                                                                     [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
@@ -92,5 +91,4 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

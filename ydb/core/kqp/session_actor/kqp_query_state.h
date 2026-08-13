@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
@@ -26,11 +27,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
 
-namespace NWorkload {
+namespace NWorkloadManager {
 class IQueryClassifier;
-} // namespace NWorkload
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -126,6 +129,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
         QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
@@ -149,9 +153,10 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkload::IQueryClassifier> QueryClassifier;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
+    TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -191,6 +196,8 @@ public:
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -305,6 +312,10 @@ public:
 
     bool HasKafkaApiOperations() const {
         return RequestEv->HasKafkaApiOperations();
+    }
+
+    bool HasDeferredPublication() const {
+        return RequestEv->HasDeferredPublication();
     }
 
     bool GetQueryKeepInCache() const {
@@ -429,6 +440,10 @@ public:
 
     const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
         return RequestEv->GetKafkaApiOperations();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublicationFromRequest() const {
+        return RequestEv->GetDeferredPublication();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -694,6 +709,7 @@ public:
 
     //// Topic ops ////
     void FillTopicOperations();
+    void FillDeferredPublicationOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
@@ -703,5 +719,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

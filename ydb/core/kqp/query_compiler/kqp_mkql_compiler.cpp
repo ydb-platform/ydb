@@ -351,9 +351,9 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 ctx.StreamLookupJoinCookieVersion());
         });
 
-    compiler->AddCallable(TDqBlockHashJoinCore::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
+    compiler->AddCallable(
+        TDqBlockHashJoinCore::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() >= 8 && node.ChildrenSize() <= 11, "Invalid number of arguments for BlockHashJoinCore");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -422,8 +422,36 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                     }
                 }
             }
-            return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
+
+            auto IsEmptyLambda = [](const TExprNode::TPtr input) -> bool {
+                auto lambda = TCoLambda(input);
+                return !!TMaybeNode<TCoVoid>(lambda.Body().Ptr());
+            };
+
+            NMiniKQL::TDqProgramBuilder::TJoinFilterLambda leftFilter;
+            if (node.ChildrenSize() > 8U && !IsEmptyLambda(node.ChildPtr(8U))) {
+                leftFilter = [&](TRuntimeNode::TList leftInputs) {
+                    return MkqlBuildLambda(*node.Child(8U), buildCtx, leftInputs);
+                };
+            }
+
+            NMiniKQL::TDqProgramBuilder::TJoinFilterLambda rightFilter;
+            if (node.ChildrenSize() > 9U && !IsEmptyLambda(node.ChildPtr(9U))) {
+                rightFilter = [&](TRuntimeNode::TList rightInputs) {
+                    return MkqlBuildLambda(*node.Child(9U), buildCtx, rightInputs);
+                };
+            }
+
+            NMiniKQL::TDqProgramBuilder::TJoinCommonFilterLambda commonFilter;
+            if (node.ChildrenSize() > 10U && !IsEmptyLambda(node.ChildPtr(10U))) {
+                commonFilter = [&](TRuntimeNode::TList leftInputs, TRuntimeNode::TList rightInputs) {
+                    leftInputs.insert(leftInputs.end(), rightInputs.begin(), rightInputs.end());
+                    return MkqlBuildLambda(*node.Child(10U), buildCtx, leftInputs);
+                };
+            }
+
+            return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns, graceJoinRenames.Left,
+                                                    graceJoinRenames.Right, returnType, settings, leftFilter, rightFilter, commonFilter);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
@@ -472,6 +500,10 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return MkqlBuildLambda(*wg.PartitionKeyExtractor().Raw(), ctx, {item});
         };
 
+        const auto writeTimeExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.WriteTimeExtractor().Raw(), ctx, {item});
+        };
+
         std::vector<std::pair<std::string, std::string>> watermarkSettings;
         watermarkSettings.reserve(wg.WatermarkSettings().Size());
         for (const auto& nameValue : wg.WatermarkSettings()) {
@@ -497,7 +529,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
         const auto partitionKeys = pgmBuilder.NewVoid();
 
-        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, watermarkSettings, partitionKeys);
+        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, writeTimeExtractor, watermarkSettings, partitionKeys);
     });
 
     compiler->AddCallable("FulltextAnalyze",

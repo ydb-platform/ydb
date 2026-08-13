@@ -18,7 +18,6 @@
 namespace NSQLTranslationV1 {
 
 using NSQLReflect::TLexerGrammar;
-using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
 
 size_t MatchANSIMultilineComment(TStringBuf remaining);

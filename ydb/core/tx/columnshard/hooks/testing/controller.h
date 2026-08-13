@@ -343,6 +343,12 @@ public:
         return ShardActuals.size();
     }
 
+    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ShardActuals.size() == 1);
+        return ShardActuals.begin()->second;
+    }
+
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);
@@ -366,6 +372,10 @@ public:
         }
         return result;
     }
+
+    ui32 GetBackgroundSessionsCount() const;
+
+    ui32 GetTxOperatorsCount() const;
 
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;

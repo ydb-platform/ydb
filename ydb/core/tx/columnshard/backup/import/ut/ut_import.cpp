@@ -1,3 +1,5 @@
+#include <ydb/core/tx/columnshard/backup/import/session.h>
+#include <ydb/core/tx/columnshard/backup/import/task.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -8,6 +10,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
@@ -17,6 +20,78 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
+
+Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
+    static std::shared_ptr<NOlap::NImport::TSession> MakeSession() {
+        NKikimrSchemeOp::TRestoreTask restoreTask;
+        restoreTask.MutableS3Settings()->SetBucket("test");
+        restoreTask.MutableS3Settings()->SetEndpoint("localhost:9000");
+        restoreTask.SetTableId(1);
+        using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
+        THashMap<ui32, TNameTypeInfo> emptyColumns;
+        auto task = std::make_shared<NOlap::NImport::TImportTask>(NColumnShard::TSchemeShardLocalPathId::FromRawValue(1),
+            /*columns=*/emptyColumns, restoreTask, /*schemaVersion=*/std::optional<ui64>{ 1 }, /*txId=*/std::optional<ui64>{ 42 });
+        return std::make_shared<NOlap::NImport::TSession>(task);
+    }
+
+    Y_UNIT_TEST(SessionIsNotStartedAfterAbort) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("simulated error: downloader timed out");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnConfirmedIsLegal) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        session->Abort("abort from confirmed state");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(IsStartedReturnsFalseForNonStartedStates) {
+        auto session = MakeSession();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Confirm();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("abort");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(DoubleAbortDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: timeout");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("second abort: racing error batch");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnFinishedSessionDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("abort on confirmed");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("abort again");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortSessionControlOnAlreadyAbortedIsNoOp) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: operation timed out");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        const bool shouldCallAbort = !session->IsFinished() && !session->IsReadyForRemoveOnFinished();
+        UNIT_ASSERT_C(!shouldCallAbort, "TAbortSessionControl::DoApply would call Abort() on an already-Aborted "
+                                        "session, reproducing the crash at session.cpp:33");
+    }
+}
 
 Y_UNIT_TEST_SUITE(Restore) {
     [[nodiscard]] TPlanStep ProposeTx(
@@ -127,10 +202,20 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
             TestWaitCondition(runtime, "export", [&]() {
                 return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
             });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
         }
 
         // restore
@@ -182,13 +267,24 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
             TestWaitCondition(runtime, "import", [&]() {
                 return true;
             });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
             {
-                NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
+                YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+                    {"TESTSTEP", 8});
                 TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
                 reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
                 auto rb = reader.ReadAll();

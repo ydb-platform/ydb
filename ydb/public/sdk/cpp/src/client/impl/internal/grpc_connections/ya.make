@@ -1,5 +1,10 @@
 LIBRARY()
 
+# Avoid llvm-symbolizer cache thrashing for large line-table-only ASan binaries.
+IF (SANITIZER_TYPE == "address" AND DEBUGINFO_LINES_ONLY == "yes")
+    NO_DEBUG_INFO()
+ENDIF()
+
 SRCS(
     actions.cpp
     grpc_connections.cpp

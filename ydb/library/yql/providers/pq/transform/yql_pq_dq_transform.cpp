@@ -29,14 +29,13 @@ public:
                 TProgramBuilder pgmBuilder(env, FunctionRegistry);
 
                 TCallableBuilder callableBuilder(env, callable.GetType()->GetName(), callable.GetType()->GetReturnType(), false);
-                callableBuilder.Add(callable.GetInput(0));
-                callableBuilder.Add(callable.GetInput(1));
-                callableBuilder.Add(callable.GetInput(2));
-                callableBuilder.Add(callable.GetInput(3));
-                callableBuilder.Add(callable.GetInput(4));
+                YQL_ENSURE(callable.GetInputsCount() == 7);
+                for (ui32 i = 0; i < 6; ++i) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
 
-                if (callable.GetInput(5).GetStaticType()->IsVoid()) {
-                    const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(4));
+                if (callable.GetInput(6).GetStaticType()->IsVoid()) {
+                    const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(5));
                     const auto watermarkSettings = TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
 
                     std::vector<TPartitionKey> federatedClusters;
@@ -69,7 +68,7 @@ public:
                     }
                     callableBuilder.Add(pgmBuilder.NewList(items.front().GetStaticType(), items));
                 } else {
-                    callableBuilder.Add(callable.GetInput(5));
+                    callableBuilder.Add(callable.GetInput(6));
                 }
 
                 return TRuntimeNode(callableBuilder.Build(), false);

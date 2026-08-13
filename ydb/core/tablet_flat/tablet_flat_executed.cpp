@@ -6,6 +6,8 @@
 #include <ydb/core/base/mon_auth.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_EXECUTOR
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -25,9 +27,11 @@ bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
         // is expected to always succeed.
         if (auto* actor = dynamic_cast<IActor*>(this)) {
             auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR,
-                "Tablet " << TabletID() << " unhandled exception " << TypeName(e) << ": " << e.what()
-                << '\n' << TBackTrace::FromCurrentException().PrintToString());
+            YDB_LOG_CRIT("Tablet unhandled exception",
+                {"tabletId", TabletID()},
+                {"typeName", TypeName(e)},
+                {"exception", e.what()},
+                {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
 
             GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 
@@ -250,12 +254,13 @@ bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, 
 }
 
 void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::TABLET_EXECUTOR, "RenderHtmlPage for tablet " << TabletID());
+    YDB_LOG_NOTICE_CTX(ctx, "RenderHtmlPage for tablet",
+        {"tabletId", TabletID()});
     auto cgi = ev->Get()->Cgi();
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app" || (UsesTabletDevUiSecurePath(AppData(), TabletType())
+    if (path == "/app" || (HasTabletDevUiSecureSubtree(AppData(), TabletType())
             && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
@@ -306,7 +311,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
-                const TStringBuf tabletDevUiAppPrefix = TabletType() == TTabletTypes::DataShard && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+                const TStringBuf tabletDevUiAppPrefix = IsTabletDevUiAppPageAdminOnly(AppData(), TabletType())
                     ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
                     : TStringBuf("app");
                 DIV_CLASS("row") {

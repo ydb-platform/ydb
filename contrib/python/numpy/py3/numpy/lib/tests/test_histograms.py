@@ -1,6 +1,6 @@
 import numpy as np
 
-from numpy.lib.histograms import histogram, histogramdd, histogram_bin_edges
+from numpy import histogram, histogramdd, histogram_bin_edges
 from numpy.testing import (
     assert_, assert_equal, assert_array_equal, assert_almost_equal,
     assert_array_almost_equal, assert_raises, assert_allclose,
@@ -349,10 +349,8 @@ class TestHistogram:
 
         # previously crashed
         count, x_loc = np.histogram(arr, bins=1, range=range)
-        assert_equal(count, [1])
-
-        # gh-10322 means that the type comes from arr - this may change
-        assert_equal(x_loc.dtype, float_small)
+        assert_equal(count, [0])
+        assert_equal(x_loc.dtype, float_large)
 
     def do_precision_upper_bound(self, float_small, float_large):
         eps = np.finfo(float_large).eps
@@ -366,10 +364,9 @@ class TestHistogram:
 
         # previously crashed
         count, x_loc = np.histogram(arr, bins=1, range=range)
-        assert_equal(count, [1])
+        assert_equal(count, [0])
 
-        # gh-10322 means that the type comes from arr - this may change
-        assert_equal(x_loc.dtype, float_small)
+        assert_equal(x_loc.dtype, float_large)
 
     def do_precision(self, float_small, float_large):
         self.do_precision_lower_bound(float_small, float_large)
@@ -472,7 +469,7 @@ class TestHistogramOptimBinNums:
                          'doane': 3, 'sqrt': 2, 'stone': 1}}
 
         for testlen, expectedResults in small_dat.items():
-            testdat = np.arange(testlen)
+            testdat = np.arange(testlen).astype(float)
             for estimator, expbins in expectedResults.items():
                 a, b = np.histogram(testdat, estimator)
                 assert_equal(len(a), expbins, err_msg="For the {0} estimator "
@@ -594,6 +591,30 @@ class TestHistogramOptimBinNums:
         hist32, edges32 = np.histogram(a.astype(np.int32), bins=bins)
         assert_array_equal(hist, hist32)
         assert_array_equal(edges, edges32)
+
+    @pytest.mark.parametrize("bins", ['auto', 'fd', 'doane', 'scott',
+                                      'stone', 'rice', 'sturges'])
+    def test_integer(self, bins):
+        """
+        Test that bin width for integer data is at least 1.
+        """
+        with suppress_warnings() as sup:
+            if bins == 'stone':
+                sup.filter(RuntimeWarning)
+            assert_equal(
+                np.histogram_bin_edges(np.tile(np.arange(9), 1000), bins),
+                np.arange(9))
+
+    def test_integer_non_auto(self):
+        """
+        Test that the bin-width>=1 requirement *only* applies to auto binning.
+        """
+        assert_equal(
+            np.histogram_bin_edges(np.tile(np.arange(9), 1000), 16),
+            np.arange(17) / 2)
+        assert_equal(
+            np.histogram_bin_edges(np.tile(np.arange(9), 1000), [.1, .2]),
+            [.1, .2])
 
     def test_simple_weighted(self):
         """

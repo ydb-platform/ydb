@@ -16,6 +16,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -56,6 +57,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(TrimQlFilters));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
         AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
@@ -78,13 +80,20 @@ public:
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
+        AddHandler(1, &TCoSqlCombine::Match, HNDL(SqlCombine));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
+
+        AddHandler(3, &TCoExtractMembers::Match, HNDL(ExtractMembersOverMaterialize));
+        AddHandler(3, &TCoRight::Match, HNDL(ExtractMembersOverMaterializeMultiUsage));
 #undef HNDL
+
+        SetGlobal(3);
     }
 
 protected:
+
     TYtSection PushdownSectionColumns(TYtSection section, TExprContext& ctx, const TGetParents& getParents) const {
         if (HasNonEmptyKeyFilter(section)) {
             // wait until key filter values are calculated and pushed to Path/Ranges
@@ -146,7 +155,7 @@ protected:
                     effectiveColumns.insert(column.Name);
                 }
 
-                if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::KeepSorted) || op.Maybe<TYtPersist>()) {
                     for (size_t i = 0; i < rowSpec->SortedBy.size(); ++i) {
                         const bool inserted = effectiveColumns.insert(rowSpec->SortedBy[i]).second;
                         keepColumns = keepColumns || inserted;
@@ -164,11 +173,20 @@ protected:
                     }
                 }
 
+                if (const auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                    // add columns which are implicitly used by path.QLFilter(), but not included in path.Columns();
+                    const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    for (const auto& item : qlFilterType->GetItems()) {
+                        const bool inserted = effectiveColumns.emplace(item->GetName()).second;
+                        keepColumns = keepColumns || inserted;
+                    }
+                }
                 if (type->GetSize() <= effectiveColumns.size()) {
                     // The same column set as original type
                     continue;
                 }
 
+                const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(op.Cast().DataSink().Cluster().StringValue(), *State_->Configuration);
                 if (auto maybeMap = op.Maybe<TYtMap>()) {
                     TYtMap map = maybeMap.Cast();
                     TVector<const TItemExprType*> structItems;
@@ -209,7 +227,7 @@ protected:
                         .Build();
 
                     auto outStructType = ctx.MakeType<TStructExprType>(structItems);
-                    TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                    TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                     if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                         if (const auto s = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -261,8 +279,7 @@ protected:
                         .Columns(newColumns)
                         .Stat<TCoVoid>().Build()
                         .Done();
-                }
-                else if (auto maybeMerge = op.Maybe<TYtMerge>()) {
+                } else if (auto maybeMerge = op.Maybe<TYtMerge>()) {
                     TYtMerge merge = maybeMerge.Cast();
 
                     auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
@@ -274,7 +291,7 @@ protected:
                         structItems.push_back(prevOutType->GetItems()[*pos]);
                     }
 
-                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), nativeTypeCompatibility);
                     mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
@@ -312,6 +329,71 @@ protected:
                         .Columns(newColumns)
                         .Stat<TCoVoid>().Build()
                         .Done();
+                } else if (auto maybePersist = op.Maybe<TYtPersist>(); maybePersist && NYql::HasSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+                    TYtPersist persist = maybePersist.Cast();
+
+                    TVector<const TItemExprType*> structItems;
+                    for (const auto& column: effectiveColumns) {
+                        auto pos = type->FindItem(column);
+                        YQL_ENSURE(pos);
+                        structItems.push_back(type->GetItems()[*pos]);
+                    }
+
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), rowSpec->GetNativeYtTypeFlags());
+                    mergeOut.RowSpec->CopySortness(ctx, *rowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    if (auto nativeType = rowSpec->GetNativeYtType()) {
+                        mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
+                    }
+                    mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), persist.Pos(), ctx);
+                    mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
+
+                    TSet<TStringBuf> columnSet(effectiveColumns.begin(), effectiveColumns.end());
+                    if (mergeOut.RowSpec->HasAuxColumns()) {
+                        for (auto item: mergeOut.RowSpec->GetAuxColumns()) {
+                            columnSet.insert(item.first);
+                        }
+                    }
+
+                    hasNewPath = true;
+                    auto persistInput = Build<TYtPath>(ctx, path.Pos())
+                        .InitFrom(persist.Input().Item(0).Paths().Item(0))
+                        .Table<TYtOutput>()
+                            .Operation<TYtMerge>()
+                                .World<TCoWorld>().Build()
+                                .DataSink(persist.DataSink())
+                                .Input()
+                                    .Add(UpdateInputFields(persist.Input().Item(0), std::move(columnSet), ctx, false))
+                                .Build()
+                                .Output()
+                                    .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
+                                .Build()
+                                .Settings().Build()
+                            .Build()
+                            .OutIndex().Value(0).Build()
+                        .Build()
+                        .Done();
+
+                    paths.back() = Build<TYtPath>(ctx, path.Pos())
+                        .InitFrom(path)
+                        .Table<TYtOutput>()
+                            .Operation<TYtPersist>()
+                                .InitFrom(persist)
+                                .Input()
+                                    .Add()
+                                        .Paths()
+                                            .Add(persistInput)
+                                        .Build()
+                                        .Settings().Build()
+                                    .Build()
+                                .Build()
+                                .Output()
+                                    .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
+                                .Build()
+                            .Build()
+                            .OutIndex().Value(0).Build()
+                            .Mode(path.Table().Cast<TYtOutput>().Mode())
+                        .Build()
+                        .Done();
                 }
             }
         }
@@ -327,6 +409,42 @@ protected:
     }
 
 protected:
+    TMaybeNode<TExprBase> SqlCombine(TExprBase node, TExprContext& ctx) const {
+        auto sqlCombine = node.Cast<TCoSqlCombine>();
+
+        TString usedCluster;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        TSyncMap syncList;
+        bool hasYtInput = false;
+        for (auto input : { sqlCombine.LeftInput(), sqlCombine.RightInput() }) {
+            if (IsYtProviderInput(input.Input())) {
+                hasYtInput = true;
+                auto cluster = DeriveClusterFromInput(input.Input(), selectionMode);
+                if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
+                    return node;
+                }
+            }
+
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+                if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
+                    return node;
+                }
+            }
+        }
+
+        if (!hasYtInput) {
+            return node;
+        }
+
+        if (!IsYtCompleteIsolatedLambda(sqlCombine.UsingLambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
+        }
+
+        return ExpandSqlCombine(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 
@@ -1534,6 +1652,110 @@ protected:
             .Done();
     }
 
+    TMaybeNode<TExprBase> ExtractMembersOverMaterialize(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        auto extractMembers = node.Cast<TCoExtractMembers>();
+
+        auto maybeMaterialize = extractMembers.Input().Maybe<TCoRight>().Input().Maybe<TYtMaterialize>();
+        if (!maybeMaterialize) {
+            return node;
+        }
+
+        auto parentsMap = getParents();
+        if (auto it = parentsMap->find(extractMembers.Input().Raw()); it == parentsMap->cend() || it->second.size() > 1) {
+            // Right! is used multiple times
+            return node;
+        }
+
+        auto materialize = maybeMaterialize.Cast();
+        if (!NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+            return node;
+        }
+
+        TVector<const TExprNode*> lefts;
+        auto it = parentsMap->find(materialize.Raw());
+        YQL_ENSURE(it != parentsMap->cend());
+        for (auto parent: it->second) {
+            if (parent == extractMembers.Input().Raw()) {
+                continue;
+            } else if (TCoLeft::Match(parent)) {
+                lefts.push_back(parent);
+            } else {
+                // YtMaterialize is used multiple times
+                return node;
+            }
+        }
+
+        auto newMaterialize = Build<TYtMaterialize>(ctx, materialize.Pos())
+            .InitFrom(materialize)
+            .Input<TCoExtractMembers>()
+                .InitFrom(extractMembers)
+                .Input(materialize.Input())
+            .Build()
+            .Done();
+
+        for (auto left: lefts) {
+            optCtx.RemapNode(*left, ctx.ChangeChild(*left, TCoLeft::idx_Input, newMaterialize.Ptr()));
+        }
+
+        return Build<TCoRight>(ctx, extractMembers.Input().Pos())
+            .Input(newMaterialize)
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> ExtractMembersOverMaterializeMultiUsage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        auto maybeMaterialize = node.Cast<TCoRight>().Input().Maybe<TYtMaterialize>();
+        if (!maybeMaterialize) {
+            return node;
+        }
+        auto materialize = maybeMaterialize.Cast();
+        if (!NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+            return node;
+        }
+
+        TVector<const TExprNode*> lefts;
+        auto parentsMap = getParents();
+        auto it = parentsMap->find(materialize.Raw());
+        YQL_ENSURE(it != parentsMap->cend());
+        for (auto parent: it->second) {
+            if (parent == node.Raw()) {
+                continue;
+            } else if (TCoLeft::Match(parent)) {
+                lefts.push_back(parent);
+            } else {
+                return node;
+            }
+        }
+
+        TNodeOnNodeOwnedMap toOptimize;
+        TExprNode::TPtr newRight;
+        TExprNode::TPtr newMaterialize;
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node.Ptr(), *parentsMap, toOptimize, ctx,
+            [&] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) -> TExprNode::TPtr {
+                newMaterialize = Build<TYtMaterialize>(ctx, node.Pos())
+                    .InitFrom(materialize)
+                    .Input<TCoExtractMembers>()
+                        .Input(materialize.Input())
+                        .Members(members)
+                    .Build()
+                    .Done().Ptr();
+                newRight = ctx.ChangeChild(*input, TCoRight::idx_Input, TExprNode::TPtr(newMaterialize));
+                return newRight;
+            }
+        );
+        if (newRight) {
+            YQL_ENSURE(newMaterialize);
+            for (auto& [s, d]: toOptimize) {
+                optCtx.RemapNode(*s, d);
+            }
+            for (auto left: lefts) {
+                optCtx.RemapNode(*left, ctx.ChangeChild(*left, TCoLeft::idx_Input, TExprNode::TPtr(newMaterialize)));
+            }
+            return TExprBase(newRight);
+        }
+
+        return node;
+    }
+
     TMaybeNode<TExprBase> TakeOrSkip(TExprBase node, TExprContext& ctx) const {
         auto countBase = node.Cast<TCoCountBase>();
         auto input = countBase.Input();
@@ -2254,7 +2476,7 @@ protected:
             }
 
             // derive common type for all join keys in key set
-            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx);
+            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx, *State_->Types);
             YQL_ENSURE(commonType);
 
             const TTypeAnnotationNode* commonTypeNoOpt = RemoveOptionalType(commonType);
@@ -2746,6 +2968,16 @@ protected:
 
         return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
             State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
+    }
+
+    TMaybeNode<TExprBase> TrimQlFilters(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+        auto input = RemoveYtQLFilters(read.Input(), ctx);
+        if (input.Raw() == read.Input().Raw()) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input, input.Ptr());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

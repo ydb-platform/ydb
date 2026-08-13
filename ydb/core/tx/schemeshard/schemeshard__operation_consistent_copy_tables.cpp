@@ -78,6 +78,7 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;
@@ -309,11 +310,17 @@ bool CreateConsistentCopyTables(
                 continue;
             }
 
+            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
+            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+            if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping a non-ready index " << name << " in state " << indexInfo->State);
+                continue;
+            }
+
             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Creating index copy operation for: " << name);
 
-            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
             if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,

@@ -78,6 +78,7 @@ struct TEvHttpProxy {
         TString PrivateKeyFile;
         TString SslCertificatePem;
         TString CaFile;
+        bool ClientCertificateRequired = false;
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
@@ -119,6 +120,7 @@ struct TEvHttpProxy {
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
         TString UserToken; // built and serialized
+        TString Database; // raw extracted from request; empty if not specified
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))

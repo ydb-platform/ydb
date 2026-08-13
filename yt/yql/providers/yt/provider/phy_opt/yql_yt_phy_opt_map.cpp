@@ -98,7 +98,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, sortedOutput, flatMap.Pos(),
-        outItemType, ctx, State_, flatMap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, flatMap.Ref().GetConstraintSet());
 
     auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, flatMap.Pos());
     if (TCoOrderedFlatMap::Match(flatMap.Raw()) || sortedOutput) {
@@ -172,7 +172,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     auto mapper = cleanup.Cast().Ptr();
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = NPrivate::ConvertOutTablesWithSortAware(mapper, sortedOutput, lmap.Pos(),
-        outItemType, ctx, State_, lmap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, lmap.Ref().GetConstraintSet());
 
     const bool useFlow = State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW);
 
@@ -392,7 +392,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
             .Done();
     }
 
-    TYtOutTableInfo combineOut(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo combineOut(outItemType, GetNativeYtTypeCompatibility(*cluster, *State_->Configuration));
 
     return Build<TYtOutput>(ctx, combineByKey.Pos())
         .Operation<TYtMap>()

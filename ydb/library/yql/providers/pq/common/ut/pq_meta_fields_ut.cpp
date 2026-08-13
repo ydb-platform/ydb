@@ -133,6 +133,18 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
             UNIT_ASSERT_VALUES_EQUAL(desc->Key, "write_time");
             UNIT_ASSERT_VALUES_EQUAL(desc->SysColumn, "_yql_sys_tsp_write_time");
         }
+        {
+            auto desc = GetPqMetaFieldDescriptorBySysColumn("_yql_sys_tsp_partition_id", false);
+            UNIT_ASSERT(desc.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(desc->Key, "partition_id");
+            UNIT_ASSERT_VALUES_EQUAL(desc->SysColumn, "_yql_sys_tsp_partition_id");
+        }
+        {
+            auto desc = GetPqMetaFieldDescriptorBySysColumn("_yql_sys_tsp_cluster", false);
+            UNIT_ASSERT(desc.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(desc->Key, "cluster");
+            UNIT_ASSERT_VALUES_EQUAL(desc->SysColumn, "_yql_sys_tsp_cluster");
+        }
     }
 
     Y_UNIT_TEST(GetAllowedYdbSysColumns) {
@@ -193,6 +205,16 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
             UNIT_ASSERT_VALUES_EQUAL(*result, "_yql_sys_tsp_write_time");
         }
         {
+            auto result = YdbSysColumnToOldSysColumn("__ydb_partition_id", true);
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(*result, "_yql_sys_tsp_partition_id");
+        }
+        {
+            auto result = YdbSysColumnToOldSysColumn("__ydb_cluster", true);
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(*result, "_yql_sys_tsp_cluster");
+        }
+        {
             // Non-__ydb_ column returns nullopt
             auto result = YdbSysColumnToOldSysColumn("_yql_sys_offset", false);
             UNIT_ASSERT(!result.has_value());
@@ -217,6 +239,20 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
             auto result = SkipPqSystemPrefix("_yql_sys_tsp_write_time", &isTransparent);
             UNIT_ASSERT(result.has_value());
             UNIT_ASSERT_VALUES_EQUAL(*result, "write_time");
+            UNIT_ASSERT(isTransparent);
+        }
+        {
+            bool isTransparent = false;
+            auto result = SkipPqSystemPrefix("_yql_sys_tsp_partition_id", &isTransparent);
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(*result, "partition_id");
+            UNIT_ASSERT(isTransparent);
+        }
+        {
+            bool isTransparent = false;
+            auto result = SkipPqSystemPrefix("_yql_sys_tsp_cluster", &isTransparent);
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(*result, "cluster");
             UNIT_ASSERT(isTransparent);
         }
         {

@@ -61,6 +61,8 @@ static int test(const char *filename, int source_fd, int target_fd,
 
 	ret = io_uring_queue_init(8, &sring, ring_flags);
 	if (ret) {
+		if (ret == -EINVAL)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
@@ -238,6 +240,8 @@ int main(int argc, char *argv[])
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 0 2 defer\n");
 		ret = T_EXIT_FAIL;
+	} else if (ret == T_EXIT_SKIP) {
+		return T_EXIT_PASS;
 	}
 
 	ret = test(fname, 1, 1, IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);

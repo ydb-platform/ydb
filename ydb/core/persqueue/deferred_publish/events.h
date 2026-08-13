@@ -6,7 +6,44 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/datetime/base.h>
+
 namespace NKikimr::NPQ::NDeferredPublish {
+
+struct TPublicationSummary {
+    ui64 IntPublicationId = 0;
+    TString ExtPublicationId;
+    TMaybe<TString> WriterIdentity;
+};
+
+struct TDescribeDestination {
+    TString TopicPath;
+    TVector<i64> PartitionIds;
+};
+
+struct TDescribePublicationData {
+    TString ExtPublicationId;
+    TMaybe<TString> WriterIdentity;
+    TInstant CreatedAt;
+    TMaybe<TString> CreatedBy;
+    TVector<TDescribeDestination> Destinations;
+};
+
+struct TDestinationRow {
+    TString Path;
+    TString DestinationBlob;
+};
+
+struct TListDestinationsData {
+    TString ExtPublicationId;
+    TMaybe<TString> CreatedBy;
+    TVector<TDestinationRow> Destinations;
+};
+
+enum class EFinalizePublicationOp {
+    Publish,
+    Cancel,
+};
 
 struct TEvDeferredPublish {
     enum EEv : ui32 {
@@ -14,6 +51,13 @@ struct TEvDeferredPublish {
         EvBeginPublicationResponse,
         EvTablesCreationFinished,
         EvInsertPublicationFinished,
+        EvListPublicationsResponse,
+        EvDescribePublicationResponse,
+        EvGetDestinationBlobResponse,
+        EvUpsertDestinationResponse,
+        EvDeletePublicationResponse,
+        EvListDestinationsResponse,
+        EvFinalizePublicationResponse,
     };
 
     struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBeginPublicationRequest> {
@@ -41,11 +85,57 @@ struct TEvDeferredPublish {
         NYql::TIssues Issues;
         ui64 IntPublicationId = 0;
     };
+
+    struct TEvListPublicationsResponse : public NActors::TEventLocal<TEvListPublicationsResponse, EvListPublicationsResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TVector<TPublicationSummary> Publications;
+    };
+
+    struct TEvDescribePublicationResponse : public NActors::TEventLocal<TEvDescribePublicationResponse, EvDescribePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TDescribePublicationData> Publication;
+    };
+
+    struct TEvGetDestinationBlobResponse : public NActors::TEventLocal<TEvGetDestinationBlobResponse, EvGetDestinationBlobResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TString> DestinationBlob;
+    };
+
+    struct TEvUpsertDestinationResponse : public NActors::TEventLocal<TEvUpsertDestinationResponse, EvUpsertDestinationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvDeletePublicationResponse : public NActors::TEventLocal<TEvDeletePublicationResponse, EvDeletePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvListDestinationsResponse : public NActors::TEventLocal<TEvListDestinationsResponse, EvListDestinationsResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TListDestinationsData> Data;
+    };
+
+    struct TEvFinalizePublicationResponse : public NActors::TEventLocal<TEvFinalizePublicationResponse, EvFinalizePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
 };
 
 using TEvBeginPublicationRequest = TEvDeferredPublish::TEvBeginPublicationRequest;
 using TEvBeginPublicationResponse = TEvDeferredPublish::TEvBeginPublicationResponse;
 using TEvTablesCreationFinished = TEvDeferredPublish::TEvTablesCreationFinished;
 using TEvInsertPublicationFinished = TEvDeferredPublish::TEvInsertPublicationFinished;
+using TEvListPublicationsResponse = TEvDeferredPublish::TEvListPublicationsResponse;
+using TEvDescribePublicationResponse = TEvDeferredPublish::TEvDescribePublicationResponse;
+using TEvGetDestinationBlobResponse = TEvDeferredPublish::TEvGetDestinationBlobResponse;
+using TEvUpsertDestinationResponse = TEvDeferredPublish::TEvUpsertDestinationResponse;
+using TEvDeletePublicationResponse = TEvDeferredPublish::TEvDeletePublicationResponse;
+using TEvListDestinationsResponse = TEvDeferredPublish::TEvListDestinationsResponse;
+using TEvFinalizePublicationResponse = TEvDeferredPublish::TEvFinalizePublicationResponse;
 
 } // namespace NKikimr::NPQ::NDeferredPublish

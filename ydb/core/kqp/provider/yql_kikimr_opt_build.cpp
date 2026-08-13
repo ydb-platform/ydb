@@ -486,7 +486,25 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         } else {
             const auto& tableData = tablesData->ExistingTable(cluster, table);
             YQL_ENSURE(tableData.Metadata);
-            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
+
+            bool needMainTableRead = bool(tableOp & KikimrReadOps());
+            if (!needMainTableRead && tableOp != TYdbOperation::Replace && !write.ReturningColumns().Empty()) {
+                auto inputColumnsSetting = GetSetting(write.Settings().Ref(), "input_columns");
+                YQL_ENSURE(inputColumnsSetting);
+                auto inputColumns = TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>();
+                THashSet<TStringBuf> inputColumnsSet;
+                for (const auto& col : inputColumns) {
+                    inputColumnsSet.insert(col.Value());
+                }
+                for (const auto& returnCol : write.ReturningColumns().Cast<TCoAtomList>()) {
+                    if (!inputColumnsSet.contains(returnCol.Value())) {
+                        needMainTableRead = true;
+                        break;
+                    }
+                }
+            }
+
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
         }
 
         if (!write.ReturningColumns().Empty()) {
@@ -577,7 +595,10 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
+        const bool needMainTableRead = bool(tableOp & KikimrReadOps())
+            || !del.ReturningColumns().Empty(); // For RETURNING row existence must be checked.
+
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, del.Pos())
@@ -936,71 +957,6 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     auto commit = node.Cast<TCoCommit>();
     auto settings = NCommon::ParseCommitSettings(commit, ctx);
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
-
-    TNodeOnNodeOwnedMap replaces;
-    std::unordered_set<std::string> pgDynTables = {"pg_tables", "tables", "pg_class"};
-    VisitExpr(node.Ptr(), [&replaces, &pgDynTables](const TExprNode::TPtr& input) -> bool {
-        if (input->IsCallable("PgTableContent")) {
-            TPgTableContent content(input);
-            if (pgDynTables.contains(content.Table().StringValue())) {
-                replaces[input.Get()] = nullptr;
-            }
-        }
-        return true;
-    });
-    if (!replaces.empty()) {
-        for (auto& [input, _] : replaces) {
-            TPgTableContent content(input);
-
-            TExprNode::TPtr path = ctx.NewCallable(
-                node.Pos(),
-                "String",
-                { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/" << content.Table().StringValue()) }
-            );
-            auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
-            auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
-
-            auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
-                .World<TCoWorld>().Build()
-                .DataSource<TCoDataSource>()
-                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
-                    .FreeArgs()
-                        .Add(ctx.NewAtom(node.Pos(), "db"))
-                    .Build()
-                .Build()
-                .FreeArgs()
-                    .Add(newKey)
-                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
-                    .Add(ctx.NewList(node.Pos(), {}))
-                .Build()
-            .Done().Ptr();
-
-
-            auto readData = Build<TCoRight>(ctx, node.Pos())
-                .Input(ydbSysTableRead)
-            .Done().Ptr();
-
-            if (auto v = content.Columns().Maybe<TCoVoid>()) {
-                replaces[input] = readData;
-            } else {
-                auto extractMembers = Build<TCoExtractMembers>(ctx, node.Pos())
-                    .Input(readData)
-                    .Members(content.Columns().Ptr())
-                .Done().Ptr();
-
-                replaces[input] = extractMembers;
-            }
-        }
-        ctx.Step
-            .Repeat(TExprStep::ExprEval)
-            .Repeat(TExprStep::DiscoveryIO)
-            .Repeat(TExprStep::Epochs)
-            .Repeat(TExprStep::Intents)
-            .Repeat(TExprStep::LoadTablesMetadata)
-            .Repeat(TExprStep::RewriteIO);
-        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), replaces);
-        return res;
-    }
 
     TNodeOnNodeOwnedMap showCreateReadReplacements;
     VisitExpr(node.Ptr(), [&showCreateReadReplacements](const TExprNode::TPtr& input) -> bool {

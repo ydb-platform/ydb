@@ -13,66 +13,183 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TMaterializeBlockStream: public TMutableComputationNode<TMaterializeBlockStream> {
-    using TBaseComputation = TMutableComputationNode<TMaterializeBlockStream>;
+constexpr double YieldProbability = 0.5;
+
+class TFuzzStreamWrapper: public TMutableComputationNode<TFuzzStreamWrapper> {
+    using TBaseComputation = TMutableComputationNode<TFuzzStreamWrapper>;
 
 public:
-    TMaterializeBlockStream(TComputationMutables& mutables, IComputationNode* stream, TType* type, ui64 fuzzId, const TFuzzerHolder& fuzzerHolder)
+    TFuzzStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, ui64 fuzzId, const TFuzzerHolder& fuzzerHolder, bool insertYields)
         : TBaseComputation(mutables)
         , Stream_(stream)
-        , Type_(type)
         , FuzzId_(fuzzId)
         , FuzzerHolder_(fuzzerHolder)
+        , InsertYields_(insertYields)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        NUdf::TUnboxedValue stream = Stream_->GetValue(ctx);
-        Y_UNUSED(Type_);
-
-        NUdf::TUnboxedValue next;
-        MKQL_ENSURE(stream.Fetch(next) == NYql::NUdf::EFetchStatus::Ok, "Stream must have at least 1 element.");
-        NUdf::TUnboxedValue secondFetch;
-        MKQL_ENSURE(stream.Fetch(secondFetch) == NYql::NUdf::EFetchStatus::Finish, "Stream must have exactly one element.");
-        auto result = FuzzerHolder_.ApplyFuzzers(next.Release(), FuzzId_, ctx.HolderFactory, ctx.ArrowMemoryPool, ctx.RandomProvider);
-        return result.Release();
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream_->GetValue(ctx), FuzzId_, FuzzerHolder_, InsertYields_);
     }
 
 private:
+    class TStreamValue: public TComputationValue<TStreamValue> {
+        using TBase = TComputationValue<TStreamValue>;
+
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream,
+                     ui64 fuzzId, const TFuzzerHolder& fuzzerHolder, bool insertYields)
+            : TBase(memInfo)
+            , Ctx_(ctx)
+            , Stream_(std::move(stream))
+            , FuzzId_(fuzzId)
+            , FuzzerHolder_(fuzzerHolder)
+            , InsertYields_(insertYields)
+        {
+        }
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+            NUdf::TUnboxedValue item;
+            if (InsertYields_ && Ctx_.RandomProvider.GenRandReal2() < YieldProbability) {
+                return NUdf::EFetchStatus::Yield;
+            }
+            const auto status = Stream_.Fetch(item);
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+            result = FuzzerHolder_.ApplyFuzzers(item.Release(), FuzzId_, Ctx_.HolderFactory, Ctx_.ArrowMemoryPool, Ctx_.RandomProvider);
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        TComputationContext& Ctx_;
+        const NUdf::TUnboxedValue Stream_;
+        const ui64 FuzzId_;
+        const TFuzzerHolder& FuzzerHolder_;
+        const bool InsertYields_;
+    };
+
     void RegisterDependencies() const final {
         this->DependsOn(Stream_);
     }
 
-    IComputationNode* Stream_ = nullptr;
-    TType* Type_;
-    ui64 FuzzId_;
+    IComputationNode* const Stream_;
+    const ui64 FuzzId_;
     const TFuzzerHolder& FuzzerHolder_;
+    const bool InsertYields_;
+};
+
+class TWideFuzzStreamWrapper: public TMutableComputationNode<TWideFuzzStreamWrapper> {
+    using TBaseComputation = TMutableComputationNode<TWideFuzzStreamWrapper>;
+
+public:
+    TWideFuzzStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, TVector<ui64> fuzzIds, const TFuzzerHolder& fuzzerHolder, bool insertYields)
+        : TBaseComputation(mutables)
+        , Stream_(stream)
+        , FuzzIds_(std::move(fuzzIds))
+        , FuzzerHolder_(fuzzerHolder)
+        , InsertYields_(insertYields)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream_->GetValue(ctx), FuzzIds_, FuzzerHolder_, InsertYields_);
+    }
+
+private:
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
+
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream,
+                     const TVector<ui64>& fuzzIds, const TFuzzerHolder& fuzzerHolder, bool insertYields)
+            : TBase(memInfo, ctx.HolderFactory, fuzzIds.size())
+            , Ctx_(ctx)
+            , Stream_(std::move(stream))
+            , FuzzIds_(fuzzIds)
+            , FuzzerHolder_(fuzzerHolder)
+            , InsertYields_(insertYields)
+        {
+        }
+
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            if (InsertYields_) {
+                if (Ctx_.RandomProvider.GenRandReal2() < YieldProbability) {
+                    return NUdf::EFetchStatus::Yield;
+                }
+            }
+            const auto status = Stream_.WideFetch(output, width);
+
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+            for (ui32 i = 0; i < width; ++i) {
+                output[i] = FuzzerHolder_.ApplyFuzzers(output[i].Release(), FuzzIds_[i], Ctx_.HolderFactory, Ctx_.ArrowMemoryPool, Ctx_.RandomProvider);
+            }
+            return NUdf::EFetchStatus::Ok;
+        }
+
+    private:
+        TComputationContext& Ctx_;
+        const NUdf::TUnboxedValue Stream_;
+        const TVector<ui64> FuzzIds_;
+        const TFuzzerHolder& FuzzerHolder_;
+        const bool InsertYields_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+    }
+
+    IComputationNode* const Stream_;
+    const TVector<ui64> FuzzIds_;
+    const TFuzzerHolder& FuzzerHolder_;
+    const bool InsertYields_;
 };
 
 } // namespace
 
 TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode list, ui64 fuzzId) {
-    auto flowList = Pb_.ToFlow(list);
-    auto blocksStream = Pb_.FromFlow(Pb_.ToBlocks(flowList));
-    auto block = MaterializeBlockStream(*Setup_.PgmBuilder, blocksStream, fuzzId);
-    return block;
+    auto blockStream = Pb_.FromFlow(Pb_.ToBlocks(Pb_.ToFlow(list, {})));
+    auto fuzzedBlocks = FuzzStream(Pb_, blockStream, fuzzId, TStreamFuzzOptions{.InsertYields = false});
+    return MaterializeBlockStream(Pb_, fuzzedBlocks);
 }
 
-IComputationNode* TBlockHelper::WrapMaterializeBlockStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 1 arg");
+TRuntimeNode TBlockHelper::BlockWideMap(TRuntimeNode flowOrStream, const TProgramBuilder::TWideLambda& handler) {
+    return Pb_.BlockExpandChunked(Pb_.WideMap(flowOrStream, handler));
+}
+
+IComputationNode* TBlockHelper::WrapFuzzStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsStream(), "Stream expected");
     auto streamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
     MKQL_ENSURE(streamType->GetItemType()->IsBlock(), "Block stream expected");
-    auto* underlyingType = AS_TYPE(TBlockType, streamType->GetItemType())->GetItemType();
-    const ui32 fuzzId = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui64>();
+    const ui64 fuzzId = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui64>();
+    const bool insertYields = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<bool>();
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TMaterializeBlockStream(ctx.Mutables, stream, underlyingType, fuzzId, FuzzerHolder_);
+    return new TFuzzStreamWrapper(ctx.Mutables, stream, fuzzId, FuzzerHolder_, insertYields);
+}
+
+IComputationNode* TBlockHelper::WrapWideFuzzStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() >= 2, "Expected stream and yield option");
+    MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsStream(), "Stream expected");
+    const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
+    TVector<ui64> fuzzIds;
+    fuzzIds.reserve(callable.GetInputsCount() - 2);
+    for (ui32 i = 1; i + 1 < callable.GetInputsCount(); ++i) {
+        fuzzIds.push_back(AS_VALUE(TDataLiteral, callable.GetInput(i))->AsValue().Get<ui64>());
+    }
+    const bool insertYields = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1))->AsValue().Get<bool>();
+    return new TWideFuzzStreamWrapper(ctx.Mutables, stream, std::move(fuzzIds), FuzzerHolder_, insertYields);
 }
 
 TComputationNodeFactory TBlockHelper::GetNodeTestFactory() {
     return [this](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        if (callable.GetType()->GetName() == "MaterializeBlockStream") {
-            return WrapMaterializeBlockStream(callable, ctx);
+        if (callable.GetType()->GetName() == "FuzzStream") {
+            return WrapFuzzStream(callable, ctx);
+        }
+        if (callable.GetType()->GetName() == "WideFuzzStream") {
+            return WrapWideFuzzStream(callable, ctx);
         }
         if (auto* pgResult = NYql::GetPgFactory()(callable, ctx)) {
             return pgResult;
@@ -81,16 +198,84 @@ TComputationNodeFactory TBlockHelper::GetNodeTestFactory() {
     };
 }
 
-// Stream<Datum<X>> -> Datum<X>
-TRuntimeNode TBlockHelper::MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId) {
+TRuntimeNode TBlockHelper::FuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId, const TStreamFuzzOptions& streamFuzzOptions) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Stream expected");
+    TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "FuzzStream", stream.GetStaticType());
+    callableBuilder.Add(stream);
+    callableBuilder.Add(pgmBuilder.NewDataLiteral<ui64>(fuzzId));
+    callableBuilder.Add(pgmBuilder.NewDataLiteral<bool>(streamFuzzOptions.InsertYields));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TBlockHelper::WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode wideStream, const TVector<ui64>& fuzzIds, const TStreamFuzzOptions& streamFuzzOptions) {
+    MKQL_ENSURE(wideStream.GetStaticType()->IsStream(), "Stream expected");
+    TCallableBuilder cb(pgmBuilder.GetTypeEnvironment(), "WideFuzzStream", wideStream.GetStaticType());
+    cb.Add(wideStream);
+    for (ui64 id : fuzzIds) {
+        cb.Add(pgmBuilder.NewDataLiteral<ui64>(id));
+    }
+    cb.Add(pgmBuilder.NewDataLiteral<bool>(streamFuzzOptions.InsertYields));
+    return TRuntimeNode(cb.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TBlockHelper::MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Stream expected");
     auto streamType = AS_TYPE(TStreamType, stream.GetStaticType());
     MKQL_ENSURE(streamType->GetItemType()->IsBlock(), "Block stream expected");
 
-    TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), __func__, streamType->GetItemType());
-    callableBuilder.Add(stream);
-    callableBuilder.Add(pgmBuilder.NewDataLiteral<ui64>(fuzzId));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    auto blocks = pgmBuilder.Collect(stream);
+    auto message = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Utf8>("Block stream must have exactly one block.");
+    auto exactlyOne = pgmBuilder.Equals(pgmBuilder.Length(blocks), pgmBuilder.NewDataLiteral<ui64>(1));
+    auto single = pgmBuilder.Ensure(blocks, exactlyOne, message, __FILE__, __LINE__, 0);
+    return pgmBuilder.Unwrap(pgmBuilder.Head(single), message, __FILE__, __LINE__, 0);
+}
+
+TVector<ui64> TBlockHelper::MakeWideStreamColumnsFuzzers(TMultiType* multiType) {
+    const ui32 width = multiType->GetElementsCount();
+    TVector<ui64> fuzzIds(width);
+    for (ui32 i = 0; i + 1 < width; ++i) {
+        fuzzIds[i] = FuzzerHolder_.ReserveFuzzer();
+        FuzzerHolder_.CreateFuzzers(fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment(),
+                                    Setup_.RuntimeSettings->DatumValidation.Get(), /*chunked=*/true);
+    }
+    fuzzIds[width - 1] = TFuzzerHolder::EmptyFuzzerId;
+    return fuzzIds;
+}
+
+TRuntimeNode TBlockHelper::BuildScalarOnlyWideBlockStream() {
+    auto driver = Pb_.NewList(Pb_.NewDataType(NUdf::EDataSlot::Uint64), {Pb_.NewDataLiteral<ui64>(0)});
+    auto length = Pb_.AsScalar(Pb_.NewDataLiteral<ui64>(1));
+    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(driver, {}), [&, length](TRuntimeNode) -> TRuntimeNode::TList {
+        return {length};
+    });
+    return Pb_.FromFlow(wideFlow);
+}
+
+TRuntimeNode TBlockHelper::BuildFuzzedWideStream(const TVector<TRuntimeNode>& vectorLists) {
+    if (vectorLists.empty()) {
+        return BuildScalarOnlyWideBlockStream();
+    }
+    const ui32 columns = vectorLists.size();
+    auto zipped = Pb_.Zip(vectorLists);
+    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(zipped, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        TRuntimeNode::TList result;
+        for (ui32 i = 0; i < columns; ++i) {
+            result.push_back(Pb_.Nth(item, i));
+        }
+        return result;
+    });
+    auto wideBlocks = Pb_.WideToBlocks(Pb_.FromFlow(wideFlow));
+    auto multiType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, wideBlocks.GetStaticType())->GetItemType());
+    return WideFuzzStream(Pb_, wideBlocks, MakeWideStreamColumnsFuzzers(multiType), TStreamFuzzOptions{.InsertYields = true});
+}
+
+TRuntimeNode TBlockHelper::ReadSingleWideStreamColumn(TRuntimeNode wideBlocks) {
+    auto multiType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, wideBlocks.GetStaticType())->GetItemType());
+    MKQL_ENSURE(multiType->GetElementsCount() == 2,
+                "Expected a single data column plus the trailing block-length scalar");
+    auto narrow = Pb_.NarrowMap(Pb_.ToFlow(Pb_.WideFromBlocks(wideBlocks), {}),
+                                [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
+    return Pb_.FromFlow(narrow);
 }
 
 TString TBlockHelper::DatumToString(arrow::Datum datum) {
@@ -103,6 +288,31 @@ TString TBlockHelper::DatumToString(arrow::Datum datum) {
     } else {
         MKQL_ENSURE(0, "Dont know what to do with " << datum.ToString() << " datum type.");
     }
+}
+
+void TBlockHelper::CompareDatums(arrow::Datum expected, arrow::Datum got) {
+    auto typeToString = [](std::shared_ptr<arrow::DataType> type) -> TString {
+        if (!type) {
+            return "nullptr";
+        }
+        return type->ToString();
+    };
+
+    if (expected != got) {
+        TStringBuilder message;
+        message << "Datum comparison failed:\n";
+        message << "Expected : " << DatumToString(expected) << "\n but got : " << DatumToString(got) << "\n";
+        message << "Expected type : " << typeToString(expected.type()) << "\n but got type : " << typeToString(got.type()) << "\n";
+        UNIT_FAIL(TString(message));
+    }
+}
+
+TString TBlockHelper::TypeToString(TType* type) {
+    auto typeHelper = TTypeInfoHelper();
+    NYql::NUdf::TTypePrinter printer(typeHelper, type);
+    TStringStream out;
+    printer.Out(out);
+    return out.Str();
 }
 
 arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& pool) {

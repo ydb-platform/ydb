@@ -76,7 +76,10 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         TKikimrSettings settings;
         auto secretUpdateListener = MakeHolder<TTestSecretUpdateListener>();
-        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(secretUpdateListener.Get(), /* schemeCacheStatusGetter */ nullptr);
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
+            secretUpdateListener.Get(),
+            /* schemeCacheStatusGetter */ nullptr,
+            /* schemeShardStatusGetter */ nullptr);
         settings.SetDescribeSchemaSecretsServiceFactory(factory);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -359,7 +362,8 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             TTestSchemeCacheStatusGetter::EFailProbability::OneTenth);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
-            schemeCacheStatusGetter.Get());
+            schemeCacheStatusGetter.Get(),
+            /* schemeShardStatusGetter */ nullptr);
         settings.SetDescribeSchemaSecretsServiceFactory(factory);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

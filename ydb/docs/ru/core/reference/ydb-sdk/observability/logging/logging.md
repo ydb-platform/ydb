@@ -324,17 +324,38 @@
 
   - Native SDK
 
-    В {{ ydb-short-name }} Java SDK для логирования используется библиотека slf4j, которая позволяет использовать различные уровни логирования (`error`, `warn`, `info`, `debug`, `trace`) для одного или нескольких логгеров. В текущей реализации доступны следующие логгеры:
+    {{ ydb-short-name }} Java SDK использует [SLF4J](https://www.slf4j.org/) как фасад логирования: SDK пишет сообщения через API SLF4J, а конкретный вывод (log4j2, logback и т.д.) подключается зависимостями приложения. Конфигурацию log4j2 разместите в `src/main/resources/log4j2.xml`.
 
-    * Логгер `tech.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола
-    * уровень `debug` логирует все операции по протоколу grpc, рекомедуется использовать только для отладки
-    * уровень `info` рекомендуется использовать по умолчанию
-    * Логгер `tech.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
-    * Логгер `tech.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
-    * Логгер `tech.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
+    Зависимости Maven (Native SDK + log4j2):
 
-    Включение и настройка логгеров Java SDK зависит от используемой реализации `slf4j-api`.
-    Здесь приведен пример конфигурации `log4j2` для библиотеки `log4j-slf4j-impl`
+    ```xml
+    <dependencies>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-core</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-query</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.3</version>
+        </dependency>
+    </dependencies>
+    ```
+
+    В {{ ydb-short-name }} Java SDK доступны следующие логгеры:
+
+    * `tech.ydb.core.grpc` — gRPC-транспорт (`info` по умолчанию, `debug` — все RPC)
+    * `tech.ydb.table.impl` — внутреннее состояние драйвера, в том числе пул сессий
+    * `tech.ydb.table.SessionRetryContext` — повторы, длительность попыток
+    * `tech.ydb.table.Session` — текст запроса, статус и время выполнения
+
+    Пример `src/main/resources/log4j2.xml`:
 
     ```xml
     <Configuration status="WARN">
@@ -364,16 +385,90 @@
           <AppenderRef ref="Console"/>
         </Logger>
 
-        <Root level="debug" >
+        <Root level="debug">
           <AppenderRef ref="Console"/>
         </Root>
       </Loggers>
     </Configuration>
     ```
 
+    Запускаемый пример — подключение и `SELECT 1` при включённом логировании:
+
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+
+    public class DebugLogsNativeExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
+    }
+    ```
+
   - JDBC
 
-    JDBC-драйвер использует тот же стек логирования через `slf4j`; настройте логгеры `tech.ydb.*` так же, как в нативном SDK.
+    JDBC-драйвер использует тот же стек SLF4J; настройте логгеры `tech.ydb.*` так же, как в нативном SDK. Конфигурацию log4j2 разместите в `src/main/resources/log4j2.xml` (см. XML выше). Зависимости Maven:
+
+    ```xml
+    <dependencies>
+        <dependency>
+            <groupId>tech.ydb.jdbc</groupId>
+            <artifactId>ydb-jdbc-driver</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.3</version>
+        </dependency>
+    </dependencies>
+    ```
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class DebugLogsJdbcExample {
+
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(url);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                rs.next();
+                System.out.println("SELECT 1 = " + rs.getInt("value"));
+            }
+        }
+    }
+    ```
 
     Те же дебаг-логи доступны во всех остальных фреймворках вокруг JDBC (Spring Boot, ORM, пулы соединений и т.д.): они ходят в {{ ydb-short-name }} через этот драйвер, достаточно подключить ту же конфигурацию `slf4j` / log4j2 / logback в приложении.
 

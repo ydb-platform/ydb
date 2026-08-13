@@ -64,10 +64,10 @@ TEST(TFederatedConnectionTest, CreateClient)
     EXPECT_CALL(*mockConnectionVla, CreateClient(::testing::Ref(clientOptions)))
         .WillOnce(Return(mockClientVla));
 
-    EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(std::string("sas")));
-    EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(std::string("vla")));
+    EXPECT_CALL(*mockConnectionSas, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "sas")));
+    EXPECT_CALL(*mockConnectionVla, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -75,7 +75,9 @@ TEST(TFederatedConnectionTest, CreateClient)
     NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
-    EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
+    EXPECT_THAT(
+        ToString(connection->GetLoggingTags()),
+        testing::HasSubstr("Clusters: [Cluster: sas, Cluster: vla]"));
     auto client = connection->CreateClient(clientOptions);
     auto nodes = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes);
@@ -129,10 +131,10 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
     EXPECT_CALL(*mockConnectionVla, CreateClient(::testing::Ref(clientOptions)))
         .WillOnce(Return(mockClientVla));
 
-    EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(std::string("sas")));
-    EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(std::string("vla")));
+    EXPECT_CALL(*mockConnectionSas, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "sas")));
+    EXPECT_CALL(*mockConnectionVla, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -140,7 +142,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
     NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
-    EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
+    EXPECT_THAT(
+        ToString(connection->GetLoggingTags()),
+        testing::HasSubstr("Clusters: [Cluster: sas, Cluster: vla]"));
     auto client = connection->CreateClient(clientOptions);
 
     Sleep(TDuration::Seconds(2));

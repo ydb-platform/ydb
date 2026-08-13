@@ -31,7 +31,8 @@ protected:
         AFL_VERIFY(proto.HasMaxIndex());
         auto& bFilter = proto.GetMaxIndex();
         if (!bFilter.GetColumnId()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"problem", "incorrect column id"});
             return false;
         };
         AddColumnId(bFilter.GetColumnId());

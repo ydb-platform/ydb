@@ -5,7 +5,6 @@ from typing import Any, TypeVar
 import deepmerge.merger
 from .core import StrategyList
 
-
 T = TypeVar("T")
 
 

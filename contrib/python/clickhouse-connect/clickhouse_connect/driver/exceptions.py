@@ -29,7 +29,7 @@ class ClickHouseError(Exception):
     """Exception related to operation with ClickHouse."""
 
 
-class Warning(Warning, ClickHouseError):  # noqa: N818
+class Warning(Warning, ClickHouseError):  # type: ignore[misc]  # noqa: N818
     """Exception raised for important warnings like data truncations
     while inserting, etc."""
 

@@ -655,6 +655,8 @@ public:
     TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) override;
     TExecDataQuerySettings DefaultExecDataQuerySettings();
 
+    NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
+
 private:
     TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
 
@@ -680,6 +682,10 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
         .SetPrimaryKeyColumn("graph_id")
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
     auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc), acl);
 
@@ -695,6 +701,10 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .AddNullableColumn("state_size", EPrimitiveType::Uint64)
         .AddNullableColumn("graph_description_id", EPrimitiveType::String)
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
     auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc), acl);
 
@@ -703,6 +713,10 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .AddNullableColumn("ref_count", EPrimitiveType::Uint64)
         .AddNullableColumn("graph_description", EPrimitiveType::String)
         .SetPrimaryKeyColumn("id")
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
     auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc), acl);
 
@@ -750,7 +764,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
                 execDataQuerySettings);
 
             return RegisterCheckGeneration(context);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -776,7 +790,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
                 [generationContext, getContext] (const TFuture<TDataQueryResult>& future) {
                     return ProcessCoordinators(future.GetValue(), generationContext, getContext);
                 });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [getContext] (const TFuture<TIssues>& future) {
@@ -830,7 +844,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 
             auto future = CheckGeneration(generationContext);
             return CreateCheckpointWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [checkpointContext] (const TFuture<TIssues>& future) {
@@ -865,7 +879,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
 
             auto future = CheckGeneration(generationContext);
             return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -892,7 +906,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
 
             auto future = CheckGeneration(generationContext);
             return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -924,7 +938,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
                 [generationContext, getContext, loadGraphDescription] (const TFuture<TDataQueryResult>& future) {
                     return ProcessCheckpoints(future.GetValue(), generationContext, getContext, loadGraphDescription);
                 });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [getContext] (const TFuture<TIssues>& future) {
@@ -970,7 +984,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1028,7 +1042,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1106,7 +1120,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1156,12 +1170,18 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         }
                         return status;
                     });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [result] (const TFuture<TIssues>& future) {
             return std::make_pair(result->Size, future.GetValue());
         });
+}
+
+NYdb::NRetry::TRetryOperationSettings TCheckpointStorage::GetRetryOperationSettings() {
+    return NYdb::NRetry::TRetryOperationSettings()
+        .MaxRetries(Config.GetMaxRetries())
+        .MaxTimeout(Config.GetMaxRetryTimeout());
 }
 
 TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {

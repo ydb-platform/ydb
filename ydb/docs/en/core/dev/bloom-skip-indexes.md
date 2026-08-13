@@ -9,6 +9,15 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 * `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
 
+### Local bloom skip indexes {#row-vs-column}
+
+The `bloom_filter` type is supported on both [row-oriented](../concepts/glossary.md#row-oriented-table) (OLTP) and [column-oriented](../concepts/glossary.md#column-oriented-table) (OLAP) tables, but the underlying implementation differs:
+
+* On row-oriented tables, the filter is built as a prefix bloom filter over a left prefix of the [primary key](../concepts/glossary.md#primary-key). The indexed columns must be a contiguous leading subset of the primary key columns. This accelerates point lookups and range scans that constrain the leading key columns. Use [ALTER TABLE ... ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom) to create a prefix bloom filter and [ALTER TABLE ... DROP INDEX](../yql/reference/syntax/alter_table/indexes.md#drop-index) to remove it.
+* On column-oriented tables, the filter is built over the indexed column values in each data fragment (portion). It is applied during analytical scans to skip fragments that cannot contain the requested value.
+
+`bloom_ngram_filter` is supported only on column-oriented tables.
+
 ## Parameters and defaults {#parameters}
 
 Full list of `WITH (...)` parameters and defaults:
@@ -46,6 +55,24 @@ ALTER TABLE events
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
+
+Create a row-oriented (OLTP) table with prefix bloom filters on primary-key prefixes. On row-oriented tables the indexed columns must be a left prefix of the primary key:
+
+```yql
+CREATE TABLE orders (
+    customer_id Utf8,
+    order_id Utf8,
+    amount Decimal(10,2),
+    PRIMARY KEY (customer_id, order_id),
+    -- Prefix bloom filter on the first key column
+    INDEX idx_customer LOCAL USING bloom_filter
+        ON (customer_id)
+        WITH (false_positive_probability = 0.001),
+    -- Prefix bloom filter on the full primary key
+    INDEX idx_full_key LOCAL USING bloom_filter
+        ON (customer_id, order_id)
+);
 ```
 
 Alter index parameters:

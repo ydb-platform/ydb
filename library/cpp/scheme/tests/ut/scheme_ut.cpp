@@ -838,10 +838,10 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             const NSc::TValue& vb = va.Get("y");
-            va = vb;
             TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
-            UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
+            va = vb;
+            UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
         }
     }
 

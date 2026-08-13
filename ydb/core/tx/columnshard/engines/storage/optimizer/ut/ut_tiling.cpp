@@ -1,8 +1,15 @@
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/json_reader.h>
@@ -97,7 +104,118 @@ std::shared_ptr<IOptimizerPlannerConstructor> MakeTilingPlusPlusConstructor() {
     return ctor;
 }
 
+// Building a planner touches AppDataVerified() (via the base ctor's GetBadPortionsLimit()), so it must
+// run inside an initialized actor context. Mirrors ut_lcbuckets_skip_level.cpp.
+enum EEvTilingTest {
+    EvExecuteTilingTest = 1,
+    EvTilingTestExecuted,
+};
+
+struct TEvExecuteTilingTest: NActors::TEventLocal<TEvExecuteTilingTest, EvExecuteTilingTest> {
+    std::function<void()> Action;
+};
+
+struct TEvTilingTestExecuted: NActors::TEventLocal<TEvTilingTestExecuted, EvTilingTestExecuted> {};
+
+class TTilingTestExecutor: public NActors::TActor<TTilingTestExecutor> {
+private:
+    const NActors::TActorId ReplyTo;
+
+    void Handle(TEvExecuteTilingTest::TPtr ev) {
+        ev->Get()->Action();
+        Send(ReplyTo, new TEvTilingTestExecuted());
+        PassAway();
+    }
+
+public:
+    explicit TTilingTestExecutor(const NActors::TActorId replyTo)
+        : TActor(&TThis::StateWork)
+        , ReplyTo(replyTo)
+    {
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExecuteTilingTest, Handle);
+            cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+        }
+    }
+};
+
+void RunInActorContext(const std::function<void()>& action) {
+    NActors::TTestActorRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+
+    const NActors::TActorId edge = runtime.AllocateEdgeActor();
+    const NActors::TActorId executor = runtime.Register(new TTilingTestExecutor(edge));
+
+    auto* request = new TEvExecuteTilingTest();
+    request->Action = action;
+    runtime.Send(new IEventHandle(executor, edge, request));
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<TEvTilingTestExecuted>(handle);
+}
+
+std::shared_ptr<IOptimizerPlanner> BuildPlannerFromJson(const TString& className, const NJson::TJsonValue& json) {
+    auto ctor = IOptimizerPlannerConstructor::BuildDefault(className);
+    UNIT_ASSERT(ctor);
+    const auto deserialize = ctor->DeserializeFromJson(json);
+    UNIT_ASSERT_C(deserialize.IsSuccess(), deserialize.GetErrorMessage());
+
+    const TInternalPathId pathId = TInternalPathId::FromRawValue(1);
+    const auto pkSchema = arrow::schema({ arrow::field("pk", arrow::uint64()) });
+    IOptimizerPlannerConstructor::TBuildContext ctx(pathId, TTestStoragesManager::GetInstance(), pkSchema);
+
+    const auto plannerConclusion = ctor->BuildPlanner(ctx);
+    UNIT_ASSERT_C(plannerConclusion.IsSuccess(), plannerConclusion.GetErrorMessage());
+    return plannerConclusion.GetResult();
+}
+
+ui64 BuildPlannerAndGetNodePortionsCountLimit(const TString& className, const NJson::TJsonValue& json) {
+    ui64 limit = 0;
+    RunInActorContext([&] {
+        limit = BuildPlannerFromJson(className, json)->GetNodePortionsCountLimit();
+    });
+    return limit;
+}
+
 }   // namespace
+
+Y_UNIT_TEST_SUITE(TilingCounterUnits) {
+    Y_UNIT_TEST(CurrentMaxOverloadTracksLiveClients) {
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        NColumnShard::TCommonCountersOwner owner("TilingCounterUnits", root);
+        TPortionCategoryCounterAgents agents(owner, "test");
+        const auto maxOverload =
+            root->GetSubgroup("module_id", "TilingCounterUnits")->GetSubgroup("category", "test")->GetCounter("Value/Overload/Max", false);
+
+        auto low = std::make_shared<TPortionCategoryCounters>(agents);
+        const auto assertMaxOverload = [&](const ui64 expected) {
+            UNIT_ASSERT_VALUES_EQUAL(low->GetMaxOverloadLevel(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(maxOverload->Val(), expected);
+        };
+        low->SetOverload(3);
+        assertMaxOverload(3);
+
+        {
+            auto high = std::make_shared<TPortionCategoryCounters>(agents);
+            high->SetOverload(7);
+            assertMaxOverload(7);
+
+            low->SetOverload(17);
+            assertMaxOverload(10);
+
+            low->SetOverload(4);
+            assertMaxOverload(7);
+        }
+
+        assertMaxOverload(4);
+
+        low->SetOverload(0);
+        assertMaxOverload(0);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     Y_UNIT_TEST(AccumulatorReturnsSimpleCompactionTask) {
@@ -411,9 +529,10 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT(!tiling.MiddleLevels.at(3).PortionById.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).PortionById.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 4);
+        // Forced aging placement does not recalculate the natural-routing width.
+        UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 0);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT(tiling.InsertTimeByPortionId.at(100) >= tick1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
@@ -455,6 +574,47 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
+    }
+
+    // HasNoIntersections() drives forced (ALTER TABLE ... COMPACT) completion: it is true only when
+    // every portion has settled into the regular last level (no accumulator, no candidates, no middle).
+    Y_UNIT_TEST(TilingHasNoIntersections) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;   // portions with >=100 bytes bypass the accumulator
+        settings.K = 2;
+        settings.MiddleLevelCount = 5;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // Empty optimizer: nothing intersects.
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // Non-overlapping wide portions settle into LastLevel.Portions → still no intersections.
+        tiling.AddPortion(MakePortion(1, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(2, 100, 109, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 2);
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // An overlapping wide portion becomes a last-level candidate → intersections present.
+        tiling.AddPortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(3));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A small portion parked in the accumulator also counts as an intersection until compacted out.
+        tiling.AddPortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A portion placed on a middle level (overlaps both baselines) is an intersection too.
+        tiling.AddPortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
     }
 
     Y_UNIT_TEST(TilingAccumulatorTaskTargetsLevelZero) {
@@ -747,6 +907,375 @@ Y_UNIT_TEST_SUITE(TilingPlusPlusParallelCompaction) {
         UNIT_ASSERT(NJson::ReadJsonFastTree(proto.GetTiling().GetJson(), &restoredJson));
         UNIT_ASSERT(restoredJson.Has("compaction_threads"));
         UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 2);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TilingNodePortionsCountLimit) {
+    // node_portions_count_limit is consumed by the base IOptimizerPlannerConstructor and must reach the
+    // built planner's node-portions overload guard. Regression for both tiling optimizers:
+    //  - "tiling++" used to hardcode std::nullopt when constructing its planner, silently dropping it.
+    //  - "tiling" used to reject the base-owned key as an "unknown tiling compaction setting".
+    constexpr ui64 ConfiguredLimit = 777;
+
+    Y_UNIT_TEST(TilingPlusPlusForwardsLimitToPlanner) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        UNIT_ASSERT_VALUES_EQUAL(BuildPlannerAndGetNodePortionsCountLimit("tiling++", json), ConfiguredLimit);
+    }
+
+    Y_UNIT_TEST(TilingForwardsLimitToPlanner) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        UNIT_ASSERT_VALUES_EQUAL(BuildPlannerAndGetNodePortionsCountLimit("tiling", json), ConfiguredLimit);
+    }
+
+    // The base-owned keys must not trip "tiling"'s strict unknown-setting check when mixed with real settings.
+    Y_UNIT_TEST(TilingAcceptsBaseOwnedKeysAlongsideSettings) {
+        auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling");
+        UNIT_ASSERT(ctor);
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        json["weight_kff"] = 2.0;
+        json["max_levels"] = 5;
+        const auto status = ctor->DeserializeFromJson(json);
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetErrorMessage());
+        UNIT_ASSERT(ctor->GetNodePortionsCountLimit().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*ctor->GetNodePortionsCountLimit(), ConfiguredLimit);
+    }
+
+    // Loosening the parser for base-owned keys must not let genuinely unknown settings through.
+    Y_UNIT_TEST(TilingStillRejectsUnknownSetting) {
+        auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling");
+        UNIT_ASSERT(ctor);
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["definitely_not_a_setting"] = 1;
+        UNIT_ASSERT(ctor->DeserializeFromJson(json).IsFail());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
+    // Helper: accumulator-centric settings with a controllable threshold.
+    // Portions below AccumulatorPortionSizeLimit go to accumulator.
+    // AccumulatorSettings.Trigger.Portions is the compaction threshold.
+    static TTestTiling::TilingSettings MakeGatingSettings() {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 500;   // portions with BlobBytes < 500 → accumulator
+        settings.K = 10;
+        settings.MiddleLevelCount = 5;
+        settings.AccumulatorSettings.Trigger.Portions = 5;   // threshold = 5 portions
+        settings.AccumulatorSettings.OverloadPortions = 100;
+        settings.AccumulatorSettings.Trigger.Bytes = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Portions = 100;
+        settings.AccumulatorSettings.Compaction.Bytes = 1'000'000;
+        settings.LastLevelSettings.Compaction.Portions = 100;
+        settings.LastLevelSettings.Compaction.Bytes = 1'000'000;
+        settings.LastLevelSettings.CandidatePortionsOverload = 100;
+        settings.MiddleLevelSettings.TriggerHeight = 1'000'000;
+        settings.MiddleLevelSettings.OverloadHeight = 2'000'000;
+        settings.AgingSettings.Enabled = true;
+        settings.AgingSettings.PromoteTime = TDuration::Seconds(60);
+        settings.AgingSettings.MaxPortionPromotion = 100;
+        return settings;
+    }
+
+    // 1) Accumulator portions do NOT get aging timers.
+    Y_UNIT_TEST(AccumulatorPortionsHaveNoAgingTimer) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // Small portions land in the accumulator (BlobBytes < 500).
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        tiling.AddPortion(MakePortion(2, 20, 30, 100));
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
+        // No aging timers for level-0 portions.
+        UNIT_ASSERT(!tiling.InsertTimeByPortionId.contains(1));
+        UNIT_ASSERT(!tiling.InsertTimeByPortionId.contains(2));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 0);
+    }
+
+    // 2) Below-threshold accumulator: no compaction task when middle/last levels
+    //    have work (candidates or portions).
+    Y_UNIT_TEST(BelowThresholdAccumulatorSuppressedWhenOtherLevelsHaveWork) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // 3 accumulator portions (below threshold=5).
+        tiling.AddPortion(MakePortion(1, 0, 1, 100));
+        tiling.AddPortion(MakePortion(2, 2, 3, 100));
+        tiling.AddPortion(MakePortion(3, 4, 5, 100));
+        UNIT_ASSERT(tiling.Accumulator.IsBelowThreshold());
+
+        // A large non-overlapping portion on the last level.
+        tiling.AddPortion(MakePortion(10, 0, 100, 1000));
+        // A large overlapping portion → last-level candidate.
+        tiling.AddPortion(MakePortion(11, 50, 150, 1000));
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.empty());
+        UNIT_ASSERT(!tiling.AreOtherLevelsEmpty());
+
+        // The task should come from the last level, not the accumulator.
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, 1);   // last-level task
+    }
+
+    // 3) Below-threshold accumulator: compaction allowed when all other levels empty.
+    Y_UNIT_TEST(BelowThresholdAccumulatorCompactsWhenOtherLevelsEmpty) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // 3 accumulator portions (below threshold=5), no other portions.
+        tiling.AddPortion(MakePortion(1, 0, 1, 100));
+        tiling.AddPortion(MakePortion(2, 2, 3, 100));
+        tiling.AddPortion(MakePortion(3, 4, 5, 100));
+        UNIT_ASSERT(tiling.Accumulator.IsBelowThreshold());
+        UNIT_ASSERT(tiling.AreOtherLevelsEmpty());
+
+        // Accumulator compaction should be allowed since other levels are empty.
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, 0);   // accumulator task
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
+    }
+
+    // 4) Above-threshold accumulator always compacts regardless of other levels.
+    Y_UNIT_TEST(AboveThresholdAccumulatorAlwaysCompacts) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // 6 accumulator portions (above threshold=5).
+        for (ui64 i = 1; i <= 6; ++i) {
+            tiling.AddPortion(MakePortion(i, i * 10, i * 10 + 1, 100));
+        }
+        UNIT_ASSERT(!tiling.Accumulator.IsBelowThreshold());
+
+        // Add last-level work to make other levels non-empty.
+        tiling.AddPortion(MakePortion(10, 0, 100, 1000));
+        tiling.AddPortion(MakePortion(11, 50, 150, 1000));
+        UNIT_ASSERT(!tiling.AreOtherLevelsEmpty());
+
+        // Accumulator compaction should still be considered (above threshold).
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        // The highest-priority task wins — either accumulator or last-level;
+        // the point is that the accumulator IS considered (not gated).
+        // Verify accumulator task is available independently.
+        const auto accTask = tiling.Accumulator.DoGetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(accTask);
+        UNIT_ASSERT_VALUES_EQUAL(accTask->TargetLevel, 0);
+    }
+
+    // 5) Middle levels having portions also prevents below-threshold accumulator compaction.
+    Y_UNIT_TEST(BelowThresholdAccumulatorSuppressedByMiddleLevels) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // 3 accumulator portions (below threshold).
+        tiling.AddPortion(MakePortion(1, 0, 1, 100));
+        tiling.AddPortion(MakePortion(2, 2, 3, 100));
+        tiling.AddPortion(MakePortion(3, 4, 5, 100));
+        UNIT_ASSERT(tiling.Accumulator.IsBelowThreshold());
+
+        // 10 non-overlapping baselines on last level (no candidates). K == 10, so a portion must
+        // overlap >= K baselines to route to a middle level rather than staying at level 1.
+        for (ui64 i = 0; i < 10; ++i) {
+            tiling.AddPortion(MakePortion(10 + i, i * 100, i * 100 + 9, 1000));
+        }
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.empty());
+
+        // A wide portion overlapping all baselines → middle level.
+        tiling.AddPortion(MakePortion(100, 0, 909, 1000));
+        UNIT_ASSERT(tiling.InternalLevel.at(100).Level >= 2);   // in a middle level
+        UNIT_ASSERT(!tiling.AreOtherLevelsEmpty());
+
+        // No accumulator task should be produced (below threshold + middle levels busy).
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        // Either no task or the task is not from the accumulator.
+        if (task) {
+            UNIT_ASSERT(task->TargetLevel != 0);
+        }
+    }
+
+    // 6) AreOtherLevelsEmpty reports true when last level has only stable portions
+    //    (zero candidates) and all middle levels are empty.
+    Y_UNIT_TEST(AreOtherLevelsEmptyWithStableLastLevel) {
+        TCounters counters;
+        TTestTiling tiling(MakeGatingSettings(), counters);
+
+        // Non-overlapping portions on the last level → stable (no candidates).
+        tiling.AddPortion(MakePortion(10, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(11, 100, 109, 1000));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.empty());
+        UNIT_ASSERT(tiling.AreOtherLevelsEmpty());   // candidates=0, middle levels=0
+    }
+
+    // 7) A single accumulator portion settles on the last level when all other levels are empty.
+    Y_UNIT_TEST(SingleAccumulatorPortionSettlesOnLastLevel) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+        settings.AgingSettings.PromoteTime = TDuration::Seconds(60);
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // One small portion in the accumulator, nothing else.
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 0);
+        UNIT_ASSERT(tiling.AreOtherLevelsEmpty());
+
+        // PromoteExpiredPortions should move the single accumulator portion to last level.
+        const TInstant now = TInstant::Now();
+        tiling.PromoteExpiredPortions(now);
+
+        // With no existing last-level portion to merge with, it settles as the stable base portion.
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 1);
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(1));
+    }
+
+    // 8) Single accumulator portion NOT promoted when other levels have work.
+    Y_UNIT_TEST(SingleAccumulatorPortionNotPromotedWhenOtherLevelsBusy) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // One small accumulator portion.
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+
+        // Add overlapping last-level portions → creates a candidate.
+        tiling.AddPortion(MakePortion(10, 0, 100, 1000));
+        tiling.AddPortion(MakePortion(11, 50, 150, 1000));
+        UNIT_ASSERT(!tiling.AreOtherLevelsEmpty());
+
+        // PromoteExpiredPortions should NOT move the accumulator portion.
+        const TInstant now = TInstant::Now();
+        tiling.PromoteExpiredPortions(now);
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 0);
+    }
+
+    // 9) Multiple accumulator portions are NOT promoted even when other levels empty
+    //    (only single portion triggers the exception).
+    Y_UNIT_TEST(MultipleAccumulatorPortionsNotPromoted) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // Two small accumulator portions, nothing else.
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        tiling.AddPortion(MakePortion(2, 20, 30, 100));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
+        UNIT_ASSERT(tiling.AreOtherLevelsEmpty());
+
+        const TInstant now = TInstant::Now();
+        tiling.PromoteExpiredPortions(now);
+
+        // Both portions should stay in the accumulator.
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(2).Level, 0);
+    }
+
+    // 10) A lone accumulator portion promoted to the last level settles without a solo compaction.
+    Y_UNIT_TEST(PromotedLonePortionDoesNotCompactSolo) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        tiling.PromoteExpiredPortions(TInstant::Now());
+        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(1));
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.contains(1));
+
+        // Compaction tasks always contain at least two portions.
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(!task);
+    }
+
+    // 11) A non-intersecting candidate is compacted with its stable last-level neighbour.
+    Y_UNIT_TEST(NonIntersectingCandidateMergesWithStableNeighbour) {
+        TLastLevelSettings settings;
+        settings.Compaction.Bytes = 1'000'000;
+        settings.Compaction.Portions = 100;
+        settings.CandidatePortionsOverload = 100;
+
+        TCounters counters;
+        TTestLastLevel lastLevel(settings, counters);
+
+        // The first forced portion becomes the stable base when the last level is empty. The second
+        // remains a candidate and uses that base as its nearest merge partner.
+        lastLevel.AddCandidatePortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddCandidatePortion(MakePortion(2, 20, 30, 100));
+        UNIT_ASSERT(lastLevel.PortionIds.contains(1));
+        UNIT_ASSERT(!lastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(lastLevel.CandidateIds.contains(2));
+
+        const auto task = lastLevel.DoGetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 2);
+
+        TVector<ui64> ids;
+        for (const auto& p : task->Portions) {
+            ids.push_back(p->GetPortionId());
+        }
+        Sort(ids.begin(), ids.end());
+        UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
+    }
+
+    // 12) A promoted lone portion converges immediately instead of producing repeated solo tasks.
+    Y_UNIT_TEST(PromotedLonePortionConvergesWithoutSoloCompaction) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // One small INSERTED portion, nothing else -> accumulator.
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+
+        ui64 nextId = 100;
+        ui32 compactions = 0;
+        constexpr ui32 maxIterations = 25;
+        ui32 iter = 0;
+        for (; iter < maxIterations; ++iter) {
+            tiling.PromoteExpiredPortions(TInstant::Now());
+            const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+            if (!task) {
+                break;
+            }
+            ++compactions;
+
+            // Apply the task as the real engine does: drop the inputs, add one compacted result
+            // spanning them, tagged with the task's target compaction level.
+            ui64 minStart = Max<ui64>();
+            ui64 maxFinish = 0;
+            ui64 bytes = 0;
+            for (const auto& p : task->Portions) {
+                minStart = std::min(minStart, p->IndexKeyStart());
+                maxFinish = std::max(maxFinish, p->IndexKeyEnd());
+                bytes += p->GetTotalBlobBytes();
+            }
+            std::vector<TTestPortion::TConstPtr> inputs(task->Portions.begin(), task->Portions.end());
+            for (const auto& p : inputs) {
+                tiling.RemovePortion(p);
+            }
+            tiling.AddPortion(
+                std::make_shared<TTestPortion>(nextId++, minStart, maxFinish, bytes, 1, NPortion::SPLIT_COMPACTED, task->TargetLevel));
+        }
+
+        UNIT_ASSERT_C(iter < maxIterations, "compaction never converged (looped " << compactions << " times)");
+        UNIT_ASSERT_VALUES_EQUAL(compactions, 0);
     }
 }
 

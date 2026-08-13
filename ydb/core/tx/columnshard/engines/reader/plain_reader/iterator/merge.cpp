@@ -8,6 +8,8 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::optional<NArrow::NMerger::TCursor> TBaseMergeTask::DrainMergerLinearScan(const std::optional<ui32> resultBufferLimit) {
@@ -61,9 +63,13 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
         } else {
             ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "update_memory_merger")("before_data", dataSizeBefore)(
-            "before_memory", memorySizeBefore)("after_memory", NArrow::GetTableMemorySize(ResultBatch))(
-            "after_data", NArrow::GetTableDataSize(ResultBatch))("guard", AllocationGuard->GetMemory());
+        YDB_LOG_DEBUG("",
+            {"event", "update_memory_merger"},
+            {"beforeData", dataSizeBefore},
+            {"beforeMemory", memorySizeBefore},
+            {"afterMemory", NArrow::GetTableMemorySize(ResultBatch)},
+            {"afterData", NArrow::GetTableDataSize(ResultBatch)},
+            {"guard", AllocationGuard->GetMemory()});
         //        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
         AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
     } else {
@@ -75,7 +81,9 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
 }
 
 bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
+    YDB_LOG_DEBUG("",
+        {"event", "DoApply"},
+        {"intervalIdx", MergingContext->GetIntervalIdx()});
     auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
     auto copy = AllocationGuard;
     reader.MutableScanner().OnIntervalResult(std::move(copy), std::move(ShardedBatch), LastPK, std::move(Merger), IntervalIdx, reader);
@@ -152,7 +160,9 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", MergingContext->GetIntervalIdx());
+    YDB_LOG_DEBUG("",
+        {"event", "DoExecute"},
+        {"intervalIdx", MergingContext->GetIntervalIdx()});
     std::optional<NArrow::NMerger::TCursor> lastResultPosition;
     if (Merger->GetSourcesCount() == 1 && sourcesInMemory) {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::ONE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));

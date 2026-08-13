@@ -122,26 +122,83 @@
 
   - Native SDK
 
+    Размер пула задаётся при создании `TableClient` или `QueryClient`. Каждая сессия в пуле — отдельный [актор](../../concepts/glossary.md#actor) на сервере, поэтому лимит следует выбирать по расчётному inflight, а не только по RPS (см. вводный раздел выше).
+
     ```java
-    this.queryClient = QueryClient.newClient(transport)
-            // 10 — минимальное число активных сессий, удерживаемых в пуле при очистке
-            // 500 — максимальный размер пула сессий
-            .sessionPoolMinSize(10)
-            .sessionPoolMaxSize(500)
-            .build();
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+
+    public class SessionPoolLimitExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport)
+                         // 10 — минимальное число активных сессий, удерживаемых в пуле при очистке
+                         // 500 — максимальный размер пула сессий
+                         .sessionPoolMinSize(10)
+                         .sessionPoolMaxSize(500)
+                         .build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Пул настроен, SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
+    }
     ```
 
   - JDBC
 
-    При работе с JDBC, как правило, используются внешние пулы соединений, такие как [HikariCP](https://github.com/brettwooldridge/HikariCP) или [C3p0](https://github.com/swaldman/c3p0). В режиме работы по умолчанию {{ ydb-short-name }} JDBC драйвер определяет количество соединений, открытых внешним пулом, и самостоятельно подстраивает размер пула сессий. Поэтому для настройки пула сессий достаточно корректно настроить `HikariCP` или `C3p0`.
+    При работе с JDBC, как правило, используются внешние пулы соединений, такие как [HikariCP](https://github.com/brettwooldridge/HikariCP). {{ ydb-short-name }} JDBC-драйвер подстраивает внутренний пул сессий под число открытых JDBC-соединений, поэтому лимит задаётся на стороне внешнего пула. Свойства подключения — в [документации JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md).
 
-    Пример настройки пула HikariCP в конфигурации Spring:
+    ```java
+    import java.sql.Connection;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-    ```properties
-    spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
-    spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-    spring.datasource.hikari.maximum-pool-size=100 # максимум JDBC-соединений
+    import com.zaxxer.hikari.HikariConfig;
+    import com.zaxxer.hikari.HikariDataSource;
+
+    public class JdbcSessionPoolLimitExample {
+
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(jdbcUrl);
+            config.setDriverClassName("tech.ydb.jdbc.YdbDriver");
+            config.setMaximumPoolSize(100); // максимум JDBC-соединений (= сессий YDB)
+
+            try (HikariDataSource dataSource = new HikariDataSource(config);
+                 Connection connection = dataSource.getConnection();
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                rs.next();
+                System.out.println("HikariCP pool size = 100, SELECT 1 = " + rs.getInt("value"));
+            }
+        }
+    }
     ```
+
+    В Spring Boot те же параметры задаются через `spring.datasource.hikari.maximum-pool-size` (см. пример в вводном разделе).
 
   {% endlist %}
 

@@ -5,8 +5,11 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
+#include <library/cpp/monlib/service/monservice.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr {
 
@@ -199,57 +202,27 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
            return GetAppCounters(runtime, tabletType)->FindHistogram(PercentileCountersMetaInfo[index]);
         }
 
-        static std::vector<ui64> GetOldHistogram(TTestBasicRuntime& runtime, const char* name, const TTabletTypes::EType tabletType) {
-            size_t index = PercentileNameToIndex(name);
-            auto rangesArray = RangeDefs[index].first;
-            auto rangeCount = RangeDefs[index].second;
-
-            std::vector<TTabletPercentileCounter::TRangeDef> ranges(rangesArray, rangesArray + rangeCount);
-            ranges.push_back({});
-            ranges.back().RangeName = "inf";
-            ranges.back().RangeVal = Max<ui64>();
-
-            auto appCounters = GetAppCounters(runtime, tabletType);
-            std::vector<ui64> buckets;
-            for (auto i: xrange(ranges.size())) {
-                auto subGroup = appCounters->GetSubgroup("range", ranges[i].RangeName);
-                auto sensor = subGroup->FindCounter(PercentileCountersMetaInfo[index]);
-                if (sensor) {
-                    buckets.push_back(sensor->Val());
-                }
-            }
-
-            return buckets;
-        }
-
         static void CheckHistogram(
             TTestBasicRuntime& runtime,
             const char* name,
-            const std::vector<ui64>& goldValuesNew,
-            const std::vector<ui64>& goldValuesOld,
+            const std::vector<ui64>& goldValues,
             const TTabletTypes::EType tabletType
         )
         {
-            // new stype histogram
             auto histogram = TTabletWithHist::GetHistogram(runtime, name, tabletType);
             UNIT_ASSERT(histogram);
             auto snapshot = histogram->Snapshot();
             UNIT_ASSERT(snapshot);
 
-            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValuesNew.size());
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValues.size());
             {
                 // for pretty printing the diff
                 std::vector<ui64> values;
-                values.reserve(goldValuesNew.size());
-                for (auto i: xrange(goldValuesNew.size()))
+                values.reserve(goldValues.size());
+                for (auto i: xrange(goldValues.size()))
                     values.push_back(snapshot->Value(i));
-                UNIT_ASSERT_VALUES_EQUAL(values, goldValuesNew);
+                UNIT_ASSERT_VALUES_EQUAL(values, goldValues);
             }
-
-            // old histogram
-            auto values = TTabletWithHist::GetOldHistogram(runtime, name, tabletType);
-            UNIT_ASSERT_VALUES_EQUAL(values.size(), goldValuesOld.size());
-            UNIT_ASSERT_VALUES_EQUAL(values, goldValuesOld);
         }
 
     public:
@@ -328,7 +301,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(CountSingleBucket)",
             {0, 2},
-            {0, 2},
             TTabletTypes::Dummy
         );
 
@@ -338,7 +310,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -346,14 +317,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {2, 0, 0, 0, 0},
-            {2, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
-            {0, 0},
             {0, 0},
             TTabletTypes::Dummy
         );
@@ -384,7 +353,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -395,7 +363,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -408,7 +375,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 2, 1, 0, 0},
-            {0, 2, 1, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -419,7 +385,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 2, 0, 0},
-            {0, 1, 2, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -428,7 +393,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -439,7 +403,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -447,14 +410,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(CountSingleBucket)",
             {2, 0},
-            {2, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
-            {0, 0},
             {0, 0},
             TTabletTypes::Dummy
         );
@@ -488,7 +449,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 0, 0, 0, 1},
-            {0, 0, 0, 0, 1},
             TTabletTypes::Dummy
         );
 
@@ -499,7 +459,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 0, 0, 0, 2},
             {0, 0, 0, 0, 2},
             TTabletTypes::Dummy
         );
@@ -531,7 +490,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -542,7 +500,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -556,7 +513,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 3, 1, 0, 1},
             {0, 3, 1, 0, 1},
             TTabletTypes::Dummy
         );
@@ -595,7 +551,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 3, 1, 0, 0},
-            {0, 3, 1, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -604,7 +559,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 2, 0, 0, 0},
             {0, 2, 0, 0, 0},
             TTabletTypes::Dummy
         );
@@ -615,7 +569,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {2, 0, 0, 0, 0},
-            {2, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -623,14 +576,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHistSingleBucket",
             {0, 0},
-            {0, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(CountSingleBucket)",
-            {2, 0},
             {2, 0},
             TTabletTypes::Dummy
         );
@@ -668,7 +619,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, v, 0, 0},
-            {0, 0, v, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -676,7 +626,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 0, 30, 0, 0},
             {0, 0, 30, 0, 0},
             TTabletTypes::Dummy
         );
@@ -705,9 +654,92 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             tablet1.TabletType
         );
+    }
+
+    Y_UNIT_TEST(SearchCounters) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        auto aggregator = CreateTabletCountersAggregator(false);
+        auto aggregatorId = runtime.Register(aggregator);
+        runtime.EnableScheduleForActor(aggregatorId);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+
+        TTabletWithHist dummyTablet(1, TTabletTypes::Dummy);
+        dummyTablet.SetSimpleCount("JustCount1", 11);
+        dummyTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist columnShardTablet(2, TTabletTypes::ColumnShard);
+        columnShardTablet.SetSimpleCount("JustCount1", 22);
+        columnShardTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        struct TTestHttpRequest : NMonitoring::IHttpRequest {
+            HTTP_METHOD Method;
+            TCgiParameters CgiParameters;
+            THttpHeaders HttpHeaders;
+            TString Path;
+
+            TTestHttpRequest(HTTP_METHOD method, TString path)
+                : Method(method)
+                , Path(std::move(path))
+            {
+            }
+
+            const char* GetURI() const override {
+                return "";
+            }
+
+            const char* GetPath() const override {
+                return Path.c_str();
+            }
+
+            const TCgiParameters& GetParams() const override {
+                return CgiParameters;
+            }
+
+            const TCgiParameters& GetPostParams() const override {
+                return CgiParameters;
+            }
+
+            TStringBuf GetPostContent() const override {
+                return {};
+            }
+
+            HTTP_METHOD GetMethod() const override {
+                return Method;
+            }
+
+            const THttpHeaders& GetHeaders() const override {
+                return HttpHeaders;
+            }
+
+            TString GetRemoteAddr() const override {
+                return {};
+            }
+        };
+
+        TTestHttpRequest httpReq(HTTP_METHOD_GET, "/actors/tablet_counters_aggregator/search");
+        httpReq.CgiParameters.emplace("name", "JustCount1");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "/search", nullptr);
+        runtime.Send(new IEventHandle(aggregatorId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(resp);
+
+        const TString& answer = resp->Answer;
+        UNIT_ASSERT_STRING_CONTAINS(answer, "JustCount1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=2");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>11</td>");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>22</td>");
     }
 }
 
@@ -1005,6 +1037,25 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
 
             PQCounters.FromProto(counters);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TEvTabletAddCountersDetailedMetricsFields) {
+    Y_UNIT_TEST(DefaultsToLeader) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 0u);
+    }
+
+    Y_UNIT_TEST(StampsFollowerIdWhenProvided) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase,
+            7);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 7u);
     }
 }
 

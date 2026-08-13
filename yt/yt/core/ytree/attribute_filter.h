@@ -169,6 +169,18 @@ void FormatValue(
     const TAttributeFilter& attributeFilter,
     TStringBuf /*spec*/);
 
+void WriteAttributeDictionaryFragment(
+    NYson::IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable);
+
+void WriteAttributeDictionary(
+    NYson::IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TShrunkAttributeFilterView

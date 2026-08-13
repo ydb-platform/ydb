@@ -1,4 +1,8 @@
 common:
+  - from: /concepts/architecture.md
+    to: /concepts/architecture/index.md
+  - from: /concepts/metadata-distribution.md
+    to: /concepts/architecture/metadata-services.md
   - from: /reference/ydb-cli/table-ttl-drop.md
     to: /reference/ydb-cli/table-ttl-reset.md
   - from: changelog.md
@@ -35,8 +39,11 @@ common:
     to: /concepts/glossary.md
   - from: /concepts/vector_index.md
     to: concepts/vector_search.md
+  # Redirects after PostgreSQL compatibility docs removal
   - from: /postgresql/pg-dump.md
-    to: /postgresql/import.md
+    to: /postgresql/intro.md
+  - from: /postgresql/(.*)$
+    to: /postgresql/intro.md
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
 
@@ -405,6 +412,8 @@ common:
 # Redirects for integrations
   - from: /integrations/grafana.md
     to: /integrations/visualization/grafana.md
+  - from: /integrations/visualization/finebi.md
+    to: /integrations/visualization/index.md
   - from: /integrations/ide/dbeaver.md
     to: /integrations/gui/dbeaver.md
   - from: /integrations/ide/datagrip.md
@@ -505,12 +514,8 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
   - from: /db/terraform.md
     to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
   - from: /maintenance/manual/replacing_nodes.md
     to: /devops/configuration-management/configuration-v1/replacing-nodes.md
   - from: /maintenance/manual/cluster_expansion.md
@@ -539,20 +544,38 @@ ru:
     to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
   - from: /recipes/ydb-sdk/debug-jaeger.md
     to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /recipes/ydb-sdk/debug-otel-tracing.md
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /integrations/sql-dialect-converter.md
     to: /integrations/sql-translation/sql-dialect-converter.md
 
 en:
-  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
-    to: /recipes/ydb-sdk/debug-jaeger.md
-  - from: /reference/ydb-sdk/recipes/debug-logs.md
-    to: /recipes/ydb-sdk/debug-logs.md
-  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
-    to: /recipes/ydb-sdk/debug-prometheus.md
   - from: /reference/ydb-sdk/recipes/debug.md
-    to: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /recipes/ydb-sdk/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /recipes/ydb-sdk/debug-logs-otel.md
+    to: /reference/ydb-sdk/observability/logging/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /recipes/ydb-sdk/debug-otel-metrics.md
+    to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-otel-tracing.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md

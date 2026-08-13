@@ -1,55 +1,22 @@
 #include "resource_pool_classifier_settings.h"
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/library/aclib/aclib.h>
 
 
 namespace NKikimr::NResourcePool {
 
-//// TClassifierSettings::TParser
-
-void TClassifierSettings::TParser::operator()(i64* setting) const {
-    *setting = FromString<i64>(Value);
-    if (*setting < -1) {
-        throw yexception() << "Invalid integer value " << *setting << ", it is should be greater or equal -1";
-    }
-}
-
-void TClassifierSettings::TParser::operator()(TString* setting) const {
-    *setting = Value;
-}
-
-void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) const {
-    *setting = Value;
-}
-
-//// TClassifierSettings::TExtractor
-
-TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
-    return ToString(*setting);
-}
-
-TString TClassifierSettings::TExtractor::operator()(TString* setting) const {
-    return *setting;
-}
-
-TString TClassifierSettings::TExtractor::operator()(std::optional<TString>* setting) const {
-    return setting->value_or(TString{});
-}
-
-//// TPoolSettings
-
-std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings::GetPropertiesMap() {
-    std::unordered_map<TString, TProperty> properties = {
-        {"rank", &Rank},
-        {"resource_pool", &ResourcePool},
-        {"member_name", &MemberName}
-    };
-    return properties;
-}
+//// TClassifierSettings
 
 std::optional<TString> TClassifierSettings::Validate() const {
+    if (!ResourcePool && !Action) {
+        return TStringBuilder() << "Invalid resource pool classifier configuration, either resource pool or action must be specified";
+    }
+    if (ResourcePool && Action) {
+        return TStringBuilder() << "Invalid resource pool classifier configuration, resource pool must not be used for Reject action";
+    }
     if (!MemberName) {
         return std::nullopt;
     }

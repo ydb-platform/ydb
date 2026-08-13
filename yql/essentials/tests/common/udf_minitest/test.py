@@ -46,7 +46,7 @@ def test(case, mode):
         scan_udfs=spec.scan_udfs,
     )
 
-    RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH, secure_params=spec.secure_params)
+    RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH, secure_params=spec.secure_params, patch_cfg_file=spec.patch_cfg_file)
 
     if mode == 'Results':
         runner = RUNNER_FACTORY(spec.langver)

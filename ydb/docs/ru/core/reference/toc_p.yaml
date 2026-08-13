@@ -4,10 +4,6 @@ items:
   include:
     mode: link
     path: ../yql/toc_p.yaml
-- name: Совместимость с PostgreSQL
-  include:
-    mode: link
-    path: ../postgresql/toc_p.yaml
 - name: Встроенный UI
   include:
     mode: link
@@ -41,7 +37,7 @@ items:
   include:
     mode: link
     path: kafka-api/toc_p.yaml
-- name: SQS API
+- name: Amazon SQS API
   href: sqs-api/index.md
   include:
     mode: link
@@ -71,3 +67,9 @@ items:
   include:
     mode: link
     path: docker/toc_p.yaml
+- name: Совместимость с PostgreSQL (удалена)
+  href: ../postgresql/intro.md
+  hidden: true
+  include:
+    mode: link
+    path: ../postgresql/toc_p.yaml

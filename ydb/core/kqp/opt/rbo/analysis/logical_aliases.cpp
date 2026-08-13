@@ -291,7 +291,7 @@ TPlanAliases::TAliasMap TOpSort::ComputeAliases() {
 }
 
 void ComputePlanAliases(TOpRoot& root) {
-    const auto traversal = root.PostOrder();
+    const auto traversal = root.SnapshotTraversal();
 
     for (const auto& iter : traversal) {
         const auto& op = iter.Current;

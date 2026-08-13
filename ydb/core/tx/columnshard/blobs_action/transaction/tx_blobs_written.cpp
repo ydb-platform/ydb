@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
@@ -16,10 +18,12 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     TInstant startTransactionTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
-    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
-    NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
-    ACFL_DEBUG("event", "start_execute");
+    CommitSnapshot = Self->GetSnapshotForNoTxWrites();
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"txState", "execute"});
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"event", "start_execute"});
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     const auto minReadSnapshot = Self->GetMinSnapshotForNewReads();
 
@@ -83,7 +87,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 // No tx writes (bulk upsert) must break decent/proper txs.
                 // Decent/proper txs asked for isolation, so we have to give them isolation.
-                Self->OperationsManager->BreakConflictingTxs(op->GetLockId(), txc);
+                Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
             }
         } else {
             auto& info = Self->OperationsManager->GetLockVerified(op->GetLockId());
@@ -107,8 +111,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
 void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     TInstant startCompleteTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Complete");
-    NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"txState", "complete"});
     const auto now = TMonotonic::Now();
     if (WritingActions) {
         WritingActions->OnCompleteTxAfterWrite(*Self, true);

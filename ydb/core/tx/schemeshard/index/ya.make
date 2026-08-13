@@ -33,6 +33,7 @@ SRCS(
     operation_initiate_build_index.cpp
     operation_move_index.cpp
     operation_move_table_index.cpp
+    operation_prepare_index_validation.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(index_build_info.h)

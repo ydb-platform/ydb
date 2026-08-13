@@ -328,6 +328,8 @@ private:
 
     TExecDataQuerySettings GetExecDataQuerySettings(ui64 multiplier = 1);
 
+    NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
+
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
 
@@ -375,6 +377,10 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
 
     auto promise = NThreading::NewPromise<TIssues>();
@@ -600,7 +606,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 
                     return MakeFuture<TStatus>(selectResult);
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [context] (const TFuture<TIssues>& future) {
@@ -694,7 +700,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                     }
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 }
 
 TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
@@ -703,6 +709,12 @@ TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) 
         .ClientTimeout(StorageConfig.GetClientTimeout() == TDuration::Max() ? TDuration::Max() : StorageConfig.GetClientTimeout() * multiplier)
         .OperationTimeout(StorageConfig.GetOperationTimeout() * multiplier)
         .CancelAfter(StorageConfig.GetCancelAfter() * multiplier);
+}
+
+NYdb::NRetry::TRetryOperationSettings TStateStorage::GetRetryOperationSettings() {
+    return NYdb::NRetry::TRetryOperationSettings()
+        .MaxRetries(StorageConfig.GetMaxRetries())
+        .MaxTimeout(StorageConfig.GetMaxRetryTimeout());
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
@@ -735,7 +747,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -778,7 +790,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -797,7 +809,7 @@ TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
                     return TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
                 }
             });
-        });
+        }, GetRetryOperationSettings());
 }
 
 TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context) {
@@ -893,7 +905,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                     TStatus status = future.GetValue();
                     return status;
                 });
-        });
+        }, GetRetryOperationSettings());
 }
 
 TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {

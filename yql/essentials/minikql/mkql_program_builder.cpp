@@ -659,7 +659,7 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode stream, TRuntimeNode state,
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense(ToFlow(stream), state, switcher, handler));
+        return Collect(Condense(ToFlow(stream, {}), state, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
@@ -699,7 +699,7 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode stream, const TUnaryLambda&
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense1(ToFlow(stream), init, switcher, handler));
+        return Collect(Condense1(ToFlow(stream, {}), init, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
@@ -3506,6 +3506,30 @@ TRuntimeNode TProgramBuilder::NextMTRand(TRuntimeNode rand) {
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
+TRuntimeNode TProgramBuilder::AsErased(TRuntimeNode value) {
+    if constexpr (RuntimeVersion < 83U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewResourceType(ErasedResourceTag));
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::PeekErased(TRuntimeNode resource, TType* expectedType) {
+    if constexpr (RuntimeVersion < 83U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto resType = AS_TYPE(TResourceType, resource);
+    MKQL_ENSURE(resType->GetTag() == ErasedResourceTag, "Expected _Erased resource");
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(expectedType));
+    callableBuilder.Add(resource);
+    callableBuilder.Add(TRuntimeNode(expectedType, /*isImmediate=*/true));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
 TRuntimeNode TProgramBuilder::AggrCountInit(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<ui64>::Id));
     callableBuilder.Add(value);
@@ -6185,23 +6209,59 @@ TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& v
 
 TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_view& name,
                                              ui32 id, const TArrayRef<const TRuntimeNode>& args,
-                                             TType* returnType, bool rangeFunction) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(NewDataLiteral(useContext));
-    callableBuilder.Add(NewDataLiteral(rangeFunction));
-    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
-    callableBuilder.Add(NewDataLiteral(id));
-    for (const auto& arg : args) {
-        callableBuilder.Add(arg);
+                                             TType* returnType, bool rangeFunction, ui32 collationOid) {
+    // On old runtimes, always use the "PgResolvedCall" callable exactly as before (and
+    // explicit COLLATE, which needs the collation oid slot, isn't representable at all).
+    // Once the runtime is new enough, ALWAYS use the distinct "PgResolvedCall2" callable -
+    // with an extra collation oid slot right after `id` - even when collationOid is 0, so
+    // that "PgResolvedCall" stops being emitted entirely once the whole fleet is upgraded
+    // past this version, and its read-side support can eventually be deleted. The two
+    // shapes are told apart by callable name rather than input count/type, since an arg's
+    // own static type can legitimately be non-Pg (e.g. a NULL literal).
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    } else {
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall2", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        callableBuilder.Add(NewDataLiteral(collationOid));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
     }
-    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, ui32 id,
-                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType,
+                                                  ui32 collationOid) {
+    // Mirrors TProgramBuilder::PgResolvedCall - see the comment there.
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    }
+
+    TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall2", returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
     callableBuilder.Add(NewDataLiteral(id));
+    callableBuilder.Add(NewDataLiteral(collationOid));
     for (const auto& arg : args) {
         callableBuilder.Add(arg);
     }
@@ -6332,6 +6392,101 @@ TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, const std::string
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
+TRuntimeNode TProgramBuilder::BlockWay(TRuntimeNode variant) {
+    if constexpr (RuntimeVersion < 80) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = variantType->GetUnderlyingType();
+    TType* alternativeKeyType = underlying->IsTuple()
+                                    ? NewDataType(NUdf::EDataSlot::Uint32)
+                                    : NewDataType(NUdf::EDataSlot::Utf8);
+    TType* itemReturnType = isOptional ? NewOptionalType(alternativeKeyType)
+                                       : alternativeKeyType;
+    auto returnType = NewBlockType(itemReturnType, blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TStructType, varType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariantItem(TRuntimeNode variant) {
+    if constexpr (RuntimeVersion < 82) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto alternativeType = variantType->GetAlternativeType(0);
+    auto itemReturnType = isOptional ? NewOptionalType(alternativeType) : alternativeType;
+    auto returnType = NewBlockType(itemReturnType, blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockDynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 83) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto indexBlockType = AS_TYPE(TBlockType, index.GetStaticType());
+
+    bool isOptional;
+    auto indexItemType = UnpackOptionalData(indexBlockType->GetItemType(), isOptional);
+    MKQL_ENSURE(indexItemType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto returnType = NewBlockType(TOptionalType::Create(type, Env_), GetResultShape({itemBlockType, indexBlockType}));
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, /*isImmediate=*/true));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
 TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
     const auto conditionType = AS_TYPE(TBlockType, condition.GetStaticType());
     MKQL_ENSURE(AS_TYPE(TDataType, conditionType->GetItemType())->GetSchemeType() == NUdf::TDataType<bool>::Id,
@@ -6410,7 +6565,7 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<u
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                      std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+                                                      std::optional<ui32> filterColumn, TArrayRef<const ui32> keys,
                                                       const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
@@ -6447,7 +6602,7 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
 }
 
 TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn,
-                                                 const TArrayRef<ui32>& keys,
+                                                 TArrayRef<const ui32> keys,
                                                  const TArrayRef<const TAggInfo>& aggs,
                                                  TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
@@ -6457,7 +6612,7 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optiona
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                            const TArrayRef<ui32>& keys,
+                                                            TArrayRef<const ui32> keys,
                                                             const TArrayRef<const TAggInfo>& aggs,
                                                             TType* returnType) {
     const auto inputType = input.GetStaticType();
@@ -6488,7 +6643,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                        const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
@@ -6497,7 +6652,7 @@ TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const 
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                                const TArrayRef<ui32>& keys,
+                                                                TArrayRef<const ui32> keys,
                                                                 const TArrayRef<const TAggInfo>& aggs,
                                                                 ui32 streamIndex,
                                                                 const TVector<TVector<ui32>>& streams, TType* returnType) {
@@ -6541,7 +6696,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::strin
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                            const TArrayRef<const TAggInfo>& aggs,
                                                            ui32 streamIndex,
                                                            const TVector<TVector<ui32>>& streams,

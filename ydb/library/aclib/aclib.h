@@ -15,6 +15,7 @@ namespace NACLib {
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
 #define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_ACL_BASIC_OWNER "owner@" BUILTIN_SYSTEM_DOMAIN
 
 
 // This definition used to mark anonymous user sid

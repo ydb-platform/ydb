@@ -206,7 +206,7 @@ void TQueryBase::RunQuery() {
     try {
         OnRunQuery();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, ex.what());
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to run query", NYql::TIssues{NYql::TIssue{ex.what()}}) );
     }
 }
 
@@ -254,7 +254,7 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     }
 
     Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
-        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, TActivationContext::ActorSystem(), true));
+        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -280,7 +280,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         try {
             (this->*QueryResultHandler)();
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, ex.what());
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
         }
         Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit || IsStreamingMode);
     } else {
@@ -315,7 +315,7 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, ActorContext(), true, channelBufferSize);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, RequestType, ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 
@@ -362,7 +362,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         try {
             (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, ex.what());
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result part", NYql::TIssues{NYql::TIssue{ex.what()}}) );
             return;
         }
     }
@@ -398,7 +398,7 @@ void TQueryBase::FinishStreamRequest() {
     try {
         (this->*QueryResultHandler)();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, ex.what());
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
     }
     Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
 }

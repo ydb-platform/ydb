@@ -27,7 +27,9 @@
 #include <util/digest/numeric.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <vector>
 
 
@@ -150,7 +152,9 @@ public:
     // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
     void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
     void DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr);
-    void DeferCallback(std::function<void()> callback);
+    void DeferCallback(
+        std::function<void()> callback,
+        NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory = {});
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task);
@@ -202,7 +206,12 @@ private:
         };
 
         std::optional<TScheduledCallback> ScheduledCallback;
-        std::optional<std::function<void()>> Callback;
+        struct TCallback {
+            std::function<void()> Callback;
+            NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
+        };
+
+        std::optional<TCallback> Callback;
     } DirectReadActions;
 
     // Executor tasks.
@@ -1256,6 +1265,9 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
+    void OnDecompressionTaskFinished();
+    bool WaitAllDecompressionTasks(TInstant deadline) const;
+    void ClearAllPartitionStreamEvents();
     void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
     void OnDecompressionInfoDestroyImpl(i64 compressedSize,
                                         i64 decompressedSize,
@@ -1540,6 +1552,8 @@ private:
     bool Closing = false;
     std::function<void()> CloseCallback;
     std::atomic<int> DecompressionTasksInflight = 0;
+    mutable std::mutex DecompressionTasksInflightMutex;
+    mutable std::condition_variable DecompressionTasksInflightCondVar;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
 

@@ -137,11 +137,21 @@ public:
         bool local = false,
         bool checkResult = true);
 
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        NYdb::NTopic::TTopicClient& topicClient,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool checkResult = true);
+
     void TestReadTopicBasic(const std::string& testSuffix);
 
     // Table client SDK
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
+
+    void WaitForClassifierPropagation();
 
     // Query client SDK
 
@@ -267,7 +277,7 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;

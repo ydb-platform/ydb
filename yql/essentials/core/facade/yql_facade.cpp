@@ -12,11 +12,11 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -134,16 +134,57 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
 }
 
 TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
-    const auto& list = node["SqlFlags"].AsList();
+    TGatewaySQLFlags flags;
 
-    THashSet<TString> flags(list.size());
-    for (const auto& f : list) {
-        flags.insert(f.AsString());
+    for (const auto& f : node["SqlFlags"].AsList()) {
+        if (f.IsString()) {
+            flags.Set(f.AsString());
+            continue;
+        }
+
+        const auto& name = f["name"].AsString();
+
+        const auto& argList = f["args"].AsList();
+        TVector<TString> args(Reserve(argList.size()));
+        for (const auto& arg : argList) {
+            args.emplace_back(arg.AsString());
+        }
+
+        flags.Set(name, std::move(args));
     }
 
-    return {
-        .Unconditional = std::move(flags),
-    };
+    return flags;
+}
+
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
 }
 
 } // namespace
@@ -202,6 +243,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
 }
 
 void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
@@ -303,15 +348,11 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
+                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
                         qContext, RemoteLayersProviders_);
 }
 
@@ -343,6 +384,7 @@ TProgram::TProgram(
     TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
@@ -364,6 +406,7 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
+    , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(std::move(filename))
@@ -434,6 +477,12 @@ TProgram::TProgram(
         }
     }
 
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
+        }
+    }
+
     UserDataStorage_ = MakeIntrusive<TUserDataStorage>(fileStorage, SavedUserDataTable_, udfResolver, udfIndex);
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
         modules->AttachUserData(UserDataStorage_);
@@ -456,7 +505,6 @@ TProgram::TProgram(
         if (UrlListerManager_) {
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
             auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
@@ -873,8 +921,14 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -1828,6 +1882,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
+
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");
             writer.OnBeginMap();
@@ -2196,6 +2254,19 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
+    }
 
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
         urlListerManager->SetTokenResolver(std::move(tokenResolver));

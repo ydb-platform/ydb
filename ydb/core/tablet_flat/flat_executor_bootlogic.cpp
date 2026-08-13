@@ -112,6 +112,18 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
 
     if (msg->DependencyGraph) {
         StartLeaseWaiter(BootTimestamp, *msg->DependencyGraph);
+
+        for (const auto &entry : msg->DependencyGraph->Entries) {
+            for (const auto &blobId : entry.References) {
+                SeenBlob(blobId);
+            }
+            for (const auto &blobId : entry.GcDiscovered) {
+                SeenBlob(blobId);
+            }
+            for (const auto &blobId : entry.GcLeft) {
+                SeenBlob(blobId);
+            }
+        }
     }
 
     Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
@@ -174,6 +186,7 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
+        SeenBlob(blobId);
     }
 }
 
@@ -181,6 +194,8 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
     auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
+
+    SeenBlob(fetch.PageCollection->Label());
 
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
@@ -264,6 +279,12 @@ void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintp
     Steps->Execute();
 }
 
+void TExecutorBootLogic::SeenBlob(const TLogoBlobID& id) {
+    if (Result().GcLogic) {
+        Result().GcLogic->HistoryCutter.SeenBlob(id);
+    }
+}
+
 TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
 {
     if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
@@ -309,6 +330,34 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
     Y_ENSURE(Result_->Database, "Looks like booting hasn't been done");
+    if (AppData()->FeatureFlags.GetEnableCutHistory()) {
+        for (const auto& [tableId, table] : Result_->Database->GetScheme().Tables) {
+            for (const auto& part : Result_->Database->GetTableParts(tableId)) {
+                if (!part) {
+                    continue;
+                }
+                if (part->Blobs) {
+                    for (const auto& glob : **(part->Blobs)) {
+                        SeenBlob(glob.Logo);
+                    }
+                }
+                if (const auto* partStore = part.As<const NTable::TPartStore>()) {
+                    for (const auto& pageCollection : partStore->PageCollections) {
+                        SeenBlob(pageCollection->PageCollection->Label());
+                    }
+                }
+            }
+            if (Result_->GcLogic && !Result_->Database->GetTableColdParts(tableId).empty()) {
+                for (const auto& [_, room] : table.Rooms) {
+                    Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
+                    for (auto channel : room.Blobs) {
+                        Result().GcLogic->HistoryCutter.BecomeUncertain(channel);
+                    }
+                    Result().GcLogic->HistoryCutter.BecomeUncertain(room.Outer);
+                }
+            }
+        }
+    }
     return Result_;
 }
 

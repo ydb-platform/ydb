@@ -73,9 +73,6 @@ void TCommandExecuteSqlBase::DeclareScriptOptions(TClientCommand::TConfig& confi
 void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
-        .Hidden();
     config.Opts->AddLongOption("results-ttl", "Amount of time to store script execution results on server "
         "(for async operations only). By default it is 86400s (24 hours).")
         .RequiredArgument("SECONDS").StoreResult(&ResultsTtl);
@@ -141,13 +138,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
     settings.ExecMode(NQuery::EExecMode::Execute);
     settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::None));
 
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
-    }
+    settings.Syntax(NQuery::ESyntax::YqlV1);
     settings.ResultsTtl(ResultsTtl);
 
     if (!Parameters.empty() || InputParamStream) {
@@ -360,13 +351,7 @@ int TCommandSqlExperimental::StreamExecuteQuery(NQuery::TQueryClient& client) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
-    }
+    settings.Syntax(NQuery::ESyntax::YqlV1);
     // Execute query without parameters
     auto asyncResult = client.StreamExecuteQuery(
         Query,
@@ -440,10 +425,6 @@ void TCommandSqlExperimental::SetScript(TString&& script) {
 
 void TCommandSqlExperimental::SetCollectStatsMode(TString&& collectStatsMode) {
     CollectStatsMode = std::move(collectStatsMode);
-}
-
-void TCommandSqlExperimental::SetSyntax(TString&& syntax) {
-    Syntax = std::move(syntax);
 }
 
 TCommandSqlOperation::TCommandSqlOperation()
@@ -548,8 +529,6 @@ void TCommandSqlOperationGet::Parse(TConfig& config) {
 namespace {
     IOutputStream& operator<<(IOutputStream& out, NQuery::ESyntax syntax) {
         switch (syntax) {
-            case NQuery::ESyntax::Pg:
-                return out << "PostgreSQL";
             case NQuery::ESyntax::YqlV1:
                 return out << "YQL";
             default:

@@ -13,6 +13,7 @@
 
 #include <contrib/libs/xxhash/xxhash.h>
 
+
 #endif
 
 namespace NYT::NTableClient {
@@ -65,7 +66,7 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
                 EErrorCode::UnhashableType,
                 "Cannot hash values of type %Qlv; only scalar types are allowed for key columns",
                 type)
-                << TErrorAttribute("value", value);
+                .With("value", value);
 #endif
     }
 }

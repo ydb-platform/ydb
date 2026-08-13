@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <limits>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info)
@@ -43,11 +45,14 @@ void TStatisticsAggregator::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const 
 }
 
 void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
-    SA_LOG_I("[" << TabletID() << "] OnActivateExecutor");
+    YDB_LOG_INFO("OnActivateExecutor",
+        {"tabletId", TabletID()});
 
     auto appData = AppData(ctx);
     Y_ABORT_UNLESS(appData);
     StatisticsConfig = appData->StatisticsConfig;
+
+    InitAnalyzeCounters();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -66,10 +71,14 @@ void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) 
 }
 
 void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-    SA_LOG_I("[" << TabletID() << "] Subscribed for config changes");
+    YDB_LOG_INFO("Subscribed for config changes",
+        {"tabletId", TabletID()});
 }
 
 void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    YDB_LOG_DEBUG("EvConfigNotification",
+        {"tabletId", TabletID()});
+
     const auto& record = ev->Get()->Record;
     const auto& config = record.GetConfig();
     if (config.HasFeatureFlags()) {
@@ -92,15 +101,17 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 void TStatisticsAggregator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev) {
     auto pipeServerId = ev->Get()->ServerId;
 
-    SA_LOG_D("[" << TabletID() << "] EvServerConnected"
-        << ", pipe server id = " << pipeServerId);
+    YDB_LOG_DEBUG("EvServerConnected",
+        {"tabletId", TabletID()},
+        {"pipeServerId", pipeServerId});
 }
 
 void TStatisticsAggregator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev) {
     auto pipeServerId = ev->Get()->ServerId;
 
-    SA_LOG_D("[" << TabletID() << "] EvServerDisconnected"
-        << ", pipe server id = " << pipeServerId);
+    YDB_LOG_DEBUG("EvServerDisconnected",
+        {"tabletId", TabletID()},
+        {"pipeServerId", pipeServerId});
 
     auto itNodeServer = NodePipes.find(pipeServerId);
     if (itNodeServer != NodePipes.end()) {
@@ -136,11 +147,12 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectNode::TPtr& ev) {
     const TNodeId nodeId = record.GetNodeId();
     auto pipeServerId = ev->Recipient;
 
-    SA_LOG_D("[" << TabletID() << "] EvConnectNode"
-        << ", pipe server id = " << pipeServerId
-        << ", node id = " << nodeId
-        << ", have schemeshards count = " << record.HaveSchemeShardsSize()
-        << ", need schemeshards count = " << record.NeedSchemeShardsSize());
+    YDB_LOG_DEBUG("EvConnectNode",
+        {"tabletId", TabletID()},
+        {"pipeServerId", pipeServerId},
+        {"nodeId", nodeId},
+        {"haveSchemeShardsCount", record.HaveSchemeShardsSize()},
+        {"needSchemeShardsCount", record.NeedSchemeShardsSize()});
 
     if (NodePipes.find(pipeServerId) == NodePipes.end()) {
         NodePipes[pipeServerId] = nodeId;
@@ -175,10 +187,11 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvRequestStats::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto nodeId = record.GetNodeId();
 
-    SA_LOG_D("[" << TabletID() << "] EvRequestStats"
-        << ", node id = " << nodeId
-        << ", schemeshard count = " << record.NeedSchemeShardsSize()
-        << ", urgent = " << record.GetUrgent());
+    YDB_LOG_DEBUG("EvRequestStats",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId},
+        {"schemeShardsCount", record.NeedSchemeShardsSize()},
+        {"urgent", record.GetUrgent()});
 
     if (!EnableStatistics) {
         auto disabled = std::make_unique<TEvStatistics::TEvStatisticsIsDisabled>();
@@ -218,13 +231,15 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectSchemeShard::TPtr& e
         ++SchemeShards[schemeShardId];
     }
 
-    SA_LOG_D("[" << TabletID() << "] EvConnectSchemeShard"
-        << ", pipe server id = " << pipeServerId
-        << ", schemeshard id = " << schemeShardId);
+    YDB_LOG_DEBUG("EvConnectSchemeShard",
+        {"tabletId", TabletID()},
+        {"pipeServerId", pipeServerId},
+        {"schemeShardId", schemeShardId});
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
-    SA_LOG_D("[" << TabletID() << "] EvFastPropagateCheck");
+    YDB_LOG_DEBUG("EvFastPropagateCheck",
+        {"tabletId", TabletID()});
 
     if (!EnableStatistics) {
         return;
@@ -239,7 +254,8 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
-    SA_LOG_T("[" << TabletID() << "] EvPropagate");
+    YDB_LOG_TRACE("EvPropagate",
+        {"tabletId", TabletID()});
 
     if (EnableStatistics) {
         PropagateStatistics();
@@ -249,7 +265,9 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
-    SA_LOG_D("[" << TabletID() << "] EvPropagateStatisticsResponse, cookie: " << ev->Cookie);
+    YDB_LOG_DEBUG("EvPropagateStatisticsResponse,",
+        {"tabletId", TabletID()},
+        {"cookie", ev->Cookie});
 
     if (!PropagationInFlight) {
         return;
@@ -271,7 +289,8 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvProcessUrgent::TPtr&) {
-    SA_LOG_D("[" << TabletID() << "] EvProcessUrgent");
+    YDB_LOG_DEBUG("EvProcessUrgent",
+        {"tabletId", TabletID()});
 
     ProcessUrgentInFlight = false;
 
@@ -300,7 +319,8 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvProcessUrgent::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagateTimeout::TPtr&) {
-    SA_LOG_D("[" << TabletID() << "] EvPropagateTimeout");
+    YDB_LOG_DEBUG("EvPropagateTimeout",
+        {"tabletId", TabletID()});
 
     if (PropagationInFlight) {
         PropagationInFlight = false;
@@ -327,9 +347,10 @@ void TStatisticsAggregator::ProcessRequests(TNodeId nodeId, const std::vector<TS
 }
 
 void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vector<TSSId>& ssIds) {
-    SA_LOG_D("[" << TabletID() << "] SendStatisticsToNode()"
-        << ", node id = " << nodeId
-        << ", schemeshard count = " << ssIds.size());
+    YDB_LOG_DEBUG("SendStatisticsToNode()",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId},
+        {"schemeShardsCount", ssIds.size()});
 
     std::vector<TNodeId> nodeIds;
     nodeIds.push_back(nodeId);
@@ -339,13 +360,15 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
 
 void TStatisticsAggregator::PropagateStatistics() {
     if (Nodes.empty() || RequestedSchemeShards.empty()) {
-        SA_LOG_T("[" << TabletID() << "] PropagateStatistics() No data");
+        YDB_LOG_TRACE("PropagateStatistics() No data",
+            {"tabletId", TabletID()});
         return;
     }
 
-    SA_LOG_D("[" << TabletID() << "] PropagateStatistics()"
-        << ", node count = " << Nodes.size()
-        << ", schemeshard count = " << RequestedSchemeShards.size());
+    YDB_LOG_DEBUG("PropagateStatistics()",
+        {"tabletId", TabletID()},
+        {"nodesCount", Nodes.size()},
+        {"schemeShardsCount", RequestedSchemeShards.size()});
 
     std::vector<TNodeId> nodeIds;
     nodeIds.reserve(Nodes.size());
@@ -372,9 +395,10 @@ void TStatisticsAggregator::PropagateStatistics() {
 }
 
 void TStatisticsAggregator::PropagateFastStatistics() {
-    SA_LOG_D("[" << TabletID() << "] PropagateFastStatistics()"
-        << ", node count = " << FastNodes.size()
-        << ", schemeshard count = " << FastSchemeShards.size());
+    YDB_LOG_DEBUG("PropagateFastStatistics()",
+        {"tabletId", TabletID()},
+        {"nodesCount", FastNodes.size()},
+        {"schemeShardsCount", FastSchemeShards.size()});
 
     if (FastNodes.empty() || FastSchemeShards.empty()) {
         return;
@@ -441,43 +465,10 @@ TDuration TStatisticsAggregator::GetPropagateInterval() {
     }
 }
 
-void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    if (!TraversalPathId) {
-        return;
-    }
-    auto tabletId = ev->Get()->TabletId;
-    if (TraversalIsColumnTable) {
-        if (tabletId == HiveId) {
-            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with HiveId=" << tabletId);
-            Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
-        } else {
-            for (TForceTraversalOperation& operation : ForceTraversals) {
-                for (TForceTraversalTable& operationTable : operation.Tables) {
-                    for (TAnalyzedShard& shard : operationTable.AnalyzedShards) {
-                        if (shard.ShardTabletId == tabletId) {
-                            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with ColumnShard=" << tabletId);
-                            shard.Status = TAnalyzedShard::EStatus::DeliveryProblem;
-                            return;
-                        }
-                    }
-                }
-            }
-            SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
-        }
-    } else {
-        SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with DataShard=" << tabletId);
-        if (DatashardRanges.empty()) {
-            return;
-        }
-        auto& range = DatashardRanges.front();
-        if (tabletId != range.DataShardId) {
-            return;
-        }
-        Resolve();
-    }
-}
-
 void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr&) {
+    YDB_LOG_DEBUG("EvStatTableCreationResponse",
+        {"tabletId", TabletID()});
+
     IsStatisticsTableCreated = true;
     if (PendingSaveStatistics) {
         PendingSaveStatistics = false;
@@ -511,7 +502,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
         }
     }
 
-    SA_LOG_D("[" << TabletID() << "] Send TEvStatistics::TEvAnalyzeStatusResponse. Status " << outRecord.GetStatus());
+    YDB_LOG_DEBUG("Send TEvStatistics::TEvAnalyzeStatusResponse",
+        {"tabletId", TabletID()},
+        {"status", outRecord.GetStatus()});
 
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
@@ -524,34 +517,11 @@ void TStatisticsAggregator::PassAway() {
     IActor::PassAway();
 }
 
-void TStatisticsAggregator::Handle(TEvPrivate::TEvResolve::TPtr&) {
-    Resolve();
-}
-
-void TStatisticsAggregator::Handle(TEvPrivate::TEvRequestDistribution::TPtr&) {
-    ++HiveRequestRound;
-
-    auto reqDistribution = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
-    reqDistribution->Record.MutableTabletIds()->Add(TabletsForReqDistribution.begin(), TabletsForReqDistribution.end());
-    Send(MakePipePerNodeCacheID(false),
-        new TEvPipeCache::TEvForward(reqDistribution.release(), HiveId, true));
-}
-
-void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
-    const auto round = ev->Get()->Record.GetRound();
-    if (round == GlobalTraversalRound && AggregationRequestBeginTime) {
-        TInstant now = AppData(TlsActivationContext->AsActorContext())->TimeProvider->Now();
-        TDuration time = now - AggregationRequestBeginTime;
-        TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(time.MicroSeconds());
-    }
-
-    auto ack = std::make_unique<TEvStatistics::TEvAggregateKeepAliveAck>();
-    ack->Record.SetRound(round);
-    Send(ev->Sender, ack.release());
-    Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++KeepAliveSeqNo));
-}
-
 void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
+    YDB_LOG_DEBUG("EvSaveStatisticsQueryResponse",
+        {"tabletId", TabletID()},
+        {"success", ev->Get()->Success});
+
     SaveQueryActorId = {};
 
     if (ev->Get()->Success) {
@@ -564,6 +534,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
             DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
         }
     } else {
+        YDB_LOG_WARN("SaveStatisticsQuery failed",
+            {"tabletId", TabletID()},
+            {"pathId", TraversalPathId});
+
         NYql::TIssue error(TStringBuilder() << "Could not save statistics for "
             "table id: " << TraversalPathId.LocalPathId);
         DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error});
@@ -571,6 +545,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
+    YDB_LOG_WARN("EvDeleteStatisticsQueryResponse, deleting statistics",
+        {"tabletId", TabletID()},
+        {"pathId", TraversalPathId});
+
     NYql::TIssue error(TStringBuilder() << "Could not find table id: "
         << TraversalPathId.LocalPathId << ", deleted its statistics");
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error});
@@ -580,6 +558,12 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
     if (ev->Sender != AnalyzeActorId) {
         return;
     }
+
+    YDB_LOG_DEBUG("EvAnalyzeActorResult",
+        {"tabletId", TabletID()},
+        {"status", static_cast<int>(ev->Get()->Status)},
+        {"final", ev->Get()->Final},
+        {"statisticsCount", ev->Get()->Statistics.size()});
 
     if (ev->Get()->Final) {
         AnalyzeActorId = {};
@@ -597,6 +581,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
         DeleteStatisticsFromTable();
         return;
     case EStatus::InternalError:
+        YDB_LOG_WARN("EvAnalyzeActorResult InternalError",
+            {"tabletId", TabletID()},
+            {"pathId", TraversalPathId});
         DispatchFinishTraversalTx(
             NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues));
         return;
@@ -606,13 +593,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
     const auto& operationId = ev->Get()->Record.GetOperationId();
     if (operationId != ForceTraversalOperationId) {
-        SA_LOG_N("Got unexpected TEvAnalyzeCancel with"
-            << " operationId: " << operationId.Quote()
-            << ", expected: " << ForceTraversalOperationId.Quote() << ", ignoring");
+        YDB_LOG_NOTICE("Got unexpected TEvAnalyzeCancel, ignoring",
+            {"operationId", operationId.Quote()},
+            {"expected", ForceTraversalOperationId.Quote()});
         return;
     }
 
-    SA_LOG_D("Got TEvAnalyzeCancel, operationId: " << operationId.Quote());
+    YDB_LOG_DEBUG("Got TEvAnalyzeCancel,",
+        {"operationId", operationId.Quote()});
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
 }
 
@@ -639,65 +627,6 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
     }
     Register(CreateStatisticsTableCreator(
         std::make_unique<TEvStatistics::TEvStatTableCreationResponse>(), Database));
-}
-
-void TStatisticsAggregator::Navigate() {
-    Y_ABORT_UNLESS(NavigatePathId);
-
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-    TNavigate::TEntry entry;
-    entry.TableId = NavigatePathId;
-    entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-    entry.Operation = TNavigate::OpTable;
-
-    auto request = std::make_unique<TNavigate>();
-    request->DatabaseName = NavigateDatabase;
-    request->ResultSet.emplace_back(entry);
-
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
-}
-
-void TStatisticsAggregator::Resolve() {
-    Y_ABORT_UNLESS(NavigatePathId);
-
-    ++ResolveRound;
-
-    TVector<TCell> plusInf;
-    TTableRange range(TraversalStartKey.GetCells(), true, plusInf, true, false);
-    auto keyDesc = MakeHolder<TKeyDesc>(
-        NavigatePathId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, Columns);
-
-    auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
-    request->DatabaseName = NavigateDatabase;
-    request->ResultSet.emplace_back(std::move(keyDesc));
-
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
-}
-
-void TStatisticsAggregator::ScanNextDatashardRange() {
-    // Datashard traversal is temporary disabled
-    Y_FAIL();
-
-    if (DatashardRanges.empty()) {
-        for (auto& [tag, sketch] : CountMinSketches) {
-            TString strSketch(sketch->AsStringBuf());
-            StatisticsToSave.emplace_back(tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
-        }
-        SaveStatisticsToTable();
-        return;
-    }
-
-    auto& range = DatashardRanges.front();
-    auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-    auto& record = request->Record;
-    auto* path = record.MutableTable()->MutablePathId();
-    path->SetOwnerId(TraversalPathId.OwnerId);
-    path->SetLocalId(TraversalPathId.LocalPathId);
-    record.SetStartKey(TraversalStartKey.GetBuffer());
-
-    Send(MakePipePerNodeCacheID(false),
-        new TEvPipeCache::TEvForward(request.release(), range.DataShardId, true),
-        IEventHandle::FlagTrackDelivery);
 }
 
 void TStatisticsAggregator::SaveStatisticsToTable() {
@@ -735,11 +664,12 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     SaveQueryActorId = Register(
         CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
-    SA_LOG_D("[" << TabletID() << "] Dispatched SaveStatisticsQuery"
-        << ", actor id: " << SaveQueryActorId
-        << ", items size: " << itemsSize
-        << ", data size: " << HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)
-        << ", items left: " << StatisticsToSave.size());
+    YDB_LOG_DEBUG("Dispatched SaveStatisticsQuery",
+        {"tabletId", TabletID()},
+        {"actorId", SaveQueryActorId},
+        {"itemsSize", itemsSize},
+        {"dataSize", HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)},
+        {"itemsLeft", StatisticsToSave.size()});
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -755,10 +685,12 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 
 void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     if (ForceTraversals.empty()) {
-        SA_LOG_T("[" << TabletID() << "] ScheduleNextAnalyze. Empty ForceTraversals");
+        YDB_LOG_TRACE("ScheduleNextAnalyze. Empty ForceTraversals",
+            {"tabletId", TabletID()});
         return;
     }
-    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
+    YDB_LOG_DEBUG("ScheduleNextAnalyze",
+        {"tabletId", TabletID()});
     Y_ABORT_UNLESS(!TraversalPathId);
     Y_ABORT_UNLESS(!AnalyzeActorId);
 
@@ -774,9 +706,9 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                     && operation.RequestingActorReattached)) {
                 std::optional<bool> isKnown = IsKnownTable(operationTable.PathId);
                 if (!isKnown.has_value()) {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
-                        << "Don't start analyze for table " << operationTable.PathId
-                        << " as there is still no info from its SchemeShard");
+                    YDB_LOG_DEBUG("ScheduleNextAnalyze. Don't start analyze for table as there is still no info from its SchemeShard",
+                        {"tabletId", TabletID()},
+                        {"pathId", operationTable.PathId});
                     continue;
                 }
 
@@ -786,9 +718,9 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 TraversalPathId = operationTable.PathId;
 
                 if (!*isKnown) {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
-                        << "table " << operationTable.PathId
-                        << " was deleted, deleting its statistics");
+                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
+                        {"tabletId", TabletID()},
+                        {"pathId", operationTable.PathId});
                     DeleteStatisticsFromTable();
                     return;
                 }
@@ -801,105 +733,167 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
                 // operation.Types field is not used, TAnalyzeActor will determine suitable
                 // statistic types itself.
-                auto analyzeActorConfig = TAnalyzeActor::TConfig{
-                    .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
-                    .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-                };
-                AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-                    SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                    operationTable.ColumnTags, analyzeActorConfig));
-                SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
-                    << "operationId: " << operation.OperationId.Quote()
-                    << ", started analyzing table: " << operationTable.PathId
-                    << ", AnalyzeActorId: " << AnalyzeActorId);
+                StartAnalyzeActor(ctx, operation.OperationId, operation.DatabaseName,
+                    operationTable.PathId, operationTable.ColumnTags);
+                YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing table",
+                    {"tabletId", TabletID()},
+                    {"operationId", operation.OperationId.Quote()},
+                    {"pathId", operationTable.PathId},
+                    {"analyzeActorId", AnalyzeActorId});
 
                 return;
             }
         }
 
-        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId.Quote());
+        YDB_LOG_DEBUG("ScheduleNextAnalyze. All the force traversal tables sent the requests",
+            {"tabletId", TabletID()},
+            {"operationId", operation.OperationId.Quote()});
         continue;
     }
 
-    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal operations sent the requests.");
+    YDB_LOG_DEBUG("ScheduleNextAnalyze. All the force traversal operations sent the requests",
+        {"tabletId", TabletID()});
 }
 
-void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db) {
-    SA_LOG_D("[" << TabletID() << "] ScheduleNextBackgroundTraversal");
+void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    YDB_LOG_DEBUG("ScheduleNextBackgroundTraversal",
+        {"tabletId", TabletID()});
     Y_ABORT_UNLESS(!TraversalPathId);
 
-    TString databaseName;
-    TPathId pathId;
-
-    if (!ScheduleTraversalsByTime.Empty()){
-        auto* oldestTable = ScheduleTraversalsByTime.Top();
-        if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            SA_LOG_T("[" << TabletID() << "] Background traversal is skipped. "
-                << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
-            return;
-        }
-
-        databaseName = ""; // it's intentional, because ScheduleTraversalsByTime is filled by SchemeShards
-        pathId = oldestTable->PathId;
-    }
-
-    if (!pathId) {
-        SA_LOG_T("[" << TabletID() << "] No traversal request to send.");
+    if (ScheduleTraversalsByTime.Empty()) {
+        YDB_LOG_TRACE("No traversal request to send",
+            {"tabletId", TabletID()});
         return;
     }
 
-    TraversalDatabase = databaseName;
+    auto* oldestTable = ScheduleTraversalsByTime.Top();
+    TScheduleTraversal* chosenTable = nullptr;
+    if (TInstant::Now() >= oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
+        chosenTable = oldestTable;
+    } else {
+        chosenTable = FindStaleTable();
+    }
+
+    if (!chosenTable) {
+        YDB_LOG_TRACE("Background traversal is skipped. No table is stale and no traversal interval elapsed",
+            {"tabletId", TabletID()},
+            {"oldestPathId", oldestTable->PathId},
+            {"oldestLastUpdateTime", oldestTable->LastUpdateTime});
+        return;
+    }
+
+    TPathId pathId = chosenTable->PathId;
+
+    TraversalDatabase = ""; // Empty: TAnalyzeActor derives the database from the Navigate response (force traversals set it explicitly).
     TraversalPathId = pathId;
     TraversalStartTime = TInstant::Now();
     LastTraversalWasForce = false;
 
-    std::optional<bool> isColumnTable = IsColumnTable(pathId);
-    if (!isColumnTable){
+    std::optional<bool> isKnown = IsKnownTable(pathId);
+    if (!isKnown) {
+        PersistTraversal(db);
         DeleteStatisticsFromTable();
         return;
     }
 
-    // Datashard traversal is temporary disabled
-    if (!*isColumnTable) {
-        SA_LOG_D("[" << TabletID() << "] ScheduleNextBackgroundTraversal. Skip traversal for datashard table " << pathId);
-        DeleteStatisticsFromTable();
-        return;
-    }
-
-    TraversalIsColumnTable = *isColumnTable;
-
-    SA_LOG_D("[" << TabletID() << "] Start background traversal navigate for path " << pathId);
-
-    StartTraversal(db);
-}
-
-void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     PersistTraversal(db);
 
-    TraversalStartKey = TSerializedCellVec();
-    PersistStartKey(db);
+    StartAnalyzeActor(ctx, /*operationId=*/"", TraversalDatabase, pathId);
 
-    NavigateDatabase = TraversalDatabase;
-    NavigatePathId = TraversalPathId;
-    Navigate();
+    YDB_LOG_DEBUG("ScheduleNextBackgroundTraversal. started analyzing table",
+        {"tabletId", TabletID()},
+        {"pathId", pathId},
+        {"analyzeActorId", AnalyzeActorId});
 }
 
 void TStatisticsAggregator::FinishTraversal(
     NIceDb::TNiceDb& db,
+    NKikimrStat::TEvAnalyzeResponse::EStatus status,
     std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
     NYql::TIssues issues)
 {
+    YDB_LOG_DEBUG("FinishTraversal",
+        {"tabletId", TabletID()},
+        {"status", static_cast<int>(status)},
+        {"pathId", TraversalPathId},
+        {"lastTraversalWasForce", LastTraversalWasForceString()});
+
     auto pathId = TraversalPathId;
+
+    bool traversalSucceeded = (status == NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
     auto pathIt = ScheduleTraversals.find(pathId);
     if (pathIt != ScheduleTraversals.end()) {
         auto& traversalTable = pathIt->second;
         traversalTable.LastUpdateTime = TraversalStartTime;
-        db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+
+        if (traversalSucceeded) {
+            auto current = GetCurrentChangeCounters(pathId);
+            // Do not baseline at (0, 0): that happens when FinishTraversal races
+            // ahead of the first full SchemeShard stats report, and the next
+            // full report then looks like a huge change ratio. Keep Max so the
+            // table stays "never analyzed" until real counters arrive.
+            if (current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0) {
+                traversalTable.LastAnalyzeRowUpdates = current.RowUpdates;
+                traversalTable.LastAnalyzeRowDeletes = current.RowDeletes;
+
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(current.RowUpdates),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(current.RowDeletes));
+            } else {
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+            }
+        } else {
+            db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+        }
 
         if (ScheduleTraversalsByTime.Has(&traversalTable)) {
             ScheduleTraversalsByTime.Update(&traversalTable);
+        }
+    }
+
+    // The BackgroundAnalyze counters track background traversals only; force
+    // (user-initiated) ANALYZE has its own reporting and must not inflate them.
+    if (!LastTraversalWasForce) {
+        if (traversalSucceeded) {
+            BackgroundAnalyzeCompletedCounter->Inc();
+        } else {
+            BackgroundAnalyzeFailedCounter->Inc();
+        }
+    }
+    InvalidateCachedChangeCounters();
+    ReportAnalyzeCounters();
+
+    // When a background traversal completes successfully, check whether there
+    // are pending force (user-initiated) ANALYZE requests for the same table
+    // that have not started yet. If so, mark them as finished — the background
+    // traversal just collected the same statistics, so re-traversing would be
+    // redundant. This deduplication only applies to background traversals;
+    // force traversals have their own completion path below.
+    if (!LastTraversalWasForce && traversalSucceeded) {
+        for (auto& operation : ForceTraversals) {
+            if (IsTerminalAnalyzeState(operation.State)) {
+                continue;
+            }
+            for (auto& table : operation.Tables) {
+                if (table.PathId == pathId
+                        && table.Status == TForceTraversalTable::EStatus::None) {
+                    UpdateForceTraversalTableStatus(
+                        TForceTraversalTable::EStatus::TraversalFinished,
+                        operation.OperationId, table, db);
+                }
+            }
+            bool tablesRemained = std::any_of(operation.Tables.begin(), operation.Tables.end(),
+                [](const TForceTraversalTable& elem) {
+                    return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;
+                });
+            if (!tablesRemained) {
+                MarkForceTraversalOperationFinished(operation.OperationId,
+                    Ydb::Table::AnalyzeState::STATE_DONE, TActivationContext::Now(), db);
+            }
         }
     }
 
@@ -957,20 +951,11 @@ std::optional<bool> TStatisticsAggregator::IsKnownTable(const TPathId& pathId) c
     return false;
 }
 
-std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {
-    auto itPath = ScheduleTraversals.find(pathId);
-    if (itPath != ScheduleTraversals.end()) {
-        bool ret = itPath->second.IsColumnTable;
-        SA_LOG_D("[" << TabletID() << "] IsColumnTable. Path " << pathId << " is "
-            << (ret ? "column" : "datashard") << " table.");
-        return ret;
-    } else {
-        SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");
-        return {};
-    }
-}
-
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
+    YDB_LOG_DEBUG("DeleteForceTraversalOperation",
+        {"tabletId", TabletID()},
+        {"operationId", operationId.Quote()});
+
     db.Table<Schema::ForceTraversalOperations>().Key(operationId).Delete();
 
     auto operation = ForceTraversalOperation(operationId);
@@ -1023,6 +1008,11 @@ void TStatisticsAggregator::MarkForceTraversalOperationFinished(
     if (IsTerminalAnalyzeState(op->State)) {
         return;
     }
+
+    YDB_LOG_DEBUG("MarkForceTraversalOperationFinished",
+        {"tabletId", TabletID()},
+        {"operationId", operationId.Quote()},
+        {"state", static_cast<int>(state)});
 
     // When the long-running operation API is disabled, fall back to pre-PR behavior:
     // delete the operation on completion instead of retaining it as history.
@@ -1141,16 +1131,18 @@ void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_TraversalTableOwnerId, ToString(TraversalPathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalPathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
-    PersistSysParam(db, Schema::SysParam_TraversalIsColumnTable, ToString(TraversalIsColumnTable));
     PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ForceTraversalOperationId);
 }
 
-void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_TraversalStartKey, TraversalStartKey.GetBuffer());
-}
-
-void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_GlobalTraversalRound, ToString(GlobalTraversalRound));
+void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TString& operationId,
+        const TString& database, const TPathId& pathId, const TVector<ui32>& columnTags) {
+    auto analyzeActorConfig = TAnalyzeActor::TConfig{
+        .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+        .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+    };
+    AnalyzeActorId = ctx.Register(new TAnalyzeActor(
+        SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),
+        TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
@@ -1165,27 +1157,7 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     SaveQueryActorId = {};
     PersistTraversal(db);
 
-    TraversalStartKey = TSerializedCellVec();
-    PersistStartKey(db);
-
     StatisticsToSave.clear();
-
-    for (auto& [tag, _] : CountMinSketches) {
-        db.Table<Schema::ColumnStatistics>().Key(tag).Delete();
-    }
-    CountMinSketches.clear();
-
-    DatashardRanges.clear();
-
-    KeyColumnTypes.clear();
-    Columns.clear();
-    ColumnNames.clear();
-
-    TabletsForReqDistribution.clear();
-
-    ResolveRound = 0;
-    HiveRequestRound = 0;
-    TraversalRound = 0;
 }
 
 TString TStatisticsAggregator::TForceTraversalTable::GetStatusString() const {
@@ -1281,10 +1253,6 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             str << "PendingRequests: " << PendingRequests.size() << Endl;
             str << "ProcessUrgentInFlight: " << ProcessUrgentInFlight << Endl << Endl;
 
-            str << "Columns: " << Columns.size() << Endl;
-            str << "DatashardRanges: " << DatashardRanges.size() << Endl;
-            str << "CountMinSketches: " << CountMinSketches.size() << Endl << Endl;
-
             str << "ScheduleTraversalsByTime: " << ScheduleTraversalsByTime.Size() << Endl;
             if (!ScheduleTraversalsByTime.Empty()) {
                 auto* oldestTable = ScheduleTraversalsByTime.Top();
@@ -1303,8 +1271,15 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                 PrintContainerStart(ForceTraversals, 2, str, extr);
             }
 
-            str << Endl;
-            str << "NavigatePathId: " << NavigatePathId << Endl;
+            // Per-table change counters (from cached BaseStatistics).
+            const auto& cachedCounters = GetCachedChangeCounters();
+            str << "CachedChangeCounters: " << cachedCounters.size() << Endl;
+            for (const auto& [pathId, counters] : cachedCounters) {
+                str << "  " << pathId
+                    << " RowUpdates=" << counters.RowUpdates
+                    << " RowDeletes=" << counters.RowDeletes
+                    << " RowCount=" << counters.RowCount << Endl;
+            }
 
             str << Endl;
             str << "ForceTraversalOperationId: " << ForceTraversalOperationId.Quote() << Endl;
@@ -1321,7 +1296,6 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                     const TForceTraversalTable& table = forceTraversal->Tables[i];
                     str << "    Table[" << i << "] PathId: " << table.PathId << Endl;
                     str << "        Status: " << table.GetStatusString() << Endl;
-                    str << "        AnalyzedShards size: " << table.AnalyzedShards.size() << Endl;
                     str << "        ColumnTags: " << JoinVectorIntoString(table.ColumnTags, ",") << Endl;
                 }
             }
@@ -1331,13 +1305,6 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             str << "TraversalStartTime: " << TraversalStartTime.ToStringUpToSeconds() << Endl;
             str << "TraversalDatabase: " << TraversalDatabase << Endl;
             str << "TraversalPathId: " << TraversalPathId << Endl;
-            str << "TraversalIsColumnTable: " << TraversalIsColumnTable << Endl;
-            str << "TraversalStartKey: " << TraversalStartKey.GetBuffer() << Endl;
-
-            str << Endl;
-            str << "GlobalTraversalRound: " << GlobalTraversalRound << Endl;
-            str << "TraversalRound: " << TraversalRound << Endl;
-            str << "HiveRequestRound: " << HiveRequestRound << Endl;
         }
     }
 
@@ -1362,5 +1329,142 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
  }
+
+TStatisticsAggregator::TChangeCounters TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
+    // A path is owned by the schemeshard identified by pathId.OwnerId, so its
+    // base stats live in that schemeshard's blob (see IsKnownTable).
+    auto it = BaseStatistics.find(pathId.OwnerId);
+    if (it == BaseStatistics.end() || !it->second.Latest) {
+        return {};
+    }
+    NKikimrStat::TSchemeShardStats stats;
+    if (!stats.ParseFromString(*it->second.Latest)) {
+        return {};
+    }
+    for (const auto& entry : stats.GetEntries()) {
+        if (TPathId::FromProto(entry.GetPathId()) == pathId) {
+            return {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
+        }
+    }
+    return {};
+}
+
+bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
+    const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
+{
+    if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
+        // Never analyzed — but only treat as stale once SchemeShard has sent
+        // real counters. Otherwise FinishTraversal would keep baselining at
+        // zero and we would re-analyze on every scheduling tick.
+        return current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0;
+    }
+    // RowUpdates and RowDeletes are monotonic cumulative counters, so current
+    // should not fall below the snapshot taken at the last ANALYZE. Guard
+    // against underflow.
+    if (current.RowCount == 0) {
+        return false;
+    }
+    if (current.RowUpdates <= lastAnalyze.RowUpdates && current.RowDeletes <= lastAnalyze.RowDeletes) {
+        return false;
+    }
+
+    // RowUpdates and RowDeletes are monotonic cumulative counters, so current
+    // should not fall below the snapshot taken at the last ANALYZE. Guard
+    // against underflow.
+    ui64 updatesSinceAnalyze = current.RowUpdates > lastAnalyze.RowUpdates
+        ? current.RowUpdates - lastAnalyze.RowUpdates : 0;
+    ui64 deletesSinceAnalyze = current.RowDeletes > lastAnalyze.RowDeletes
+        ? current.RowDeletes - lastAnalyze.RowDeletes : 0;
+    ui64 changesSinceAnalyze = updatesSinceAnalyze + deletesSinceAnalyze;
+    auto threshold = StatisticsConfig.GetBackgroundAnalyzeChangeRatioThresholdPercent();
+
+
+    double changeRatio = static_cast<double>(changesSinceAnalyze) / current.RowCount * 100.0;
+    return changeRatio >= static_cast<double>(threshold);
+}
+
+const THashMap<TPathId, TStatisticsAggregator::TChangeCounters>& TStatisticsAggregator::GetCachedChangeCounters() {
+    if (!CachedChangeCountersValid) {
+        // Parse each schemeshard's base stats once into a pathId -> TChangeCounters
+        // lookup. The cache is reused across scheduling ticks and counter reports,
+        // avoiding re-parsing all BaseStatistics blobs every second.
+        CachedChangeCounters.clear();
+        for (const auto& [ssId, serializedStats] : BaseStatistics) {
+            if (!serializedStats.Latest) {
+                continue;
+            }
+            NKikimrStat::TSchemeShardStats stats;
+            if (!stats.ParseFromString(*serializedStats.Latest)) {
+                continue;
+            }
+            for (const auto& entry : stats.GetEntries()) {
+                CachedChangeCounters[TPathId::FromProto(entry.GetPathId())] =
+                    {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
+            }
+        }
+        CachedChangeCountersValid = true;
+    }
+    return CachedChangeCounters;
+}
+
+void TStatisticsAggregator::InvalidateCachedChangeCounters() {
+    CachedChangeCountersValid = false;
+}
+
+TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleTable() {
+    // Statistics staleness (change ratio) is independent of the time-based
+    // ordering in ScheduleTraversalsByTime, so we must scan all tables rather than
+    // inspecting only the heap top. Among the stale tables pick the one
+    // analyzed longest ago.
+    const auto& currentCounters = GetCachedChangeCounters();
+
+    TScheduleTraversal* stalest = nullptr;
+    for (auto& [pathId, traversal] : ScheduleTraversals) {
+        auto it = currentCounters.find(pathId);
+        TChangeCounters current = it != currentCounters.end() ? it->second : TChangeCounters{};
+        TChangeCounters lastAnalyze{traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes, 0};
+        if (!IsChangeRatioAboveThreshold(lastAnalyze, current)) {
+            continue;
+        }
+        if (!stalest || traversal.LastUpdateTime < stalest->LastUpdateTime) {
+            stalest = &traversal;
+        }
+    }
+    return stalest;
+}
+
+void TStatisticsAggregator::InitAnalyzeCounters() {
+    // Initialize dynamic counters for background ANALYZE monitoring.
+    // Uses GetSubgroup to create a single metric with a "status" label:
+    //   BackgroundAnalyze{status="pending"}   — gauge: tables needing ANALYZE
+    //   BackgroundAnalyze{status="completed"} — cumulative: successful ANALYZE
+    //   BackgroundAnalyze{status="failed"}    — cumulative: failed ANALYZE
+    auto analyzeCounters = GetServiceCounters(AppData()->Counters, "statistics")
+        ->GetSubgroup("subsystem", "background_analyze");
+    BackgroundAnalyzePendingCounter = analyzeCounters
+        ->GetSubgroup("status", "pending")->GetCounter("BackgroundAnalyze", false);
+    BackgroundAnalyzeCompletedCounter = analyzeCounters
+        ->GetSubgroup("status", "completed")->GetCounter("BackgroundAnalyze", true);
+    BackgroundAnalyzeFailedCounter = analyzeCounters
+        ->GetSubgroup("status", "failed")->GetCounter("BackgroundAnalyze", true);
+}
+
+void TStatisticsAggregator::ReportAnalyzeCounters() {
+    const auto& currentCounters = GetCachedChangeCounters();
+
+    ui64 pendingTables = 0;
+    for (const auto& [pathId, traversal] : ScheduleTraversals) {
+        if (!traversal.IsColumnTable) {
+            continue;
+        }
+        auto it = currentCounters.find(pathId);
+        TChangeCounters current = it != currentCounters.end() ? it->second : TChangeCounters{};
+        TChangeCounters lastAnalyze{traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes, 0};
+        if (IsChangeRatioAboveThreshold(lastAnalyze, current)) {
+            ++pendingTables;
+        }
+    }
+    *BackgroundAnalyzePendingCounter = pendingTables;
+}
 
 } // NKikimr::NStat

@@ -1,9 +1,15 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+
+#include <ydb/library/actors/core/actorid.h>
+
+#include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
@@ -18,7 +24,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(LoadState, __VA_ARGS__)                     \
     xxx(StoreVolumeConfig, __VA_ARGS__)             \
     xxx(StorePartitionIds, __VA_ARGS__)             \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)
+    xxx(UpdateVChunkConfig, __VA_ARGS__)            \
+    xxx(StartAddHost, __VA_ARGS__)                  \
+    xxx(AddHostToDBG, __VA_ARGS__)                  \
+    xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
 
@@ -28,6 +37,8 @@ struct TTxPartition
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+    using TAddHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
 
     //
     // InitSchema
@@ -51,6 +62,7 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVector<TVChunkConfig> VChunkConfigs;
+        TMaybe<TAddHostInProgress> AddHostInProgress;
 
         explicit TLoadState()
         {}
@@ -60,6 +72,7 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
+            AddHostInProgress.Clear();
         }
     };
 
@@ -107,14 +120,81 @@ struct TTxPartition
     struct TUpdateVChunkConfig
     {
         const TVChunkConfig VChunkConfig;
+        NThreading::TPromise<void> UpdateCompleted;
 
-        explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
+        explicit TUpdateVChunkConfig(
+            TVChunkConfig vChunkConfig,
+            NThreading::TPromise<void> updateCompleted)
             : VChunkConfig(std::move(vChunkConfig))
+            , UpdateCompleted(std::move(updateCompleted))
         {}
 
         void Clear()
         {
             // nothing to do
+        }
+    };
+
+    //
+    // TStartAddHost
+    //
+    struct TStartAddHost
+    {
+        const size_t DirectBlockGroupId;
+        const THostIndex NewHostIndex;
+
+        TStartAddHost(size_t directBlockGroupId, THostIndex newHostIndex)
+            : DirectBlockGroupId(directBlockGroupId)
+            , NewHostIndex(newHostIndex)
+        {}
+
+        void Clear()
+        {}
+    };
+
+    struct TAddHostToDBG
+    {
+        const TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+        const size_t DirectBlockGroupId;
+        const THostIndex NewHostIndex;
+
+        TAddHostToDBG(
+            TDirectBlockGroupsConnections directBlockGroupsConnections,
+            size_t directBlockGroupId,
+            THostIndex newHostIndex)
+            : DirectBlockGroupsConnections(
+                  std::move(directBlockGroupsConnections))
+            , DirectBlockGroupId(directBlockGroupId)
+            , NewHostIndex(newHostIndex)
+        {}
+
+        void Clear()
+        {}
+    };
+
+    //
+    // Monitoring: read the local DB contents for the mon page.
+    //
+    struct TMonitoring
+    {
+        const NActors::TActorId Requester;
+
+        // Filled by Prepare.
+        TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
+        TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
+        TMaybe<TAddHostInProgress> AddHostInProgress;
+        TVector<TVChunkConfig> VChunkConfigs;
+
+        explicit TMonitoring(NActors::TActorId requester)
+            : Requester(requester)
+        {}
+
+        void Clear()
+        {
+            VolumeConfig.Clear();
+            DirectBlockGroupsConnections.Clear();
+            AddHostInProgress.Clear();
+            VChunkConfigs.clear();
         }
     };
 };

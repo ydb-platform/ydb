@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    backoff_delay_provider_ut.cpp
     block_buffer_ut.cpp
     block_data_ref_ut.cpp
     context_ut.cpp

@@ -52,6 +52,15 @@ enum class ECompactState {
     Cancelled = 3,
 };
 
+enum class ESetNotNullState {
+    Unspecified = 0,
+    Preparing = 1,
+    Validating = 2,
+    Applying = 3,
+    Done = 4,
+    Cancelled = 5,
+};
+
 enum class EAnalyzeState {
     Unspecified = 0,
     Enqueued = 1,

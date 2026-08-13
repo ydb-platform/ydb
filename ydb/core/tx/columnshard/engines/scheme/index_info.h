@@ -40,6 +40,10 @@ namespace NIndexes::NMax {
 class TIndexMeta;
 }
 
+namespace NIndexes::NMinMax {
+class TIndexMeta;
+}
+
 namespace NIndexes::NCountMinSketch {
 class TIndexMeta;
 }
@@ -104,6 +108,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    std::optional<bool> DeduplicationEnabled;
     TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
@@ -123,6 +128,8 @@ private:
 
         if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
             arrowType = arrow::fixed_size_binary(16);
+        } else if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+            arrowType = arrow::int64();
         } else {
             auto result = NArrow::GetArrowType(column.PType);
             AFL_VERIFY(result.ok());
@@ -243,6 +250,10 @@ public:
 
     const std::optional<TString>& GetScanReaderPolicyName() const {
         return ScanReaderPolicyName;
+    }
+
+    const std::optional<bool>& GetDeduplicationEnabled() const {
+        return DeduplicationEnabled;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
@@ -400,6 +411,7 @@ public:
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
         const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NMinMax::TIndexMeta> GetIndexMetaMinMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,

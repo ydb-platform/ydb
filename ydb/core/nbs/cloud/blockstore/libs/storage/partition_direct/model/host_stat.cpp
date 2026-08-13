@@ -9,6 +9,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsDDiskOperation(EOperation operation)
+{
+    return operation == EOperation::ReadFromDDisk ||
+           operation == EOperation::WriteToDDisk ||
+           operation == EOperation::Flush ||
+           operation == EOperation::FlushCrossNode;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THostStat::OnRequest(EOperation operation)
 {
     ++AccessInflightCount(operation);
@@ -78,9 +88,19 @@ size_t THostStat::GetConsecutiveSuccessCount() const
     return ConsecutiveSuccessCount;
 }
 
+size_t THostStat::GetConsecutiveErrorCount() const
+{
+    return ConsecutiveErrorCount;
+}
+
 size_t THostStat::InflightCount(EOperation operation) const
 {
     return InflightByOperation[static_cast<size_t>(operation)];
+}
+
+const TInflightByOperation& THostStat::GetInflightByOperation() const
+{
+    return InflightByOperation;
 }
 
 TString THostStat::DebugPrint() const

@@ -245,6 +245,9 @@ protected:
             response.Span.Attribute("target_node_id", nodeId);
         }
         SendRequest(whiteboardServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+        if (flags & IEventHandle::FlagSubscribeOnSession) {
+            SubscriptionNodeIds.push_back(nodeId);
+        }
         return response;
     }
 

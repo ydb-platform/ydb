@@ -48,11 +48,26 @@ public:
         return client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
     }
 
-    void CreateUser(TString user, TString password) {
-        TClient client(*(Server.ServerSettings));
-        client.SetSecurityToken(RootToken);
-        auto status = client.CreateUser("/Root", user, password);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+    NYdb::NQuery::TExecuteQueryResult CreateUser(const TString& user, const TString& password, const TString& token = "") {
+        auto query = std::format("CREATE USER {0:} PASSWORD '{1:}'", std::string(user), std::string(password));
+        return ExecuteSql(token.empty() ? RootToken : token, TString(query));
+    }
+
+    NYdb::NQuery::TExecuteQueryResult CreateUserHash(const TString& user, const TString& hash, const TString& token = "") {
+        auto query = std::format("CREATE USER {0:} HASH '{1:}'", std::string(user), std::string(hash));
+        return ExecuteSql(token.empty() ? RootToken : token, TString(query));
+    }
+
+    NYdb::NQuery::TExecuteQueryResult AlterUserHash(const TString& user, const TString& hash, const TString& token = "") {
+        auto query = std::format("ALTER USER {0:} HASH '{1:}'", std::string(user), std::string(hash));
+        return ExecuteSql(token.empty() ? RootToken : token, TString(query));
+    }
+
+    void SetPasswordComplexity(const NKikimrProto::TPasswordComplexity& passwordComplexity) {
+        auto* runtime = Server.GetRuntime();
+        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+            *runtime->GetAppData(i).AuthConfig.MutablePasswordComplexity() = passwordComplexity;
+        }
     }
 
     void ModifyACL(bool add, TString user, ui32 access) {
@@ -169,8 +184,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
                 "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
             }
         )";
-        auto createUserQuery = std::format("CREATE USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
-        auto result = loginConnection.ExecuteSql("root@builtin", TString(createUserQuery));
+        auto result = loginConnection.CreateUserHash(User, Base64Encode(hash));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "password1"});
@@ -183,8 +197,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
                 "argon2id": "HTkpQjtVJgBoA0CZu+i3zg==$ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw="
             }
         )";
-        auto alterUserQuery = std::format("ALTER USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
-        result = loginConnection.ExecuteSql("root@builtin", TString(alterUserQuery));
+        result = loginConnection.AlterUserHash(User, Base64Encode(hash));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "password1"});
@@ -219,8 +232,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
                 "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
             }
         )";
-        auto alterUserQuery = std::format("ALTER USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
-        auto result = loginConnection.ExecuteSql("root@builtin", TString(alterUserQuery));
+        auto result = loginConnection.AlterUserHash(User, Base64Encode(hash));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
@@ -330,8 +342,10 @@ Y_UNIT_TEST_SUITE(TAuthenticationWithSqlExecution) {
 
         auto adminToken = loginConnection.GetToken(adminName, adminPassword);
 
-        auto query = std::format("CREATE USER {0:}; ALTER USER {0:} HASH '{1:}';", user, hash);
-        auto result = loginConnection.ExecuteSql(adminToken, TString(query));
+        auto createResult = loginConnection.CreateUser(TString(user), TString(password), adminToken);
+        UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
+        auto result = loginConnection.AlterUserHash(TString(user), TString(hash), adminToken);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         loginConnection.ModifyACL(true, TString(user), NACLib::EAccessRights::ConnectDatabase);
@@ -339,6 +353,173 @@ Y_UNIT_TEST_SUITE(TAuthenticationWithSqlExecution) {
         loginConnection.TestConnectRight(userToken, "");
 
         loginConnection.Stop();
+    }
+}
+
+Y_UNIT_TEST_SUITE(TModifyUser) {
+    Y_UNIT_TEST(ModifyUserPassword) {
+        TLoginClientConnection loginConnection;
+
+        loginConnection.CreateUser("user1", "pass1");
+        loginConnection.CreateUser("user2", "pass2");
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::ConnectDatabase);
+        loginConnection.ModifyACL(true, "user2", NACLib::EAccessRights::ConnectDatabase);
+
+        auto user1Token = loginConnection.GetToken("user1", "pass1");
+        auto user2Token = loginConnection.GetToken("user2", "pass2");
+
+        // user2 cannot change password for user1: user2 has no ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user1 PASSWORD 'password1'");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 can change password for self
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 PASSWORD 'password2'");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot login with the old password
+        {
+            auto factory = CreateLoginCredentialsProviderFactory({.User = "user2", .Password = "pass2"});
+            auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+        }
+
+        // user2 can login with the new password
+        loginConnection.GetToken("user2", "password2");
+
+        // grant ydb.granular.alter_schema to user1
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::AlterSchema);
+
+        // user1 can change password for user2 now: user1 has ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user1Token, "ALTER USER user2 PASSWORD 'pas2user'");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 can login with the password set by user1
+        loginConnection.GetToken("user2", "pas2user");
+
+        loginConnection.Stop();
+    }
+
+    Y_UNIT_TEST(ModifyUserIsEnabled) {
+        TLoginClientConnection loginConnection;
+
+        loginConnection.CreateUser("user1", "pass1");
+        loginConnection.CreateUser("user2", "pass2");
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::ConnectDatabase);
+        loginConnection.ModifyACL(true, "user2", NACLib::EAccessRights::ConnectDatabase);
+
+        auto user2Token = loginConnection.GetToken("user2", "pass2");
+
+        // user2 cannot change isEnabled for user1: user2 has no ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user1 NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot change isEnabled for self
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot change isEnabled for self even together with a password change
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 PASSWORD 'password' NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        loginConnection.Stop();
+    }
+}
+
+Y_UNIT_TEST_SUITE(TLoginPasswordComplexity) {
+
+    void CheckPasswordAccepted(TLoginClientConnection& conn, const TString& user, const TString& password) {
+        auto result = conn.CreateUser(user, password);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        conn.GetToken(user, password);
+    }
+
+    void CheckPasswordRejected(TLoginClientConnection& conn, const TString& user, const TString& password,
+        const TString& expectedError)
+    {
+        auto result = conn.CreateUser(user, password);
+        UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
+        TLoginClientConnection conn;
+
+        // Default complexity: min length 0
+        // optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        // required: cannot contain username
+        {
+            CheckPasswordAccepted(conn, "user1", "Pass_word1");
+            CheckPasswordAccepted(conn, "user2", "PASSWORDU2");
+            CheckPasswordRejected(conn, "user3", "user3passwd", "Password must not contain user name");
+        }
+
+        // Require at least 3 lower case characters.
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetMinLowerCaseCount(3);
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user4", "PASSWORDU4", "should contain at least 3 lower case character");
+            CheckPasswordAccepted(conn, "user4", "PASswORDu4");
+        }
+
+        // Require at least 3 upper case characters.
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetMinUpperCaseCount(3);
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user5", "passwordu5", "should contain at least 3 upper case character");
+            CheckPasswordAccepted(conn, "user5", "PASswORDu5");
+        }
+
+        // Require a minimum length of 8.
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetMinLength(8);
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user6", "passwu6", "Password is too short");
+            CheckPasswordAccepted(conn, "user6", "passwordu6");
+        }
+
+        // Require at least 3 numbers.
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetMinNumbersCount(3);
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user7", "passworduseven", "should contain at least 3 number");
+            CheckPasswordAccepted(conn, "user7", "pas1swo5rdu7");
+        }
+
+        // Require at least 3 special characters (default set of special characters).
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetMinSpecialCharsCount(3);
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user8", "passwordu8", "should contain at least 3 special character");
+            CheckPasswordAccepted(conn, "user8", "passwordu8*&%#");
+        }
+
+        // Restrict the set of acceptable special characters to "*#".
+        {
+            NKikimrProto::TPasswordComplexity complexity;
+            complexity.SetSpecialChars("*#");
+            conn.SetPasswordComplexity(complexity);
+            CheckPasswordRejected(conn, "user9", "passwordu9*&%#", "Password contains unacceptable characters");
+            CheckPasswordAccepted(conn, "user9", "passwordu9*#");
+        }
+
+        conn.Stop();
     }
 }
 

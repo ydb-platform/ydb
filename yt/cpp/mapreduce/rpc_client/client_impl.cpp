@@ -28,6 +28,7 @@ public:
     TMap<TString, TString> ProxyUrlAliasingRules;
 
     bool IsHeavy = false;
+    bool EnableControlMultiplexingBand = false;
 
 public:
     TConnectionCacheKey() = default;
@@ -39,6 +40,7 @@ public:
         , ProxyAddress(context.ProxyAddress)
         , ProxyUrlAliasingRules(context.Config->ProxyUrlAliasingRules.begin(), context.Config->ProxyUrlAliasingRules.end())
         , IsHeavy(isHeavy)
+        , EnableControlMultiplexingBand(context.Config->EnableControlMultiplexingBand)
     { }
 
     bool operator==(const TConnectionCacheKey& other) const = default;
@@ -65,6 +67,7 @@ struct THash<NYT::NDetail::TConnectionCacheKey>
             HashCombine(result, v);
         }
         HashCombine(result, key.IsHeavy);
+        HashCombine(result, key.EnableControlMultiplexingBand);
         return result;
     }
 };
@@ -112,6 +115,8 @@ NApi::IConnectionPtr GetOrCreateConnection(const TConnectionCacheKey& key)
         connectionConfig->ProxyUrlAliasingRules.emplace(clusterName, url);
     }
 
+    connectionConfig->EnableControlMultiplexingBand = key.EnableControlMultiplexingBand;
+
     auto connection = NApi::NRpcProxy::CreateConnection(connectionConfig);
 
     if (it != cache.end()) {
@@ -150,6 +155,14 @@ static NApi::IClientPtr CreateApiClientImpl(const TClientContext& context, bool 
 
 TApiClients CreateApiClients(const TClientContext& context)
 {
+    if (context.Config->EnableControlMultiplexingBand) {
+        // Multiplexing is done on native client side.
+        auto client = CreateApiClientImpl(context, /*isHeavy*/ false);
+        return {
+            .Light = client,
+            .Heavy = client,
+        };
+    }
     return {
         .Light = CreateApiClientImpl(context, /*isHeavy*/ false),
         .Heavy = CreateApiClientImpl(context, /*isHeavy*/ true),

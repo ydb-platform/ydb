@@ -72,6 +72,17 @@ protected:
                 return false;
             }
 
+            if (NBackupRestoreTraits::DataFormatFromTask(backup) == NBackupRestoreTraits::EDataFormat::Parquet) {
+                if (!appData->FeatureFlags.GetEnableExportInParquet()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableExportInParquet");
+                    return false;
+                }
+                if (backup.HasEncryptionSettings()) {
+                    Abort(op, ctx, "Encryption is not supported for parquet files");
+                    return false;
+                }
+            }
+
             const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);

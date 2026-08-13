@@ -11,6 +11,7 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/udf/udf_value_utils.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/guid.h>
@@ -45,7 +46,8 @@ template <typename TLayout>
 void StoreFixedSizeLayout(TLayout& dst, const NYql::NUdf::TUnboxedValue& value) {
     if constexpr (std::is_same_v<TLayout, TGUID>) {
         const auto ref = value.AsStringRef();
-        std::memcpy(&dst, ref.Data(), sizeof(TLayout));
+        Y_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
+        dst = ReadUnaligned<TGUID>(ref.Data());
     } else {
         dst = value.Get<TLayout>();
     }
@@ -54,7 +56,7 @@ void StoreFixedSizeLayout(TLayout& dst, const NYql::NUdf::TUnboxedValue& value) 
 template <typename TLayout>
 NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TLayout& data) {
     if constexpr (std::is_same_v<TLayout, TGUID>) {
-        return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(TLayout)));
+        return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(TGUID)));
     } else {
         return NYql::NUdf::TUnboxedValuePod(data);
     }
@@ -133,7 +135,7 @@ public:
             }
         }
 
-        const TLayout* data = reinterpret_cast<TLayout*>(columnsData[0]) + tupleIndex;
+        const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]) + tupleIndex;
         return CreateFixedSizeValue(*data);
     }
 
@@ -220,6 +222,7 @@ protected:
     TType* Type_;
 };
 
+template <bool IsNull>
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
     TSingularColumnDataExtractor(TType* type) {
@@ -228,11 +231,16 @@ public:
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         Y_UNUSED(value);
-        auto& dataStorage = tempStorage.emplace_back(1);
-        dataStorage[0] = 0;
+        columnsData.push_back(nullptr);
 
-        columnsData.push_back(dataStorage.data());
-        columnsNullBitmap.push_back(nullptr);
+        if constexpr (IsNull) {
+            auto& bitmapStorage = tempStorage.emplace_back(1);
+            bitmapStorage[0] = 0; // null
+            columnsNullBitmap.push_back(bitmapStorage.data());
+        } else {
+            Y_UNUSED(tempStorage);
+            columnsNullBitmap.push_back(nullptr);
+        }
     }
 
     void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
@@ -244,11 +252,11 @@ public:
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(columnsData, columnsNullBitmap, tupleIndex, holderFactory);
-        return NYql::NUdf::TUnboxedValuePod::Void();
+        return NYql::NUdf::CreateSingularUnboxedValuePod<IsNull>();
     }
 
     ui32 GetElementSize() override {
-        return 1;
+        return 0;
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
@@ -603,7 +611,8 @@ struct TColumnDataExtractorTraits {
     using TResource = TResourceColumnDataExtractor<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
-    using TSingular = TSingularColumnDataExtractor;
+    template <bool IsNull>
+    using TSingular = TSingularColumnDataExtractor<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -618,8 +627,7 @@ struct TColumnDataExtractorTraits {
 
     template <bool IsNull>
     static TResult::TPtr MakeSingular(TType* type) {
-        Y_UNUSED(IsNull);
-        return std::make_unique<TSingular>(type);
+        return std::make_unique<TSingular<IsNull>>(type);
     }
 
     static TResult::TPtr MakeResource(bool isOptional, TType* type) {

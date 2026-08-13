@@ -24,13 +24,22 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Flush"},
-           {"src", PrintHostIndex(route.SourceHostIndex)},
-           {"dst", PrintHostIndex(route.DestinationHostIndex)}}))
+           {"src",
+            THostAndNodeId{
+                .HostIndex = route.SourceHostIndex,
+                .NodeId = directBlockGroup->GetNodeId(route.SourceHostIndex)}},
+           {"dst",
+            THostAndNodeId{
+                .HostIndex = route.DestinationHostIndex,
+                .NodeId =
+                    directBlockGroup->GetNodeId(route.DestinationHostIndex)}}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
     , Route(route)
     , Hint(std::move(hint))
+    , Cooldown(DirectBlockGroup->GetOracle()->GetFlushRequestCooldown(
+          THostMask::MakeFromRoute(Route)))
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetFlushRequestTimeout())
 {
     Y_ABORT_UNLESS(Route.SourceHostIndex != InvalidHostIndex);
@@ -52,6 +61,44 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
+    if (!Cooldown) {
+        DoRun();
+    } else {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Flush cooldown time %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatDuration(Cooldown).c_str());
+        DirectBlockGroup->Schedule(
+            Cooldown,
+            [self = shared_from_this()]()
+            {
+                self->DoRun();   //
+            });
+    }
+}
+
+TString TFlushRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    if (Cooldown) {
+        result << ",Cooldown=" << FormatDuration(Cooldown);
+    }
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    return result;
+}
+
+NThreading::TFuture<TFlushRequestExecutor::TResponse>
+TFlushRequestExecutor::GetFuture() const
+{
+    return Promise.GetFuture();
+}
+
+void TFlushRequestExecutor::DoRun()
+{
     ScheduleRequestTimeout();
 
     auto future = DirectBlockGroup->SyncWithPBuffer(
@@ -64,24 +111,8 @@ void TFlushRequestExecutor::Run()
         [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGFlushResponse>& f)
         {
-            //
-            self->OnFlushResponse(f.GetValue());
+            self->OnFlushResponse(f.GetValue());   //
         });
-}
-
-TString TFlushRequestExecutor::Print()
-{
-    TStringBuilder result;
-    result << LogTitle.GetWithTime();
-    result << Hint.DebugPrint(true);
-    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
-    return result;
-}
-
-NThreading::TFuture<TFlushRequestExecutor::TResponse>
-TFlushRequestExecutor::GetFuture() const
-{
-    return Promise.GetFuture();
 }
 
 void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
@@ -100,7 +131,7 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
                 LogTitle.GetWithTime().c_str(),
                 Hint.Segments[i].Lsn,
                 Hint.Segments[i].Range.Print().c_str(),
-                FormatError(response.Errors[i]).c_str());
+                FormatError(response.Errors[i]).Quote().c_str());
 
             flushFailed.push_back(Hint.Segments[i].Lsn);
         } else {

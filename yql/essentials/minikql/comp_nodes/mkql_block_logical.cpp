@@ -15,8 +15,7 @@
 #include <arrow/array/array_primitive.h>
 #include <arrow/array/util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -50,7 +49,7 @@ bool IsAllEqualsTo(const arrow::Datum& datum, bool value) {
         return false;
     }
     if (datum.is_scalar()) {
-        return (datum.scalar_as<arrow::UInt8Scalar>().value & 1u) == value;
+        return (datum.scalar_as<arrow::UInt8Scalar>().value & 1U) == value;
     }
     size_t len = datum.array()->length;
     size_t popCnt = GetSparseBitmapPopCount(datum.array()->GetValues<ui8>(1), len);
@@ -66,7 +65,7 @@ public:
             *res = CalcScalarScalar(firstDatum, secondDatum);
             return arrow::Status::OK();
         }
-        if (IsAllEqualsTo(firstDatum, false)) {
+        if (IsAllEqualsTo(firstDatum, /*value=*/false)) {
             // false AND ... = false
             if (firstDatum.is_array()) {
                 *res = firstDatum;
@@ -78,7 +77,7 @@ public:
             return arrow::Status::OK();
         }
 
-        if (IsAllEqualsTo(secondDatum, false)) {
+        if (IsAllEqualsTo(secondDatum, /*value=*/false)) {
             // ... AND false = false
             if (secondDatum.is_array()) {
                 *res = secondDatum;
@@ -90,11 +89,11 @@ public:
         }
 
         if (firstDatum.is_scalar()) {
-            ui8 value = firstDatum.scalar_as<arrow::UInt8Scalar>().value & 1u;
+            ui8 value = firstDatum.scalar_as<arrow::UInt8Scalar>().value & 1U;
             bool valid = firstDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, secondDatum.array());
         } else if (secondDatum.is_scalar()) {
-            ui8 value = secondDatum.scalar_as<arrow::UInt8Scalar>().value & 1u;
+            ui8 value = secondDatum.scalar_as<arrow::UInt8Scalar>().value & 1U;
             bool valid = secondDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, firstDatum.array());
         } else {
@@ -110,7 +109,7 @@ private:
         const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
-            bool result = bool((first.value & second.value) & 1u);
+            bool result = bool((first.value & second.value) & 1U);
             return MakeScalarDatum(result);
         }
 
@@ -226,7 +225,7 @@ public:
             *res = CalcScalarScalar(firstDatum, secondDatum);
             return arrow::Status::OK();
         }
-        if (IsAllEqualsTo(firstDatum, true)) {
+        if (IsAllEqualsTo(firstDatum, /*value=*/true)) {
             // true OR ... = true
             if (firstDatum.is_array()) {
                 *res = firstDatum;
@@ -238,7 +237,7 @@ public:
             return arrow::Status::OK();
         }
 
-        if (IsAllEqualsTo(secondDatum, true)) {
+        if (IsAllEqualsTo(secondDatum, /*value=*/true)) {
             // ... OR true = true
             if (secondDatum.is_array()) {
                 *res = secondDatum;
@@ -270,7 +269,7 @@ private:
         const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
-            bool result = bool((first.value | second.value) & 1u);
+            bool result = bool((first.value | second.value) & 1U);
             return MakeScalarDatum(result);
         }
 
@@ -425,7 +424,7 @@ private:
         const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
-            bool result = bool((first.value ^ second.value) & 1u);
+            bool result = bool((first.value ^ second.value) & 1U);
             return MakeScalarDatum(result);
         }
 
@@ -466,7 +465,7 @@ public:
         const auto& input = batch.values[0];
         if (input.is_scalar()) {
             const auto& arg = input.scalar_as<arrow::UInt8Scalar>();
-            *res = arg.is_valid ? MakeScalarDatum(bool(~arg.value & 1u)) : input;
+            *res = arg.is_valid ? MakeScalarDatum(bool(~arg.value & 1U)) : input;
             return arrow::Status::OK();
         }
         MKQL_ENSURE(input.is_array(), "Expected array");
@@ -505,7 +504,8 @@ IComputationNode* WrapBlockLogical(std::string_view name, TCallable& callable, c
     auto firstType = AS_TYPE(TBlockType, callable.GetInput(0).GetStaticType());
     auto secondType = AS_TYPE(TBlockType, callable.GetInput(1).GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     MKQL_ENSURE(UnpackOptionalData(firstType->GetItemType(), isOpt1)->GetSchemeType() == NUdf::TDataType<bool>::Id,
                 "Requires boolean args.");
     MKQL_ENSURE(UnpackOptionalData(secondType->GetItemType(), isOpt2)->GetSchemeType() == NUdf::TDataType<bool>::Id,
@@ -558,5 +558,4 @@ IComputationNode* WrapBlockNot(TCallable& callable, const TComputationNodeFactor
     return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), "Not", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

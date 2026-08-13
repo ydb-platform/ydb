@@ -32,7 +32,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Create Compute Savings Plans, EC2 Instance Savings Plans, or EC2 Reserved Instances commitments that you want to model in a Bill Scenario. </p>",
+      "documentation":"<p> Create Compute Savings Plans, EC2 Instance Savings Plans, or EC2 Reserved Instances commitments that you want to model in a Bill Scenario. </p> <note> <p>The <code>BatchCreateBillScenarioCommitmentModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:CreateBillScenarioCommitmentModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchCreateBillScenarioUsageModification":{
@@ -53,7 +53,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Create Amazon Web Services service usage that you want to model in a Bill Scenario. </p>",
+      "documentation":"<p> Create Amazon Web Services service usage that you want to model in a Bill Scenario. </p> <note> <p>The <code>BatchCreateBillScenarioUsageModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:CreateBillScenarioUsageModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchCreateWorkloadEstimateUsage":{
@@ -74,7 +74,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Create Amazon Web Services service usage that you want to model in a Workload Estimate. </p>",
+      "documentation":"<p> Create Amazon Web Services service usage that you want to model in a Workload Estimate. </p> <note> <p>The <code>BatchCreateWorkloadEstimateUsage</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:CreateWorkloadEstimateUsage</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchDeleteBillScenarioCommitmentModification":{
@@ -86,6 +86,7 @@
       "input":{"shape":"BatchDeleteBillScenarioCommitmentModificationRequest"},
       "output":{"shape":"BatchDeleteBillScenarioCommitmentModificationResponse"},
       "errors":[
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"DataUnavailableException"},
         {"shape":"InternalServerException"},
@@ -93,7 +94,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Delete commitment that you have created in a Bill Scenario. You can only delete a commitment that you had added and cannot model deletion (or removal) of a existing commitment. If you want model deletion of an existing commitment, see the negate <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BillScenarioCommitmentModificationAction.html\"> BillScenarioCommitmentModificationAction</a> of <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchCreateBillScenarioUsageModification.html\"> BatchCreateBillScenarioCommitmentModification</a> operation. </p>",
+      "documentation":"<p> Delete commitment that you have created in a Bill Scenario. You can only delete a commitment that you had added and cannot model deletion (or removal) of a existing commitment. If you want model deletion of an existing commitment, see the negate <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BillScenarioCommitmentModificationAction.html\"> BillScenarioCommitmentModificationAction</a> of <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchCreateBillScenarioUsageModification.html\"> BatchCreateBillScenarioCommitmentModification</a> operation. </p> <note> <p>The <code>BatchDeleteBillScenarioCommitmentModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:DeleteBillScenarioCommitmentModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchDeleteBillScenarioUsageModification":{
@@ -105,6 +106,7 @@
       "input":{"shape":"BatchDeleteBillScenarioUsageModificationRequest"},
       "output":{"shape":"BatchDeleteBillScenarioUsageModificationResponse"},
       "errors":[
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"DataUnavailableException"},
         {"shape":"ServiceQuotaExceededException"},
@@ -113,7 +115,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Delete usage that you have created in a Bill Scenario. You can only delete usage that you had added and cannot model deletion (or removal) of a existing usage. If you want model removal of an existing usage, see <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchUpdateBillScenarioUsageModification.html\"> BatchUpdateBillScenarioUsageModification</a>. </p>",
+      "documentation":"<p> Delete usage that you have created in a Bill Scenario. You can only delete usage that you had added and cannot model deletion (or removal) of a existing usage. If you want model removal of an existing usage, see <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchUpdateBillScenarioUsageModification.html\"> BatchUpdateBillScenarioUsageModification</a>. </p> <note> <p>The <code>BatchDeleteBillScenarioUsageModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:DeleteBillScenarioUsageModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchDeleteWorkloadEstimateUsage":{
@@ -133,7 +135,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Delete usage that you have created in a Workload estimate. You can only delete usage that you had added and cannot model deletion (or removal) of a existing usage. If you want model removal of an existing usage, see <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchUpdateWorkloadEstimateUsage.html\"> BatchUpdateWorkloadEstimateUsage</a>. </p>",
+      "documentation":"<p> Delete usage that you have created in a Workload estimate. You can only delete usage that you had added and cannot model deletion (or removal) of a existing usage. If you want model removal of an existing usage, see <a href=\"https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AWSBCMPricingCalculator_BatchUpdateWorkloadEstimateUsage.html\"> BatchUpdateWorkloadEstimateUsage</a>. </p> <note> <p>The <code>BatchDeleteWorkloadEstimateUsage</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:DeleteWorkloadEstimateUsage</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchUpdateBillScenarioCommitmentModification":{
@@ -145,6 +147,7 @@
       "input":{"shape":"BatchUpdateBillScenarioCommitmentModificationRequest"},
       "output":{"shape":"BatchUpdateBillScenarioCommitmentModificationResponse"},
       "errors":[
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"DataUnavailableException"},
         {"shape":"InternalServerException"},
@@ -152,7 +155,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Update a newly added or existing commitment. You can update the commitment group based on a commitment ID and a Bill scenario ID. </p>",
+      "documentation":"<p> Update a newly added or existing commitment. You can update the commitment group based on a commitment ID and a Bill scenario ID. </p> <note> <p>The <code>BatchUpdateBillScenarioCommitmentModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:UpdateBillScenarioCommitmentModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchUpdateBillScenarioUsageModification":{
@@ -164,6 +167,7 @@
       "input":{"shape":"BatchUpdateBillScenarioUsageModificationRequest"},
       "output":{"shape":"BatchUpdateBillScenarioUsageModificationResponse"},
       "errors":[
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"DataUnavailableException"},
         {"shape":"ServiceQuotaExceededException"},
@@ -172,7 +176,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Update a newly added or existing usage lines. You can update the usage amounts, usage hour, and usage group based on a usage ID and a Bill scenario ID. </p>",
+      "documentation":"<p> Update a newly added or existing usage lines. You can update the usage amounts, usage hour, and usage group based on a usage ID and a Bill scenario ID. </p> <note> <p>The <code>BatchUpdateBillScenarioUsageModification</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:UpdateBillScenarioUsageModification</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "BatchUpdateWorkloadEstimateUsage":{
@@ -192,7 +196,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Update a newly added or existing usage lines. You can update the usage amounts and usage group based on a usage ID and a Workload estimate ID. </p>",
+      "documentation":"<p> Update a newly added or existing usage lines. You can update the usage amounts and usage group based on a usage ID and a Workload estimate ID. </p> <note> <p>The <code>BatchUpdateWorkloadEstimateUsage</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>bcm-pricing-calculator:UpdateWorkloadEstimateUsage</code> in your policies.</p> </note>",
       "idempotent":true
     },
     "CreateBillEstimate":{
@@ -283,6 +287,7 @@
       "input":{"shape":"DeleteBillScenarioRequest"},
       "output":{"shape":"DeleteBillScenarioResponse"},
       "errors":[
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"DataUnavailableException"},
         {"shape":"InternalServerException"},
@@ -326,7 +331,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Retrieves details of a specific bill estimate. </p>"
+      "documentation":"<p> Retrieves details of a specific bill estimate. </p>",
+      "readonly":true
     },
     "GetBillScenario":{
       "name":"GetBillScenario",
@@ -344,7 +350,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Retrieves details of a specific bill scenario. </p>"
+      "documentation":"<p> Retrieves details of a specific bill scenario. </p>",
+      "readonly":true
     },
     "GetPreferences":{
       "name":"GetPreferences",
@@ -361,7 +368,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Retrieves the current preferences for the Amazon Web Services Cost Explorer service. </p>"
+      "documentation":"<p> Retrieves the current preferences for Pricing Calculator. </p>",
+      "readonly":true
     },
     "GetWorkloadEstimate":{
       "name":"GetWorkloadEstimate",
@@ -379,7 +387,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Retrieves details of a specific workload estimate. </p>"
+      "documentation":"<p> Retrieves details of a specific workload estimate. </p>",
+      "readonly":true
     },
     "ListBillEstimateCommitments":{
       "name":"ListBillEstimateCommitments",
@@ -397,7 +406,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the commitments associated with a bill estimate. </p>"
+      "documentation":"<p> Lists the commitments associated with a bill estimate. </p>",
+      "readonly":true
     },
     "ListBillEstimateInputCommitmentModifications":{
       "name":"ListBillEstimateInputCommitmentModifications",
@@ -415,7 +425,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the input commitment modifications associated with a bill estimate. </p>"
+      "documentation":"<p> Lists the input commitment modifications associated with a bill estimate. </p>",
+      "readonly":true
     },
     "ListBillEstimateInputUsageModifications":{
       "name":"ListBillEstimateInputUsageModifications",
@@ -433,7 +444,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the input usage modifications associated with a bill estimate. </p>"
+      "documentation":"<p> Lists the input usage modifications associated with a bill estimate. </p>",
+      "readonly":true
     },
     "ListBillEstimateLineItems":{
       "name":"ListBillEstimateLineItems",
@@ -451,7 +463,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the line items associated with a bill estimate. </p>"
+      "documentation":"<p> Lists the line items associated with a bill estimate. </p>",
+      "readonly":true
     },
     "ListBillEstimates":{
       "name":"ListBillEstimates",
@@ -468,7 +481,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists all bill estimates for the account. </p>"
+      "documentation":"<p> Lists all bill estimates for the account. </p>",
+      "readonly":true
     },
     "ListBillScenarioCommitmentModifications":{
       "name":"ListBillScenarioCommitmentModifications",
@@ -486,7 +500,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the commitment modifications associated with a bill scenario. </p>"
+      "documentation":"<p> Lists the commitment modifications associated with a bill scenario. </p>",
+      "readonly":true
     },
     "ListBillScenarioUsageModifications":{
       "name":"ListBillScenarioUsageModifications",
@@ -504,7 +519,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the usage modifications associated with a bill scenario. </p>"
+      "documentation":"<p> Lists the usage modifications associated with a bill scenario. </p>",
+      "readonly":true
     },
     "ListBillScenarios":{
       "name":"ListBillScenarios",
@@ -521,7 +537,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists all bill scenarios for the account. </p>"
+      "documentation":"<p> Lists all bill scenarios for the account. </p>",
+      "readonly":true
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -538,7 +555,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists all tags associated with a specified resource. </p>"
+      "documentation":"<p> Lists all tags associated with a specified resource. </p>",
+      "readonly":true
     },
     "ListWorkloadEstimateUsage":{
       "name":"ListWorkloadEstimateUsage",
@@ -556,7 +574,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists the usage associated with a workload estimate. </p>"
+      "documentation":"<p> Lists the usage associated with a workload estimate. </p>",
+      "readonly":true
     },
     "ListWorkloadEstimates":{
       "name":"ListWorkloadEstimates",
@@ -573,7 +592,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Lists all workload estimates for the account. </p>"
+      "documentation":"<p> Lists all workload estimates for the account. </p>",
+      "readonly":true
     },
     "TagResource":{
       "name":"TagResource",
@@ -666,7 +686,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Updates the preferences for the Amazon Web Services Cost Explorer service. </p>",
+      "documentation":"<p> Updates the preferences for Pricing Calculator. </p>",
       "idempotent":true
     },
     "UpdateWorkloadEstimate":{
@@ -2001,7 +2021,8 @@
       "enum":[
         "READY",
         "LOCKED",
-        "FAILED"
+        "FAILED",
+        "STALE"
       ]
     },
     "BillScenarioSummaries":{
@@ -2039,6 +2060,14 @@
         "failureMessage":{
           "shape":"String",
           "documentation":"<p> An error message if the bill scenario creation or processing failed. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       },
       "documentation":"<p> Provides a summary of a bill scenario. </p>"
@@ -2139,6 +2168,12 @@
       },
       "documentation":"<p> Represents a monetary amount with associated currency. </p>"
     },
+    "CostCategoryArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:aws[-a-z0-9]*:ce::[0-9]{12}:costcategory/[a-f0-9-]{36}"
+    },
     "CostDifference":{
       "type":"structure",
       "members":{
@@ -2214,6 +2249,18 @@
         "expiresAt":{
           "shape":"Timestamp",
           "documentation":"<p> The timestamp of when the Bill estimate will expire. A Bill estimate becomes inaccessible after expiration. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
+        },
+        "costCategoryGroupSharingPreferenceEffectiveDate":{
+          "shape":"Timestamp",
+          "documentation":"<p>Timestamp of the effective date of the cost category used in the group sharing settings.</p>"
         }
       }
     },
@@ -2233,6 +2280,14 @@
         "tags":{
           "shape":"Tags",
           "documentation":"<p> The tags to apply to the bill scenario. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       }
     },
@@ -2267,6 +2322,14 @@
         "failureMessage":{
           "shape":"String",
           "documentation":"<p> An error message if the bill scenario creation failed. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       }
     },
@@ -2365,8 +2428,7 @@
     },
     "DeleteBillEstimateResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteBillScenarioRequest":{
       "type":"structure",
@@ -2380,8 +2442,7 @@
     },
     "DeleteBillScenarioResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkloadEstimateRequest":{
       "type":"structure",
@@ -2395,8 +2456,7 @@
     },
     "DeleteWorkloadEstimateResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Double":{
       "type":"double",
@@ -2513,6 +2573,18 @@
         "expiresAt":{
           "shape":"Timestamp",
           "documentation":"<p> The timestamp when the bill estimate will expire. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
+        },
+        "costCategoryGroupSharingPreferenceEffectiveDate":{
+          "shape":"Timestamp",
+          "documentation":"<p>Timestamp of the effective date of the cost category used in the group sharing settings.</p>"
         }
       }
     },
@@ -2557,13 +2629,20 @@
         "failureMessage":{
           "shape":"String",
           "documentation":"<p> An error message if the bill scenario retrieval failed. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       }
     },
     "GetPreferencesRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetPreferencesResponse":{
       "type":"structure",
@@ -2575,6 +2654,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -2634,6 +2717,14 @@
         }
       },
       "documentation":"<p>Mixin for common fields returned by CRUD APIs</p>"
+    },
+    "GroupSharingPreferenceEnum":{
+      "type":"string",
+      "enum":[
+        "OPEN",
+        "PRIORITIZED",
+        "RESTRICTED"
+      ]
     },
     "HistoricalUsageEntity":{
       "type":"structure",
@@ -2920,11 +3011,11 @@
         },
         "createdAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter bill estimates based on their creation date. </p>"
+          "documentation":"<p> Filter bill estimates based on the creation date. </p>"
         },
         "expiresAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter bill estimates based on their expiration date. </p>"
+          "documentation":"<p> Filter bill estimates based on the expiration date. </p>"
         },
         "nextToken":{
           "shape":"NextPageToken",
@@ -3041,7 +3132,9 @@
       "type":"string",
       "enum":[
         "STATUS",
-        "NAME"
+        "NAME",
+        "GROUP_SHARING_PREFERENCE",
+        "COST_CATEGORY_ARN"
       ]
     },
     "ListBillScenariosFilterValues":{
@@ -3061,11 +3154,11 @@
         },
         "createdAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter bill scenarios based on their creation date. </p>"
+          "documentation":"<p> Filter bill scenarios based on the creation date. </p>"
         },
         "expiresAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter bill scenarios based on their expiration date. </p>"
+          "documentation":"<p> Filter bill scenarios based on the expiration date. </p>"
         },
         "nextToken":{
           "shape":"NextPageToken",
@@ -3172,7 +3265,7 @@
           "documentation":"<p> A token to retrieve the next page of results. </p>"
         },
         "maxResults":{
-          "shape":"MaxResults",
+          "shape":"WorkloadEstimateUsageMaxResults",
           "documentation":"<p> The maximum number of results to return per page. </p>"
         }
       }
@@ -3232,11 +3325,11 @@
       "members":{
         "createdAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter workload estimates based on their creation date. </p>"
+          "documentation":"<p> Filter workload estimates based on the creation date. </p>"
         },
         "expiresAtFilter":{
           "shape":"FilterTimestamp",
-          "documentation":"<p> Filter workload estimates based on their expiration date. </p>"
+          "documentation":"<p> Filter workload estimates based on the expiration date. </p>"
         },
         "filters":{
           "shape":"ListWorkloadEstimatesFilters",
@@ -3276,7 +3369,8 @@
     "MaxResults":{
       "type":"integer",
       "box":true,
-      "max":25
+      "max":25,
+      "min":1
     },
     "NegateReservedInstanceAction":{
       "type":"structure",
@@ -3321,13 +3415,14 @@
       "type":"string",
       "enum":[
         "BEFORE_DISCOUNTS",
-        "AFTER_DISCOUNTS"
+        "AFTER_DISCOUNTS",
+        "AFTER_DISCOUNTS_AND_COMMITMENTS"
       ]
     },
     "RateTypes":{
       "type":"list",
       "member":{"shape":"RateType"},
-      "max":2,
+      "max":3,
       "min":1
     },
     "ReservedInstanceInstanceCount":{
@@ -3454,8 +3549,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Tags":{
       "type":"map",
@@ -3505,8 +3599,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateBillEstimateRequest":{
       "type":"structure",
@@ -3561,6 +3654,18 @@
         "expiresAt":{
           "shape":"Timestamp",
           "documentation":"<p> The updated expiration timestamp for the bill estimate. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
+        },
+        "costCategoryGroupSharingPreferenceEffectiveDate":{
+          "shape":"Timestamp",
+          "documentation":"<p>Timestamp of the effective date of the cost category used in the group sharing settings.</p>"
         }
       }
     },
@@ -3579,6 +3684,14 @@
         "expiresAt":{
           "shape":"Timestamp",
           "documentation":"<p> The new expiration date for the bill scenario. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       }
     },
@@ -3613,6 +3726,14 @@
         "failureMessage":{
           "shape":"String",
           "documentation":"<p> An error message if the bill scenario update failed. </p>"
+        },
+        "groupSharingPreference":{
+          "shape":"GroupSharingPreferenceEnum",
+          "documentation":"<p>The setting for the reserved instance and savings plan group sharing used in this estimate.</p>"
+        },
+        "costCategoryGroupSharingPreferenceArn":{
+          "shape":"CostCategoryArn",
+          "documentation":"<p>The arn of the cost category used in the reserved and prioritized group sharing.</p>"
         }
       }
     },
@@ -3626,6 +3747,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The updated preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The updated preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -3639,6 +3764,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The updated preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The updated preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -3851,7 +3980,8 @@
       "type":"string",
       "enum":[
         "BEFORE_DISCOUNTS",
-        "AFTER_DISCOUNTS"
+        "AFTER_DISCOUNTS",
+        "AFTER_DISCOUNTS_AND_COMMITMENTS"
       ]
     },
     "WorkloadEstimateStatus":{
@@ -3985,6 +4115,12 @@
     "WorkloadEstimateUsageItems":{
       "type":"list",
       "member":{"shape":"WorkloadEstimateUsageItem"}
+    },
+    "WorkloadEstimateUsageMaxResults":{
+      "type":"integer",
+      "box":true,
+      "max":300,
+      "min":1
     },
     "WorkloadEstimateUsageQuantity":{
       "type":"structure",

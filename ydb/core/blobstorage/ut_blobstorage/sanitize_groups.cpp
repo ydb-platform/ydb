@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             auto pdisk = cfg.GetPDisk(i);
             TNodeLocation loc = nodes[pdisk.GetNodeId()];
             TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
-            pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, geom);
+            pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, std::nullopt, pdiskId, geom);
         }
 
         std::unordered_map<ui32, TGroupMapper::TGroupDefinition> groups;

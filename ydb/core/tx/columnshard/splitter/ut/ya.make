@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/data_accessor

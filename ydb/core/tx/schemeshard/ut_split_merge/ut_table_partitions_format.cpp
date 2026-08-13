@@ -1,28 +1,12 @@
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/actors/http/http.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
-
-// Also used in ut_split_merge.cpp
-TString PostSwitchAction(TTestActorRuntime& runtime, ui64 schemeShard, TPathId pathId, TStringBuf format) {
-    auto sender = runtime.AllocateEdgeActor();
-    const TString query = TStringBuilder()
-    << "/app?Action=TablePartitionsFormatSwitch"
-    << "&OwnerPathId=" << pathId.OwnerId
-    << "&LocalPathId=" << pathId.LocalPathId
-    << "&format=" << format
-    ;
-    auto req = std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(query, HTTP_METHOD_POST);
-    runtime.SendToPipe(schemeShard, sender, req.release(), 0, {});
-    auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteBinaryInfoRes>(sender);
-    return r->Get()->Blob;
-}
 
 TPathId GetPathId(TTestActorRuntime& runtime, const TString& path) {
     auto desc = DescribePath(runtime, path);
@@ -31,26 +15,6 @@ TPathId GetPathId(TTestActorRuntime& runtime, const TString& path) {
 }
 
 namespace {
-
-TString PostSweepAction(TTestActorRuntime& runtime, ui64 schemeShard, const TString& params) {
-    auto sender = runtime.AllocateEdgeActor();
-    TString redirectLocation;
-    {
-        const TString query = TStringBuilder() << "/app?TabletID=" << schemeShard << "&Action=TablePartitionsFormatSweep" << params;
-        runtime.SendToPipe(schemeShard, sender, new NActors::NMon::TEvRemoteHttpInfo(query, HTTP_METHOD_POST), 0, {});
-        auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteBinaryInfoRes>(sender);
-        NHttp::THttpParser<NHttp::THttpResponse> parser(r->Get()->Blob);
-        NHttp::THeaders headers(parser.Headers);
-        redirectLocation = headers.Get("Location");
-    }
-    // `Location` is relative to the original query base, needs adding `/` prefix.
-    {
-        const TString query = TStringBuilder() << "/" << redirectLocation;
-        runtime.SendToPipe(schemeShard, sender, new NActors::NMon::TEvRemoteHttpInfo(query, HTTP_METHOD_GET), 0, {});
-        auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
-        return r->Get()->Html;
-    }
-}
 
 // Get table partitions format counters by parsing AdminRequest mon page.
 // Sensitive to page markup changes.

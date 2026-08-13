@@ -5,42 +5,46 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TVariantItemWrapper: public TMutableCodegeneratorPtrNode<TVariantItemWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorPtrNode<TVariantItemWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TVariantItemWrapper<IsOptional>>;
 
 public:
     TVariantItemWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
+        , VarNode_(varNode)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto var = VarNode->GetValue(compCtx);
+        auto var = VarNode_->GetValue(compCtx);
 
-        if (IsOptional && !var) {
-            return NUdf::TUnboxedValuePod();
+        if constexpr (IsOptional) {
+            if (!var) {
+                return NUdf::TUnboxedValuePod();
+            }
+            return var.Release().GetVariantItem().Release().MakeOptional();
+        } else {
+            return var.Release().GetVariantItem().Release();
         }
-
-        return var.Release().GetVariantItem().Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
 
-        const auto var = GetNodeValue(VarNode, ctx, block);
+        const auto var = GetNodeValue(VarNode_, ctx, block);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        if (IsOptional) {
+        if constexpr (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
 
@@ -63,15 +67,23 @@ public:
 
         block = emb;
 
-        const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
-        const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
+        const std::array<uint64_t, 2> init = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
+        const auto mask = ConstantInt::get(valueType, APInt(128, init));
         const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
-        new StoreInst(clean, pointer, block);
+        if constexpr (IsOptional) {
+            new StoreInst(MakeOptional(context, clean, block), pointer, block);
+        } else {
+            new StoreInst(clean, pointer, block);
+        }
         ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
         BranchInst::Create(done, block);
 
         block = box;
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetVariantItem>(pointer, var, ctx.Codegen, block);
+        if constexpr (IsOptional) {
+            const auto load = new LoadInst(valueType, pointer, "load", block);
+            new StoreInst(MakeOptional(context, load, block), pointer, block);
+        }
         BranchInst::Create(done, block);
 
         block = done;
@@ -79,10 +91,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(VarNode);
+        this->DependsOn(VarNode_);
     }
 
-    IComputationNode* const VarNode;
+    IComputationNode* const VarNode_;
 };
 
 } // namespace
@@ -101,5 +113,4 @@ IComputationNode* WrapVariantItem(TCallable& callable, const TComputationNodeFac
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

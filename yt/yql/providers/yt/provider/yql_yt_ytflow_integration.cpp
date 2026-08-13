@@ -53,6 +53,11 @@ public:
                 auto pathInfo = TYtPathInfo(path);
                 auto tableInfo = pathInfo.Table;
 
+                if (!tableInfo->Meta) {
+                    AddIssue(ctx, TIssue("table without meta"));
+                    return false;
+                }
+
                 if (!tableInfo->Meta->IsDynamic) {
                     AddIssue(ctx, TIssue("static table"));
                     return false;
@@ -289,6 +294,15 @@ public:
 
             sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
             sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+
+            const auto& rowSpec = tableDesc.RowSpec;
+            if (rowSpec) {
+                for (const auto& [column, _] : rowSpec->GetForeignSort()) {
+                    if (!rowSpec->ExpressionColumns.contains(column)) {
+                        sinkSettings.AddKeyColumns(column);
+                    }
+                }
+            }
         }
 
         settings.PackFrom(sinkSettings);

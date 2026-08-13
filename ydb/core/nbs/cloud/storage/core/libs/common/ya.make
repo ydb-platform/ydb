@@ -4,6 +4,7 @@ GENERATE_ENUM_SERIALIZATION(error.h)
 
 SRCS(
     affinity.cpp
+    backoff_delay_provider.cpp
     block_buffer.cpp
     block_data_ref.cpp
     context.cpp

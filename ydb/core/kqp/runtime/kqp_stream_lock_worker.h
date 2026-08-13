@@ -12,9 +12,11 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include <deque>
 
 namespace NScheme {
 class TOwnedCellVec;
@@ -36,7 +38,9 @@ struct TKqpStreamLockSettings {
     NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE;
     TString Database;
     NKikimrDataEvents::TMvccSnapshot Snapshot;
+    bool SkipAbsent = false;
     ui64 QuerySpanId = 0;
+
     const NMiniKQL::THolderFactory& HolderFactory;
 };
 
@@ -53,6 +57,7 @@ public:
         TVector<bool> ModifiedFlags;
         TVector<bool> LockedFlags;
         bool LockResultReceived = false;
+        size_t Bytes = 0;
     };
 
 public:
@@ -64,18 +69,24 @@ public:
 
     void AddInputRow(TConstArrayRef<TCell> inputRow);
 
-    TLockRequestList BuildLockRequests(const TPartitionInfo& partitioning, ui64& requestId);
+    void BuildLockRequests(const TPartitionInfo& partitioning, ui64& requestId);
 
-    TLockRequestList RebuildLockRequest(ui64 prevRequestId, ui64& newRequestId);
+    void RebuildLockRequest(ui64 prevRequestId, ui64& newRequestId);
+
+    std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> PopNextLockRequest();
 
     void AddLockResult(ui64 requestId, NEvents::TDataEvents::TEvLockRowsResult* result);
 
+    std::optional<size_t> GetBatchBytes(ui64 requestId) const;
+
     ui64 GetRowCount() const { return InputRows.size(); }
 
-    using TProcessRowCallback = std::function<void(NUdf::TUnboxedValue row, bool modified)>;
+    const std::vector<NScheme::TTypeInfo>& GetColumnTypes() const { return ColumnTypes; }
+
+    using TProcessRowCallback = std::function<void(NUdf::TUnboxedValue row, bool locked, bool modified)>;
     void ProcessRowsByLockResult(ui64 requestId, TProcessRowCallback callback);
 
-    using TProcessRowCallbackOwned = std::function<void(const TOwnedCellVec& row, bool modified)>;
+    using TProcessRowCallbackOwned = std::function<void(const TOwnedCellVec& row, bool locked, bool modified)>;
     void ProcessRowsByLockResult(ui64 requestId, TProcessRowCallbackOwned callback);
 
     bool AllRowsProcessed();
@@ -95,6 +106,8 @@ private:
         size_t batchSize,
         size_t keyColumnCount);
 
+    static size_t EstimateKeyBytes(const TOwnedCellVec& key);
+
     const TKqpStreamLockSettings Settings;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -105,6 +118,7 @@ private:
 
     std::vector<TOwnedCellVec> InputRows;
     std::unordered_map<ui64, TRowBatchInfo> BatchesByRequestId;
+    std::deque<std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>>> PendingLockRequests;
 };
 
 } // namespace NKqp

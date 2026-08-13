@@ -6,27 +6,26 @@ import sys
 
 from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
-    NODE_MODULES_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
-    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     NPM_REGISTRY_URL,
 )
 from .lockfile import Lockfile
 from .utils import (
     build_lockfile_path,
-    build_pre_lockfile_path,
     build_ws_config_path,
     b_rooted,
-    build_nm_bundle_path,
     build_nm_path,
     build_pj_path,
     build_pnpm_store_path,
     s_rooted,
 )
 from .pnpm_workspace import PnpmWorkspace
-from .node_modules_bundler import bundle_node_modules
 from .timeit import timeit
 from .package_json import PackageJson
+
+
+def _same_filesystem(source: str, destination: str) -> bool:
+    return os.stat(source).st_dev == os.stat(os.path.dirname(destination)).st_dev
 
 
 class PackageManagerError(RuntimeError):
@@ -199,15 +198,29 @@ class PackageManager(object):
         """
         :rtype: PackageJson
         """
-        pj = self.load_package_json_from_dir(self.sources_path)
+        source_path = build_pj_path(self.sources_path)
+        build_path = build_pj_path(self.build_path)
+        os.makedirs(self.build_path, exist_ok=True)
 
-        if not os.path.exists(self.build_path):
-            os.makedirs(self.build_path, exist_ok=True)
+        package_json = self.load_package_json(source_path)
+        should_write = False
 
-        pj.path = build_pj_path(self.build_path)
-        pj.write()
+        if "name" not in package_json.data:
+            parts = self.module_path.split("/")
+            package_json.data["name"] = "@{}/{}".format(parts[0], parts[-1])
+            should_write = True
+        if "version" not in package_json.data:
+            package_json.data["version"] = "0.0.0"
+            should_write = True
 
-        return pj
+        if should_write:
+            package_json.path = build_path
+            package_json.write()
+        else:
+            shutil.copyfile(source_path, build_path)
+            package_json.path = build_path
+
+        return package_json
 
     @classmethod
     def load_lockfile(cls, path):
@@ -319,38 +332,41 @@ class PackageManager(object):
         yatool_prebuilder_path=None,
         use_legacy_pnpm_virtual_store=False,
         local_cli=False,
-        nm_bundle=False,
-        original_lf_path=None,
+        node_modules_path=None,
+        store_dir=None,
     ):
         """
         Creates node_modules directory according to the lockfile.
         """
-        ws = self._prepare_workspace(local_cli)
+        ws = self._prepare_workspace()
 
         self._copy_pnpm_patches()
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
-        store_dir = self._get_pnpm_store()
+        store_dir = store_dir or self._get_pnpm_store()
+        default_node_modules_path = build_nm_path(self.build_path)
+        node_modules_path = node_modules_path or default_node_modules_path
+        os.makedirs(store_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(node_modules_path), exist_ok=True)
         if self.inject_peers or use_legacy_pnpm_virtual_store:
-            virtual_store_dir = os.path.join(self.build_path, NODE_MODULES_DIRNAME, VIRTUAL_STORE_DIRNAME)
+            virtual_store_dir = os.path.join(node_modules_path, VIRTUAL_STORE_DIRNAME)
         else:
             virtual_store_dir = None
 
         global_virtual_store_dir = os.path.join(store_dir, "v10", "links")
 
-        self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir, self.inject_peers)
+        self._run_pnpm_install(
+            store_dir,
+            self.build_path,
+            local_cli,
+            virtual_store_dir,
+            self.inject_peers,
+            node_modules_path,
+        )
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
-        if nm_bundle:
-            # TODO: how to bundle node_modules with GVS?
-            bundle_node_modules(
-                build_root=self.build_root,
-                node_modules_path=self._nm_path(),
-                peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
-                bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
-                inject_peers=self.inject_peers,
-            )
+        return ws
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.
@@ -370,11 +386,22 @@ class PackageManager(object):
 
     @timeit
     def _run_pnpm_install(
-        self, store_dir: str, cwd: str, local_cli: bool, virtual_store_dir: str | None, inject_peers: bool
+        self,
+        store_dir: str,
+        cwd: str,
+        local_cli: bool,
+        virtual_store_dir: str | None,
+        inject_peers: bool,
+        node_modules_path: str,
     ):
         # Use fcntl to lock a temp file
 
         def execute_install_cmd():
+            default_node_modules_path = build_nm_path(cwd)
+            custom_node_modules_path = os.path.normpath(node_modules_path) != os.path.normpath(
+                default_node_modules_path
+            )
+            package_import_method = "hardlink" if _same_filesystem(store_dir, node_modules_path) else "copy"
             install_cmd = [
                 "install",
                 "--frozen-lockfile",
@@ -385,12 +412,15 @@ class PackageManager(object):
                 "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
                 "--config.preferSymlinkedExecutables=true",
                 "--package-import-method",
-                "hardlink",
+                package_import_method,
                 # "--registry" will be set later inside self._exec_command()
                 "--store-dir",
                 store_dir,
                 "--strict-peer-dependencies",
             ]
+
+            if custom_node_modules_path:
+                install_cmd.extend(["--modules-dir", os.path.relpath(node_modules_path, cwd)])
 
             if virtual_store_dir:
                 install_cmd.extend(["--virtual-store-dir", virtual_store_dir])
@@ -428,13 +458,18 @@ class PackageManager(object):
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(
-        self, store_path: str, has_deps: bool, local_cli: bool
+        self,
+        store_path: str,
+        has_deps: bool,
+        local_cli: bool,
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [
             s_rooted(build_pj_path(self.module_path)),
-            s_rooted(build_lockfile_path(self.module_path)),
         ]
+        if has_deps or os.path.exists(build_lockfile_path(self.sources_path)):
+            ins.append(s_rooted(build_lockfile_path(self.module_path)))
         outs = [
+            b_rooted(build_pj_path(self.module_path)),
             b_rooted(build_ws_config_path(self.module_path)),
         ]
         resources = []
@@ -460,6 +495,8 @@ class PackageManager(object):
         outs = []
 
         if nm_bundle:
+            from .utils import build_nm_bundle_path
+
             outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs
@@ -486,15 +523,7 @@ class PackageManager(object):
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     @timeit
-    def _prepare_workspace(self, local_cli: bool):
-        if local_cli:
-            shutil.copy(build_pre_lockfile_path(self.build_path), build_lockfile_path(self.build_path))
-        else:
-            lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
-
-            lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
-            lf.write(build_lockfile_path(self.build_path))
-
+    def _prepare_workspace(self):
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
     @timeit
@@ -509,7 +538,8 @@ class PackageManager(object):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
-        self._build_merged_pre_lockfile(tarballs_store, dep_paths, local_cli)
+        dep_paths = ws.get_paths(ignore_self=True)
+        self._build_merged_lockfile(tarballs_store, dep_paths, local_cli, pj.has_dependencies())
 
         return ws
 
@@ -523,31 +553,59 @@ class PackageManager(object):
         ws.packages.add(".")
         ws.write()
 
-        deps_pre_lockfile_path = build_pre_lockfile_path(os.path.join(self.build_root, deps_mod))
-        pre_lockfile_path = build_pre_lockfile_path(self.build_path)
-        shutil.copyfile(deps_pre_lockfile_path, pre_lockfile_path)
+        deps_lockfile_path = build_lockfile_path(os.path.join(self.build_root, deps_mod))
+        lockfile_path = build_lockfile_path(self.build_path)
+        lf = self.load_lockfile(deps_lockfile_path)
+        self._rebase_file_tarball_resolutions(lf, self.build_path)
+        lf.write(lockfile_path)
 
         return ws
 
     @timeit
-    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths, local_cli: bool):
+    def _build_merged_lockfile(self, tarballs_store, dep_paths, local_cli: bool, has_deps: bool):
         """
         :type dep_paths: list of str
         :rtype: PnpmLockfile
         """
-        lf = self.load_lockfile_from_dir(self.sources_path)
+        lockfile_path = build_lockfile_path(self.sources_path)
+        if has_deps or os.path.exists(lockfile_path):
+            lf = self.load_lockfile(lockfile_path)
+        else:
+            lf = Lockfile(lockfile_path)
+            lf.data = {"lockfileVersion": "9.0"}
         # Change to the output path for correct path calcs on merging.
-        lf.path = build_pre_lockfile_path(self.build_path)
+        lf.path = build_lockfile_path(self.build_path)
         if not local_cli:
-            lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
+            lf.update_tarball_resolutions(
+                lambda p: "file:"
+                + os.path.relpath(
+                    os.path.join(self.build_root, self._tarballs_store_path(p, tarballs_store)),
+                    self.build_path,
+                )
+            )
 
         if self.inject_peers is False:
             for dep_path in dep_paths:
-                pre_lf_path = build_pre_lockfile_path(dep_path)
-                if os.path.isfile(pre_lf_path):
-                    lf.merge(self.load_lockfile(pre_lf_path))
+                dep_lockfile_path = build_lockfile_path(dep_path)
+                if os.path.isfile(dep_lockfile_path):
+                    dep_lf = self.load_lockfile(dep_lockfile_path)
+                    self._rebase_file_tarball_resolutions(dep_lf, self.build_path)
+                    lf.merge(dep_lf)
 
         lf.write()
+
+    @staticmethod
+    def _rebase_file_tarball_resolutions(lf, target_dir):
+        source_dir = os.path.dirname(lf.path)
+
+        def rebase(pkg):
+            if not pkg.tarball_url.startswith("file:"):
+                return pkg.tarball_url
+
+            source_path = os.path.normpath(os.path.join(source_dir, pkg.tarball_url[len("file:") :]))
+            return "file:" + os.path.relpath(source_path, target_dir)
+
+        lf.update_tarball_resolutions(rebase)
 
     @timeit
     def _build_merged_workspace_config(self, ws, dep_paths):

@@ -72,9 +72,8 @@ void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& de
 
     const auto visibleIUs = MakeInfoUnitSet(op->GetOutputIUs());
 
-    auto it = TOpIterator(op, nullptr);
-    for (; it != TOpIterator(nullptr); it++) {
-        auto currOp = (*it).Current;
+    for (const auto& item : IterateSubtree(op)) {
+        auto currOp = item.Current;
         if (currOp->Kind != EOperator::AddDependencies) {
             continue;
         }
@@ -95,10 +94,10 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
 
     TVector<DependencyPairType> subplanDependencies;
 
-    // Iterate over just the operator of the current plan/subplan
-    auto it = TOpIterator(op, nullptr);
-    for(; it != TOpIterator(nullptr); it++) {
-        auto currOp = (*it).Current;
+    // This pass can insert operators, so preserve the original traversal while mutating the plan.
+    const TOpTraversal traversal(IterateSubtree(op).begin());
+    for (const auto& item : traversal) {
+        auto currOp = item.Current;
         auto subplanIUs = currOp->GetSubplanIUs(*props);
 
         // If the current operator contains references to subplans:
@@ -279,7 +278,7 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     opRoot->PlanProps = PlanProps;
  
     // We need to propagate plan properties reference into expressions in the plan
-    for (auto it : *opRoot) {
+    for (const auto& it : *opRoot) {
         for (auto exprRef : it.Current->GetExpressions()) {
             exprRef.get().PlanProps = &(opRoot->PlanProps);
         }

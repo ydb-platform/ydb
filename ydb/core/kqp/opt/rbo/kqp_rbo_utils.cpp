@@ -90,6 +90,18 @@ bool JoinOutputsRight(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi";
 }
 
+TString GetValidJoinKind(const TString& joinKind) {
+    const auto joinKindLowered = to_lower(joinKind);
+    if (joinKindLowered == "left") {
+        return "Left";
+    } else if (joinKindLowered == "inner") {
+        return "Inner";
+    } else if (joinKindLowered == "cross") {
+        return "Cross";
+    }
+    return joinKind;
+}
+
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {
@@ -143,6 +155,28 @@ TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right)
 
 bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     return IUSetDiff(left, right).empty();
+}
+
+bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen) {
+    if (sortColumns.empty() || pointPrefixLen > keyColumns.size()) {
+        return false;
+    }
+
+    const THashSet<TString> pointKeys(keyColumns.begin(), keyColumns.begin() + pointPrefixLen);
+    size_t next = pointPrefixLen;
+    for (const auto& sortColumn : sortColumns) {
+        if (sortColumn.empty()) {
+            return false;
+        }
+        if (pointKeys.contains(sortColumn)) {
+            continue;
+        }
+        if (next >= keyColumns.size() || keyColumns[next] != sortColumn) {
+            return false;
+        }
+        ++next;
+    }
+    return true;
 }
 
 }

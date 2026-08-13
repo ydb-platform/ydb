@@ -40,19 +40,17 @@ def pop_addr_infos_interleave(
     The interleave parameter is used to know how many addr_infos for
     each family should be popped of the top of the list.
     """
-    seen: dict[int, int] = {}
     if interleave is None:
         interleave = 1
-    to_remove: list[AddrInfoType] = []
+    seen: dict[int, int] = {}
+    kept: list[AddrInfoType] = []
     for addr_info in addr_infos:
         family = addr_info[0]
-        if family not in seen:
-            seen[family] = 0
-        if seen[family] < interleave:
-            to_remove.append(addr_info)
-        seen[family] += 1
-    for addr_info in to_remove:
-        addr_infos.remove(addr_info)
+        count = seen.get(family, 0)
+        if count >= interleave:
+            kept.append(addr_info)
+        seen[family] = count + 1
+    addr_infos[:] = kept
 
 
 def _addr_tuple_to_ip_address(
@@ -72,21 +70,13 @@ def remove_addr_infos(
     The addr value is typically the return value of
     sock.getpeername().
     """
-    bad_addrs_infos: list[AddrInfoType] = []
-    for addr_info in addr_infos:
-        if addr_info[-1] == addr:
-            bad_addrs_infos.append(addr_info)
-    if bad_addrs_infos:
-        for bad_addr_info in bad_addrs_infos:
-            addr_infos.remove(bad_addr_info)
-        return
-    # Slow path in case addr is formatted differently
-    match_addr = _addr_tuple_to_ip_address(addr)
-    for addr_info in addr_infos:
-        if match_addr == _addr_tuple_to_ip_address(addr_info[-1]):
-            bad_addrs_infos.append(addr_info)
-    if bad_addrs_infos:
-        for bad_addr_info in bad_addrs_infos:
-            addr_infos.remove(bad_addr_info)
-        return
-    raise ValueError(f"Address {addr} not found in addr_infos")
+    kept = [ai for ai in addr_infos if ai[-1] != addr]
+    if len(kept) == len(addr_infos):
+        # Slow path in case addr is formatted differently
+        match_addr = _addr_tuple_to_ip_address(addr)
+        kept = [
+            ai for ai in addr_infos if _addr_tuple_to_ip_address(ai[-1]) != match_addr
+        ]
+    if len(kept) == len(addr_infos):
+        raise ValueError(f"Address {addr} not found in addr_infos")
+    addr_infos[:] = kept

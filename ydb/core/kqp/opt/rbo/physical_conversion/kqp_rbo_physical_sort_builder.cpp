@@ -91,7 +91,7 @@ TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TV
 }
 
 TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputs = Sort->GetInput()->GetOutputIUs();
+    const auto inputs = NPhysicalConvertionUtils::GetLiveInputIUs(*Sort, 0);
     const auto& sortElements = Sort->SortElements;
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -123,8 +123,12 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format on
     }
 
-    // Fuse wide input.
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputs, NPhysicalConvertionUtils::BuildNameSet(Sort->GetOutputIUs()), Ctx);
+    // Merge-connection keys are already included in LiveOut.
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
+        input,
+        inputs,
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Sort)),
+        Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

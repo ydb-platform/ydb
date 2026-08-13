@@ -58,10 +58,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::SidHash,
                                                                    Schema::LoginSids::PasswordHashes,
                                                                    Schema::LoginSids::CreatedAt>(
-                                                                    sid.Type, sid.ArgonHash, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt));
+                                                                    sid.Type, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt));
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -414,6 +413,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
 
         if (record.HasServerlessComputeResourcesMode()) {
             subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
+        }
+
+        if (record.HasTablesMetricsLevel()) {
+            subdomain->SetTablesMetricsLevel(record.GetTablesMetricsLevel());
         }
 
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);

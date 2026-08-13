@@ -31,6 +31,7 @@ SRCS(
     kqp_vector_index_levels_cache.cpp
     kqp_vector_index_levels_cache.h
     kqp_vector_actor.cpp
+    kqp_vector_search_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
@@ -57,6 +58,7 @@ PEERDIR(
     ydb/core/kqp/common/buffer
     ydb/core/mon
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_board
@@ -79,4 +81,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_vector_search
 )

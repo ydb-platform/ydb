@@ -7,7 +7,7 @@ VERSION(21.0.0)
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/python/cryptography/py2
+    contrib/python/cryptography
     contrib/python/six
 )
 

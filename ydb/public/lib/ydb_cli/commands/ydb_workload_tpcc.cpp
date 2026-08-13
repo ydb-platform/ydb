@@ -256,7 +256,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     auto txModeOpt = config.Opts->AddLongOption(
         "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
-            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
+            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [runConfig = RunConfig](const TString& value) {
                 if (value == "serializable-rw") {
                     return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot-rw") {
@@ -264,12 +264,30 @@ void TCommandTPCCRun::Config(TConfig& config) {
                 } else if (value == "read-committed-rw") {
                     // Experimental isolation level. Hidden from help at current time.
                     return NQuery::TTxSettings::ReadCommittedRW();
+                } else if (value == "mixed") {
+                    // This option is useful for stress tests. Hidden from help.
+                    runConfig->MixedTxMode = true;
+                    return NQuery::TTxSettings::SerializableRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
             }).DefaultValue("serializable-rw")
-            .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"},
-                                    {"snapshot-rw", "Snapshot read-write"},
-                                    {"read-committed-rw", "Read Committed read-write"}});
+            .Completer(NLastGetopt::NComp::Choice({{"serializable-rw", "Serializable read-write"},
+                                                   {"snapshot-rw", "Snapshot read-write"}}));
+
+    auto txModeWeightSerializableOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-serializable",
+        TStringBuilder() << "Weight for serializable-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSerializable).DefaultValue(0.0);
+
+    auto txModeWeightSnapshotOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-snapshot",
+        TStringBuilder() << "Weight for snapshot-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSnapshot).DefaultValue(0.0);
+
+    auto txModeWeightReadCommittedOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-read-committed",
+        TStringBuilder() << "Weight for read-committed-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightReadCommitted).DefaultValue(0.0);
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
@@ -288,10 +306,32 @@ void TCommandTPCCRun::Config(TConfig& config) {
         noDelaysOpt.Hidden();
         simulateOpt.Hidden();
         simulateSelect1Opt.Hidden();
+        txModeWeightSerializableOpt.Hidden();
+        txModeWeightSnapshotOpt.Hidden();
+        txModeWeightReadCommittedOpt.Hidden();
     }
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    if (RunConfig->TxModeWeightSerializable < 0.0
+        || RunConfig->TxModeWeightSnapshot < 0.0
+        || RunConfig->TxModeWeightReadCommitted < 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* values must be non-negative" << Endl;
+        return 1;
+    }
+    double totalWeight = RunConfig->TxModeWeightSerializable
+        + RunConfig->TxModeWeightSnapshot
+        + RunConfig->TxModeWeightReadCommitted;
+    if (RunConfig->MixedTxMode) {
+        if (totalWeight <= 0.0) {
+            Cout << "Run failed: --tx-mode mixed requires at least one non-zero --tx-mode-weight-* option" << Endl;
+            return 1;
+        }
+    } else if (totalWeight > 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* options are only valid with --tx-mode mixed" << Endl;
+        return 1;
+    }
+
     RunConfig->SetFullPath(connectionConfig);
     try {
         NTPCC::RunSync(connectionConfig, *RunConfig);

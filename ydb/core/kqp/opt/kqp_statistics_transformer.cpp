@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -154,6 +155,40 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     kqpStats->SetStats(input.Get(), stats);
 }
 
+// Vector index search returns at most TopK rows of the main table.
+void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
+    auto read = TExprBase(input).Cast<TKqlReadTableVectorIndex>();
+    auto inputStats = kqpStats->GetStats(read.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    // Literal TopK gives the exact bound; a query parameter isn't known at plan time,
+    // so fall back to a typical KNN TopK.
+    constexpr double DefaultTopK = 16;
+    double nRows = DefaultTopK;
+    if (auto literal = read.TopK().Maybe<TCoUint64>()) {
+        nRows = FromString<double>(literal.Cast().Literal().Value());
+    }
+    int nAttrs = read.Columns().Size();
+    double sizePerRow = inputStats->ByteSize / (inputStats->Nrows == 0 ? 1 : inputStats->Nrows);
+    double byteSize = nRows * sizePerRow * (nAttrs / static_cast<double>(inputStats->Ncols == 0 ? 1 : inputStats->Ncols));
+
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable,
+        nRows,
+        nAttrs,
+        byteSize,
+        0.0,
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType
+    );
+    stats->SourceTableName = inputStats->SourceTableName;
+
+    kqpStats->SetStats(input.Get(), std::move(stats));
+}
+
 std::vector<TOrdering::TItem::EDirection> GetAscDirections(std::size_t n) {
     return std::vector<TOrdering::TItem::EDirection>(n, TOrdering::TItem::EDirection::EAscending);
 }
@@ -247,30 +282,12 @@ void InferStatisticsForKqpTable(
     // full path.
     {
         auto optHints = kqpCtx.GetOptimizerHints();
-        THashSet<TString> candidates;
-        if (!alias.empty()) {
-            candidates.insert(alias);
-        }
-        TString pathStr = path.StringValue();
-        candidates.insert(pathStr);
-        if (auto pos = pathStr.rfind('/'); pos != TString::npos && pos + 1 < pathStr.size()) {
-            candidates.insert(pathStr.substr(pos + 1));
-        }
-
-        auto applySingleLabelHint = [&](TCardinalityHints& hints, double& target) {
-            for (auto& h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && candidates.contains(h.JoinLabels[0])) {
-                    target = h.ApplyHint(target);
-                    break;
-                }
-            }
-        };
-
+        auto candidates = BuildTableHintCandidates(alias, path.StringValue());
         if (optHints.CardinalityHints) {
-            applySingleLabelHint(*optHints.CardinalityHints, stats->Nrows);
+            ApplySingleLabelHint(*optHints.CardinalityHints, candidates, stats->Nrows);
         }
         if (optHints.BytesHints) {
-            applySingleLabelHint(*optHints.BytesHints, stats->ByteSize);
+            ApplySingleLabelHint(*optHints.BytesHints, candidates, stats->ByteSize);
         }
     }
 
@@ -1468,6 +1485,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx, KqpStats);
+    }
+    else if(TKqlReadTableVectorIndex::Match(input.Get())){
+        InferStatisticsForReadTableVectorIndex(input, KqpStats);
     }
     else if(TKqlStreamLookupIndex::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx, KqpStats);

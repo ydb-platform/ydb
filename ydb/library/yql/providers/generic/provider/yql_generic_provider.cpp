@@ -7,7 +7,8 @@ namespace NYql {
 
     TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
                                                                const IDatabaseAsyncResolver::TPtr& dbResolver,
-                                                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
+                                                               const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory
+                                                               )
     {
         return [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
                                                                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

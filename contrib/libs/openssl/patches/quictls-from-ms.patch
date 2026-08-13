@@ -1,0 +1,1657 @@
+commit a1710ceeba972d163108e8a86bba74b090c8f4c8
+merge: 22a7fd65ca59aa889ed516b87e9c752abc44f006 d0f8b7eff774f6436502af3a9685952c19bec76d
+author: xiwra
+date: 2024-10-11T04:10:50+03:00
+revision: 15072932
+
+    OpenSSL+quictls
+    
+    applied patch from ms: <https://github.com/quictls/openssl/releases/tag/OpenSSL_1_1_1w-quic1>
+    
+    needed to bring QUIC to smart devices
+    
+    PoC with this patch checked here: <https://a.yandex-team.ru/review/6663586>
+    
+    REVIEW: 6903903
+
+--- contrib/libs/openssl/include/openssl/bnerr.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/bnerr.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -72,6 +72,7 @@ int ERR_load_BN_strings(void);
+ # define BN_F_BN_SET_WORDS                                144
+ # define BN_F_BN_STACK_PUSH                               148
+ # define BN_F_BN_USUB                                     115
++# define BN_F_OSSL_BN_RSA_DO_UNBLIND                      151
+ 
+ /*
+  * BN reason codes.
+--- contrib/libs/openssl/include/openssl/crypto.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/crypto.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -161,6 +161,10 @@ const char *OpenSSL_version(int type);
+ # define OPENSSL_DIR              4
+ # define OPENSSL_ENGINES_DIR      5
+ 
++# ifndef OPENSSL_NO_QUIC
++#  define OPENSSL_INFO_QUIC       2000
++# endif
++
+ int OPENSSL_issetugid(void);
+ 
+ typedef void CRYPTO_EX_new (void *parent, void *ptr, CRYPTO_EX_DATA *ad,
+--- contrib/libs/openssl/include/openssl/dh.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/dh.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -29,6 +29,9 @@ extern "C" {
+ # ifndef OPENSSL_DH_MAX_MODULUS_BITS
+ #  define OPENSSL_DH_MAX_MODULUS_BITS    10000
+ # endif
++# ifndef OPENSSL_DH_CHECK_MAX_MODULUS_BITS
++#  define OPENSSL_DH_CHECK_MAX_MODULUS_BITS  32768
++# endif
+ 
+ # define OPENSSL_DH_FIPS_MIN_MODULUS_BITS 1024
+ 
+--- contrib/libs/openssl/include/openssl/dherr.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/dherr.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -30,6 +30,7 @@ int ERR_load_DH_strings(void);
+ #  define DH_F_COMPUTE_KEY                                 102
+ #  define DH_F_DHPARAMS_PRINT_FP                           101
+ #  define DH_F_DH_BUILTIN_GENPARAMS                        106
++#  define DH_F_DH_CHECK                                    126
+ #  define DH_F_DH_CHECK_EX                                 121
+ #  define DH_F_DH_CHECK_PARAMS_EX                          122
+ #  define DH_F_DH_CHECK_PUB_KEY_EX                         123
+--- contrib/libs/openssl/include/openssl/evp.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/evp.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -1324,6 +1324,10 @@ void EVP_PKEY_asn1_set_security_bits(EVP_PKEY_ASN1_METHOD *ameth,
+  */
+ # define EVP_PKEY_FLAG_SIGCTX_CUSTOM     4
+ 
++/* Used by Chromium/QUIC */
++# define X25519_PRIVATE_KEY_LEN          32
++# define X25519_PUBLIC_VALUE_LEN         32
++
+ const EVP_PKEY_METHOD *EVP_PKEY_meth_find(int type);
+ EVP_PKEY_METHOD *EVP_PKEY_meth_new(int id, int flags);
+ void EVP_PKEY_meth_get0_info(int *ppkey_id, int *pflags,
+--- contrib/libs/openssl/include/openssl/ossl_typ.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/ossl_typ.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -176,6 +176,8 @@ typedef struct ct_policy_eval_ctx_st CT_POLICY_EVAL_CTX;
+ typedef struct ossl_store_info_st OSSL_STORE_INFO;
+ typedef struct ossl_store_search_st OSSL_STORE_SEARCH;
+ 
++typedef struct ssl_quic_method_st SSL_QUIC_METHOD;
++
+ #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L && \
+     defined(INTMAX_MAX) && defined(UINTMAX_MAX)
+ typedef intmax_t ossl_intmax_t;
+--- contrib/libs/openssl/include/openssl/ssl.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/ssl.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -1931,6 +1931,7 @@ int SSL_get_key_update_type(const SSL *s);
+ int SSL_renegotiate(SSL *s);
+ int SSL_renegotiate_abbreviated(SSL *s);
+ __owur int SSL_renegotiate_pending(const SSL *s);
++int SSL_new_session_ticket(SSL *s);
+ int SSL_shutdown(SSL *s);
+ __owur int SSL_verify_client_post_handshake(SSL *s);
+ void SSL_CTX_set_post_handshake_auth(SSL_CTX *ctx, int val);
+@@ -2442,6 +2443,66 @@ void SSL_set_allow_early_data_cb(SSL *s,
+                                  SSL_allow_early_data_cb_fn cb,
+                                  void *arg);
+ 
++#  ifndef OPENSSL_NO_QUIC
++/*
++ * QUIC integration - The QUIC interface matches BoringSSL
++ *
++ * ssl_encryption_level_t represents a specific QUIC encryption level used to
++ * transmit handshake messages. BoringSSL has this as an 'enum'.
++ */
++typedef enum ssl_encryption_level_t {
++    ssl_encryption_initial = 0,
++    ssl_encryption_early_data,
++    ssl_encryption_handshake,
++    ssl_encryption_application
++} OSSL_ENCRYPTION_LEVEL;
++
++struct ssl_quic_method_st {
++    int (*set_encryption_secrets)(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
++                                  const uint8_t *read_secret,
++                                  const uint8_t *write_secret, size_t secret_len);
++    int (*add_handshake_data)(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
++                              const uint8_t *data, size_t len);
++    int (*flush_flight)(SSL *ssl);
++    int (*send_alert)(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert);
++};
++
++__owur int SSL_CTX_set_quic_method(SSL_CTX *ctx, const SSL_QUIC_METHOD *quic_method);
++__owur int SSL_set_quic_method(SSL *ssl, const SSL_QUIC_METHOD *quic_method);
++__owur int SSL_set_quic_transport_params(SSL *ssl,
++                                         const uint8_t *params,
++                                         size_t params_len);
++void SSL_get_peer_quic_transport_params(const SSL *ssl,
++                                        const uint8_t **out_params,
++                                        size_t *out_params_len);
++__owur size_t SSL_quic_max_handshake_flight_len(const SSL *ssl, OSSL_ENCRYPTION_LEVEL level);
++__owur OSSL_ENCRYPTION_LEVEL SSL_quic_read_level(const SSL *ssl);
++__owur OSSL_ENCRYPTION_LEVEL SSL_quic_write_level(const SSL *ssl);
++__owur int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
++                                 const uint8_t *data, size_t len);
++__owur int SSL_process_quic_post_handshake(SSL *ssl);
++
++__owur int SSL_is_quic(SSL *ssl);
++
++/* BoringSSL API */
++void SSL_set_quic_use_legacy_codepoint(SSL *ssl, int use_legacy);
++
++/*
++ * Set an explicit value that you want to use
++ * If 0 (default) the server will use the highest extenstion the client sent
++ * If 0 (default) the client will send both extensions
++ */
++void SSL_set_quic_transport_version(SSL *ssl, int version);
++__owur int SSL_get_quic_transport_version(const SSL *ssl);
++/* Returns the negotiated version, or -1 on error */
++__owur int SSL_get_peer_quic_transport_version(const SSL *ssl);
++
++int SSL_CIPHER_get_prf_nid(const SSL_CIPHER *c);
++
++void SSL_set_quic_early_data_enabled(SSL *ssl, int enabled);
++
++#  endif
++
+ # ifdef  __cplusplus
+ }
+ # endif
+--- contrib/libs/openssl/include/openssl/sslerr.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/sslerr.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -71,6 +71,7 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_FINAL_KEY_SHARE                            503
+ # define SSL_F_FINAL_MAXFRAGMENTLEN                       557
+ # define SSL_F_FINAL_PSK                                  639
++# define SSL_F_FINAL_QUIC_TRANSPORT_PARAMS                3012
+ # define SSL_F_FINAL_RENEGOTIATE                          483
+ # define SSL_F_FINAL_SERVER_NAME                          558
+ # define SSL_F_FINAL_SIG_ALGS                             497
+@@ -97,6 +98,9 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_PITEM_NEW                                  624
+ # define SSL_F_PQUEUE_NEW                                 625
+ # define SSL_F_PROCESS_KEY_SHARE_EXT                      439
++# define SSL_F_QUIC_CHANGE_CIPHER_STATE                   3000
++# define SSL_F_QUIC_GET_MESSAGE                           3001
++# define SSL_F_QUIC_SET_ENCRYPTION_SECRETS                3002
+ # define SSL_F_READ_STATE_MACHINE                         352
+ # define SSL_F_SET_CLIENT_CIPHERSUITE                     540
+ # define SSL_F_SRP_GENERATE_CLIENT_MASTER_SECRET          595
+@@ -107,7 +111,9 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_SSL3_CTRL                                  213
+ # define SSL_F_SSL3_CTX_CTRL                              133
+ # define SSL_F_SSL3_DIGEST_CACHED_RECORDS                 293
++# define SSL_F_SSL3_DISPATCH_ALERT                        3003
+ # define SSL_F_SSL3_DO_CHANGE_CIPHER_SPEC                 292
++# define SSL_F_SSL3_DO_WRITE                              3004
+ # define SSL_F_SSL3_ENC                                   608
+ # define SSL_F_SSL3_FINAL_FINISH_MAC                      285
+ # define SSL_F_SSL3_FINISH_MAC                            587
+@@ -212,6 +218,8 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_SSL_PEEK                                   270
+ # define SSL_F_SSL_PEEK_EX                                432
+ # define SSL_F_SSL_PEEK_INTERNAL                          522
++# define SSL_F_SSL_PROCESS_QUIC_POST_HANDSHAKE            3005
++# define SSL_F_SSL_PROVIDE_QUIC_DATA                      3006
+ # define SSL_F_SSL_READ                                   223
+ # define SSL_F_SSL_READ_EARLY_DATA                        529
+ # define SSL_F_SSL_READ_EX                                434
+@@ -261,6 +269,7 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_SSL_WRITE_EARLY_FINISH                     527
+ # define SSL_F_SSL_WRITE_EX                               433
+ # define SSL_F_SSL_WRITE_INTERNAL                         524
++# define SSL_F_STATEM_FLUSH                               3007
+ # define SSL_F_STATE_MACHINE                              353
+ # define SSL_F_TLS12_CHECK_PEER_SIGALG                    333
+ # define SSL_F_TLS12_COPY_SIGALGS                         533
+@@ -320,6 +329,8 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_TLS_CONSTRUCT_CTOS_POST_HANDSHAKE_AUTH     619
+ # define SSL_F_TLS_CONSTRUCT_CTOS_PSK                     501
+ # define SSL_F_TLS_CONSTRUCT_CTOS_PSK_KEX_MODES           509
++# define SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS   3008
++# define SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT 3013
+ # define SSL_F_TLS_CONSTRUCT_CTOS_RENEGOTIATE             473
+ # define SSL_F_TLS_CONSTRUCT_CTOS_SCT                     474
+ # define SSL_F_TLS_CONSTRUCT_CTOS_SERVER_NAME             475
+@@ -359,6 +370,8 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_TLS_CONSTRUCT_STOC_MAXFRAGMENTLEN          548
+ # define SSL_F_TLS_CONSTRUCT_STOC_NEXT_PROTO_NEG          457
+ # define SSL_F_TLS_CONSTRUCT_STOC_PSK                     504
++# define SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS   3009
++# define SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS_DRAFT 3014
+ # define SSL_F_TLS_CONSTRUCT_STOC_RENEGOTIATE             458
+ # define SSL_F_TLS_CONSTRUCT_STOC_SERVER_NAME             459
+ # define SSL_F_TLS_CONSTRUCT_STOC_SESSION_TICKET          460
+@@ -384,6 +397,8 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_TLS_PARSE_CTOS_POST_HANDSHAKE_AUTH         620
+ # define SSL_F_TLS_PARSE_CTOS_PSK                         505
+ # define SSL_F_TLS_PARSE_CTOS_PSK_KEX_MODES               572
++# define SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS       3010
++# define SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT 3015
+ # define SSL_F_TLS_PARSE_CTOS_RENEGOTIATE                 464
+ # define SSL_F_TLS_PARSE_CTOS_SERVER_NAME                 573
+ # define SSL_F_TLS_PARSE_CTOS_SESSION_TICKET              574
+@@ -402,6 +417,8 @@ int ERR_load_SSL_strings(void);
+ # define SSL_F_TLS_PARSE_STOC_MAXFRAGMENTLEN              581
+ # define SSL_F_TLS_PARSE_STOC_NPN                         582
+ # define SSL_F_TLS_PARSE_STOC_PSK                         502
++# define SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS       3011
++# define SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS_DRAFT 3016
+ # define SSL_F_TLS_PARSE_STOC_RENEGOTIATE                 448
+ # define SSL_F_TLS_PARSE_STOC_SCT                         564
+ # define SSL_F_TLS_PARSE_STOC_SERVER_NAME                 583
+@@ -594,6 +611,7 @@ int ERR_load_SSL_strings(void);
+ # define SSL_R_MISSING_FATAL                              256
+ # define SSL_R_MISSING_PARAMETERS                         290
+ # define SSL_R_MISSING_PSK_KEX_MODES_EXTENSION            310
++# define SSL_R_MISSING_QUIC_TRANSPORT_PARAMETERS_EXTENSION 801
+ # define SSL_R_MISSING_RSA_CERTIFICATE                    168
+ # define SSL_R_MISSING_RSA_ENCRYPTING_CERT                169
+ # define SSL_R_MISSING_RSA_SIGNING_CERT                   170
+@@ -765,6 +783,7 @@ int ERR_load_SSL_strings(void);
+ # define SSL_R_WRONG_CERTIFICATE_TYPE                     383
+ # define SSL_R_WRONG_CIPHER_RETURNED                      261
+ # define SSL_R_WRONG_CURVE                                378
++# define SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED            800
+ # define SSL_R_WRONG_SIGNATURE_LENGTH                     264
+ # define SSL_R_WRONG_SIGNATURE_SIZE                       265
+ # define SSL_R_WRONG_SIGNATURE_TYPE                       370
+--- contrib/libs/openssl/include/openssl/tls1.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/include/openssl/tls1.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -148,6 +148,10 @@ extern "C" {
+ /* Temporary extension type */
+ # define TLSEXT_TYPE_renegotiate                 0xff01
+ 
++/* ExtensionType value from draft-ietf-quic-tls-27 */
++# define TLSEXT_TYPE_quic_transport_parameters_draft   0xffa5
++# define TLSEXT_TYPE_quic_transport_parameters         0x0039
++
+ # ifndef OPENSSL_NO_NEXTPROTONEG
+ /* This is not an IANA defined extension number */
+ #  define TLSEXT_TYPE_next_proto_neg              13172
+--- contrib/libs/openssl/ssl/record/rec_layer_s3.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/record/rec_layer_s3.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -387,10 +387,12 @@ int ssl3_write_bytes(SSL *s, int type, const void *buf_, size_t len,
+     s->rlayer.wnum = 0;
+ 
+     /*
+-     * If we are supposed to be sending a KeyUpdate then go into init unless we
+-     * have writes pending - in which case we should finish doing that first.
++     * If we are supposed to be sending a KeyUpdate or NewSessionTicket then go
++     * into init unless we have writes pending - in which case we should finish
++     * doing that first.
+      */
+-    if (wb->left == 0 && s->key_update != SSL_KEY_UPDATE_NONE)
++    if (wb->left == 0 && (s->key_update != SSL_KEY_UPDATE_NONE
++                          || s->ext.extra_tickets_expected > 0))
+         ossl_statem_set_in_init(s, 1);
+ 
+     /*
+--- contrib/libs/openssl/ssl/s3_msg.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/s3_msg.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -77,6 +77,16 @@ int ssl3_dispatch_alert(SSL *s)
+ 
+     s->s3->alert_dispatch = 0;
+     alertlen = 2;
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        if (!s->quic_method->send_alert(s, s->quic_write_level,
++                                        s->s3->send_alert[1])) {
++            SSLerr(SSL_F_SSL3_DISPATCH_ALERT, ERR_R_INTERNAL_ERROR);
++            return 0;
++        }
++        i = 1;
++    } else
++#endif
+     i = do_ssl3_write(s, SSL3_RT_ALERT, &s->s3->send_alert[0], &alertlen, 1, 0,
+                       &written);
+     if (i <= 0) {
+--- contrib/libs/openssl/ssl/ssl_ciph.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/ssl_ciph.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -2161,3 +2161,37 @@ int ssl_cert_is_disabled(size_t idx)
+         return 1;
+     return 0;
+ }
++
++#ifndef OPENSSL_NO_QUIC
++int SSL_CIPHER_get_prf_nid(const SSL_CIPHER *c)
++{
++    switch (c->algorithm2 & (0xFF << TLS1_PRF_DGST_SHIFT)) {
++    default:
++        break;
++    case TLS1_PRF_SHA1_MD5: /* TLS1_PRF */
++        return NID_md5_sha1;
++    case TLS1_PRF_SHA256:
++        return NID_sha256;
++    case TLS1_PRF_SHA384:
++        return NID_sha384;
++    case TLS1_PRF_GOST94:
++        return NID_id_GostR3411_94_prf;
++    case TLS1_PRF_GOST12_256:
++        return NID_id_GostR3411_2012_256;
++    case TLS1_PRF_GOST12_512:
++        return NID_id_GostR3411_2012_512;
++    }
++    /* TLSv1.3 ciphers don't specify separate PRF */
++    switch (c->algorithm2 & SSL_HANDSHAKE_MAC_MASK) {
++    default:
++        break;
++    case SSL_HANDSHAKE_MAC_MD5_SHA1: /* SSL_HANDSHAKE_MAC_DEFAULT */
++        return NID_md5_sha1;
++    case SSL_HANDSHAKE_MAC_SHA256:
++        return NID_sha256;
++    case SSL_HANDSHAKE_MAC_SHA384:
++        return NID_sha384;
++    }
++    return NID_undef;
++}
++#endif
+--- contrib/libs/openssl/ssl/ssl_err.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/ssl_err.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -86,6 +86,8 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_MAXFRAGMENTLEN, 0),
+      "final_maxfragmentlen"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_PSK, 0), "final_psk"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_QUIC_TRANSPORT_PARAMS, 0),
++     "final_quic_transport_params"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_RENEGOTIATE, 0), "final_renegotiate"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_SERVER_NAME, 0), "final_server_name"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_FINAL_SIG_ALGS, 0), "final_sig_algs"},
+@@ -113,6 +115,8 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+      "ossl_statem_server_post_process_message"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_OSSL_STATEM_SERVER_POST_WORK, 0),
+      "ossl_statem_server_post_work"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_OSSL_STATEM_SERVER_PRE_WORK, 0),
++     "ossl_statem_server_pre_work"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_OSSL_STATEM_SERVER_PROCESS_MESSAGE, 0),
+      "ossl_statem_server_process_message"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_OSSL_STATEM_SERVER_READ_TRANSITION, 0),
+@@ -123,6 +127,11 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_PITEM_NEW, 0), "pitem_new"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_PQUEUE_NEW, 0), "pqueue_new"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_PROCESS_KEY_SHARE_EXT, 0), ""},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_QUIC_CHANGE_CIPHER_STATE, 0),
++     "quic_change_cipher_state"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_QUIC_GET_MESSAGE, 0), "quic_get_message"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_QUIC_SET_ENCRYPTION_SECRETS, 0),
++     "quic_set_encryption_secrets"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_READ_STATE_MACHINE, 0), "read_state_machine"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SET_CLIENT_CIPHERSUITE, 0),
+      "set_client_ciphersuite"},
+@@ -140,8 +149,11 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_CTX_CTRL, 0), "ssl3_ctx_ctrl"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_DIGEST_CACHED_RECORDS, 0),
+      "ssl3_digest_cached_records"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_DISPATCH_ALERT, 0),
++     "ssl3_dispatch_alert"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_DO_CHANGE_CIPHER_SPEC, 0),
+      "ssl3_do_change_cipher_spec"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_DO_WRITE, 0), "ssl3_do_write"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_ENC, 0), "ssl3_enc"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL3_FINAL_FINISH_MAC, 0),
+      "ssl3_final_finish_mac"},
+@@ -303,6 +315,10 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_PEEK, 0), "SSL_peek"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_PEEK_EX, 0), "SSL_peek_ex"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_PEEK_INTERNAL, 0), "ssl_peek_internal"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_PROCESS_QUIC_POST_HANDSHAKE, 0),
++     "SSL_process_quic_post_handshake"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_PROVIDE_QUIC_DATA, 0),
++     "SSL_provide_quic_data"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_READ, 0), "SSL_read"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_READ_EARLY_DATA, 0),
+      "SSL_read_early_data"},
+@@ -379,6 +395,7 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_WRITE_EARLY_FINISH, 0), ""},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_WRITE_EX, 0), "SSL_write_ex"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_SSL_WRITE_INTERNAL, 0), "ssl_write_internal"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_STATEM_FLUSH, 0), "statem_flush"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_STATE_MACHINE, 0), "state_machine"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS12_CHECK_PEER_SIGALG, 0),
+      "tls12_check_peer_sigalg"},
+@@ -480,6 +497,10 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+      "tls_construct_ctos_psk"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_CTOS_PSK_KEX_MODES, 0),
+      "tls_construct_ctos_psk_kex_modes"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS, 0),
++     "tls_construct_ctos_quic_transport_params"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT, 0),
++     "tls_construct_ctos_quic_transport_params_draft"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_CTOS_RENEGOTIATE, 0),
+      "tls_construct_ctos_renegotiate"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_CTOS_SCT, 0),
+@@ -551,6 +572,10 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+      "tls_construct_stoc_next_proto_neg"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_STOC_PSK, 0),
+      "tls_construct_stoc_psk"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS, 0),
++     "tls_construct_stoc_quic_transport_params"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS_DRAFT, 0),
++     "tls_construct_stoc_quic_transport_params_draft"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_STOC_RENEGOTIATE, 0),
+      "tls_construct_stoc_renegotiate"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_CONSTRUCT_STOC_SERVER_NAME, 0),
+@@ -597,6 +622,10 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_PSK, 0), "tls_parse_ctos_psk"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_PSK_KEX_MODES, 0),
+      "tls_parse_ctos_psk_kex_modes"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS, 0),
++     "tls_parse_ctos_quic_transport_params"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT, 0),
++     "tls_parse_ctos_quic_transport_params_draft"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_RENEGOTIATE, 0),
+      "tls_parse_ctos_renegotiate"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_CTOS_SERVER_NAME, 0),
+@@ -629,6 +658,10 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
+      "tls_parse_stoc_maxfragmentlen"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_NPN, 0), "tls_parse_stoc_npn"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_PSK, 0), "tls_parse_stoc_psk"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS, 0),
++     "tls_parse_stoc_quic_transport_params"},
++    {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS_DRAFT, 0),
++     "tls_parse_stoc_quic_transport_params_draft"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_RENEGOTIATE, 0),
+      "tls_parse_stoc_renegotiate"},
+     {ERR_PACK(ERR_LIB_SSL, SSL_F_TLS_PARSE_STOC_SCT, 0), "tls_parse_stoc_sct"},
+@@ -951,6 +984,8 @@ static const ERR_STRING_DATA SSL_str_reasons[] = {
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_MISSING_PARAMETERS), "missing parameters"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_MISSING_PSK_KEX_MODES_EXTENSION),
+     "missing psk kex modes extension"},
++    {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_MISSING_QUIC_TRANSPORT_PARAMETERS_EXTENSION),
++    "missing quic transport parameters extension"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_MISSING_RSA_CERTIFICATE),
+     "missing rsa certificate"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_MISSING_RSA_ENCRYPTING_CERT),
+@@ -1253,6 +1288,8 @@ static const ERR_STRING_DATA SSL_str_reasons[] = {
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_WRONG_CIPHER_RETURNED),
+     "wrong cipher returned"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_WRONG_CURVE), "wrong curve"},
++    {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED),
++    "wrong encryption level received"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_WRONG_SIGNATURE_LENGTH),
+     "wrong signature length"},
+     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_WRONG_SIGNATURE_SIZE),
+--- contrib/libs/openssl/ssl/ssl_lib.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/ssl_lib.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -574,8 +574,57 @@ static void clear_ciphers(SSL *s)
+     ssl_clear_hash_ctx(&s->write_hash);
+ }
+ 
++#ifndef OPENSSL_NO_QUIC
+ int SSL_clear(SSL *s)
+ {
++    if (!SSL_clear_not_quic(s))
++        return 0;
++    return SSL_clear_quic(s);
++}
++
++int SSL_clear_quic(SSL *s)
++{
++    OPENSSL_free(s->ext.peer_quic_transport_params_draft);
++    s->ext.peer_quic_transport_params_draft = NULL;
++    s->ext.peer_quic_transport_params_draft_len = 0;
++    OPENSSL_free(s->ext.peer_quic_transport_params);
++    s->ext.peer_quic_transport_params = NULL;
++    s->ext.peer_quic_transport_params_len = 0;
++    s->quic_read_level = ssl_encryption_initial;
++    s->quic_write_level = ssl_encryption_initial;
++    s->quic_latest_level_received = ssl_encryption_initial;
++    while (s->quic_input_data_head != NULL) {
++        QUIC_DATA *qd;
++
++        qd = s->quic_input_data_head;
++        s->quic_input_data_head = qd->next;
++        OPENSSL_free(qd);
++    }
++    s->quic_input_data_tail = NULL;
++    BUF_MEM_free(s->quic_buf);
++    s->quic_buf = NULL;
++    s->quic_next_record_start = 0;
++    memset(s->client_hand_traffic_secret, 0, EVP_MAX_MD_SIZE);
++    memset(s->server_hand_traffic_secret, 0, EVP_MAX_MD_SIZE);
++    memset(s->client_early_traffic_secret, 0, EVP_MAX_MD_SIZE);
++    /*
++     * CONFIG - DON'T CLEAR
++     * s->ext.quic_transport_params
++     * s->ext.quic_transport_params_len
++     * s->quic_transport_version
++     * s->quic_method = NULL;
++     */
++    return 1;
++}
++#endif
++
++/* Keep this conditional very local */
++#ifndef OPENSSL_NO_QUIC
++int SSL_clear_not_quic(SSL *s)
++#else
++int SSL_clear(SSL *s)
++#endif
++{
+     if (s->method == NULL) {
+         SSLerr(SSL_F_SSL_CLEAR, SSL_R_NO_METHOD_SPECIFIED);
+         return 0;
+@@ -845,6 +894,10 @@ SSL *SSL_new(SSL_CTX *ctx)
+ 
+     s->job = NULL;
+ 
++#ifndef OPENSSL_NO_QUIC
++    s->quic_method = ctx->quic_method;
++#endif
++
+ #ifndef OPENSSL_NO_CT
+     if (!SSL_set_ct_validation_callback(s, ctx->ct_validation_callback,
+                                         ctx->ct_validation_callback_arg))
+@@ -1212,6 +1265,20 @@ void SSL_free(SSL *s)
+     OPENSSL_free(s->pha_context);
+     EVP_MD_CTX_free(s->pha_dgst);
+ 
++#ifndef OPENSSL_NO_QUIC
++    OPENSSL_free(s->ext.quic_transport_params);
++    OPENSSL_free(s->ext.peer_quic_transport_params_draft);
++    OPENSSL_free(s->ext.peer_quic_transport_params);
++    BUF_MEM_free(s->quic_buf);
++    while (s->quic_input_data_head != NULL) {
++        QUIC_DATA *qd;
++
++        qd = s->quic_input_data_head;
++        s->quic_input_data_head = qd->next;
++        OPENSSL_free(qd);
++    }
++#endif
++
+     sk_X509_NAME_pop_free(s->ca_names, X509_NAME_free);
+     sk_X509_NAME_pop_free(s->client_ca_names, X509_NAME_free);
+ 
+@@ -1747,6 +1814,12 @@ static int ssl_io_intern(void *vargs)
+ 
+ int ssl_read_internal(SSL *s, void *buf, size_t num, size_t *readbytes)
+ {
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        SSLerr(SSL_F_SSL_READ_INTERNAL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
++        return -1;
++    }
++#endif
+     if (s->handshake_func == NULL) {
+         SSLerr(SSL_F_SSL_READ_INTERNAL, SSL_R_UNINITIALIZED);
+         return -1;
+@@ -1879,6 +1952,12 @@ int SSL_get_early_data_status(const SSL *s)
+ 
+ static int ssl_peek_internal(SSL *s, void *buf, size_t num, size_t *readbytes)
+ {
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        SSLerr(SSL_F_SSL_PEEK_INTERNAL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
++        return -1;
++    }
++#endif
+     if (s->handshake_func == NULL) {
+         SSLerr(SSL_F_SSL_PEEK_INTERNAL, SSL_R_UNINITIALIZED);
+         return -1;
+@@ -1939,6 +2018,12 @@ int SSL_peek_ex(SSL *s, void *buf, size_t num, size_t *readbytes)
+ 
+ int ssl_write_internal(SSL *s, const void *buf, size_t num, size_t *written)
+ {
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        SSLerr(SSL_F_SSL_WRITE_INTERNAL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
++        return -1;
++    }
++#endif
+     if (s->handshake_func == NULL) {
+         SSLerr(SSL_F_SSL_WRITE_INTERNAL, SSL_R_UNINITIALIZED);
+         return -1;
+@@ -2196,6 +2281,19 @@ int SSL_renegotiate_pending(const SSL *s)
+     return (s->renegotiate != 0);
+ }
+ 
++int SSL_new_session_ticket(SSL *s)
++{
++    /* If we are in init because we're sending tickets, okay to send more. */
++    if ((SSL_in_init(s) && s->ext.extra_tickets_expected == 0)
++            || SSL_IS_FIRST_HANDSHAKE(s) || !s->server
++            || !SSL_IS_TLS13(s))
++        return 0;
++    s->ext.extra_tickets_expected++;
++    if (s->rlayer.wbuf[0].left == 0 && !SSL_in_init(s))
++        ossl_statem_set_in_init(s, 1);
++    return 1;
++}
++
+ long SSL_ctrl(SSL *s, int cmd, long larg, void *parg)
+ {
+     long l;
+@@ -3635,6 +3733,11 @@ int SSL_get_error(const SSL *s, int i)
+     }
+ 
+     if (SSL_want_read(s)) {
++#ifndef OPENSSL_NO_QUIC
++        if (SSL_IS_QUIC(s)) {
++            return SSL_ERROR_WANT_READ;
++        }
++#endif
+         bio = SSL_get_rbio(s);
+         if (BIO_should_read(bio))
+             return SSL_ERROR_WANT_READ;
+@@ -3732,6 +3835,21 @@ int SSL_do_handshake(SSL *s)
+             ret = s->handshake_func(s);
+         }
+     }
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s) && ret == 1) {
++        if (s->server) {
++            if (s->early_data_state == SSL_EARLY_DATA_ACCEPTING) {
++                s->early_data_state = SSL_EARLY_DATA_FINISHED_READING;
++                s->rwstate = SSL_READING;
++                ret = 0;
++            }
++        } else if (s->early_data_state == SSL_EARLY_DATA_CONNECTING) {
++            s->early_data_state = SSL_EARLY_DATA_WRITE_RETRY;
++            s->rwstate = SSL_READING;
++            ret = 0;
++        }
++    }
++#endif
+     return ret;
+ }
+ 
+--- contrib/libs/openssl/ssl/ssl_local.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/ssl_local.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -315,6 +315,13 @@
+ /* Flag used on OpenSSL ciphersuite ids to indicate they are for SSLv3+ */
+ # define SSL3_CK_CIPHERSUITE_FLAG                0x03000000
+ 
++/* Check if an SSL structure is using QUIC (which uses TLSv1.3) */
++# ifndef OPENSSL_NO_QUIC
++#  define SSL_IS_QUIC(s)  (s->quic_method != NULL)
++# else
++#  define SSL_IS_QUIC(s) 0
++# endif
++
+ /* Check if an SSL structure is using DTLS */
+ # define SSL_IS_DTLS(s)  (s->method->ssl3_enc->enc_flags & SSL_ENC_FLAG_DTLS)
+ 
+@@ -714,6 +721,8 @@ typedef enum tlsext_index_en {
+     TLSEXT_IDX_cryptopro_bug,
+     TLSEXT_IDX_early_data,
+     TLSEXT_IDX_certificate_authorities,
++    TLSEXT_IDX_quic_transport_params_draft,
++    TLSEXT_IDX_quic_transport_params,
+     TLSEXT_IDX_padding,
+     TLSEXT_IDX_psk,
+     /* Dummy index - must always be the last entry */
+@@ -1063,8 +1072,25 @@ struct ssl_ctx_st {
+ 
+     /* Do we advertise Post-handshake auth support? */
+     int pha_enabled;
++
++#ifndef OPENSSL_NO_QUIC
++    const SSL_QUIC_METHOD *quic_method;
++#endif
+ };
+ 
++typedef struct cert_pkey_st CERT_PKEY;
++
++#ifndef OPENSSL_NO_QUIC
++struct quic_data_st {
++    struct quic_data_st *next;
++    OSSL_ENCRYPTION_LEVEL level;
++    size_t start;       /* offset into quic_buf->data */
++    size_t length;
++};
++typedef struct quic_data_st QUIC_DATA;
++int quic_set_encryption_secrets(SSL *ssl, OSSL_ENCRYPTION_LEVEL level);
++#endif
++
+ struct ssl_st {
+     /*
+      * protocol version (one of SSL2_VERSION, SSL3_VERSION, TLS1_VERSION,
+@@ -1152,6 +1178,11 @@ struct ssl_st {
+     unsigned char handshake_traffic_hash[EVP_MAX_MD_SIZE];
+     unsigned char client_app_traffic_secret[EVP_MAX_MD_SIZE];
+     unsigned char server_app_traffic_secret[EVP_MAX_MD_SIZE];
++# ifndef OPENSSL_NO_QUIC
++    unsigned char client_hand_traffic_secret[EVP_MAX_MD_SIZE];
++    unsigned char server_hand_traffic_secret[EVP_MAX_MD_SIZE];
++    unsigned char client_early_traffic_secret[EVP_MAX_MD_SIZE];
++# endif
+     unsigned char exporter_master_secret[EVP_MAX_MD_SIZE];
+     unsigned char early_exporter_master_secret[EVP_MAX_MD_SIZE];
+     EVP_CIPHER_CTX *enc_read_ctx; /* cryptographic state */
+@@ -1289,6 +1320,8 @@ struct ssl_st {
+ 
+         /* RFC4507 session ticket expected to be received or sent */
+         int ticket_expected;
++        /* TLS 1.3 tickets requested by the application. */
++        int extra_tickets_expected;
+ # ifndef OPENSSL_NO_EC
+         size_t ecpointformats_len;
+         /* our list */
+@@ -1364,8 +1397,35 @@ struct ssl_st {
+          * selected.
+          */
+         int tick_identity;
++
++#ifndef OPENSSL_NO_QUIC
++        uint8_t *quic_transport_params;
++        size_t quic_transport_params_len;
++        uint8_t *peer_quic_transport_params_draft;
++        size_t peer_quic_transport_params_draft_len;
++        uint8_t *peer_quic_transport_params;
++        size_t peer_quic_transport_params_len;
++#endif
+     } ext;
+ 
++#ifndef OPENSSL_NO_QUIC
++    OSSL_ENCRYPTION_LEVEL quic_read_level;
++    OSSL_ENCRYPTION_LEVEL quic_write_level;
++    OSSL_ENCRYPTION_LEVEL quic_latest_level_received;
++    /*
++     * defaults to 0, but can be set to:
++     * - TLSEXT_TYPE_quic_transport_parameters_draft
++     * - TLSEXT_TYPE_quic_transport_parameters
++     * Client: if 0, send both
++     * Server: if 0, use same version as client sent
++     */
++    int quic_transport_version;
++    BUF_MEM *quic_buf;          /* buffer incoming handshake messages */
++    QUIC_DATA *quic_input_data_head;
++    QUIC_DATA *quic_input_data_tail;
++    size_t quic_next_record_start;
++    const SSL_QUIC_METHOD *quic_method;
++#endif
+     /*
+      * Parsed form of the ClientHello, kept around across client_hello_cb
+      * calls.
+@@ -2660,6 +2720,11 @@ void custom_exts_free(custom_ext_methods *exts);
+ 
+ void ssl_comp_free_compression_methods_int(void);
+ 
++#ifndef OPENSSL_NO_QUIC
++__owur int SSL_clear_not_quic(SSL *s);
++__owur int SSL_clear_quic(SSL *s);
++#endif
++
+ /* ssl_mcnf.c */
+ void ssl_ctx_system_config(SSL_CTX *ctx);
+ 
+--- contrib/libs/openssl/ssl/statem/extensions.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/extensions.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -58,6 +58,11 @@ static int final_early_data(SSL *s, unsigned int context, int sent);
+ static int final_maxfragmentlen(SSL *s, unsigned int context, int sent);
+ static int init_post_handshake_auth(SSL *s, unsigned int context);
+ static int final_psk(SSL *s, unsigned int context, int sent);
++#ifndef OPENSSL_NO_QUIC
++static int init_quic_transport_params(SSL *s, unsigned int context);
++static int final_quic_transport_params_draft(SSL *s, unsigned int context, int sent);
++static int final_quic_transport_params(SSL *s, unsigned int context, int sent);
++#endif
+ 
+ /* Structure to define a built-in extension */
+ typedef struct extensions_definition_st {
+@@ -377,6 +382,29 @@ static const EXTENSION_DEFINITION ext_defs[] = {
+         tls_construct_certificate_authorities,
+         tls_construct_certificate_authorities, NULL,
+     },
++#ifndef OPENSSL_NO_QUIC
++    {
++        TLSEXT_TYPE_quic_transport_parameters_draft,
++        SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS
++        | SSL_EXT_TLS_IMPLEMENTATION_ONLY | SSL_EXT_TLS1_3_ONLY,
++        init_quic_transport_params,
++        tls_parse_ctos_quic_transport_params_draft, tls_parse_stoc_quic_transport_params_draft,
++        tls_construct_stoc_quic_transport_params_draft, tls_construct_ctos_quic_transport_params_draft,
++        final_quic_transport_params_draft,
++    },
++    {
++        TLSEXT_TYPE_quic_transport_parameters,
++        SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS
++        | SSL_EXT_TLS_IMPLEMENTATION_ONLY | SSL_EXT_TLS1_3_ONLY,
++        init_quic_transport_params,
++        tls_parse_ctos_quic_transport_params, tls_parse_stoc_quic_transport_params,
++        tls_construct_stoc_quic_transport_params, tls_construct_ctos_quic_transport_params,
++        final_quic_transport_params,
++    },
++#else
++    INVALID_EXTENSION,
++    INVALID_EXTENSION,
++#endif
+     {
+         /* Must be immediately before pre_shared_key */
+         TLSEXT_TYPE_padding,
+@@ -1745,3 +1773,45 @@ static int final_psk(SSL *s, unsigned int context, int sent)
+ 
+     return 1;
+ }
++
++#ifndef OPENSSL_NO_QUIC
++static int init_quic_transport_params(SSL *s, unsigned int context)
++{
++    return 1;
++}
++
++static int final_quic_transport_params_draft(SSL *s, unsigned int context,
++                                             int sent)
++{
++    return 1;
++}
++
++static int final_quic_transport_params(SSL *s, unsigned int context, int sent)
++{
++    /* called after final_quic_transport_params_draft */
++    if (SSL_IS_QUIC(s)) {
++        if (s->ext.peer_quic_transport_params_len == 0
++                && s->ext.peer_quic_transport_params_draft_len == 0) {
++            SSLfatal(s, SSL_AD_MISSING_EXTENSION,
++                     SSL_F_FINAL_QUIC_TRANSPORT_PARAMS,
++                     SSL_R_MISSING_QUIC_TRANSPORT_PARAMETERS_EXTENSION);
++            return 0;
++        }
++        /* if we got both, discard the one we can't use */
++        if (s->ext.peer_quic_transport_params_len != 0
++                && s->ext.peer_quic_transport_params_draft_len != 0) {
++            if (s->quic_transport_version == TLSEXT_TYPE_quic_transport_parameters_draft) {
++                OPENSSL_free(s->ext.peer_quic_transport_params);
++                s->ext.peer_quic_transport_params = NULL;
++                s->ext.peer_quic_transport_params_len = 0;
++            } else {
++                OPENSSL_free(s->ext.peer_quic_transport_params_draft);
++                s->ext.peer_quic_transport_params_draft = NULL;
++                s->ext.peer_quic_transport_params_draft_len = 0;
++            }
++        }
++    }
++
++    return 1;
++}
++#endif
+--- contrib/libs/openssl/ssl/statem/extensions_clnt.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/extensions_clnt.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -1228,7 +1228,49 @@ EXT_RETURN tls_construct_ctos_post_handshake_auth(SSL *s, WPACKET *pkt,
+ #endif
+ }
+ 
++#ifndef OPENSSL_NO_QUIC
++EXT_RETURN tls_construct_ctos_quic_transport_params_draft(SSL *s, WPACKET *pkt,
++                                                          unsigned int context, X509 *x,
++                                                          size_t chainidx)
++{
++    if (s->quic_transport_version == TLSEXT_TYPE_quic_transport_parameters
++            || s->ext.quic_transport_params == NULL
++            || s->ext.quic_transport_params_len == 0) {
++        return EXT_RETURN_NOT_SENT;
++    }
+ 
++    if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_quic_transport_parameters_draft)
++        || !WPACKET_sub_memcpy_u16(pkt, s->ext.quic_transport_params,
++                                   s->ext.quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT, ERR_R_INTERNAL_ERROR);
++        return EXT_RETURN_FAIL;
++    }
++
++    return EXT_RETURN_SENT;
++}
++
++EXT_RETURN tls_construct_ctos_quic_transport_params(SSL *s, WPACKET *pkt,
++                                                    unsigned int context, X509 *x,
++                                                    size_t chainidx)
++{
++    if (s->quic_transport_version == TLSEXT_TYPE_quic_transport_parameters_draft
++            || s->ext.quic_transport_params == NULL
++            || s->ext.quic_transport_params_len == 0) {
++        return EXT_RETURN_NOT_SENT;
++    }
++
++    if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_quic_transport_parameters)
++        || !WPACKET_sub_memcpy_u16(pkt, s->ext.quic_transport_params,
++                                   s->ext.quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_CONSTRUCT_CTOS_QUIC_TRANSPORT_PARAMS, ERR_R_INTERNAL_ERROR);
++        return EXT_RETURN_FAIL;
++    }
++
++    return EXT_RETURN_SENT;
++}
++#endif
+ /*
+  * Parse the server's renegotiation binding and abort if it's not right
+  */
+@@ -1938,6 +1980,18 @@ int tls_parse_stoc_early_data(SSL *s, PACKET *pkt, unsigned int context,
+             return 0;
+         }
+ 
++#ifndef OPENSSL_NO_QUIC
++        /*
++         * QUIC server must send 0xFFFFFFFF or it's a PROTOCOL_VIOLATION
++         * per draft-ietf-quic-tls-27 S4.5
++         */
++        if (SSL_IS_QUIC(s) && max_early_data != 0xFFFFFFFF) {
++            SSLfatal(s, SSL_AD_ILLEGAL_PARAMETER, SSL_F_TLS_PARSE_STOC_EARLY_DATA,
++                     SSL_R_INVALID_MAX_EARLY_DATA);
++            return 0;
++        }
++#endif
++
+         s->session->ext.max_early_data = max_early_data;
+ 
+         return 1;
+@@ -2025,3 +2079,40 @@ int tls_parse_stoc_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+ 
+     return 1;
+ }
++#ifndef OPENSSL_NO_QUIC
++int tls_parse_stoc_quic_transport_params_draft(SSL *s, PACKET *pkt,
++                                               unsigned int context, X509 *x,
++                                               size_t chainidx)
++{
++    OPENSSL_free(s->ext.peer_quic_transport_params_draft);
++    s->ext.peer_quic_transport_params_draft = NULL;
++    s->ext.peer_quic_transport_params_draft_len = 0;
++
++    if (!PACKET_memdup(pkt,
++                       &s->ext.peer_quic_transport_params_draft,
++                       &s->ext.peer_quic_transport_params_draft_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS_DRAFT, ERR_R_INTERNAL_ERROR);
++        return 0;
++    }
++    return 1;
++}
++
++int tls_parse_stoc_quic_transport_params(SSL *s, PACKET *pkt, unsigned int context,
++                                         X509 *x, size_t chainidx)
++{
++    OPENSSL_free(s->ext.peer_quic_transport_params);
++    s->ext.peer_quic_transport_params = NULL;
++    s->ext.peer_quic_transport_params_len = 0;
++
++    if (!PACKET_memdup(pkt,
++                       &s->ext.peer_quic_transport_params,
++                       &s->ext.peer_quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_PARSE_STOC_QUIC_TRANSPORT_PARAMS,
++                 ERR_R_INTERNAL_ERROR);
++        return 0;
++    }
++    return 1;
++}
++#endif
+--- contrib/libs/openssl/ssl/statem/extensions_srvr.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/extensions_srvr.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -1302,6 +1302,43 @@ int tls_parse_ctos_post_handshake_auth(SSL *s, PACKET *pkt, unsigned int context
+     return 1;
+ }
+ 
++#ifndef OPENSSL_NO_QUIC
++int tls_parse_ctos_quic_transport_params_draft(SSL *s, PACKET *pkt, unsigned int context,
++                                               X509 *x, size_t chainidx)
++{
++    OPENSSL_free(s->ext.peer_quic_transport_params_draft);
++    s->ext.peer_quic_transport_params_draft = NULL;
++    s->ext.peer_quic_transport_params_draft_len = 0;
++
++    if (!PACKET_memdup(pkt,
++                       &s->ext.peer_quic_transport_params_draft,
++                       &s->ext.peer_quic_transport_params_draft_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS_DRAFT, ERR_R_INTERNAL_ERROR);
++        return 0;
++    }
++    return 1;
++}
++
++int tls_parse_ctos_quic_transport_params(SSL *s, PACKET *pkt, unsigned int context,
++                                         X509 *x, size_t chainidx)
++{
++    OPENSSL_free(s->ext.peer_quic_transport_params);
++    s->ext.peer_quic_transport_params = NULL;
++    s->ext.peer_quic_transport_params_len = 0;
++
++    if (!PACKET_memdup(pkt,
++                       &s->ext.peer_quic_transport_params,
++                       &s->ext.peer_quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_PARSE_CTOS_QUIC_TRANSPORT_PARAMS,
++                 ERR_R_INTERNAL_ERROR);
++        return 0;
++    }
++    return 1;
++}
++#endif
++
+ /*
+  * Add the server's renegotiation binding
+  */
+@@ -1932,12 +1969,20 @@ EXT_RETURN tls_construct_stoc_early_data(SSL *s, WPACKET *pkt,
+                                          size_t chainidx)
+ {
+     if (context == SSL_EXT_TLS1_3_NEW_SESSION_TICKET) {
++        uint32_t max_early_data = s->max_early_data;
++
+         if (s->max_early_data == 0)
+             return EXT_RETURN_NOT_SENT;
+ 
++#ifndef OPENSSL_NO_QUIC
++        /* QUIC server must always send 0xFFFFFFFF, per draft-ietf-quic-tls-27 S4.5 */
++        if (SSL_IS_QUIC(s))
++            max_early_data = 0xFFFFFFFF;
++#endif
++
+         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_early_data)
+                 || !WPACKET_start_sub_packet_u16(pkt)
+-                || !WPACKET_put_bytes_u32(pkt, s->max_early_data)
++                || !WPACKET_put_bytes_u32(pkt, max_early_data)
+                 || !WPACKET_close(pkt)) {
+             SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                      SSL_F_TLS_CONSTRUCT_STOC_EARLY_DATA, ERR_R_INTERNAL_ERROR);
+@@ -1978,3 +2023,51 @@ EXT_RETURN tls_construct_stoc_psk(SSL *s, WPACKET *pkt, unsigned int context,
+ 
+     return EXT_RETURN_SENT;
+ }
++
++#ifndef OPENSSL_NO_QUIC
++EXT_RETURN tls_construct_stoc_quic_transport_params_draft(SSL *s, WPACKET *pkt,
++                                                          unsigned int context,
++                                                          X509 *x,
++                                                          size_t chainidx)
++{
++    if (s->quic_transport_version == TLSEXT_TYPE_quic_transport_parameters
++            || s->ext.peer_quic_transport_params_draft_len == 0
++            || s->ext.quic_transport_params == NULL
++            || s->ext.quic_transport_params_len == 0) {
++        return EXT_RETURN_NOT_SENT;
++    }
++
++    if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_quic_transport_parameters_draft)
++        || !WPACKET_sub_memcpy_u16(pkt, s->ext.quic_transport_params,
++                                   s->ext.quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS_DRAFT, ERR_R_INTERNAL_ERROR);
++        return EXT_RETURN_FAIL;
++    }
++
++    return EXT_RETURN_SENT;
++}
++
++EXT_RETURN tls_construct_stoc_quic_transport_params(SSL *s, WPACKET *pkt,
++                                                    unsigned int context, X509 *x,
++                                                    size_t chainidx)
++{
++    if (s->quic_transport_version == TLSEXT_TYPE_quic_transport_parameters_draft
++            || s->ext.peer_quic_transport_params_len == 0
++            || s->ext.quic_transport_params == NULL
++            || s->ext.quic_transport_params_len == 0) {
++        return EXT_RETURN_NOT_SENT;
++    }
++
++    if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_quic_transport_parameters)
++        || !WPACKET_sub_memcpy_u16(pkt, s->ext.quic_transport_params,
++                                   s->ext.quic_transport_params_len)) {
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                 SSL_F_TLS_CONSTRUCT_STOC_QUIC_TRANSPORT_PARAMS,
++                 ERR_R_INTERNAL_ERROR);
++        return EXT_RETURN_FAIL;
++    }
++
++    return EXT_RETURN_SENT;
++}
++#endif
+--- contrib/libs/openssl/ssl/statem/statem.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/statem.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -319,8 +319,13 @@ static int state_machine(SSL *s, int server)
+          * If we are stateless then we already called SSL_clear() - don't do
+          * it again and clear the STATELESS flag itself.
+          */
++#ifndef OPENSSL_NO_QUIC
++        if ((s->s3->flags & TLS1_FLAGS_STATELESS) == 0 && !SSL_clear_not_quic(s))
++            return -1;
++#else
+         if ((s->s3->flags & TLS1_FLAGS_STATELESS) == 0 && !SSL_clear(s))
+             return -1;
++#endif
+     }
+ #ifndef OPENSSL_NO_SCTP
+     if (SSL_IS_DTLS(s) && BIO_dgram_is_sctp(SSL_get_wbio(s))) {
+@@ -575,6 +580,11 @@ static SUB_STATE_RETURN read_state_machine(SSL *s)
+                  * In DTLS we get the whole message in one go - header and body
+                  */
+                 ret = dtls_get_message(s, &mt, &len);
++#ifndef OPENSSL_NO_QUIC
++            } else if (SSL_IS_QUIC(s)) {
++                /* QUIC behaves like DTLS -- all in one go. */
++                ret = quic_get_message(s, &mt, &len);
++#endif
+             } else {
+                 ret = tls_get_message_header(s, &mt);
+             }
+@@ -604,8 +614,8 @@ static SUB_STATE_RETURN read_state_machine(SSL *s)
+                 return SUB_STATE_ERROR;
+             }
+ 
+-            /* dtls_get_message already did this */
+-            if (!SSL_IS_DTLS(s)
++            /* dtls_get_message/quic_get_message already did this */
++            if (!SSL_IS_DTLS(s) && !SSL_IS_QUIC(s)
+                     && s->s3->tmp.message_size > 0
+                     && !grow_init_buf(s, s->s3->tmp.message_size
+                                          + SSL3_HM_HEADER_LENGTH)) {
+@@ -618,8 +628,8 @@ static SUB_STATE_RETURN read_state_machine(SSL *s)
+             /* Fall through */
+ 
+         case READ_STATE_BODY:
+-            if (!SSL_IS_DTLS(s)) {
+-                /* We already got this above for DTLS */
++            if (!SSL_IS_DTLS(s) && !SSL_IS_QUIC(s)) {
++                /* We already got this above for DTLS & QUIC */
+                 ret = tls_get_message_body(s, &len);
+                 if (ret == 0) {
+                     /* Could be non-blocking IO */
+@@ -900,6 +910,14 @@ static SUB_STATE_RETURN write_state_machine(SSL *s)
+ int statem_flush(SSL *s)
+ {
+     s->rwstate = SSL_WRITING;
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        if (!s->quic_method->flush_flight(s)) {
++            SSLerr(SSL_F_STATEM_FLUSH, ERR_R_INTERNAL_ERROR);
++            return 0;
++        }
++    } else
++#endif
+     if (BIO_flush(s->wbio) <= 0) {
+         return 0;
+     }
+--- contrib/libs/openssl/ssl/statem/statem_clnt.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/statem_clnt.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -909,6 +909,14 @@ int ossl_statem_client_construct_message(SSL *s, WPACKET *pkt,
+         break;
+ 
+     case TLS_ST_CW_END_OF_EARLY_DATA:
++#ifndef OPENSSL_NO_QUIC
++        /* QUIC does not send EndOfEarlyData, draft-ietf-quic-tls-24 S8.3 */
++        if (SSL_IS_QUIC(s)) {
++            *confunc = NULL;
++            *mt = SSL3_MT_DUMMY;
++            break;
++        }
++#endif
+         *confunc = tls_construct_end_of_early_data;
+         *mt = SSL3_MT_END_OF_EARLY_DATA;
+         break;
+--- contrib/libs/openssl/ssl/statem/statem_lib.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/statem_lib.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -43,8 +43,28 @@ int ssl3_do_write(SSL *s, int type)
+     int ret;
+     size_t written = 0;
+ 
+-    ret = ssl3_write_bytes(s, type, &s->init_buf->data[s->init_off],
+-                           s->init_num, &written);
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s)) {
++        if (type == SSL3_RT_HANDSHAKE) {
++            ret = s->quic_method->add_handshake_data(s, s->quic_write_level,
++                                                     (const uint8_t*)&s->init_buf->data[s->init_off],
++                                                     s->init_num);
++            if (!ret) {
++                ret = -1;
++                /* QUIC can't sent anything out sice the above failed */
++                SSLerr(SSL_F_SSL3_DO_WRITE, ERR_R_INTERNAL_ERROR);
++            } else {
++                written = s->init_num;
++            }
++        } else {
++            /* QUIC doesn't use ChangeCipherSpec */
++            ret = -1;
++            SSLerr(SSL_F_SSL3_DO_WRITE, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
++        }
++    } else
++#endif
++        ret = ssl3_write_bytes(s, type, &s->init_buf->data[s->init_off],
++                               s->init_num, &written);
+     if (ret < 0)
+         return -1;
+     if (type == SSL3_RT_HANDSHAKE)
+@@ -610,6 +630,14 @@ int tls_construct_finished(SSL *s, WPACKET *pkt)
+ 
+ int tls_construct_key_update(SSL *s, WPACKET *pkt)
+ {
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_is_quic(s)) {
++        /* TLS KeyUpdate is not used for QUIC, so this is an error. */
++        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_CONSTRUCT_KEY_UPDATE,
++                 ERR_R_INTERNAL_ERROR);
++        return 0;
++    }
++#endif
+     if (!WPACKET_put_bytes_u8(pkt, s->key_update)) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_CONSTRUCT_KEY_UPDATE,
+                  ERR_R_INTERNAL_ERROR);
+@@ -634,6 +662,14 @@ MSG_PROCESS_RETURN tls_process_key_update(SSL *s, PACKET *pkt)
+         return MSG_PROCESS_ERROR;
+     }
+ 
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_is_quic(s)) {
++        SSLfatal(s, SSL_AD_UNEXPECTED_MESSAGE, SSL_F_TLS_PROCESS_KEY_UPDATE,
++                 SSL_R_UNEXPECTED_MESSAGE);
++        return MSG_PROCESS_ERROR;
++    }
++#endif
++
+     if (!PACKET_get_1(pkt, &updatetype)
+             || PACKET_remaining(pkt) != 0) {
+         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_KEY_UPDATE,
+--- contrib/libs/openssl/ssl/statem/statem_local.h	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/statem_local.h	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -95,6 +95,9 @@ WORK_STATE ossl_statem_server_post_process_message(SSL *s, WORK_STATE wst);
+ __owur int tls_get_message_header(SSL *s, int *mt);
+ __owur int tls_get_message_body(SSL *s, size_t *len);
+ __owur int dtls_get_message(SSL *s, int *mt, size_t *len);
++#ifndef OPENSSL_NO_QUIC
++__owur int quic_get_message(SSL *s, int *mt, size_t *len);
++#endif
+ 
+ /* Message construction and processing functions */
+ __owur int tls_process_initial_server_flight(SSL *s);
+@@ -238,6 +241,14 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+                        size_t chainidx);
+ int tls_parse_ctos_post_handshake_auth(SSL *, PACKET *pkt, unsigned int context,
+                                        X509 *x, size_t chainidx);
++#ifndef OPENSSL_NO_QUIC
++int tls_parse_ctos_quic_transport_params_draft(SSL *s, PACKET *pkt,
++                                               unsigned int context, X509 *x,
++                                               size_t chainidx);
++
++int tls_parse_ctos_quic_transport_params(SSL *s, PACKET *pkt, unsigned int context,
++                                         X509 *x, size_t chainidx);
++#endif
+ 
+ EXT_RETURN tls_construct_stoc_renegotiate(SSL *s, WPACKET *pkt,
+                                           unsigned int context, X509 *x,
+@@ -300,6 +311,16 @@ EXT_RETURN tls_construct_stoc_cryptopro_bug(SSL *s, WPACKET *pkt,
+                                             size_t chainidx);
+ EXT_RETURN tls_construct_stoc_psk(SSL *s, WPACKET *pkt, unsigned int context,
+                                   X509 *x, size_t chainidx);
++#ifndef OPENSSL_NO_QUIC
++EXT_RETURN tls_construct_stoc_quic_transport_params_draft(SSL *s, WPACKET *pkt,
++                                                          unsigned int context,
++                                                          X509 *x,
++                                                          size_t chainidx);
++
++EXT_RETURN tls_construct_stoc_quic_transport_params(SSL *s, WPACKET *pkt,
++                                                    unsigned int context, X509 *x,
++                                                    size_t chainidx);
++#endif
+ 
+ /* Client Extension processing */
+ EXT_RETURN tls_construct_ctos_renegotiate(SSL *s, WPACKET *pkt, unsigned int context,
+@@ -370,6 +391,15 @@ EXT_RETURN tls_construct_ctos_psk(SSL *s, WPACKET *pkt, unsigned int context,
+                                   X509 *x, size_t chainidx);
+ EXT_RETURN tls_construct_ctos_post_handshake_auth(SSL *s, WPACKET *pkt, unsigned int context,
+                                                   X509 *x, size_t chainidx);
++#ifndef OPENSSL_NO_QUIC
++EXT_RETURN tls_construct_ctos_quic_transport_params_draft(SSL *s, WPACKET *pkt,
++                                                          unsigned int context, X509 *x,
++                                                          size_t chainidx);
++
++EXT_RETURN tls_construct_ctos_quic_transport_params(SSL *s, WPACKET *pkt,
++                                                    unsigned int context, X509 *x,
++                                                    size_t chainidx);
++#endif
+ 
+ int tls_parse_stoc_renegotiate(SSL *s, PACKET *pkt, unsigned int context,
+                                X509 *x, size_t chainidx);
+@@ -415,6 +445,14 @@ int tls_parse_stoc_cookie(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+                        size_t chainidx);
+ int tls_parse_stoc_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+                        size_t chainidx);
++#ifndef OPENSSL_NO_QUIC
++int tls_parse_stoc_quic_transport_params_draft(SSL *s, PACKET *pkt,
++                                               unsigned int context, X509 *x,
++                                               size_t chainidx);
++
++int tls_parse_stoc_quic_transport_params(SSL *s, PACKET *pkt, unsigned int context,
++                                         X509 *x, size_t chainidx);
++#endif
+ 
+ int tls_handle_alpn(SSL *s);
+ 
+--- contrib/libs/openssl/ssl/statem/statem_srvr.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/statem/statem_srvr.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -72,7 +72,8 @@ static int ossl_statem_server13_read_transition(SSL *s, int mt)
+                 return 1;
+             }
+             break;
+-        } else if (s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
++        } else if (s->ext.early_data == SSL_EARLY_DATA_ACCEPTED
++                   && !SSL_IS_QUIC(s)) {
+             if (mt == SSL3_MT_END_OF_EARLY_DATA) {
+                 st->hand_state = TLS_ST_SR_END_OF_EARLY_DATA;
+                 return 1;
+@@ -436,6 +437,10 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
+             st->hand_state = TLS_ST_SW_CERT_REQ;
+             return WRITE_TRAN_CONTINUE;
+         }
++        if (s->ext.extra_tickets_expected > 0) {
++            st->hand_state = TLS_ST_SW_SESSION_TICKET;
++            return WRITE_TRAN_CONTINUE;
++        }
+         /* Try to read from the client instead */
+         return WRITE_TRAN_FINISHED;
+ 
+@@ -526,7 +531,9 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
+          * Following an initial handshake we send the number of tickets we have
+          * been configured for.
+          */
+-        if (s->hit || s->num_tickets <= s->sent_tickets) {
++        if (!SSL_IS_FIRST_HANDSHAKE(s) && s->ext.extra_tickets_expected > 0) {
++            return WRITE_TRAN_CONTINUE;
++        } else if (s->hit || s->num_tickets <= s->sent_tickets) {
+             /* We've written enough tickets out. */
+             st->hand_state = TLS_ST_OK;
+         }
+@@ -722,7 +729,8 @@ WORK_STATE ossl_statem_server_pre_work(SSL *s, WORK_STATE wst)
+         return WORK_FINISHED_CONTINUE;
+ 
+     case TLS_ST_SW_SESSION_TICKET:
+-        if (SSL_IS_TLS13(s) && s->sent_tickets == 0) {
++        if (SSL_IS_TLS13(s) && s->sent_tickets == 0
++                && s->ext.extra_tickets_expected == 0) {
+             /*
+              * Actually this is the end of the handshake, but we're going
+              * straight into writing the session ticket out. So we finish off
+@@ -964,6 +972,16 @@ WORK_STATE ossl_statem_server_post_work(SSL *s, WORK_STATE wst)
+                         SSL3_CC_APPLICATION | SSL3_CHANGE_CIPHER_SERVER_WRITE))
+             /* SSLfatal() already called */
+             return WORK_ERROR;
++
++#ifndef OPENSSL_NO_QUIC
++            if (SSL_IS_QUIC(s) && s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
++                s->early_data_state = SSL_EARLY_DATA_FINISHED_READING;
++                if (!s->method->ssl3_enc->change_cipher_state(
++                        s, SSL3_CC_HANDSHAKE | SSL3_CHANGE_CIPHER_SERVER_READ))
++                    /* SSLfatal() already called */
++                    return WORK_ERROR;
++            }
++#endif
+         }
+         break;
+ 
+@@ -1578,6 +1596,16 @@ MSG_PROCESS_RETURN tls_process_client_hello(SSL *s, PACKET *pkt)
+                 goto err;
+             }
+         }
++#ifndef OPENSSL_NO_QUIC
++        if (SSL_IS_QUIC(s)) {
++            /* Any other QUIC checks on ClientHello here */
++            if (clienthello->session_id_len > 0) {
++                SSLfatal(s, SSL_AD_ILLEGAL_PARAMETER, SSL_F_TLS_PROCESS_CLIENT_HELLO,
++                         SSL_R_LENGTH_MISMATCH);
++                goto err;
++            }
++        }
++#endif
+     }
+ 
+     if (!PACKET_copy_all(&compression, clienthello->compressions,
+@@ -4183,10 +4211,13 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
+         /*
+          * Increment both |sent_tickets| and |next_ticket_nonce|. |sent_tickets|
+          * gets reset to 0 if we send more tickets following a post-handshake
+-         * auth, but |next_ticket_nonce| does not.
++         * auth, but |next_ticket_nonce| does not.  If we're sending extra
++         * tickets, decrement the count of pending extra tickets.
+          */
+         s->sent_tickets++;
+         s->next_ticket_nonce++;
++        if (s->ext.extra_tickets_expected > 0)
++            s->ext.extra_tickets_expected--;
+         ssl_update_cache(s, SSL_SESS_CACHE_SERVER);
+     }
+ 
+--- contrib/libs/openssl/ssl/tls13_enc.c	(22a7fd65ca59aa889ed516b87e9c752abc44f006)
++++ contrib/libs/openssl/ssl/tls13_enc.c	(a1710ceeba972d163108e8a86bba74b090c8f4c8)
+@@ -435,8 +435,6 @@ static int derive_secret_key_and_iv(SSL *s, int sending, const EVP_MD *md,
+     return 0;
+ }
+ 
+-int tls13_change_cipher_state(SSL *s, int which)
+-{
+ #ifdef CHARSET_EBCDIC
+   static const unsigned char client_early_traffic[]       = {0x63, 0x20, 0x65, 0x20,       /*traffic*/0x74, 0x72, 0x61, 0x66, 0x66, 0x69, 0x63, 0x00};
+   static const unsigned char client_handshake_traffic[]   = {0x63, 0x20, 0x68, 0x73, 0x20, /*traffic*/0x74, 0x72, 0x61, 0x66, 0x66, 0x69, 0x63, 0x00};
+@@ -456,6 +454,217 @@ int tls13_change_cipher_state(SSL *s, int which)
+     static const unsigned char resumption_master_secret[] = "res master";
+     static const unsigned char early_exporter_master_secret[] = "e exp master";
+ #endif
++
++#ifndef OPENSSL_NO_QUIC
++static int quic_change_cipher_state(SSL *s, int which)
++{
++    unsigned char hash[EVP_MAX_MD_SIZE];
++    size_t hashlen = 0;
++    int hashleni;
++    int ret = 0;
++    const EVP_MD *md = NULL;
++    OSSL_ENCRYPTION_LEVEL level;
++    int is_handshake = ((which & SSL3_CC_HANDSHAKE) == SSL3_CC_HANDSHAKE);
++    int is_client_read = ((which & SSL3_CHANGE_CIPHER_CLIENT_READ) == SSL3_CHANGE_CIPHER_CLIENT_READ);
++    int is_server_write = ((which & SSL3_CHANGE_CIPHER_SERVER_WRITE) == SSL3_CHANGE_CIPHER_SERVER_WRITE);
++    int is_early = (which & SSL3_CC_EARLY);
++
++    if (is_early) {
++        EVP_MD_CTX *mdctx = NULL;
++        long handlen;
++        void *hdata;
++        unsigned int hashlenui;
++        const SSL_CIPHER *sslcipher = SSL_SESSION_get0_cipher(s->session);
++
++        handlen = BIO_get_mem_data(s->s3->handshake_buffer, &hdata);
++        if (handlen <= 0) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_QUIC_CHANGE_CIPHER_STATE,
++                     SSL_R_BAD_HANDSHAKE_LENGTH);
++            goto err;
++        }
++
++        if (s->early_data_state == SSL_EARLY_DATA_CONNECTING
++                && s->max_early_data > 0 && s->session->ext.max_early_data == 0) {
++            /*
++             * If we are attempting to send early data, and we've decided to
++             * actually do it but max_early_data in s->session is 0 then we
++             * must be using an external PSK.
++             */
++            if (!ossl_assert(s->psksession != NULL
++                             && s->max_early_data
++                                    == s->psksession->ext.max_early_data)) {
++                SSLfatal(s, SSL_AD_INTERNAL_ERROR,
++                         SSL_F_QUIC_CHANGE_CIPHER_STATE, ERR_R_INTERNAL_ERROR);
++                goto err;
++            }
++            sslcipher = SSL_SESSION_get0_cipher(s->psksession);
++        }
++        if (sslcipher == NULL) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_QUIC_CHANGE_CIPHER_STATE,
++                     SSL_R_BAD_PSK);
++            goto err;
++        }
++
++        /*
++         * We need to calculate the handshake digest using the digest from
++         * the session. We haven't yet selected our ciphersuite so we can't
++         * use ssl_handshake_md().
++         */
++        mdctx = EVP_MD_CTX_new();
++        if (mdctx == NULL) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_QUIC_CHANGE_CIPHER_STATE,
++                     ERR_R_MALLOC_FAILURE);
++            goto err;
++        }
++        md = ssl_md(sslcipher->algorithm2);
++        if (md == NULL || !EVP_DigestInit_ex(mdctx, md, NULL)
++                || !EVP_DigestUpdate(mdctx, hdata, handlen)
++                || !EVP_DigestFinal_ex(mdctx, hash, &hashlenui)) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_QUIC_CHANGE_CIPHER_STATE,
++                     ERR_R_INTERNAL_ERROR);
++            EVP_MD_CTX_free(mdctx);
++            goto err;
++        }
++        hashlen = hashlenui;
++        EVP_MD_CTX_free(mdctx);
++    } else {
++        md = ssl_handshake_md(s);
++        if (!ssl3_digest_cached_records(s, 1)
++                || !ssl_handshake_hash(s, hash, sizeof(hash), &hashlen)) {
++            /* SSLfatal() already called */;
++            goto err;
++        }
++
++        /* Ensure cast to size_t is safe */
++        hashleni = EVP_MD_size(md);
++        if (!ossl_assert(hashleni >= 0)) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_QUIC_CHANGE_CIPHER_STATE,
++                     ERR_R_EVP_LIB);
++            goto err;
++        }
++        hashlen = (size_t)hashleni;
++    }
++
++    if (is_client_read || is_server_write) {
++        if (is_handshake) {
++            /*
++             * This looks a bit weird, since the condition is basically "the
++             * server is writing" but we set both the server *and* client
++             * handshake traffic keys here.  That's because there's only a fixed
++             * number of change-cipher-state events in the TLS 1.3 handshake,
++             * and in particular there's not an event in between when the server
++             * writes encrypted handshake messages and when the client writes
++             * encrypted handshake messages, so we generate both here.
++             */
++            level = ssl_encryption_handshake;
++
++            if (!tls13_hkdf_expand(s, md, s->handshake_secret,
++                                   client_handshake_traffic,
++                                   sizeof(client_handshake_traffic)-1, hash,
++                                   hashlen, s->client_hand_traffic_secret,
++                                   hashlen, 1)
++                || !ssl_log_secret(s, CLIENT_HANDSHAKE_LABEL,
++                                   s->client_hand_traffic_secret, hashlen)
++                || !tls13_derive_finishedkey(s, md,
++                                             s->client_hand_traffic_secret,
++                                             s->client_finished_secret, hashlen)
++                || !tls13_hkdf_expand(s, md, s->handshake_secret,
++                                      server_handshake_traffic,
++                                      sizeof(server_handshake_traffic)-1, hash,
++                                      hashlen, s->server_hand_traffic_secret,
++                                      hashlen, 1)
++                || !ssl_log_secret(s, SERVER_HANDSHAKE_LABEL,
++                                   s->server_hand_traffic_secret, hashlen)
++                || !tls13_derive_finishedkey(s, md,
++                                             s->server_hand_traffic_secret,
++                                             s->server_finished_secret,
++                                             hashlen)) {
++                /* SSLfatal() already called */
++                goto err;
++            }
++        } else {
++            /*
++             * As above, we generate both sets of application traffic keys at
++             * the same time.
++             */
++            level = ssl_encryption_application;
++
++            if (!tls13_hkdf_expand(s, md, s->master_secret,
++                                   client_application_traffic,
++                                   sizeof(client_application_traffic)-1, hash,
++                                   hashlen, s->client_app_traffic_secret,
++                                   hashlen, 1)
++                || !ssl_log_secret(s, CLIENT_APPLICATION_LABEL,
++                                   s->client_app_traffic_secret, hashlen)
++                || !tls13_hkdf_expand(s, md, s->master_secret,
++                                      server_application_traffic,
++                                      sizeof(server_application_traffic)-1,
++                                      hash, hashlen,
++                                      s->server_app_traffic_secret, hashlen, 1)
++                || !ssl_log_secret(s, SERVER_APPLICATION_LABEL,
++                                   s->server_app_traffic_secret, hashlen)) {
++                /* SSLfatal() already called */
++                goto err;
++            }
++        }
++        if (!quic_set_encryption_secrets(s, level)) {
++            /* SSLfatal() already called */
++            goto err;
++        }
++        if (s->server)
++            s->quic_write_level = level;
++        else
++            s->quic_read_level = level;
++    } else {
++        /* is_client_write || is_server_read */
++
++        if (is_early) {
++            level = ssl_encryption_early_data;
++
++            if (!tls13_hkdf_expand(s, md, s->early_secret, client_early_traffic,
++                                   sizeof(client_early_traffic)-1, hash,
++                                   hashlen, s->client_early_traffic_secret,
++                                   hashlen, 1)
++                || !ssl_log_secret(s, CLIENT_EARLY_LABEL,
++                                   s->client_early_traffic_secret, hashlen)
++                || !quic_set_encryption_secrets(s, level)) {
++                /* SSLfatal() already called */
++                goto err;
++            }
++        } else if (is_handshake) {
++            level = ssl_encryption_handshake;
++        } else {
++            level = ssl_encryption_application;
++            /*
++             * We also create the resumption master secret, but this time use the
++             * hash for the whole handshake including the Client Finished
++             */
++            if (!tls13_hkdf_expand(s, md, s->master_secret,
++                                   resumption_master_secret,
++                                   sizeof(resumption_master_secret)-1, hash,
++                                   hashlen, s->resumption_master_secret,
++                                   hashlen, 1)) {
++                /* SSLfatal() already called */
++                goto err;
++            }
++        }
++
++        if (level != ssl_encryption_early_data) {
++            if (s->server)
++                s->quic_read_level = level;
++            else
++                s->quic_write_level = level;
++        }
++    }
++
++    ret = 1;
++ err:
++    return ret;
++}
++#endif /* OPENSSL_NO_QUIC */
++
++int tls13_change_cipher_state(SSL *s, int which)
++{
+     unsigned char *iv;
+     unsigned char secret[EVP_MAX_MD_SIZE];
+     unsigned char hashval[EVP_MAX_MD_SIZE];
+@@ -471,6 +680,11 @@ int tls13_change_cipher_state(SSL *s, int which)
+     const EVP_MD *md = NULL;
+     const EVP_CIPHER *cipher = NULL;
+ 
++#ifndef OPENSSL_NO_QUIC
++    if (SSL_IS_QUIC(s))
++        return quic_change_cipher_state(s, which);
++#endif
++
+     if (which & SSL3_CC_READ) {
+         if (s->enc_read_ctx != NULL) {
+             EVP_CIPHER_CTX_reset(s->enc_read_ctx);

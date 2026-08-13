@@ -10,6 +10,7 @@ void TCpuConsumptionInfo::Clear() {
     Cpu = 0.0;
     LastSecondElapsed = 0.0;
     LastSecondCpu = 0.0;
+    NeedyWindowCpu = 0.0;
 }
 
 void THarmonizerCpuConsumption::Init(i16 poolCount) {
@@ -43,6 +44,11 @@ namespace {
             poolFullThreadConsumption->LastSecondElapsed += threadLastSecondElapsed;
             poolFullThreadConsumption->Cpu += threadCpu;
             poolFullThreadConsumption->LastSecondCpu += threadLastSecondCpu;
+            float threadNeedyWindowCpu = pool.NeedyCpuWindowSeconds == 1
+                ? threadLastSecondCpu
+                : Rescale(pool.GetCpuForLastSeconds(threadIdx, pool.NeedyCpuWindowSeconds));
+            poolConsumption->NeedyWindowCpu += threadNeedyWindowCpu;
+            poolFullThreadConsumption->NeedyWindowCpu += threadNeedyWindowCpu;
             LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
         }
         for (i16 sharedIdx = 0; sharedIdx < static_cast<i16>(pool.SharedInfo.size()); ++sharedIdx) {
@@ -50,10 +56,14 @@ namespace {
             float sharedLastSecondElapsed = pool.GetLastSecondSharedElapsed(sharedIdx);
             float sharedCpu = pool.GetSharedCpu(sharedIdx);
             float sharedLastSecondCpu = pool.GetLastSecondSharedCpu(sharedIdx);
+            float sharedNeedyWindowCpu = pool.NeedyCpuWindowSeconds == 1
+                ? sharedLastSecondCpu
+                : pool.GetSharedCpuForLastSeconds(sharedIdx, pool.NeedyCpuWindowSeconds);
             poolConsumption->Elapsed += sharedElapsed;
             poolConsumption->LastSecondElapsed += sharedLastSecondElapsed;
             poolConsumption->Cpu += sharedCpu;
             poolConsumption->LastSecondCpu += sharedLastSecondCpu;
+            poolConsumption->NeedyWindowCpu += sharedNeedyWindowCpu;
             LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), -1 - sharedIdx, sharedElapsed, sharedCpu, sharedLastSecondElapsed, sharedLastSecondCpu);
         }
     }
@@ -110,8 +120,11 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             "cpu:", PoolConsumption[poolIdx].Cpu,
             "last second elapsed:", PoolConsumption[poolIdx].LastSecondElapsed,
             "last second cpu:", PoolConsumption[poolIdx].LastSecondCpu,
+            "needy cpu window seconds:", pool.NeedyCpuWindowSeconds,
+            "needy window cpu:", PoolConsumption[poolIdx].NeedyWindowCpu,
             "full thread elapsed:", PoolFullThreadConsumption[poolIdx].Elapsed,
             "full thread cpu:", PoolFullThreadConsumption[poolIdx].Cpu,
+            "needy window full thread cpu:", PoolFullThreadConsumption[poolIdx].NeedyWindowCpu,
             "last second full thread elapsed:", PoolFullThreadConsumption[poolIdx].LastSecondElapsed,
             "last second full thread cpu:", PoolFullThreadConsumption[poolIdx].LastSecondCpu,
             "foreign elapsed:", PoolForeignConsumption[poolIdx].Elapsed,
@@ -126,10 +139,12 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
         bool hasSharedThread = sharedInfo.OwnedThreads[poolIdx] != -1;
         float expectedThreadCount = pool.GetFullThreadCount() + (hasSharedThread ? 1 : 0) + 0.5;
-        bool isMoreThanExpected = (PoolConsumption[poolIdx].LastSecondCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].LastSecondCpu >= currentFullThreadCount - 1);
+        bool isMoreThanExpected = (PoolConsumption[poolIdx].NeedyWindowCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].NeedyWindowCpu >= currentFullThreadCount - 1);
+        bool isMoreThanExpectedLastSecond = (PoolConsumption[poolIdx].LastSecondCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].LastSecondCpu >= currentFullThreadCount - 1);
+        bool hasCurrentCpuDemand = (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount || isMoreThanExpectedLastSecond);
         bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions);
         if (isNeedy && !pool.IsSharedOnly) {
-            isNeedy = (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount || isMoreThanExpected);
+            isNeedy = (PoolConsumption[poolIdx].NeedyWindowCpu >= currentThreadCount || isMoreThanExpected) && hasCurrentCpuDemand;
         } else if (pool.IsSharedOnly) {
             isNeedy = sharedInfo.FreeCpu < 0.1f;
         }
@@ -161,7 +176,10 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             pool.MaxFullThreadCount,
             isStarved,
             isNeedy,
-            isHoggish
+            isHoggish,
+            pool.NeedyCpuWindowSeconds,
+            PoolConsumption[poolIdx].NeedyWindowCpu,
+            PoolFullThreadConsumption[poolIdx].NeedyWindowCpu
         );
     }
 

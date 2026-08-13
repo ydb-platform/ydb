@@ -1412,35 +1412,35 @@ void TQuoterResources::FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersRe
 
 void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id) {
     if (prevId) {
-        auto [prevIt, prevItEnd] = PipeServerIdToSession.equal_range(prevId);
-        for (; prevIt != prevItEnd; ++prevIt) {
-            if (prevIt->second.second == sessionId.second) { // compare resource id
-                PipeServerIdToSession.erase(prevIt);
-                break;
+        auto outerIt = PipeServerIdToSession.find(prevId);
+        if (outerIt != PipeServerIdToSession.end()) {
+            outerIt->second.erase(sessionId);
+            if (outerIt->second.empty()) {
+                PipeServerIdToSession.erase(outerIt);
             }
         }
     }
     if (id) {
-        PipeServerIdToSession.emplace(id, sessionId);
+        PipeServerIdToSession[id].insert(sessionId);
     }
 }
 
 void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) {
-    auto [pipeToSessionItBegin, pipeToSessionItEnd] = PipeServerIdToSession.equal_range(pipeServerId);
-    for (auto pipeToSessionIt = pipeToSessionItBegin; pipeToSessionIt != pipeToSessionItEnd; ++pipeToSessionIt) {
-        const TQuoterSessionId sessionId = pipeToSessionIt->second;
+    auto outerIt = PipeServerIdToSession.find(pipeServerId);
+    if (outerIt == PipeServerIdToSession.end()) {
+        return;
+    }
+    for (const TQuoterSessionId& sessionId : outerIt->second) {
         const NActors::TActorId sessionClientId = sessionId.first;
 
-        {
-            const auto sessionIter = Sessions.find(sessionId);
-            Y_ABORT_UNLESS(sessionIter != Sessions.end());
-            TQuoterSession* session = sessionIter->second.Get();
-            session->GetResource()->OnSessionDisconnected(sessionClientId);
-            session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconected.");
-            Sessions.erase(sessionIter);
-        }
+        const auto sessionIter = Sessions.find(sessionId);
+        Y_ABORT_UNLESS(sessionIter != Sessions.end());
+        TQuoterSession* session = sessionIter->second.Get();
+        session->GetResource()->OnSessionDisconnected(sessionClientId);
+        session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconnected.");
+        Sessions.erase(sessionIter);
     }
-    PipeServerIdToSession.erase(pipeToSessionItBegin, pipeToSessionItEnd);
+    PipeServerIdToSession.erase(outerIt);
 }
 
 void TQuoterResources::SetQuoterPath(const TString& quoterPath) {

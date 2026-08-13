@@ -190,6 +190,37 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
     }
 
+    Y_UNIT_TEST(ErrorCountGetterReflectsConsecutiveErrors)
+    {
+        THostStat stat;
+        TInstant now = TInstant::Now();
+
+        // Initially there are no consecutive errors.
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveErrorCount());
+
+        // Each error increments the consecutive error count.
+        stat.OnRequest(EOperation::WriteToPBuffer);
+        stat.OnError(now, EOperation::WriteToPBuffer);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveErrorCount());
+
+        stat.OnRequest(EOperation::WriteToPBuffer);
+        stat.OnError(now, EOperation::WriteToPBuffer);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveErrorCount());
+
+        // A success resets the consecutive error count back to zero.
+        stat.OnRequest(EOperation::WriteToPBuffer);
+        stat.OnSuccess(now, TDuration(), EOperation::WriteToPBuffer);
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveErrorCount());
+
+        // OnCancelled does not affect the consecutive error count.
+        stat.OnRequest(EOperation::WriteToPBuffer);
+        stat.OnError(now, EOperation::WriteToPBuffer);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveErrorCount());
+        stat.OnRequest(EOperation::WriteToPBuffer);
+        stat.OnCancelled(now, EOperation::WriteToPBuffer);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveErrorCount());
+    }
+
     Y_UNIT_TEST(SuccessCountInitiallyZero)
     {
         THostStat stat;

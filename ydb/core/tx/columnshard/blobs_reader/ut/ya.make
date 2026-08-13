@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     ut_retry.cpp
+    ut_glue.cpp
 )
 
 PEERDIR(

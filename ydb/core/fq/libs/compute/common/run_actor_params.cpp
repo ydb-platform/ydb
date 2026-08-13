@@ -28,7 +28,7 @@ TRunActorParams::TRunActorParams(
     const int64_t previousQueryRevision,
     TVector<FederatedQuery::Connection> connections,
     TVector<FederatedQuery::Binding> bindings,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     THashMap<TString, TString> accountIdSignatures,
     FederatedQuery::QueryContent::QueryType queryType,
     FederatedQuery::QueryContent::QuerySyntax querySyntax,

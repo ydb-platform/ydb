@@ -217,6 +217,7 @@ class TDataShard
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
+    class TTxS3DirectWriteFinish;
     class TTxObjectStorageListing;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -325,6 +326,7 @@ class TDataShard
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
+    class TTxPersistSubDomainTablesMetricsLevel;
 
     class TTxRequestChangeRecords;
     class TTxRemoveChangeRecords;
@@ -594,8 +596,6 @@ class TDataShard
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
 
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
-
-        struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
 
@@ -1226,6 +1226,8 @@ class TDataShard
 
             Sys_VacuumCompletedGeneration = 47,
 
+            Sys_SubDomainTablesMetricsLevel = 48,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1239,6 +1241,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
         static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
+        static_assert(ESysTableKeys::Sys_SubDomainTablesMetricsLevel == 48, "Sys_SubDomainTablesMetricsLevel changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -1387,6 +1390,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1418,9 +1424,6 @@ class TDataShard
     void Handle(TEvDataShard::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
-    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -1486,6 +1489,10 @@ class TDataShard
 
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
+
+    // Reports the identity of this shard's primary user table to the node's tablet counters
+    // aggregator, so detailed metrics can attribute the executor's counter deltas to a table.
+    void SendTableInfoToCountersAggregator(const TActorContext &ctx);
 
     TDuration GetTxCompleteLag()
     {
@@ -1765,13 +1772,19 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
-        if (locksDb) {
-            SysLocks.RemoveSchema(tableId, locksDb);
-        }
+    void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        SetUserTable(tableId, tableInfo);
+    }
+
+    void ReplaceUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb& locksDb) {
+        SysLocks.RemoveSchema(tableId, &locksDb);
+        SetUserTable(tableId, tableInfo);
     }
 
     bool IsUserTable(const TTableId& tableId) const {
@@ -2000,6 +2013,19 @@ public:
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetSubDomainTablesMetricsLevel() const
+    {
+        return SubDomainTablesMetricsLevel;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetEffectiveMetricsLevel(const TUserTable& table) const
+    {
+        const auto tableLevel = table.GetDetailedMetricsLevel();
+        return tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+            ? tableLevel
+            : SubDomainTablesMetricsLevel;
     }
 
     ui64 GetExecutorStep() const
@@ -2679,20 +2705,28 @@ private:
 
     class TProposeQueue : private TTxProgressIdempotentScalarQueue<TEvPrivate::TEvDelayedProposeTransaction> {
     public:
-        struct TItem : public TMoveOnly {
+        // TItem is heap-allocated and owned by TProposeQueue (via TIntrusiveList).
+        // Using an intrusive list allows O(1) removal from an arbitrary position,
+        // which is needed to physically remove cancelled items immediately in Cancel().
+        struct TItem : public TIntrusiveListItem<TItem> {
             TItem(TAutoPtr<IEventHandle>&& event, TInstant receivedAt, ui64 tieBreakerIndex)
                 : Event(std::move(event))
                 , ReceivedAt(receivedAt)
                 , TieBreakerIndex(tieBreakerIndex)
-                , Next(nullptr)
-                , Cancelled(false)
+                , NextForTxId(nullptr)
             { }
+
+            TItem(const TItem&) = delete;
+            TItem& operator=(const TItem&) = delete;
+            TItem(TItem&&) = delete;
+            TItem& operator=(TItem&&) = delete;
 
             TAutoPtr<IEventHandle> Event;
             TInstant ReceivedAt;
             ui64 TieBreakerIndex;
-            TItem* Next;
-            bool Cancelled;
+            // Linked list of items with the same txId within Items.
+            // N.B. there should almost always be exactly one propose per txId.
+            TItem* NextForTxId;
         };
 
         struct TItemList {
@@ -2700,14 +2734,23 @@ private:
             TItem* Last = nullptr;
         };
 
+        ~TProposeQueue() {
+            // Items are heap-allocated; destroy all of them.
+            while (!Items.Empty()) {
+                delete Items.PopFront();
+            }
+        }
+
         void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
-            TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
+            TItem* item = new TItem(std::move(event), receivedAt, tieBreakerIndex);
+            Items.PushBack(item);
+            ++Count;
 
             const ui64 txId = NEvWrite::TConvertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
-                links.Last->Next = item;
+                links.Last->NextForTxId = item;
             } else {
                 links.First = item;
             }
@@ -2716,61 +2759,79 @@ private:
             Progress(ctx);
         }
 
-        TItem Dequeue() {
-            TItem* first = &Items.front();
+        // Removes the front item from the queue and transfers ownership to the caller.
+        THolder<TItem> Dequeue() {
+            Y_ENSURE(!Items.Empty());
+            TItem* first = Items.Front();
             const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ENSURE(it != TxIds.end() && it->second.First == first,
-                "Consistency check: proposed txId " << txId << " in deque, but not in hashmap");
+                "Consistency check: proposed txId " << txId << " in list, but not in hashmap");
 
             // N.B. there should almost always be exactly one propose per txId
-            it->second.First = first->Next;
+            it->second.First = first->NextForTxId;
             if (Y_LIKELY(it->second.First == nullptr)) {
                 TxIds.erase(it);
             } else {
-                first->Next = nullptr;
+                first->NextForTxId = nullptr;
             }
 
-            TItem item = std::move(*first);
-            Items.pop_front();
-            return item;
+            first->Unlink();
+            --Count;
+            return THolder<TItem>(first);
         }
 
-        void Cancel(ui64 txId) {
+        // Physically removes all items with the given txId from the queue and calls
+        // onCancelled(item) for each one before deleting it.  Items are removed in
+        // O(1) per item (intrusive list unlink), so the total cost is O(k) where k
+        // is the number of items with this txId (almost always 1).
+        // The HasInFly slot is intentionally NOT released here: if the cancelled item
+        // was at the head of the queue the already-scheduled TEvDelayedProposeTransaction
+        // will arrive and find either the next non-cancelled item or an empty queue.
+        template <typename TOnCancelled>
+        void Cancel(ui64 txId, TOnCancelled&& onCancelled) {
             auto it = TxIds.find(txId);
             if (it != TxIds.end()) {
-                auto* item = it->second.First;
+                TItem* item = it->second.First;
                 while (item) {
-                    item->Cancelled = true;
-                    item = item->Next;
+                    TItem* next = item->NextForTxId;
+                    item->Unlink();
+                    --Count;
+                    THolder<TItem> holder(item);
+                    onCancelled(*holder);  // now Size() is accurate
+                    item = next;
                 }
+                TxIds.erase(it);
             }
         }
 
         void Ack(const TActorContext& ctx) {
             Reset(ctx);
-            if (Items) {
+            if (!Items.Empty()) {
                 Progress(ctx);
             }
         }
 
         explicit operator bool() const {
-            return bool(Items);
+            return !Items.Empty();
         }
 
         size_t Size() const {
-            return Items.size();
+            return Count;
         }
 
     private:
-        TDeque<TItem> Items;
+        TIntrusiveList<TItem> Items;
         THashMap<ui64, TItemList> TxIds;
+        size_t Count = 0;
     };
 
     TProposeQueue ProposeQueue;
     TVector<THolder<IEventHandle>> DelayedProposeQueue;
     TAsyncEvent DelayedProposeCoroutines;
+
+    void SendCancelledProposeReply(const TProposeQueue::TItem& item, const TActorContext& ctx);
 
     TActorId PersistentPipeCache;
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
@@ -2797,11 +2858,16 @@ private:
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel SubDomainTablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
+    // Non-persistent flag that is set just after we waited for all pending transactions to finish
+    // and are starting the split.
+    bool SplitStarted = false;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
@@ -3184,9 +3250,6 @@ private:
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 
-    ui32 StatisticsScanTableId = 0;
-    ui64 StatisticsScanId = 0;
-
     ui64 CurrentVacuumGeneration = 0;
 
     // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
@@ -3335,6 +3398,9 @@ protected:
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteBegin, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteFinish, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteAbort, Handle);
             HFuncTraced(TEvDataShard::TEvObjectStorageListingRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
@@ -3452,8 +3518,6 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
-            HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:

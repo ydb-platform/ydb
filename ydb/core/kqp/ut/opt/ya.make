@@ -8,6 +8,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_agg_ut.cpp
+    kqp_concurrent_results_ut.cpp
     kqp_extract_predicate_unpack_ut.cpp
     kqp_hash_combine_ut.cpp
     kqp_kv_ut.cpp

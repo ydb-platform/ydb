@@ -986,6 +986,8 @@ struct TEvPQ {
         TVector<NKikimrPQ::TPartitionOperation> Operations;
         TActorId SupportivePartitionActor;
         bool ForcePredicateFalse = false;
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+            NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
 
         NWilson::TSpan Span;
 
@@ -1154,9 +1156,9 @@ struct TEvPQ {
             , IsOverhead(true)
         {}
 
-        ui64 ConsumedBytes;
-        ui64 ConsumedMessages;
-        ui64 RequestCookie;
+        ui64 ConsumedBytes = 0;
+        ui64 ConsumedMessages = 0;
+        ui64 RequestCookie = 0;
         TString Consumer;
         bool IsOverhead = false;
     };
@@ -1259,12 +1261,17 @@ struct TEvPQ {
         }
 
         bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
+
+        bool GetDiscard() const { return Discard; }
+        void SetDiscard(bool value) { Discard = value; }
 
         TActorId OriginalPartition;
         NWilson::TSpan Span;
 
     private:
         bool SkipSrcIdInfo = false;
+        bool Discard = false;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1293,6 +1300,7 @@ struct TEvPQ {
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
         THolder<NPQ::TMultiBucketCounter> InputLags;
+        bool Discard = false;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {

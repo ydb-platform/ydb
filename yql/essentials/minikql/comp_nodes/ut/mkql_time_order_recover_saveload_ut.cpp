@@ -12,8 +12,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
@@ -25,7 +24,7 @@ TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
 }
 
 struct TSetup {
-    TSetup(TScopedAlloc& alloc)
+    explicit TSetup(TScopedAlloc& alloc)
         : Alloc(alloc)
     {
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -72,18 +71,18 @@ THolder<IComputationGraph> BuildGraph(TSetup& setup, const TTestData& input) {
         NTest::TStructMember<"time", i64>>>(pgmBuilder);
 
     TVector<TRuntimeNode> items;
-    for (size_t i = 0; i < input.size(); ++i)
+    for (const auto& i : input)
     {
         auto item = pgmBuilder.NewStruct(structType, {
-                                                         {"key", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<0>(input[i])))},
-                                                         {"time", NTest::ConvertValueToLiteralNode(pgmBuilder, i64(std::get<1>(input[i])))},
-                                                         {"sum", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<2>(input[i])))},
+                                                         {"key", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<0>(i)))},
+                                                         {"time", NTest::ConvertValueToLiteralNode(pgmBuilder, i64(std::get<1>(i)))},
+                                                         {"sum", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<2>(i)))},
                                                      });
         items.push_back(std::move(item));
     }
 
     const auto list = pgmBuilder.NewList(structType, std::move(items));
-    auto inputFlow = pgmBuilder.ToFlow(list);
+    auto inputFlow = pgmBuilder.ToFlow(list, {});
 
     i64 delay = -10;
     i64 ahead = 30;
@@ -168,5 +167,4 @@ Y_UNIT_TEST(Test1) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLTimeOrderRecoverSaveLoadTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

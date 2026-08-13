@@ -359,6 +359,13 @@
       "min":44,
       "pattern":"^arn:(aws[a-zA-Z0-9-]*):acm:.+:(\\d{12}):certificate/.+$"
     },
+    "AllowAWSToRetainLogs":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "AuthorizationConfiguration":{
       "type":"structure",
       "members":{
@@ -695,6 +702,10 @@
           "shape":"ResourceNameString",
           "documentation":"<p>The name of the security configuration.</p>"
         },
+        "containerProvider":{
+          "shape":"ContainerProvider",
+          "documentation":"<p>The container provider associated with the security configuration.</p>"
+        },
         "securityConfigurationData":{
           "shape":"SecurityConfigurationData",
           "documentation":"<p>Security configuration input for the request.</p>"
@@ -1005,6 +1016,10 @@
         "namespace":{
           "shape":"KubernetesNamespace",
           "documentation":"<p>The namespaces of the Amazon EKS cluster.</p>"
+        },
+        "nodeLabel":{
+          "shape":"ResourceNameString",
+          "documentation":"<p>The nodeLabel of the nodes where the resources of this virtual cluster can get scheduled. It requires relevant scaling and policy engine addons.</p>"
         }
       },
       "documentation":"<p>The information about the Amazon EKS cluster.</p>"
@@ -1788,6 +1803,20 @@
       "min":1,
       "pattern":"[\\.\\-_/#A-Za-z0-9]+"
     },
+    "ManagedLogs":{
+      "type":"structure",
+      "members":{
+        "allowAWSToRetainLogs":{
+          "shape":"AllowAWSToRetainLogs",
+          "documentation":"<p>Determines whether Amazon Web Services can retain logs.</p>"
+        },
+        "encryptionKeyArn":{
+          "shape":"KmsKeyArn",
+          "documentation":"<p>The Amazon resource name (ARN) of the encryption key for logs.</p>"
+        }
+      },
+      "documentation":"<p>The entity that provides configuration control over managed logs.</p>"
+    },
     "MaxFilesToKeep":{
       "type":"integer",
       "max":50,
@@ -1796,6 +1825,10 @@
     "MonitoringConfiguration":{
       "type":"structure",
       "members":{
+        "managedLogs":{
+          "shape":"ManagedLogs",
+          "documentation":"<p>The entity that controls configuration for managed logs.</p>"
+        },
         "persistentAppUI":{
           "shape":"PersistentAppUI",
           "documentation":"<p>Monitoring configurations for the persistent application UI. </p>"
@@ -2280,8 +2313,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TemplateParameter":{
       "type":"string",
@@ -2357,8 +2389,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UriString":{
       "type":"string",

@@ -39,7 +39,7 @@ def get_variables(unit):
 
 
 @macro
-def PROCESS_DOCS(unit: Unit, *args: tuple[str, ...]):
+def PROCESS_DOCS(unit: Unit, *args: str):
     if unit.enabled('_DOCS_USE_PLANTUML'):
         unit.on_docs_yfm_use_plantuml([])
 
@@ -52,7 +52,7 @@ def PROCESS_DOCS(unit: Unit, *args: tuple[str, ...]):
 
 
 @macro
-def _APPEND_DOCS_DIR_FLAG(unit: Unit, *args: tuple[str, ...]):
+def _APPEND_DOCS_DIR_FLAG(unit: Unit, *args: str):
     assert len(args) == 1
     docs_dir = args[0]
 

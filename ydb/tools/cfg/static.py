@@ -450,10 +450,6 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("scan_conveyor_config")
 
     @property
-    def local_pg_wire_config(self):
-        return self.__cluster_details.get_service("local_pg_wire_config")
-
-    @property
     def aws_compatibility_config(self):
         return self.__cluster_details.get_service("aws_compatibility_config")
 
@@ -696,11 +692,17 @@ class StaticConfigGenerator(object):
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
                     for drive in host_config['drive']:
+                        pdisk_config = {}
                         if 'expected_slot_count' in drive:
                             # inside config.yaml we should use pdisk_config section for expected_slot_count
-                            drive['pdisk_config'] = {
-                                'expected_slot_count': drive.pop('expected_slot_count')
-                            }
+                            pdisk_config['expected_slot_count'] = drive.pop('expected_slot_count')
+                        if 'expected_slot_size' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_size/max_slots
+                            pdisk_config['expected_slot_size'] = drive.pop('expected_slot_size')
+                        if 'max_slots' in drive:
+                            pdisk_config['max_slots'] = drive.pop('max_slots')
+                        if pdisk_config:
+                            drive.setdefault('pdisk_config', {}).update(pdisk_config)
 
                         # support type-safe `pdisk_config` directly in `host_configs`, for example:
                         # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
@@ -801,9 +803,6 @@ class StaticConfigGenerator(object):
 
         if self.scan_conveyor_config:
             normalized_config["scan_conveyor_config"] = self.scan_conveyor_config
-
-        if self.local_pg_wire_config:
-            normalized_config["local_pg_wire_config"] = self.local_pg_wire_config
 
         if self.aws_compatibility_config:
             normalized_config["aws_compatibility_config"] = self.aws_compatibility_config
@@ -1011,7 +1010,14 @@ class StaticConfigGenerator(object):
                             vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
-                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_count'])
+                                if 'expected_slot_size' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_size'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_size'])
+                                if 'max_slots' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['max_slots'] = int(
+                                        vdisk_location['pdisk_config']['max_slots'])
 
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
@@ -1299,6 +1305,12 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
 
                 # Full support of `pdisk_config`, not just copying selected fields manually
                 # from other non-typed locations
@@ -1379,6 +1391,12 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),
@@ -2054,7 +2072,10 @@ class StaticConfigGenerator(object):
     @property
     def dynamic_server_common_args(self):
         if self.__cluster_details.use_new_style_kikimr_cfg:
-            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file)
+            domain = ""
+            if len(self.__cluster_details.domains) == 1:
+                domain = self.__cluster_details.domains[0].domain_name
+            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain)
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

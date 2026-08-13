@@ -56,6 +56,13 @@ void THostRoles::SetRole(THostIndex host, EHostRole assignment)
     Assignments[host] = assignment;
 }
 
+void THostRoles::AppendRole(EHostRole assignment)
+{
+    Y_ABORT_UNLESS(Count < MaxHostCount);
+
+    Assignments[Count++] = assignment;
+}
+
 THostMask THostRoles::GetPrimary() const
 {
     THostMask result;

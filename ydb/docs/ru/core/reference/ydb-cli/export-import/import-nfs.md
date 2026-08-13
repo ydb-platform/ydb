@@ -41,6 +41,8 @@
 
 {% include [import-additional-params.md](_includes/import-additional-params.md) %}
 
+{% include [import-resource-broker-note.md](_includes/import-resource-broker-note.md) %}
+
 ## Выполнение загрузки {#exec}
 
 {% include [server-import-workflow.md](_includes/server-import-workflow.md) %}

@@ -536,7 +536,7 @@
         {"shape":"InternalFailureException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Transcribes the audio from a customer service call and applies any additional Request Parameters you choose to include in your request.</p> <p>In addition to many standard transcription features, Call Analytics provides you with call characteristics, call summarization, speaker sentiment, and optional redaction of your text transcript and your audio file. You can also apply custom categories to flag specified conditions. To learn more about these features and insights, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/call-analytics.html\">Analyzing call center audio with Call Analytics</a>.</p> <p>If you want to apply categories to your Call Analytics job, you must create them before submitting your job request. Categories cannot be retroactively applied to a job. To create a new category, use the operation. To learn more about Call Analytics categories, see <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tca-categories-batch.html\">Creating categories for post-call transcriptions</a> and <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tca-categories-stream.html\">Creating categories for real-time transcriptions</a>.</p> <p>To make a <code>StartCallAnalyticsJob</code> request, you must first upload your media file into an Amazon S3 bucket; you can then specify the Amazon S3 location of the file using the <code>Media</code> parameter.</p> <p>Note that job queuing is enabled by default for Call Analytics jobs.</p> <p>You must include the following parameters in your <code>StartCallAnalyticsJob</code> request:</p> <ul> <li> <p> <code>region</code>: The Amazon Web Services Region where you are making your request. For a list of Amazon Web Services Regions supported with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/general/latest/gr/transcribe.html\">Amazon Transcribe endpoints and quotas</a>.</p> </li> <li> <p> <code>CallAnalyticsJobName</code>: A custom name that you create for your transcription job that's unique within your Amazon Web Services account.</p> </li> <li> <p> <code>DataAccessRoleArn</code>: The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files.</p> </li> <li> <p> <code>Media</code> (<code>MediaFileUri</code> or <code>RedactedMediaFileUri</code>): The Amazon S3 location of your media file.</p> </li> </ul> <note> <p>With Call Analytics, you can redact the audio contained in your media file by including <code>RedactedMediaFileUri</code>, instead of <code>MediaFileUri</code>, to specify the location of your input audio. If you choose to redact your audio, you can find your redacted media at the location specified in the <code>RedactedMediaFileUri</code> field of your response.</p> </note>"
+      "documentation":"<p>Transcribes the audio from a customer service call and applies any additional Request Parameters you choose to include in your request.</p> <p>In addition to many standard transcription features, Call Analytics provides you with call characteristics, call summarization, speaker sentiment, and optional redaction of your text transcript and your audio file. You can also apply custom categories to flag specified conditions. To learn more about these features and insights, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/call-analytics.html\">Analyzing call center audio with Call Analytics</a>.</p> <p>If you want to apply categories to your Call Analytics job, you must create them before submitting your job request. Categories cannot be retroactively applied to a job. To create a new category, use the operation. To learn more about Call Analytics categories, see <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tca-categories-batch.html\">Creating categories for post-call transcriptions</a> and <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tca-categories-stream.html\">Creating categories for real-time transcriptions</a>.</p> <p>To make a <code>StartCallAnalyticsJob</code> request, you must first upload your media file into an Amazon S3 bucket; you can then specify the Amazon S3 location of the file using the <code>Media</code> parameter.</p> <p>Job queuing is available for Call Analytics jobs. If you pass a <code>DataAccessRoleArn</code> in your request and you exceed your Concurrent Job Limit, your job will automatically be added to a queue to be processed once your concurrent job count is below the limit.</p> <p>You must include the following parameters in your <code>StartCallAnalyticsJob</code> request:</p> <ul> <li> <p> <code>region</code>: The Amazon Web Services Region where you are making your request. For a list of Amazon Web Services Regions supported with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/general/latest/gr/transcribe.html\">Amazon Transcribe endpoints and quotas</a>.</p> </li> <li> <p> <code>CallAnalyticsJobName</code>: A custom name that you create for your transcription job that's unique within your Amazon Web Services account.</p> </li> <li> <p> <code>Media</code> (<code>MediaFileUri</code> or <code>RedactedMediaFileUri</code>): The Amazon S3 location of your media file.</p> </li> </ul> <note> <p>With Call Analytics, you can redact the audio contained in your media file by including <code>RedactedMediaFileUri</code>, instead of <code>MediaFileUri</code>, to specify the location of your input audio. If you choose to redact your audio, you can find your redacted media at the location specified in the <code>RedactedMediaFileUri</code> field of your response.</p> </note>"
     },
     "StartMedicalScribeJob":{
       "name":"StartMedicalScribeJob",
@@ -552,7 +552,7 @@
         {"shape":"InternalFailureException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Transcribes patient-clinician conversations and generates clinical notes. </p> <p>Amazon Web Services HealthScribe automatically provides rich conversation transcripts, identifies speaker roles, classifies dialogues, extracts medical terms, and generates preliminary clinical notes. To learn more about these features, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/health-scribe.html\">Amazon Web Services HealthScribe</a>.</p> <p>To make a <code>StartMedicalScribeJob</code> request, you must first upload your media file into an Amazon S3 bucket; you can then specify the Amazon S3 location of the file using the <code>Media</code> parameter.</p> <p>You must include the following parameters in your <code>StartMedicalTranscriptionJob</code> request:</p> <ul> <li> <p> <code>DataAccessRoleArn</code>: The ARN of an IAM role with the these minimum permissions: read permission on input file Amazon S3 bucket specified in <code>Media</code>, write permission on the Amazon S3 bucket specified in <code>OutputBucketName</code>, and full permissions on the KMS key specified in <code>OutputEncryptionKMSKeyId</code> (if set). The role should also allow <code>transcribe.amazonaws.com</code> to assume it. </p> </li> <li> <p> <code>Media</code> (<code>MediaFileUri</code>): The Amazon S3 location of your media file.</p> </li> <li> <p> <code>MedicalScribeJobName</code>: A custom name you create for your MedicalScribe job that is unique within your Amazon Web Services account.</p> </li> <li> <p> <code>OutputBucketName</code>: The Amazon S3 bucket where you want your output files stored.</p> </li> <li> <p> <code>Settings</code>: A <code>MedicalScribeSettings</code> obect that must set exactly one of <code>ShowSpeakerLabels</code> or <code>ChannelIdentification</code> to true. If <code>ShowSpeakerLabels</code> is true, <code>MaxSpeakerLabels</code> must also be set. </p> </li> <li> <p> <code>ChannelDefinitions</code>: A <code>MedicalScribeChannelDefinitions</code> array should be set if and only if the <code>ChannelIdentification</code> value of <code>Settings</code> is set to true. </p> </li> </ul>"
+      "documentation":"<p>Transcribes patient-clinician conversations and generates clinical notes. </p> <p>Amazon Web Services HealthScribe automatically provides rich conversation transcripts, identifies speaker roles, classifies dialogues, extracts medical terms, and generates preliminary clinical notes. To learn more about these features, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/health-scribe.html\">Amazon Web Services HealthScribe</a>.</p> <p>To make a <code>StartMedicalScribeJob</code> request, you must first upload your media file into an Amazon S3 bucket; you can then specify the Amazon S3 location of the file using the <code>Media</code> parameter.</p> <p>You must include the following parameters in your <code>StartMedicalTranscriptionJob</code> request:</p> <ul> <li> <p> <code>DataAccessRoleArn</code>: The ARN of an IAM role with the these minimum permissions: read permission on input file Amazon S3 bucket specified in <code>Media</code>, write permission on the Amazon S3 bucket specified in <code>OutputBucketName</code>, and full permissions on the KMS key specified in <code>OutputEncryptionKMSKeyId</code> (if set). The role should also allow <code>transcribe.amazonaws.com</code> to assume it. </p> </li> <li> <p> <code>Media</code> (<code>MediaFileUri</code>): The Amazon S3 location of your media file.</p> </li> <li> <p> <code>MedicalScribeJobName</code>: A custom name you create for your MedicalScribe job that is unique within your Amazon Web Services account.</p> </li> <li> <p> <code>OutputBucketName</code>: The Amazon S3 bucket where you want your output files stored.</p> </li> <li> <p> <code>Settings</code>: A <code>MedicalScribeSettings</code> object that must set exactly one of <code>ShowSpeakerLabels</code> or <code>ChannelIdentification</code> to true. If <code>ShowSpeakerLabels</code> is true, <code>MaxSpeakerLabels</code> must also be set. </p> </li> <li> <p> <code>ChannelDefinitions</code>: A <code>MedicalScribeChannelDefinitions</code> array should be set if and only if the <code>ChannelIdentification</code> value of <code>Settings</code> is set to true. </p> </li> </ul>"
     },
     "StartMedicalTranscriptionJob":{
       "name":"StartMedicalTranscriptionJob",
@@ -852,7 +852,7 @@
         "ContentRedaction":{"shape":"ContentRedaction"},
         "LanguageOptions":{
           "shape":"LanguageOptions",
-          "documentation":"<p>You can specify two or more language codes that represent the languages you think may be present in your media. Including more than five is not recommended. If you're unsure what languages are present, do not include this parameter.</p> <p>Including language options can improve the accuracy of language identification.</p> <p>For a list of languages supported with Call Analytics, refer to the <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a> table.</p> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>), your media file must be encoded at a sample rate of 16,000 Hz or higher.</p>"
+          "documentation":"<p>You can specify two or more language codes that represent the languages you think may be present in your media. Including more than five is not recommended. If you're unsure what languages are present, do not include this parameter.</p> <p>Including language options can improve the accuracy of language identification.</p> <p>For a list of languages supported with Call Analytics, refer to the <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a> table.</p> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>) in Amazon Web Services GovCloud (US) (US-West, us-gov-west-1), Amazon Web Services GovCloud (US) (US-East, us-gov-east-1), Canada (Calgary) ca-west-1 and Africa (Cape Town) af-south-1, your media file must be encoded at a sample rate of 16,000 Hz or higher.</p>"
         },
         "LanguageIdSettings":{
           "shape":"LanguageIdSettingsMap",
@@ -1009,6 +1009,16 @@
       "type":"integer",
       "max":1,
       "min":0
+    },
+    "ClinicalNoteGenerationSettings":{
+      "type":"structure",
+      "members":{
+        "NoteTemplate":{
+          "shape":"MedicalScribeNoteTemplate",
+          "documentation":"<p>Specify one of the following templates to use for the clinical note summary. The default is <code>HISTORY_AND_PHYSICAL</code>.</p> <ul> <li> <p>HISTORY_AND_PHYSICAL: Provides summaries for key sections of the clinical documentation. Examples of sections include Chief Complaint, History of Present Illness, Review of Systems, Past Medical History, Assessment, and Plan. </p> </li> <li> <p>GIRPP: Provides summaries based on the patients progress toward goals. Examples of sections include Goal, Intervention, Response, Progress, and Plan.</p> </li> <li> <p>BIRP: Focuses on the patient's behavioral patterns and responses. Examples of sections include Behavior, Intervention, Response, and Plan.</p> </li> <li> <p>SIRP: Emphasizes the situational context of therapy. Examples of sections include Situation, Intervention, Response, and Plan.</p> </li> <li> <p>DAP: Provides a simplified format for clinical documentation. Examples of sections include Data, Assessment, and Plan.</p> </li> <li> <p>BEHAVIORAL_SOAP: Behavioral health focused documentation format. Examples of sections include Subjective, Objective, Assessment, and Plan.</p> </li> <li> <p>PHYSICAL_SOAP: Physical health focused documentation format. Examples of sections include Subjective, Objective, Assessment, and Plan.</p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>The output configuration for clinical note generation.</p>"
     },
     "ConflictException":{
       "type":"structure",
@@ -1308,8 +1318,7 @@
     },
     "DeleteCallAnalyticsCategoryResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteCallAnalyticsJobRequest":{
       "type":"structure",
@@ -1323,8 +1332,7 @@
     },
     "DeleteCallAnalyticsJobResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLanguageModelRequest":{
       "type":"structure",
@@ -1769,6 +1777,7 @@
         "cs-CZ",
         "cy-WL",
         "el-GR",
+        "et-EE",
         "et-ET",
         "eu-ES",
         "fi-FI",
@@ -1818,6 +1827,7 @@
         "uk-UA",
         "uz-UZ",
         "wo-SN",
+        "zh-HK",
         "zu-ZA"
       ]
     },
@@ -2345,6 +2355,16 @@
       "max":1,
       "min":0
     },
+    "MedicalScribeContext":{
+      "type":"structure",
+      "members":{
+        "PatientContext":{
+          "shape":"MedicalScribePatientContext",
+          "documentation":"<p>Contains patient-specific information.</p>"
+        }
+      },
+      "documentation":"<p>The <code>MedicalScribeContext</code> object that contains contextual information used to generate customized clinical notes.</p>"
+    },
     "MedicalScribeJob":{
       "type":"structure",
       "members":{
@@ -2393,9 +2413,13 @@
           "shape":"MedicalScribeChannelDefinitions",
           "documentation":"<p>Makes it possible to specify which speaker is on which channel. For example, if the clinician is the first participant to speak, you would set <code>ChannelId</code> of the first <code>ChannelDefinition</code> in the list to <code>0</code> (to indicate the first channel) and <code>ParticipantRole</code> to <code>CLINICIAN</code> (to indicate that it's the clinician speaking). Then you would set the <code>ChannelId</code> of the second <code>ChannelDefinition</code> in the list to <code>1</code> (to indicate the second channel) and <code>ParticipantRole</code> to <code>PATIENT</code> (to indicate that it's the patient speaking). </p>"
         },
+        "MedicalScribeContextProvided":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the <code>MedicalScribeContext</code> object was provided when the Medical Scribe job was started.</p>"
+        },
         "Tags":{
           "shape":"TagList",
-          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to the Medica Scribe job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
+          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to the Medical Scribe job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
         }
       },
       "documentation":"<p>Provides detailed information about a Medical Scribe job.</p> <p>To view the status of the specified Medical Scribe job, check the <code>MedicalScribeJobStatus</code> field. If the status is <code>COMPLETED</code>, the job is finished and you can find the results at the locations specified in <code>MedicalScribeOutput</code>. If the status is <code>FAILED</code>, <code>FailureReason</code> provides details on why your Medical Scribe job failed.</p>"
@@ -2451,6 +2475,18 @@
       "type":"string",
       "enum":["en-US"]
     },
+    "MedicalScribeNoteTemplate":{
+      "type":"string",
+      "enum":[
+        "HISTORY_AND_PHYSICAL",
+        "GIRPP",
+        "BIRP",
+        "SIRP",
+        "DAP",
+        "BEHAVIORAL_SOAP",
+        "PHYSICAL_SOAP"
+      ]
+    },
     "MedicalScribeOutput":{
       "type":"structure",
       "required":[
@@ -2475,6 +2511,16 @@
         "PATIENT",
         "CLINICIAN"
       ]
+    },
+    "MedicalScribePatientContext":{
+      "type":"structure",
+      "members":{
+        "Pronouns":{
+          "shape":"Pronouns",
+          "documentation":"<p>The patient's preferred pronouns that the user wants to provide as a context for clinical note generation.</p>"
+        }
+      },
+      "documentation":"<p>Contains patient-specific information used to customize the clinical note generation.</p>"
     },
     "MedicalScribeSettings":{
       "type":"structure",
@@ -2502,6 +2548,10 @@
         "VocabularyFilterMethod":{
           "shape":"VocabularyFilterMethod",
           "documentation":"<p>Specify how you want your custom vocabulary filter applied to your transcript.</p> <p>To replace words with <code>***</code>, choose <code>mask</code>.</p> <p>To delete words, choose <code>remove</code>.</p> <p>To flag words without changing them, choose <code>tag</code>.</p>"
+        },
+        "ClinicalNoteGenerationSettings":{
+          "shape":"ClinicalNoteGenerationSettings",
+          "documentation":"<p>Specify settings for the clinical note generation.</p>"
         }
       },
       "documentation":"<p>Makes it possible to control how your Medical Scribe job is processed using a <code>MedicalScribeSettings</code> object. Specify <code>ChannelIdentification</code> if <code>ChannelDefinitions</code> are set. Enabled <code>ShowSpeakerLabels</code> if <code>ChannelIdentification</code> and <code>ChannelDefinitions</code> are not set. One and only one of <code>ChannelIdentification</code> and <code>ShowSpeakerLabels</code> must be set. If <code>ShowSpeakerLabels</code> is set, <code>MaxSpeakerLabels</code> must also be set. Use <code>Settings</code> to specify a vocabulary or vocabulary filter or both using <code>VocabularyName</code>, <code>VocabularyFilterName</code>. <code>VocabularyFilterMethod</code> must be specified if <code>VocabularyFilterName</code> is set. </p>"
@@ -2799,6 +2849,15 @@
       "max":11,
       "min":0
     },
+    "Pronouns":{
+      "type":"string",
+      "enum":[
+        "HE_HIM",
+        "SHE_HER",
+        "THEY_THEM"
+      ],
+      "sensitive":true
+    },
     "RedactionOutput":{
       "type":"string",
       "enum":[
@@ -2966,7 +3025,7 @@
         },
         "OutputEncryptionKMSKeyId":{
           "shape":"KMSKeyId",
-          "documentation":"<p>The KMS key you want to use to encrypt your Call Analytics output.</p> <p>If using a key located in the <b>current</b> Amazon Web Services account, you can specify your KMS key in one of four ways:</p> <ol> <li> <p>Use the KMS key ID itself. For example, <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use an alias for the KMS key ID. For example, <code>alias/ExampleAlias</code>.</p> </li> <li> <p>Use the Amazon Resource Name (ARN) for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If using a key located in a <b>different</b> Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways:</p> <ol> <li> <p>Use the ARN for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>If you specify a KMS key to encrypt your output, you must also specify an output location using the <code>OutputLocation</code> parameter.</p> <p>Note that the role making the request must have permission to use the specified KMS key.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of a KMS key that you want to use to encrypt your Call Analytics output.</p> <p>KMS key ARNs have the format <code>arn:partition:kms:region:account:key/key-id</code>. For example: <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id-key-ARN\"> KMS key ARNs</a>.</p> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>Note that the role making the request and the role specified in the <code>DataAccessRoleArn</code> request parameter (if present) must have permission to use the specified KMS key.</p>"
         },
         "DataAccessRoleArn":{
           "shape":"DataAccessRoleArn",
@@ -3016,7 +3075,7 @@
         },
         "OutputEncryptionKMSKeyId":{
           "shape":"KMSKeyId",
-          "documentation":"<p>The KMS key you want to use to encrypt your Medical Scribe output.</p> <p>If using a key located in the <b>current</b> Amazon Web Services account, you can specify your KMS key in one of four ways:</p> <ol> <li> <p>Use the KMS key ID itself. For example, <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use an alias for the KMS key ID. For example, <code>alias/ExampleAlias</code>.</p> </li> <li> <p>Use the Amazon Resource Name (ARN) for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If using a key located in a <b>different</b> Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways:</p> <ol> <li> <p>Use the ARN for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>Note that the role specified in the <code>DataAccessRoleArn</code> request parameter must have permission to use the specified KMS key.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of a KMS key that you want to use to encrypt your Medical Scribe output.</p> <p>KMS key ARNs have the format <code>arn:partition:kms:region:account:key/key-id</code>. For example: <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id-key-ARN\"> KMS key ARNs</a>.</p> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>Note that the role making the request and the role specified in the <code>DataAccessRoleArn</code> request parameter (if present) must have permission to use the specified KMS key.</p>"
         },
         "KMSEncryptionContext":{
           "shape":"KMSEncryptionContextMap",
@@ -3036,7 +3095,11 @@
         },
         "Tags":{
           "shape":"TagList",
-          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to the Medica Scribe job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
+          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to the Medical Scribe job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
+        },
+        "MedicalScribeContext":{
+          "shape":"MedicalScribeContext",
+          "documentation":"<p>The <code>MedicalScribeContext</code> object that contains contextual information which is used during clinical note generation to add relevant context to the note.</p>"
         }
       }
     },
@@ -3087,7 +3150,7 @@
         },
         "OutputEncryptionKMSKeyId":{
           "shape":"KMSKeyId",
-          "documentation":"<p>The KMS key you want to use to encrypt your medical transcription output.</p> <p>If using a key located in the <b>current</b> Amazon Web Services account, you can specify your KMS key in one of four ways:</p> <ol> <li> <p>Use the KMS key ID itself. For example, <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use an alias for the KMS key ID. For example, <code>alias/ExampleAlias</code>.</p> </li> <li> <p>Use the Amazon Resource Name (ARN) for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If using a key located in a <b>different</b> Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways:</p> <ol> <li> <p>Use the ARN for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>If you specify a KMS key to encrypt your output, you must also specify an output location using the <code>OutputLocation</code> parameter.</p> <p>Note that the role making the request must have permission to use the specified KMS key.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of a KMS key that you want to use to encrypt your medical transcription output.</p> <p>KMS key ARNs have the format <code>arn:partition:kms:region:account:key/key-id</code>. For example: <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id-key-ARN\"> KMS key ARNs</a>.</p> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>Note that the role making the request and the role specified in the <code>DataAccessRoleArn</code> request parameter (if present) must have permission to use the specified KMS key.</p>"
         },
         "KMSEncryptionContext":{
           "shape":"KMSEncryptionContextMap",
@@ -3137,7 +3200,7 @@
         },
         "LanguageCode":{
           "shape":"LanguageCode",
-          "documentation":"<p>The language code that represents the language spoken in the input media file.</p> <p>If you're unsure of the language spoken in your media file, consider using <code>IdentifyLanguage</code> or <code>IdentifyMultipleLanguages</code> to enable automatic language identification.</p> <p>Note that you must include one of <code>LanguageCode</code>, <code>IdentifyLanguage</code>, or <code>IdentifyMultipleLanguages</code> in your request. If you include more than one of these parameters, your transcription job fails.</p> <p>For a list of supported languages and their associated language codes, refer to the <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a> table.</p> <note> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>), your media file must be encoded at a sample rate of 16,000 Hz or higher.</p> </note>"
+          "documentation":"<p>The language code that represents the language spoken in the input media file.</p> <p>If you're unsure of the language spoken in your media file, consider using <code>IdentifyLanguage</code> or <code>IdentifyMultipleLanguages</code> to enable automatic language identification.</p> <p>Note that you must include one of <code>LanguageCode</code>, <code>IdentifyLanguage</code>, or <code>IdentifyMultipleLanguages</code> in your request. If you include more than one of these parameters, your transcription job fails.</p> <p>For a list of supported languages and their associated language codes, refer to the <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a> table.</p> <note> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>) in Amazon Web Services GovCloud (US) (US-West, us-gov-west-1), Amazon Web Services GovCloud (US) (US-East, us-gov-east-1), Canada (Calgary, ca-west-1) and Africa (Cape Town, af-south-1), your media file must be encoded at a sample rate of 16,000 Hz or higher.</p> </note>"
         },
         "MediaSampleRateHertz":{
           "shape":"MediaSampleRateHertz",
@@ -3161,7 +3224,7 @@
         },
         "OutputEncryptionKMSKeyId":{
           "shape":"KMSKeyId",
-          "documentation":"<p>The KMS key you want to use to encrypt your transcription output.</p> <p>If using a key located in the <b>current</b> Amazon Web Services account, you can specify your KMS key in one of four ways:</p> <ol> <li> <p>Use the KMS key ID itself. For example, <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use an alias for the KMS key ID. For example, <code>alias/ExampleAlias</code>.</p> </li> <li> <p>Use the Amazon Resource Name (ARN) for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If using a key located in a <b>different</b> Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways:</p> <ol> <li> <p>Use the ARN for the KMS key ID. For example, <code>arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Use the ARN for the KMS key alias. For example, <code>arn:aws:kms:region:account-ID:alias/ExampleAlias</code>.</p> </li> </ol> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>If you specify a KMS key to encrypt your output, you must also specify an output location using the <code>OutputLocation</code> parameter.</p> <p>Note that the role making the request must have permission to use the specified KMS key.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of a KMS key that you want to use to encrypt your transcription output.</p> <p>KMS key ARNs have the format <code>arn:partition:kms:region:account:key/key-id</code>. For example: <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id-key-ARN\"> KMS key ARNs</a>.</p> <p>If you do not specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3).</p> <p>Note that the role making the request and the role specified in the <code>DataAccessRoleArn</code> request parameter (if present) must have permission to use the specified KMS key.</p>"
         },
         "KMSEncryptionContext":{
           "shape":"KMSEncryptionContextMap",
@@ -3193,7 +3256,7 @@
         },
         "LanguageOptions":{
           "shape":"LanguageOptions",
-          "documentation":"<p>You can specify two or more language codes that represent the languages you think may be present in your media. Including more than five is not recommended. If you're unsure what languages are present, do not include this parameter.</p> <p>If you include <code>LanguageOptions</code> in your request, you must also include <code>IdentifyLanguage</code>.</p> <p>For more information, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a>.</p> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>), your media file must be encoded at a sample rate of 16,000 Hz or higher.</p>"
+          "documentation":"<p>You can specify two or more language codes that represent the languages you think may be present in your media. Including more than five is not recommended. If you're unsure what languages are present, do not include this parameter.</p> <p>If you include <code>LanguageOptions</code> in your request, you must also include <code>IdentifyLanguage</code>.</p> <p>For more information, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html\">Supported languages</a>.</p> <p>To transcribe speech in Modern Standard Arabic (<code>ar-SA</code>)in Amazon Web Services GovCloud (US) (US-West, us-gov-west-1), Amazon Web Services GovCloud (US) (US-East, us-gov-east-1), in Canada (Calgary) ca-west-1 and Africa (Cape Town) af-south-1, your media file must be encoded at a sample rate of 16,000 Hz or higher.</p>"
         },
         "Subtitles":{
           "shape":"Subtitles",
@@ -3345,8 +3408,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -3653,8 +3715,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCallAnalyticsCategoryRequest":{
       "type":"structure",

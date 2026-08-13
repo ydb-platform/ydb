@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -74,7 +73,7 @@ TComputationNodeFactory GetChain1MapThrottleFactory() {
 TRuntimeNode ThrottleNarrowStream(TProgramBuilder& pb, TRuntimeNode stream) {
     TCallableBuilder callableBuilder(pb.GetTypeEnvironment(), "StreamThrottler", stream.GetStaticType());
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 } // namespace
@@ -158,7 +157,7 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
                                                      });
     auto init = NTest::ConvertValueToLiteralNode(pb, std::make_tuple(TMaybe<i32>{3}, TMaybe<TStringBuf>{"B"}));
 
-    auto pgmReturn = pb.FromFlow(pb.ChainMap(pb.ToFlow(list), init,
+    auto pgmReturn = pb.FromFlow(pb.ChainMap(pb.ToFlow(list, {}), init,
                                              [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNodePair {
                                                  auto key = pb.Nth(item, 0);
                                                  auto val = pb.Nth(item, 1);
@@ -191,7 +190,7 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
                                                          TItem{},
                                                      });
 
-    auto pgmReturn = pb.FromFlow(pb.Chain1Map(pb.ToFlow(list),
+    auto pgmReturn = pb.FromFlow(pb.Chain1Map(pb.ToFlow(list, {}),
                                               [&](TRuntimeNode item) -> TRuntimeNodePair {
                 auto key = pb.Nth(item, 0);
                 auto val = pb.Nth(item, 1);
@@ -322,7 +321,8 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
     auto pgmReturn = pb.FromFlow(pb.ToFlow(
         pb.OrderedMap(chain1, [&](TRuntimeNode tuple) -> TRuntimeNode {
             return pb.Nth(tuple, 0);
-        })));
+        }),
+        {}));
 
     auto graph = setup.BuildGraph(pgmReturn);
 
@@ -341,5 +341,4 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLChain1MapThrottleTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

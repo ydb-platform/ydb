@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc
+    ydb/core/persqueue/pqtablet/blob
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/testlib/audit_helpers

@@ -1,11 +1,13 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/driver_lib/version/version.h>
-#include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/text_format.h>
+
+namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     using EComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
@@ -18,48 +20,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     using TValidateCallback = std::function<bool(std::unique_ptr<TEnvironmentSetup>&, TString&)>;
     using TVersion = std::tuple<ui32, ui32, ui32, ui32>;
 
-    std::vector<EComponentId> Components = {
-        NKikimrConfig::TCompatibilityRule::PDisk,
-        NKikimrConfig::TCompatibilityRule::VDisk,
-        NKikimrConfig::TCompatibilityRule::BlobStorageController,
-    };
-
     ui32 passPoisons = 1000;
-
-    NKikimrConfig::TCurrentCompatibilityInfo MakeCurrent(const std::optional<TVersion>& version, EComponentId componentId) {
-        TString build = "ydb";
-        TCurrentConstructor ctor;
-        if (version) {
-            ctor = TCurrentConstructor{
-                .Application = build,
-                .Version = TYdbVersion{
-                    .Year = std::get<0>(*version),
-                    .Major = std::get<1>(*version),
-                    .Minor = std::get<2>(*version),
-                    .Hotfix = std::get<3>(*version)
-                }
-            };
-        } else {
-            ctor = TCurrentConstructor{
-                .Application = "trunk",
-            };
-        }
-
-        // Disable compatibility checks for all other components
-        for (auto component : Components) {
-            if (component != componentId) {
-                auto newRule = TCompatibilityRule{
-                    .Application = build,
-                    .LowerLimit = TYdbVersion{ .Year = 0, .Major = 0, .Minor = 0, .Hotfix = 0 },
-                    .UpperLimit = TYdbVersion{ .Year = 1000, .Major = 1000, .Minor = 1000, .Hotfix = 1000 },
-                    .ComponentId = component,
-                };
-                ctor.CanLoadFrom.push_back(newRule);
-                ctor.StoresReadableBy.push_back(newRule);
-            }
-        }
-        return ctor.ToPB();
-    }
 
     void SetupEnv(std::unique_ptr<TEnvironmentSetup>& env, bool suppressCompatibilityCheck = false) {
         env.reset();
@@ -86,8 +47,8 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
             bool isCompatible, TValidateCallback validateCallback, bool suppressCompatibilityCheck = false) {
         passPoisons = 1000;
 
-        auto oldInfo = MakeCurrent(oldVersion, componentId);
-        auto newInfo = MakeCurrent(newVersion, componentId);
+        auto oldInfo = MakeCompatibilityInfo(oldVersion, componentId);
+        auto newInfo = MakeCompatibilityInfo(newVersion, componentId);
 
         TCompatibilityInfoTest::Reset(&oldInfo);
 
@@ -199,9 +160,9 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
             EComponentId componentId, TValidateCallback validateCallback) {
         passPoisons = 1000;
 
-        auto oldInfo = MakeCurrent(oldVersion, componentId);
-        auto intermediateInfo = MakeCurrent(intermediateVersion, componentId);
-        auto newInfo = MakeCurrent(newVersion, componentId);
+        auto oldInfo = MakeCompatibilityInfo(oldVersion, componentId);
+        auto intermediateInfo = MakeCompatibilityInfo(intermediateVersion, componentId);
+        auto newInfo = MakeCompatibilityInfo(newVersion, componentId);
 
         TCompatibilityInfoTest::Reset(&oldInfo);
 
@@ -230,5 +191,6 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     Y_UNIT_TEST(BSControllerMigration) {
         TestMigration(TVersion{ 23, 3, 13, 0 }, TVersion{ 23, 4, 1, 0 }, TVersion{ 23, 5, 1, 0 }, componentBSController, ValidateForBSController);
     }
-
 }
+
+}  // namespace NKikimr

@@ -6,6 +6,7 @@ import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
@@ -157,7 +158,7 @@ message TEvLogin {
     }
 
     optional string User = 1;
-    optional string Password = 2 [deprecated = true, (Ydb.sensitive) = true];
+    reserved 2; reserved "Password";
     optional string ExternalAuth = 3;
     optional uint64 ExpiresAfterMs = 4;
     optional string PeerName = 5;  // IP address actually, same as TEvModifySchemeTransaction.PeerName
@@ -232,6 +233,8 @@ message TEvInitTenantSchemeShard {
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17;
     optional NKikimrSubDomains.TAuditSettings AuditSettings = 18;
     optional NKikimrSubDomains.EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 19;
+
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 20;
 }
 
 message TEvInitTenantSchemeShardResult {
@@ -411,6 +414,8 @@ message TEvUpdateTenantSchemeShard {
 
     optional NKikimrSubDomains.TAuditSettings AuditSettings = 15;
     optional NKikimrSubDomains.EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 17;
+
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 21;
 }
 
 message TEvFindTabletSubDomainPathId {

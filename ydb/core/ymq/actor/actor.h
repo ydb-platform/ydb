@@ -11,7 +11,7 @@ public:
     virtual ~IReplyCallback() = default;
 
     virtual void DoSendReply(const NKikimrClient::TSqsResponse& resp) = 0;
-    virtual void OnIamAuthError() {}
+    virtual void OnIamAuthSuccess() {}
 };
 
 class IPingReplyCallback {

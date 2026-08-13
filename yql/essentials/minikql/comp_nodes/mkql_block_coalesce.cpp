@@ -153,7 +153,7 @@ public:
             if (firstArray.GetNullCount() == 0) {
                 *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
             } else if ((size_t)firstArray.GetNullCount() == length) {
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 builder->Add(secondValue, length);
                 *res = builder->Build(true);
@@ -162,7 +162,7 @@ public:
                     return arrow::Status::OK();
                 }
 
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 for (size_t i = 0; i < length; ++i) {
                     auto firstItem = firstReader->GetItem(firstArray, i);
@@ -187,7 +187,7 @@ public:
                     return arrow::Status::OK();
                 }
 
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 for (size_t i = 0; i < length; ++i) {
                     auto firstItem = firstReader->GetItem(firstArray, i);
                     if (firstItem) {

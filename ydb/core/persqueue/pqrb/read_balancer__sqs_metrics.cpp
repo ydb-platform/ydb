@@ -10,6 +10,7 @@
 
 #include <util/generic/array_ref.h>
 #include <util/string/builder.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -205,8 +206,6 @@ void InitSqsActionCounters(
         root, TStringBuilder() << nonBatch << "_Success", derivative, true);
     actionCounters.Errors = MakeSqsCounter(
         root, TStringBuilder() << nonBatch << "_Errors", derivative, true);
-    actionCounters.Infly = MakeSqsCounter(
-        root, TStringBuilder() << nonBatch << "_Infly", false, true);
 
     const auto& buckets = action.Fast ? FastActionsDurationBucketsMs : SlowActionsDurationBucketsMs;
     actionCounters.Duration = MakeSqsHistogram(root, TStringBuilder() << nonBatch << "_Duration", buckets, true);
@@ -241,10 +240,6 @@ void InitSqsLeaderCounters(
     const NMonitoring::TDynamicCounterPtr& root,
     const NKikimrConfig::TSqsConfig& cfg
 ) {
-    counters.RequestsThrottled = MakeSqsCounter(root, "RequestsThrottled", true, true);
-    counters.QueueMasterStartProblems = MakeSqsCounter(root, "QueueMasterStartProblems", true, false);
-    counters.QueueLeaderStartProblems = MakeSqsCounter(root, "QueueLeaderStartProblems", true, false);
-
     counters.MessagesPurged = MakeSqsCounter(root, "MessagesPurged", true, true);
     counters.MessageReceiveAttempts = MakeSqsHistogram(root, "MessageReceiveAttempts", MLP_LOCKS_BOUNDS, true);
     counters.ClientMessageProcessing_Duration = MakeSqsHistogram(root, "ClientMessageProcessing_Duration", SLOW_LATENCY_BOUNDS, true);
@@ -265,7 +260,6 @@ void InitSqsLeaderCounters(
     counters.InflyMessagesCount = MakeSqsCounter(root, "InflyMessagesCount", false, true);
     counters.OldestMessageAgeSeconds = MakeSqsCounter(root, "OldestMessageAgeSeconds", false, true);
 
-    counters.ReceiveMessage_KeysInvalidated = MakeSqsCounter(root, "ReceiveMessage_KeysInvalidated", true, true);
     counters.ReceiveMessageImmediate_Duration = MakeSqsHistogram(root, "ReceiveMessageImmediate_Duration", DurationBucketsMs, true);
 
     for (const auto& action : SqsQueueProxyActions) {
@@ -309,7 +303,9 @@ bool TTopicSqsMetricsHandler::IsApplicable(const NKikimrPQ::TPQTabletConfig& tab
 }
 
 TTopicSqsMetricsHandler::TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
-    Y_ABORT_UNLESS(IsApplicable(tabletConfig));
+    AFL_ENSURE(IsApplicable(tabletConfig))
+        ("sqs_queue", tabletConfig.GetSqsQueueName())
+        ("sqs_export_metrics", tabletConfig.GetSqsExportMetrics());
 
     const TString& account = tabletConfig.GetSqsAccountName();
     const TString& queueName = tabletConfig.GetSqsQueueName();

@@ -5,6 +5,7 @@
   "mute_window_days": 4,
   "unmute_window_days": 7,
   "delete_window_days": 7,
+  "stable_branch_grace_days": 7,
   "manual_unmute_issue_closed_lookback_days": 7,
   "manual_unmute_currently_muted_lookback_days": 14,
   "default_muted_ya_path": ".github/config/muted_ya.txt",
@@ -22,6 +23,15 @@
       "release-asan",
       "release-tsan",
       "release-msan"
+    ],
+    "stable-26-3-1": [
+      "relwithdebinfo",
+      "release-asan"
+    ]
+    ,
+    "stable-26-3": [
+      "relwithdebinfo",
+      "release-asan"
     ]
   }
 }

@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    common.h
     events.h
 )
 
@@ -18,6 +17,7 @@ END()
 
 RECURSE(
     aggregator
+    common
     database
     service
     ut_common

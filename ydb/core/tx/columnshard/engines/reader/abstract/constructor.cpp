@@ -3,6 +3,8 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/program/program.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader {
 
 TConclusionStatus IScannerConstructor::ParseProgram(const TProgramParsingContext& context, const NKikimrSchemeOp::EOlapProgramType programType,
@@ -14,7 +16,9 @@ TConclusionStatus IScannerConstructor::ParseProgram(const TProgramParsingContext
             read.ColumnIds = std::vector<ui32>(schema->GetColumnIds().begin(), schema->GetColumnIds().end());
         }
         TProgramContainer container;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "overriden_columns")("ids", JoinSeq(",", read.ColumnIds));
+        YDB_LOG_DEBUG("",
+            {"event", "overriden_columns"},
+            {"ids", JoinSeq(",", read.ColumnIds)});
         //        container.OverrideProcessingColumns(read.ColumnIds);
 
         {

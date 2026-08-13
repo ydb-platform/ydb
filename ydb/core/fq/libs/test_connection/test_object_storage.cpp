@@ -63,7 +63,7 @@ class TTestObjectStorageConnectionActor : public NActors::TActorBootstrapped<TTe
     TString Token;
     ui64 Cookie;
     NYql::IHTTPGateway::TPtr Gateway;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NYql::TS3ClusterConfig ClusterConfig;
 
     const TInstant StartTime = TInstant::Now();
@@ -74,7 +74,7 @@ public:
         const NFq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
          NYql::IHTTPGateway::TPtr gateway,
         const TString& scope,
         const TString& user,
@@ -158,8 +158,8 @@ private:
     }
 
     void SendDiscover() {
-        const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
+        const auto structuredToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
+        const auto credentialsProviderFactory = CredentialsFactory->Create(structuredToken);
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         TString requestId = CreateGuidAsString();
@@ -219,7 +219,7 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
         const NFq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
          NYql::IHTTPGateway::TPtr gateway,
         const TString& scope,
         const TString& user,

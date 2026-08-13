@@ -3,6 +3,7 @@ LIBRARY()
 GENERATE_ENUM_SERIALIZATION(host.h)
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host_roles.h)
+GENERATE_ENUM_SERIALIZATION(oracle.h)
 
 SRCS(
     host_mask.cpp
@@ -11,12 +12,14 @@ SRCS(
     host_state.cpp
     host.cpp
     oracle.cpp
+    region_geometry.cpp
     time_predictor.cpp
     vchunk_config.cpp
 )
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/blockstore/config
 )
 

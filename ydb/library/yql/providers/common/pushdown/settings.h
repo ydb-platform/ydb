@@ -49,6 +49,7 @@ struct TSettings {
         DateCtor = 1 << 30,
         PredicateAsExpression = ui64{1} << 31, // Predicates can be used in expressions (e.g. (a = b) = (c = d))
         AnyExpressionExceptMember = ui64{1} << 32,
+        StructOperators = ui64{1} << 33, // Struct operators can be used
     };
 
     explicit TSettings(NLog::EComponent logComponent)

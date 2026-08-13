@@ -139,11 +139,11 @@ public:
     {
     }
 
-    virtual ~TKqpLookupRows() {
-        auto guard = TypeEnv.BindAllocator();
-        auto alloc = &guard.GetMutex()->Ref();
-        while(!ReadResults.empty()) {
-            ReadResults.front().Untrack(alloc);
+    virtual ~TKqpLookupRows() = default;
+
+    void ClearResults(NMiniKQL::TAllocState& allocState) final {
+        while (!ReadResults.empty()) {
+            ReadResults.front().Untrack(&allocState);
             ReadResults.pop_front();
         }
     }
@@ -1056,8 +1056,8 @@ public:
         while (!FlushedResultRows.empty()) {
             TResultBatch::TResultRow& row = FlushedResultRows.front();
             batch.emplace_back(std::move(row.Data));
-            FlushedResultRows.pop_front();
             resultStats.Add(row.Stats);
+            FlushedResultRows.pop_front();
         }
 
         return resultStats;

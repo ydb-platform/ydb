@@ -43,7 +43,7 @@ message THashInitParams {
 message TSid {
     string Name = 1;
     ESidType.SidType Type = 2;
-    string ArgonHash = 3 [deprecated = true];
+    reserved 3; reserved "ArgonHash";
     repeated string Members = 4;
     uint64 CreatedAt = 5; // microseconds
     uint64 LastSuccessfulLogin = 6; // microseconds

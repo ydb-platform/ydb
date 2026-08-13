@@ -35,6 +35,7 @@ RECURSE_FOR_TESTS(
     ut_incremental_restore
     ut_incremental_restore_reboots
     ut_full_backup
+    ut_generated_columns
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -113,7 +114,6 @@ SRCS(
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
     schemeshard__login.cpp
-    schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__monitoring.h
@@ -243,7 +243,6 @@ SRCS(
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
-    schemeshard__user_hashes_migration.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -300,8 +299,6 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
-    schemeshard_login_helper.cpp
-    schemeshard_login_helper.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp
@@ -314,8 +311,11 @@ SRCS(
     schemeshard_self_pinger.h
     schemeshard_set_column_constraint.cpp
     schemeshard_set_column_constraint.h
+    schemeshard_set_column_constraint__cancel.cpp
     schemeshard_set_column_constraint__create.cpp
+    schemeshard_set_column_constraint__forget.cpp
     schemeshard_set_column_constraint__get.cpp
+    schemeshard_set_column_constraint__list.cpp
     schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
@@ -361,6 +361,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/common
     ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base

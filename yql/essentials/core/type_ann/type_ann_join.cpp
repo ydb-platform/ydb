@@ -274,7 +274,7 @@ namespace NYql::NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -352,7 +352,7 @@ namespace NYql::NTypeAnnImpl {
         }
 
         const TStructExprType* resultType = nullptr;
-        status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr);
+        status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }

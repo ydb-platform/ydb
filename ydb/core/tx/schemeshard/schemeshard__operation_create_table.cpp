@@ -636,6 +636,9 @@ public:
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+            .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+            .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

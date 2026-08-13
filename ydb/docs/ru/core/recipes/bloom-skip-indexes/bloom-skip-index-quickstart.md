@@ -1,8 +1,8 @@
 # Блум-индекс — быстрый старт
 
-## Создание таблицы с индексом bloom_filter
+## Колоночная (OLAP) таблица: bloom_filter
 
-Ниже минимальный пример: колоночная таблица с первичным ключом и локальным индексом `bloom_filter` по колонке, которая часто используется в условиях фильтрации.
+Ниже минимальный пример: [колоночная таблица](../../concepts/glossary.md#column-oriented-table) с первичным ключом и локальным индексом `bloom_filter` по колонке, которая часто используется в условиях фильтрации.
 
 ```yql
 CREATE TABLE events (
@@ -39,7 +39,7 @@ ALTER TABLE events
 
 После загрузки данных селективные запросы с условиями по проиндексированным колонкам могут читать меньше данных: при обходе хранилища Блум-индекс пропускает фрагменты, в которых искомое значение гарантированно отсутствует (по сравнению с полным чтением колонки без такого фильтра).
 
-Пример данных и запросов к таблице из примеров выше:
+Пример данных и запросов к колоночной таблице из примеров выше:
 
 ```yql
 INSERT INTO events (id, resource_id, payload, message) VALUES
@@ -62,6 +62,38 @@ WHERE resource_id = "res-42";
 SELECT id, message
 FROM events
 WHERE message LIKE '%timeout%';
+```
+
+## Строковая (OLTP) таблица: префиксный фильтр Блума
+
+В [строковой таблице](../../concepts/glossary.md#row-oriented-table) индекс `bloom_filter` строится по левому префиксу первичного ключа. Индексируемые колонки должны образовывать непрерывное ведущее подмножество колонок первичного ключа:
+
+```yql
+CREATE TABLE orders (
+    customer_id Utf8 NOT NULL,
+    order_id Utf8 NOT NULL,
+    amount Decimal(10,2),
+    PRIMARY KEY (customer_id, order_id),
+    -- Префиксный фильтр Блума по первой колонке ключа
+    INDEX idx_customer LOCAL USING bloom_filter
+        ON (customer_id)
+        WITH (false_positive_probability = 0.001),
+    -- Префиксный фильтр Блума по всему первичному ключу
+    INDEX idx_full_key LOCAL USING bloom_filter
+        ON (customer_id, order_id)
+);
+```
+
+Точечные чтения и сканы по диапазону, ограничивающие ведущие колонки ключа, могут пропускать нерелевантные фрагменты данных. Запрос с фильтром только по `customer_id` использует префиксный фильтр Блума `idx_customer`:
+
+```yql
+SELECT amount FROM orders WHERE customer_id = "cust-42";
+```
+
+Запрос с фильтром по всему первичному ключу использует `idx_full_key`:
+
+```yql
+SELECT amount FROM orders WHERE customer_id = "cust-42" AND order_id = "ord-1001";
 ```
 
 ## Как убедиться в эффективности индекса

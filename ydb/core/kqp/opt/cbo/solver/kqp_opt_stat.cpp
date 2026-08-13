@@ -16,7 +16,7 @@ namespace {
      * All other callables will not be evaluated
      */
     THashSet<TString> ConstantFoldingWhiteList = {
-        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
+        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size", "IfPresent",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
     THashSet<TString> PgConstantFoldingWhiteList = {
@@ -87,13 +87,12 @@ namespace {
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input);
 
     bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams) {
+        Y_UNUSED(withParams);
+
         if (!TCoApply::Match(input.Get())) {
             return false;
         }
 
-        if (input->ChildrenSize() != 2 && input->ChildrenSize() != 3) {
-            return false;
-        }
         if (input->Child(0)->IsCallable("Udf")) {
             auto udf = TCoUdf(input->Child(0));
             auto udfName = udf.MethodName().StringValue();
@@ -102,13 +101,17 @@ namespace {
                     return false;
                 }
             }
-            if (withParams) {
-                return IsConstantExprWithParams(input->Child(1)) || IsConstantUdf(input->Child(1));
-            } else {
-                return IsConstantExpr(input->Child(1)) || IsConstantUdf(input->Child(1));
+
+            for (size_t i=1; i<input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (TCoApply::Match(callableInput) && !IsConstantUdf(callableInput)) {
+                    return false;
+                }
+                else if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                    return false;
+                }
             }
-        } else if (TCoApply::Match(input->Child(1))){
-            return IsConstantUdf(input->ChildPtr(1));
+            return true;
         }
         return false;
     }
@@ -138,14 +141,19 @@ namespace {
     }
 
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
-        if (!TCoFlatMap::Match(input.Get())) {
+        if (!TCoFlatMap::Match(input.Get()) && !TCoMap::Match(input.Get())) {
             return false;
         }
-        if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
-            auto apply = maybeApply.Cast();
-            return IsConstantUdf(apply.Callable().Ptr());
+
+        if (!IsPureIsolatedLambda(*input->Child(1))) {
+            return false;
         }
-        return false;
+
+        if (!IsConstantExpr(input->Child(0))) {
+            return false;
+        }
+
+        return true;
     }
 
     TString RemoveAliases(TString attributeName) {
@@ -1364,6 +1372,12 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
+    if (foldUdfs && (input->IsCallable("Map") || input->IsCallable("FlatMap"))) {
+        return IsSuitableToFoldFlatMap(input);
+    }
+    if (foldUdfs && (input->IsCallable("Apply"))) {
+        return IsConstantUdf(input);
+    }
     if (!NYql::IsDataOrOptionalOfData(input->GetTypeAnn())) {
         return false;
     }
@@ -1376,8 +1390,6 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
                 return false;
             }
         }
-        return true;
-    } else if (foldUdfs && ((TCoApply::Match(input.Get()) && IsConstantUdf(input)) || IsSuitableToFoldFlatMap(input))) {
         return true;
     }
     return false;

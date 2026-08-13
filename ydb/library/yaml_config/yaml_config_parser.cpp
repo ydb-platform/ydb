@@ -169,6 +169,45 @@ namespace NKikimr::NYaml {
         return config;
     }
 
+    // Tribool feature flags (VALUE_TRUE/VALUE_FALSE) are commonly written as YAML
+    // booleans; the json->proto merge cannot map a bool onto an enum, so rewrite
+    // such booleans to the enum value names before merging, guided by the schema.
+    void CoerceBoolEnumsToNames(NJson::TJsonValue& json, const google::protobuf::Descriptor* descriptor) {
+        using ::google::protobuf::FieldDescriptor;
+        if (!descriptor || !json.IsMap()) {
+            return;
+        }
+        auto& map = json.GetMapSafe();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const FieldDescriptor* field = descriptor->field(i);
+            TString key = field->name();
+            NProtobufJson::ToSnakeCaseDense(&key);
+            auto it = map.find(key);
+            if (it == map.end()) {
+                continue;
+            }
+            NJson::TJsonValue& value = it->second;
+            if (field->cpp_type() == FieldDescriptor::CPPTYPE_ENUM) {
+                if (value.IsBoolean()) {
+                    const char* name = value.GetBoolean() ? "VALUE_TRUE" : "VALUE_FALSE";
+                    if (field->enum_type()->FindValueByName(name)) {
+                        value = TString(name);
+                    }
+                }
+            } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+                if (field->is_repeated()) {
+                    if (value.IsArray()) {
+                        for (auto& elem : value.GetArraySafe()) {
+                            CoerceBoolEnumsToNames(elem, field->message_type());
+                        }
+                    }
+                } else {
+                    CoerceBoolEnumsToNames(value, field->message_type());
+                }
+            }
+        }
+    }
+
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
         // for static group
         Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
@@ -640,11 +679,33 @@ namespace NKikimr::NYaml {
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
                     }
+                    const bool hasExpectedSlotSize = drive.HasExpectedSlotSize() && drive.GetExpectedSlotSize();
+                    const bool hasMaxSlots = drive.HasMaxSlots() && drive.GetMaxSlots();
+                    if (hasExpectedSlotSize
+                            && (drive.GetExpectedSlotCount() || drive.GetSlotSizeInUnits())) {
+                        ythrow yexception() << "expected_slot_size is mutually exclusive with expected_slot_count"
+                            << " and slot_size_in_units"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                        ythrow yexception() << "expected_slot_size requires max_slots"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                        ythrow yexception() << "max_slots requires expected_slot_size"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
                     if (drive.HasExpectedSlotCount()) {
                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
+                    }
+                    if (drive.HasExpectedSlotSize()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotSize(drive.GetExpectedSlotSize());
+                    }
+                    if (drive.HasMaxSlots()) {
+                        drive.MutablePDiskConfig()->SetMaxSlots(drive.GetMaxSlots());
                     }
                 }
             }
@@ -1714,6 +1775,7 @@ endDiskTypeCheck:   ;
         }
 
         CaptureOpaqueConfigFields(jsonNode);
+        CoerceBoolEnumsToNames(jsonNode, config.GetDescriptor());
         runPhase(EParsePhase::JsonToProto, [&] {
             NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
         });

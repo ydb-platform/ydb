@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import ydb
 import logging
 import sys
@@ -33,6 +34,7 @@ from mute.constants import (
     get_manual_unmute_min_runs,
     get_manual_unmute_window_days,
     get_mute_window_days,
+    get_stable_branch_grace_days,
     get_unmute_window_days,
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
@@ -53,6 +55,193 @@ repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
+
+_STABLE_BRANCHES_CONFIG = '.github/config/stable_tests_branches.json'
+
+
+def _grace_inherited_debug_line(line, branch, config_since, grace_until):
+    return (
+        f"{line} # GRACE: inherited mute ({branch}, config since "
+        f"{config_since.isoformat()}, until {grace_until.isoformat()}, no monitor data yet)"
+    )
+
+
+def _git_branch_added_to_stable_config(branch, repo_root):
+    """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
+
+    ``git log -S<needle>`` (pickaxe) narrows to the commit(s) that changed the
+    branch string's occurrence count, instead of ``git show``-ing every commit
+    that ever touched the config file on every scheduled run.
+    """
+    if not branch or branch == 'main':
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                'git', 'log', '--format=%H', '--reverse', '-S' + json.dumps(branch),
+                '--', _STABLE_BRANCHES_CONFIG,
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        logging.warning(
+            'stable branch grace: git log failed for branch=%s: %s',
+            branch,
+            exc,
+        )
+        return None
+    if proc.returncode != 0:
+        logging.warning(
+            'stable branch grace: git log exit %s for %s: %s',
+            proc.returncode,
+            _STABLE_BRANCHES_CONFIG,
+            (proc.stderr or '').strip(),
+        )
+        return None
+    for commit in proc.stdout.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        show = subprocess.run(
+            ['git', 'show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if show.returncode != 0:
+            logging.warning(
+                'stable branch grace: git show %s:%s failed with exit %s: %s',
+                commit,
+                _STABLE_BRANCHES_CONFIG,
+                show.returncode,
+                (show.stderr or '').strip(),
+            )
+            continue
+        try:
+            branches = json.loads(show.stdout)
+            names = {str(b).strip() for b in branches if str(b).strip()}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if branch not in names:
+            continue
+        dproc = subprocess.run(
+            ['git', 'log', '-1', '--format=%aI', commit],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dproc.returncode != 0:
+            logging.warning(
+                'stable branch grace: git log -1 date for commit %s failed with exit %s: %s',
+                commit,
+                dproc.returncode,
+                (dproc.stderr or '').strip(),
+            )
+            continue
+        raw = dproc.stdout.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
+        except ValueError:
+            logging.warning(
+                'stable branch grace: invalid author date for commit %s: %r',
+                commit,
+                raw,
+            )
+            continue
+    return None
+
+
+def _debug_line_test_string(debug_line):
+    """Recover the raw ``testsuite testcase`` prefix from a ``create_debug_string`` line."""
+    return debug_line.split(' # ', 1)[0]
+
+
+def _apply_stable_branch_grace(
+    branch,
+    inherited_muted_ya_path,
+    all_muted_ya,
+    all_muted_ya_debug,
+    to_delete,
+    to_delete_debug,
+    repo_root,
+):
+    """Keep inherited ``muted_ya`` lines for a new stable branch during its grace window.
+
+    Returns ``(all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug,
+    grace_inherited, grace_config_since, grace_until)``. The ``*_debug`` lists are
+    kept 1:1 with their raw counterparts, so grace can't desync ``foo.txt`` from
+    ``foo_debug.txt`` (previously it could, e.g. a test grace protected from
+    deletion would still show up in ``to_delete_debug.txt`` as removed).
+    """
+    inactive = all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug, frozenset(), None, None
+    added = _git_branch_added_to_stable_config(branch, repo_root)
+    if added is None:
+        return inactive
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    grace_days = get_stable_branch_grace_days()
+    grace_until = added + datetime.timedelta(days=grace_days - 1)
+    if today > grace_until:
+        return inactive
+    try:
+        with open(inherited_muted_ya_path, encoding='utf-8') as fp:
+            inherited = {line.strip() for line in fp if line.strip()}
+    except OSError as exc:
+        logging.warning(
+            'stable branch grace: cannot read inherited mute file %s: %s',
+            inherited_muted_ya_path,
+            exc,
+        )
+        return inactive
+    if not inherited:
+        return inactive
+
+    # to_delete: drop debug lines for entries grace just pulled back out of to_delete
+    # (matched by their raw "testsuite testcase" prefix, so wildcard delete patterns —
+    # whose debug line is rendered from one concrete chunk rather than the pattern
+    # itself — are conservatively left as-is rather than mismatched).
+    removed_from_delete = set(to_delete) & inherited
+    new_to_delete = sorted(set(to_delete) - inherited)
+    new_to_delete_debug = sorted(
+        d for d in to_delete_debug if _debug_line_test_string(d) not in removed_from_delete
+    )
+
+    # muted_ya: add a synthetic debug line for every inherited entry that grace newly
+    # restores. all_muted_ya/all_muted_ya_debug are 1:1 going in, so anything not
+    # already in all_muted_ya cannot already have a debug line either.
+    newly_added = inherited - set(all_muted_ya)
+    grace_debug_lines = [
+        _grace_inherited_debug_line(line, branch, added, grace_until) for line in sorted(newly_added)
+    ]
+    new_all_muted_ya = sorted(set(all_muted_ya) | inherited)
+    new_all_muted_ya_debug = sorted(list(all_muted_ya_debug) + grace_debug_lines)
+
+    logging.info(
+        'stable branch grace for %s (config since %s, until %s): keep %d inherited mute(s) '
+        '(%d newly restored, %d protected from zero-run delete)',
+        branch,
+        added,
+        grace_until,
+        len(inherited),
+        len(newly_added),
+        len(removed_from_delete),
+    )
+    return (
+        new_all_muted_ya,
+        new_all_muted_ya_debug,
+        new_to_delete,
+        new_to_delete_debug,
+        frozenset(inherited),
+        added,
+        grace_until,
+    )
+
 
 def load_manual_unmute_config():
     """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
@@ -711,6 +900,8 @@ def apply_and_add_mutes(
     ydb_wrapper=None,
     branch=None,
     build_type=None,
+    inherited_muted_ya_path=None,
+    repo_root=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
@@ -872,12 +1063,33 @@ def apply_and_add_mutes(
         to_delete = sorted(list(set(to_delete) | set(manual_fast_delete_lines)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(manual_fast_delete_debug)))
 
-        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
-        
         # 4. muted_ya (all currently muted tests).
         all_muted_ya, all_muted_ya_debug = create_file_set(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
+        grace_inherited = frozenset()
+        grace_config_since = None
+        grace_until = None
+        if branch and inherited_muted_ya_path and repo_root:
+            (
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                grace_inherited,
+                grace_config_since,
+                grace_until,
+            ) = _apply_stable_branch_grace(
+                branch,
+                inherited_muted_ya_path,
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                repo_root,
+            )
+
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
         to_unmute_set = set(to_unmute)
@@ -896,6 +1108,15 @@ def apply_and_add_mutes(
             if is_chunk_test(test):
                 wildcard_key = create_test_string(test, use_wildcards=True)
                 wildcard_to_chunks[wildcard_key].append(test)
+        for line in grace_inherited:
+            if (
+                line not in test_debug_dict
+                and grace_config_since is not None
+                and grace_until is not None
+            ):
+                test_debug_dict[line] = _grace_inherited_debug_line(
+                    line, branch, grace_config_since, grace_until
+                )
         # Build wildcard-level debug strings.
         for wildcard, chunks in wildcard_to_chunks.items():
             N = len(chunks)
@@ -1554,6 +1775,8 @@ def mute_worker(args):
                 ydb_wrapper=ydb_wrapper,
                 branch=args.branch,
                 build_type=build_type,
+                inherited_muted_ya_path=input_muted_ya_path,
+                repo_root=repo_path.rstrip(os.sep),
             )
 
         elif args.mode == 'sync_fast_unmute_grace':

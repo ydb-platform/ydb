@@ -10,7 +10,6 @@
 namespace NSQLHighlight {
 
 using NSQLTranslationV1::Compile;
-using NSQLTranslationV1::IGenericLexer;
 using NSQLTranslationV1::TGenericLexerGrammar;
 using NSQLTranslationV1::TGenericToken;
 

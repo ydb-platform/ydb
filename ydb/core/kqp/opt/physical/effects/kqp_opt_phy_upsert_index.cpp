@@ -648,7 +648,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
+    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, kqpCtx, filter);
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
     const bool needPrecompute = !useStreamIndex
@@ -997,8 +997,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
             switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
+                    YQL_ENSURE(false, "Async indexes are not updated directly");
+                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // deleteIndexKeys are already correct
                     break;
@@ -1046,7 +1047,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltextCompact:
                 case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 case TIndexDescription::EType::GlobalJsonCompact:
-                    Y_ENSURE(false, "Not implemented");
+                    YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:
@@ -1076,8 +1077,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
             switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
+                    YQL_ENSURE(false, "Async indexes are not updated directly");
+                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // upsertIndexRows are already correct
                     break;
@@ -1128,7 +1130,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltextCompact:
                 case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 case TIndexDescription::EType::GlobalJsonCompact:
-                    Y_ENSURE(false, "Not implemented");
+                    YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:

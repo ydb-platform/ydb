@@ -26,9 +26,9 @@
         {"shape":"ServiceQuotaExceededException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Creates an environment for your thin client devices.</p>",
@@ -46,9 +46,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deletes a thin client device.</p>",
@@ -67,9 +67,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deletes an environment.</p>",
@@ -88,9 +88,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deregisters a thin client device.</p>",
@@ -239,9 +239,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Assigns one or more tags (key-value pairs) to the specified resource.</p>",
@@ -259,9 +259,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Removes a tag or tags from a resource.</p>",
@@ -300,6 +300,7 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
@@ -344,7 +345,8 @@
     },
     "ActivationCode":{
       "type":"string",
-      "pattern":"[a-z]{2}[a-z0-9]{6}"
+      "pattern":"[a-z]{2}[a-z0-9]{6}",
+      "sensitive":true
     },
     "ApplyTimeOf":{
       "type":"string",
@@ -394,7 +396,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -634,9 +636,9 @@
           "shape":"KmsKeyArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Key Management Service key used to encrypt the device.</p>"
         },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>"
+        "lastUserId":{
+          "shape":"UserId",
+          "documentation":"<p>The user ID of the most recent session on the device.</p>"
         }
       },
       "documentation":"<p>Describes a thin client device.</p>"
@@ -671,7 +673,9 @@
     },
     "DeviceName":{
       "type":"string",
-      "pattern":"[0-9\\p{IsAlphabetic}+:,.@'\" -]{1,64}",
+      "max":64,
+      "min":0,
+      "pattern":"$|^[0-9\\p{IsAlphabetic}+:,.@'\" -]*",
       "sensitive":true
     },
     "DeviceSoftwareSetComplianceStatus":{
@@ -753,6 +757,10 @@
         "arn":{
           "shape":"Arn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the device.</p>"
+        },
+        "lastUserId":{
+          "shape":"UserId",
+          "documentation":"<p>The user ID of the most recent session on the device.</p>"
         }
       },
       "documentation":"<p>Describes a thin client device.</p>"
@@ -770,7 +778,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -832,10 +840,6 @@
           "shape":"KmsKeyArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Key Management Service key used to encrypt the environment.</p>"
         },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>"
-        },
         "deviceCreationTags":{
           "shape":"DeviceCreationTagsMap",
           "documentation":"<p>The tag keys and optional values for the newly created devices for this environment.</p>"
@@ -853,7 +857,9 @@
     },
     "EnvironmentName":{
       "type":"string",
-      "pattern":"[0-9\\p{IsAlphabetic}+:,.@'\" -][0-9\\p{IsAlphabetic}+=:,.@'\" -]{0,63}",
+      "max":64,
+      "min":0,
+      "pattern":"$|^[0-9\\p{IsAlphabetic}+:,.@'\" -][0-9\\p{IsAlphabetic}+=:,.@'\" -]*",
       "sensitive":true
     },
     "EnvironmentSoftwareSetComplianceStatus":{
@@ -877,7 +883,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -1136,6 +1142,7 @@
     },
     "MaintenanceWindow":{
       "type":"structure",
+      "required":["type"],
       "members":{
         "type":{
           "shape":"MaintenanceWindowType",
@@ -1297,10 +1304,6 @@
         "arn":{
           "shape":"Arn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the software set.</p>"
-        },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>"
         }
       },
       "documentation":"<p>Describes a software set.</p>"
@@ -1521,7 +1524,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -1581,6 +1584,10 @@
       "type":"structure",
       "members":{
       }
+    },
+    "UserId":{
+      "type":"string",
+      "sensitive":true
     },
     "ValidationException":{
       "type":"structure",

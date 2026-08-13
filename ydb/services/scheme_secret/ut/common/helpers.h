@@ -45,7 +45,7 @@ namespace NKikimr::NSecret {
         TTestDescribeSchemaSecretsServiceFactory(
             TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
             TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
-            TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter = nullptr
+            TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter
         );
 
         NActors::IActor* CreateService() override;

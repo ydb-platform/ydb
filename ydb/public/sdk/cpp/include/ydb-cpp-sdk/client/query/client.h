@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
@@ -130,6 +131,8 @@ public:
         const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings = TCreateSessionSettings());
+
+    TAsyncStatus DeleteSession(const std::string& sessionId, const TDeleteSessionSettings& settings = TDeleteSessionSettings());
 
     //! Returns number of active sessions given via session pool
     int64_t GetActiveSessionCount() const;
@@ -291,19 +294,25 @@ public:
     
     const std::optional<TTransaction>& GetTransaction() const { return Transaction_; }
 
-    TExecuteQueryPart(TStatus&& status, std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx)
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
+    TExecuteQueryPart(TStatus&& status, std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStreamPartStatus(std::move(status))
         , Stats_(std::move(queryStats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
     TExecuteQueryPart(TStatus&& status, TResultSet&& resultSet, int64_t resultSetIndex,
-        std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx)
+        std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , ResultSetIndex_(resultSetIndex)
         , Stats_(std::move(queryStats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
 private:
@@ -311,6 +320,7 @@ private:
     int64_t ResultSetIndex_ = 0;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Transaction_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 class TExecuteQueryResult : public TStatus {
@@ -323,22 +333,27 @@ public:
 
     std::optional<TTransaction> GetTransaction() const {return Transaction_; }
 
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
     TExecuteQueryResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
 
     TExecuteQueryResult(TStatus&& status, std::vector<TResultSet>&& resultSets,
-        std::optional<TExecStats>&& stats, std::optional<TTransaction>&& tx)
+        std::optional<TExecStats>&& stats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStatus(std::move(status))
         , ResultSets_(std::move(resultSets))
         , Stats_(std::move(stats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
 private:
     std::vector<TResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Transaction_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 } // namespace NYdb::NQuery

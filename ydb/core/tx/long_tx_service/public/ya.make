@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/uri
     ydb/core/base
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/util
     yql/essentials/public/issue
 )

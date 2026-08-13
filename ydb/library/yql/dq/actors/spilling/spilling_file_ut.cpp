@@ -9,6 +9,7 @@
 #include <util/system/fs.h>
 #include <util/generic/string.h>
 #include <util/folder/path.h>
+#include <util/stream/file.h>
 
 namespace NYql::NDq {
 
@@ -496,6 +497,103 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT_C(err.Contains("No such file or directory"), err);
             UNIT_ASSERT_C(err.Contains(expected), err);
         }
+
+        // The read error must trigger a proper cleanup: the file has to be closed and its
+        // descriptor released. If the close operation is not dispatched (e.g. because the
+        // active-op flag was left set), EvCloseFileResponse never arrives and the file stays
+        // stuck in the active list, keeping the file descriptor counter above zero.
+        {
+            std::atomic<bool> closed = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingSvc) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        closed = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) closed;
+            };
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(closed, "file was not closed after read error");
+        }
+
+        {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
+
+            runtime.Send(new IEventHandle(spillingSvc, tester, new NMon::TEvHttpInfo(monReq)));
+            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains("Used file descriptors (compute): 0"));
+        }
+    }
+
+    Y_UNIT_TEST(WriteError) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        auto spillingSvc = runtime.StartSpillingService(1000, 100, 25);
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester);
+
+        runtime.WaitBootstrap();
+
+        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()) + "_" + runtime.GetSpillingSessionId());
+        const TFsPath spillingDir = runtime.GetSpillingRoot() / nodePath;
+        const TFsPath firstFile = spillingDir / "1_test_0";
+        const TFsPath secondFile = spillingDir / "1_test_1";
+
+        // Write the first blob. Because MaxFilePartSize is small and RemoveBlobsAfterRead is on,
+        // this blob lands in its own file part "1_test_0".
+        {
+            auto ev = new TEvDqSpilling::TEvWrite(0, CreateRope(20, 'a'));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
+            UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
+        }
+        UNIT_ASSERT(NFs::Exists(firstFile.GetPath()));
+
+        // File part names are predictable, so occupy the name of the would-be next file part
+        // ("1_test_1") with a directory. Opening it for writing will fail and produce an IO error.
+        secondFile.MkDirs();
+
+        // Write the second blob. It requires a fresh file part ("1_test_1"), whose creation now
+        // fails with an IO error.
+        {
+            auto ev = new TEvDqSpilling::TEvWrite(1, CreateRope(20, 'b'));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
+            UNIT_ASSERT_C(resp->Get()->Message.Contains("1_test_1"), resp->Get()->Message);
+        }
+
+        // The write error must trigger cleanup of the whole file, including the already-written
+        // "1_test_0" part. Wait for the close operation to complete.
+        {
+            std::atomic<bool> closed = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingSvc) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        closed = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) closed;
+            };
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(closed, "file was not closed after write error");
+        }
+
+        // The successfully written part must have been removed from disk during cleanup.
+        UNIT_ASSERT_C(!NFs::Exists(firstFile.GetPath()), "partially written file was not cleaned up");
     }
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {
@@ -541,44 +639,60 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         runtime.DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(StartError) {
+    Y_UNIT_TEST(RecoverAfterStartError) {
         TTestActorRuntime runtime;
+        runtime.SetScheduledEventFilter([](
+                TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>& event,
+                TDuration delay,
+                TInstant& deadline)
+        {
+            if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {
+                deadline = runtime.GetTimeProvider()->Now() + delay;
+                return false;
+            }
+            return true;
+        });
         runtime.Initialize();
 
-        auto spillingService = runtime.StartSpillingService(100, 500, 100, 1000, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
-        auto tester = runtime.AllocateEdgeActor();
-        auto spillingActor = runtime.StartSpillingActor(tester);
+        const TFsPath root = TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_recover");
+        root.ForceDelete();
+        {
+            TFileOutput output(root.GetPath());
+        }
 
+        runtime.StartSpillingService(1000, 500, 100, 1000, root);
         runtime.WaitBootstrap();
 
-        // put blob 1
+        // While the root is unusable, requests are rejected instead of killing the service.
         {
-            auto ev = new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'));
-            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+            auto tester = runtime.AllocateEdgeActor();
+            runtime.StartSpillingActor(tester);
+            runtime.WaitBootstrap();
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("Service not started", resp->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
         }
 
-        // get blob 1
+        // Unblock the root and let the scheduled retry start the service.
+        root.ForceDelete();
+
+        TDispatchOptions retryOptions;
+        retryOptions.CustomFinalCondition = [&root]() { return root.IsDirectory(); };
+        UNIT_ASSERT(runtime.DispatchEvents(retryOptions, TDuration::Seconds(5)));
+
         {
-            auto ev = new TEvDqSpilling::TEvRead(1);
-            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+            auto tester = runtime.AllocateEdgeActor();
+            auto spillingActor = runtime.StartSpillingActor(tester);
+            runtime.WaitBootstrap();
 
-            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("Service not started", resp->Get()->Message);
-        }
+            runtime.Send(new IEventHandle(
+                spillingActor,
+                tester,
+                new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'))));
 
-        // mon
-        {
-            THttpRequest httpReq(HTTP_METHOD_GET);
-            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
-
-            runtime.Send(new IEventHandle(spillingService, tester, new NMon::TEvHttpInfo(monReq)));
-
-            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("<html><h2>Service is not started due to IO error</h2></html>",
-                            ((NMon::TEvHttpInfoRes*) resp->Get())->Answer);
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(resp->Get()->BlobId, 1);
         }
     }
 

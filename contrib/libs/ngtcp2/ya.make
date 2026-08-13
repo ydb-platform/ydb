@@ -2,14 +2,13 @@
 
 LIBRARY()
 
-VERSION(1.22.1)
+VERSION(1.24.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.22.1/ngtcp2-1.22.1.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.24.0/ngtcp2-1.24.0.tar.xz)
 
 LICENSE(
     "(Apache-2.0 OR MIT)" AND
     Apache-2.0 AND
-    BSD-3-Clause AND
     FSFAP AND
     MIT
 )
@@ -46,6 +45,7 @@ SRCS(
     lib/ngtcp2_crypto.c
     lib/ngtcp2_dcidtr.c
     lib/ngtcp2_err.c
+    lib/ngtcp2_fmt.c
     lib/ngtcp2_frame_chain.c
     lib/ngtcp2_gaptr.c
     lib/ngtcp2_idtr.c
@@ -76,7 +76,7 @@ SRCS(
     lib/ngtcp2_unreachable.c
     lib/ngtcp2_vec.c
     lib/ngtcp2_version.c
-    lib/ngtcp2_window_filter.c
+    lib/ngtcp2_wf.c
 )
 
 END()

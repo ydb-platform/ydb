@@ -190,6 +190,12 @@ private:
                     return ReplyOnException(ex, "Unable to fill index description");
                 }
 
+                try {
+                    FillMultiColumnStatisticsDescription(describeTableResult, tableDescription);
+                } catch (const std::exception& ex) {
+                    return ReplyOnException(ex, "Unable to fill statistics description");
+                }
+
                 FillChangefeedDescription(describeTableResult, tableDescription);
 
                 if (GetProtoRequest()->include_table_stats()) {

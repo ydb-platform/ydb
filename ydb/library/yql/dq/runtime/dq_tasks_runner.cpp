@@ -767,6 +767,20 @@ public:
             }
         }
 
+        bool outputUsesWatermarks = false;
+        for (const auto& outputDesc : task.GetOutputs()) {
+            for (const auto& outputChannelDesc : outputDesc.GetChannels()) {
+                if (outputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
+                    outputUsesWatermarks = true;
+                    break;
+                }
+            }
+            if (outputUsesWatermarks) {
+                break;
+            }
+        }
+        taskUsesWatermarks |= outputUsesWatermarks;
+
         if (!taskUsesWatermarks) {
             WatermarksTracker = nullptr;
         }

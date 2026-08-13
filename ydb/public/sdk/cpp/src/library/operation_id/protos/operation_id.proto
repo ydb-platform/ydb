@@ -20,6 +20,7 @@ message TOperationId {
         COMPACTION = 13;
         FULL_BACKUP = 14;
         ANALYZE = 15;
+        SET_NOT_NULL = 16;
     }
 
     message TData {

@@ -1,6 +1,18 @@
-/* Generated from serbian.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from serbian.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_serbian.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p1;
+    unsigned char b_no_diacritics;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +21,7 @@ extern int serbian_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_Step_3(struct SN_env * z);
 static int r_Step_2(struct SN_env * z);
 static int r_Step_1(struct SN_env * z);
@@ -16,18 +29,299 @@ static int r_R1(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
 static int r_prelude(struct SN_env * z);
 static int r_cyr_to_lat(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'a' };
+static const symbol s_1[] = { 'b' };
+static const symbol s_2[] = { 'v' };
+static const symbol s_3[] = { 'g' };
+static const symbol s_4[] = { 'd' };
+static const symbol s_5[] = { 0xC4, 0x91 };
+static const symbol s_6[] = { 'e' };
+static const symbol s_7[] = { 0xC5, 0xBE };
+static const symbol s_8[] = { 'z' };
+static const symbol s_9[] = { 'i' };
+static const symbol s_10[] = { 'j' };
+static const symbol s_11[] = { 'k' };
+static const symbol s_12[] = { 'l' };
+static const symbol s_13[] = { 'l', 'j' };
+static const symbol s_14[] = { 'm' };
+static const symbol s_15[] = { 'n' };
+static const symbol s_16[] = { 'n', 'j' };
+static const symbol s_17[] = { 'o' };
+static const symbol s_18[] = { 'p' };
+static const symbol s_19[] = { 'r' };
+static const symbol s_20[] = { 's' };
+static const symbol s_21[] = { 't' };
+static const symbol s_22[] = { 0xC4, 0x87 };
+static const symbol s_23[] = { 'u' };
+static const symbol s_24[] = { 'f' };
+static const symbol s_25[] = { 'h' };
+static const symbol s_26[] = { 'c' };
+static const symbol s_27[] = { 0xC4, 0x8D };
+static const symbol s_28[] = { 'd', 0xC5, 0xBE };
+static const symbol s_29[] = { 0xC5, 0xA1 };
+static const symbol s_30[] = { 'i', 'j', 'e' };
+static const symbol s_31[] = { 'e' };
+static const symbol s_32[] = { 'j', 'e' };
+static const symbol s_33[] = { 'e' };
+static const symbol s_34[] = { 'd', 'j' };
+static const symbol s_35[] = { 0xC4, 0x91 };
+static const symbol s_36[] = { 'l', 'o', 'g', 'a' };
+static const symbol s_37[] = { 'p', 'e', 'h' };
+static const symbol s_38[] = { 'v', 'o', 'j', 'k', 'a' };
+static const symbol s_39[] = { 'b', 'o', 'j', 'k', 'a' };
+static const symbol s_40[] = { 'j', 'a', 'k' };
+static const symbol s_41[] = { 0xC4, 0x8D, 'a', 'j', 'n', 'i' };
+static const symbol s_42[] = { 'c', 'a', 'j', 'n', 'i' };
+static const symbol s_43[] = { 'e', 'r', 'n', 'i' };
+static const symbol s_44[] = { 'l', 'a', 'r', 'n', 'i' };
+static const symbol s_45[] = { 'e', 's', 'n', 'i' };
+static const symbol s_46[] = { 'a', 'n', 'j', 'c', 'a' };
+static const symbol s_47[] = { 'a', 'j', 'c', 'a' };
+static const symbol s_48[] = { 'l', 'j', 'c', 'a' };
+static const symbol s_49[] = { 'e', 'j', 'c', 'a' };
+static const symbol s_50[] = { 'o', 'j', 'c', 'a' };
+static const symbol s_51[] = { 'a', 'j', 'k', 'a' };
+static const symbol s_52[] = { 'o', 'j', 'k', 'a' };
+static const symbol s_53[] = { 0xC5, 0xA1, 'c', 'a' };
+static const symbol s_54[] = { 'i', 'n', 'g' };
+static const symbol s_55[] = { 't', 'v', 'e', 'n', 'i', 'k' };
+static const symbol s_56[] = { 't', 'e', 't', 'i', 'k', 'a' };
+static const symbol s_57[] = { 'n', 's', 't', 'v', 'a' };
+static const symbol s_58[] = { 'n', 'i', 'k' };
+static const symbol s_59[] = { 't', 'i', 'k' };
+static const symbol s_60[] = { 'z', 'i', 'k' };
+static const symbol s_61[] = { 's', 'n', 'i', 'k' };
+static const symbol s_62[] = { 'k', 'u', 's', 'i' };
+static const symbol s_63[] = { 'k', 'u', 's', 'n', 'i' };
+static const symbol s_64[] = { 'k', 'u', 's', 't', 'v', 'a' };
+static const symbol s_65[] = { 'd', 'u', 0xC5, 0xA1, 'n', 'i' };
+static const symbol s_66[] = { 'd', 'u', 's', 'n', 'i' };
+static const symbol s_67[] = { 'a', 'n', 't', 'n', 'i' };
+static const symbol s_68[] = { 'b', 'i', 'l', 'n', 'i' };
+static const symbol s_69[] = { 't', 'i', 'l', 'n', 'i' };
+static const symbol s_70[] = { 'a', 'v', 'i', 'l', 'n', 'i' };
+static const symbol s_71[] = { 's', 'i', 'l', 'n', 'i' };
+static const symbol s_72[] = { 'g', 'i', 'l', 'n', 'i' };
+static const symbol s_73[] = { 'r', 'i', 'l', 'n', 'i' };
+static const symbol s_74[] = { 'n', 'i', 'l', 'n', 'i' };
+static const symbol s_75[] = { 'a', 'l', 'n', 'i' };
+static const symbol s_76[] = { 'o', 'z', 'n', 'i' };
+static const symbol s_77[] = { 'r', 'a', 'v', 'i' };
+static const symbol s_78[] = { 's', 't', 'a', 'v', 'n', 'i' };
+static const symbol s_79[] = { 'p', 'r', 'a', 'v', 'n', 'i' };
+static const symbol s_80[] = { 't', 'i', 'v', 'n', 'i' };
+static const symbol s_81[] = { 's', 'i', 'v', 'n', 'i' };
+static const symbol s_82[] = { 'a', 't', 'n', 'i' };
+static const symbol s_83[] = { 'e', 'n', 't', 'a' };
+static const symbol s_84[] = { 't', 'e', 't', 'n', 'i' };
+static const symbol s_85[] = { 'p', 'l', 'e', 't', 'n', 'i' };
+static const symbol s_86[] = { 0xC5, 0xA1, 'a', 'v', 'i' };
+static const symbol s_87[] = { 's', 'a', 'v', 'i' };
+static const symbol s_88[] = { 'a', 'n', 't', 'a' };
+static const symbol s_89[] = { 'a', 0xC4, 0x8D, 'k', 'a' };
+static const symbol s_90[] = { 'a', 'c', 'k', 'a' };
+static const symbol s_91[] = { 'u', 0xC5, 0xA1, 'k', 'a' };
+static const symbol s_92[] = { 'u', 's', 'k', 'a' };
+static const symbol s_93[] = { 'a', 't', 'k', 'a' };
+static const symbol s_94[] = { 'e', 't', 'k', 'a' };
+static const symbol s_95[] = { 'i', 't', 'k', 'a' };
+static const symbol s_96[] = { 'o', 't', 'k', 'a' };
+static const symbol s_97[] = { 'u', 't', 'k', 'a' };
+static const symbol s_98[] = { 'e', 's', 'k', 'n', 'a' };
+static const symbol s_99[] = { 't', 'i', 0xC4, 0x8D, 'n', 'i' };
+static const symbol s_100[] = { 't', 'i', 'c', 'n', 'i' };
+static const symbol s_101[] = { 'o', 'j', 's', 'k', 'a' };
+static const symbol s_102[] = { 'e', 's', 'm', 'a' };
+static const symbol s_103[] = { 'm', 'e', 't', 'r', 'a' };
+static const symbol s_104[] = { 'c', 'e', 'n', 't', 'r', 'a' };
+static const symbol s_105[] = { 'i', 's', 't', 'r', 'a' };
+static const symbol s_106[] = { 'o', 's', 't', 'i' };
+static const symbol s_107[] = { 'o', 's', 't', 'i' };
+static const symbol s_108[] = { 'd', 'b', 'a' };
+static const symbol s_109[] = { 0xC4, 0x8D, 'k', 'a' };
+static const symbol s_110[] = { 'm', 'c', 'a' };
+static const symbol s_111[] = { 'n', 'c', 'a' };
+static const symbol s_112[] = { 'v', 'o', 'l', 'j', 'n', 'i' };
+static const symbol s_113[] = { 'a', 'n', 'k', 'i' };
+static const symbol s_114[] = { 'v', 'c', 'a' };
+static const symbol s_115[] = { 's', 'c', 'a' };
+static const symbol s_116[] = { 'r', 'c', 'a' };
+static const symbol s_117[] = { 'a', 'l', 'c', 'a' };
+static const symbol s_118[] = { 'e', 'l', 'c', 'a' };
+static const symbol s_119[] = { 'o', 'l', 'c', 'a' };
+static const symbol s_120[] = { 'n', 'j', 'c', 'a' };
+static const symbol s_121[] = { 'e', 'k', 't', 'a' };
+static const symbol s_122[] = { 'i', 'z', 'm', 'a' };
+static const symbol s_123[] = { 'j', 'e', 'b', 'i' };
+static const symbol s_124[] = { 'b', 'a', 'c', 'i' };
+static const symbol s_125[] = { 'a', 0xC5, 0xA1, 'n', 'i' };
+static const symbol s_126[] = { 'a', 's', 'n', 'i' };
+static const symbol s_127[] = { 's', 'k' };
+static const symbol s_128[] = { 0xC5, 0xA1, 'k' };
+static const symbol s_129[] = { 's', 't', 'v' };
+static const symbol s_130[] = { 0xC5, 0xA1, 't', 'v' };
+static const symbol s_131[] = { 't', 'a', 'n', 'i', 'j' };
+static const symbol s_132[] = { 'm', 'a', 'n', 'i', 'j' };
+static const symbol s_133[] = { 'p', 'a', 'n', 'i', 'j' };
+static const symbol s_134[] = { 'r', 'a', 'n', 'i', 'j' };
+static const symbol s_135[] = { 'g', 'a', 'n', 'i', 'j' };
+static const symbol s_136[] = { 'a', 'n' };
+static const symbol s_137[] = { 'i', 'n' };
+static const symbol s_138[] = { 'o', 'n' };
+static const symbol s_139[] = { 'n' };
+static const symbol s_140[] = { 'a', 0xC4, 0x87 };
+static const symbol s_141[] = { 'e', 0xC4, 0x87 };
+static const symbol s_142[] = { 'u', 0xC4, 0x87 };
+static const symbol s_143[] = { 'u', 'g', 'o', 'v' };
+static const symbol s_144[] = { 'u', 'g' };
+static const symbol s_145[] = { 'l', 'o', 'g' };
+static const symbol s_146[] = { 'g' };
+static const symbol s_147[] = { 'r', 'a', 'r', 'i' };
+static const symbol s_148[] = { 'o', 't', 'i' };
+static const symbol s_149[] = { 's', 'i' };
+static const symbol s_150[] = { 'l', 'i' };
+static const symbol s_151[] = { 'u', 'j' };
+static const symbol s_152[] = { 'c', 'a', 'j' };
+static const symbol s_153[] = { 0xC4, 0x8D, 'a', 'j' };
+static const symbol s_154[] = { 0xC4, 0x87, 'a', 'j' };
+static const symbol s_155[] = { 0xC4, 0x91, 'a', 'j' };
+static const symbol s_156[] = { 'l', 'a', 'j' };
+static const symbol s_157[] = { 'r', 'a', 'j' };
+static const symbol s_158[] = { 'b', 'i', 'j' };
+static const symbol s_159[] = { 'c', 'i', 'j' };
+static const symbol s_160[] = { 'd', 'i', 'j' };
+static const symbol s_161[] = { 'l', 'i', 'j' };
+static const symbol s_162[] = { 'n', 'i', 'j' };
+static const symbol s_163[] = { 'm', 'i', 'j' };
+static const symbol s_164[] = { 0xC5, 0xBE, 'i', 'j' };
+static const symbol s_165[] = { 'g', 'i', 'j' };
+static const symbol s_166[] = { 'f', 'i', 'j' };
+static const symbol s_167[] = { 'p', 'i', 'j' };
+static const symbol s_168[] = { 'r', 'i', 'j' };
+static const symbol s_169[] = { 's', 'i', 'j' };
+static const symbol s_170[] = { 't', 'i', 'j' };
+static const symbol s_171[] = { 'z', 'i', 'j' };
+static const symbol s_172[] = { 'n', 'a', 'l' };
+static const symbol s_173[] = { 'i', 'j', 'a', 'l' };
+static const symbol s_174[] = { 'o', 'z', 'i', 'l' };
+static const symbol s_175[] = { 'o', 'l', 'o', 'v' };
+static const symbol s_176[] = { 'o', 'l' };
+static const symbol s_177[] = { 'l', 'e', 'm' };
+static const symbol s_178[] = { 'r', 'a', 'm' };
+static const symbol s_179[] = { 'a', 'r' };
+static const symbol s_180[] = { 'd', 'r' };
+static const symbol s_181[] = { 'e', 'r' };
+static const symbol s_182[] = { 'o', 'r' };
+static const symbol s_183[] = { 'e', 's' };
+static const symbol s_184[] = { 'i', 's' };
+static const symbol s_185[] = { 't', 'a', 0xC5, 0xA1 };
+static const symbol s_186[] = { 'n', 'a', 0xC5, 0xA1 };
+static const symbol s_187[] = { 'j', 'a', 0xC5, 0xA1 };
+static const symbol s_188[] = { 'k', 'a', 0xC5, 0xA1 };
+static const symbol s_189[] = { 'b', 'a', 0xC5, 0xA1 };
+static const symbol s_190[] = { 'g', 'a', 0xC5, 0xA1 };
+static const symbol s_191[] = { 'v', 'a', 0xC5, 0xA1 };
+static const symbol s_192[] = { 'e', 0xC5, 0xA1 };
+static const symbol s_193[] = { 'i', 0xC5, 0xA1 };
+static const symbol s_194[] = { 'i', 'k', 'a', 't' };
+static const symbol s_195[] = { 'l', 'a', 't' };
+static const symbol s_196[] = { 'e', 't' };
+static const symbol s_197[] = { 'e', 's', 't' };
+static const symbol s_198[] = { 'i', 's', 't' };
+static const symbol s_199[] = { 'k', 's', 't' };
+static const symbol s_200[] = { 'o', 's', 't' };
+static const symbol s_201[] = { 'i', 0xC5, 0xA1, 't' };
+static const symbol s_202[] = { 'o', 'v', 'a' };
+static const symbol s_203[] = { 'a', 'v' };
+static const symbol s_204[] = { 'e', 'v' };
+static const symbol s_205[] = { 'i', 'v' };
+static const symbol s_206[] = { 'o', 'v' };
+static const symbol s_207[] = { 'm', 'o', 'v' };
+static const symbol s_208[] = { 'l', 'o', 'v' };
+static const symbol s_209[] = { 'e', 'l' };
+static const symbol s_210[] = { 'a', 'n', 'j' };
+static const symbol s_211[] = { 'e', 'n', 'j' };
+static const symbol s_212[] = { 0xC5, 0xA1, 'n', 'j' };
+static const symbol s_213[] = { 'e', 'n' };
+static const symbol s_214[] = { 0xC5, 0xA1, 'n' };
+static const symbol s_215[] = { 0xC4, 0x8D, 'i', 'n' };
+static const symbol s_216[] = { 'r', 'o', 0xC5, 0xA1, 'i' };
+static const symbol s_217[] = { 'o', 0xC5, 0xA1 };
+static const symbol s_218[] = { 'e', 'v', 'i', 't' };
+static const symbol s_219[] = { 'o', 'v', 'i', 't' };
+static const symbol s_220[] = { 'a', 's', 't' };
+static const symbol s_221[] = { 'k' };
+static const symbol s_222[] = { 'e', 'v', 'a' };
+static const symbol s_223[] = { 'a', 'v', 'a' };
+static const symbol s_224[] = { 'i', 'v', 'a' };
+static const symbol s_225[] = { 'u', 'v', 'a' };
+static const symbol s_226[] = { 'i', 'r' };
+static const symbol s_227[] = { 'a', 0xC4, 0x8D };
+static const symbol s_228[] = { 'a', 0xC4, 0x8D, 'a' };
+static const symbol s_229[] = { 'n', 'i' };
+static const symbol s_230[] = { 'a' };
+static const symbol s_231[] = { 'u', 'r' };
+static const symbol s_232[] = { 'a', 's', 't', 'a', 'j' };
+static const symbol s_233[] = { 'i', 's', 't', 'a', 'j' };
+static const symbol s_234[] = { 'o', 's', 't', 'a', 'j' };
+static const symbol s_235[] = { 'a', 'j' };
+static const symbol s_236[] = { 'a', 's', 't', 'a' };
+static const symbol s_237[] = { 'i', 's', 't', 'a' };
+static const symbol s_238[] = { 'o', 's', 't', 'a' };
+static const symbol s_239[] = { 't', 'a' };
+static const symbol s_240[] = { 'i', 'n', 'j' };
+static const symbol s_241[] = { 'a', 's' };
+static const symbol s_242[] = { 'i' };
+static const symbol s_243[] = { 'l', 'u', 0xC4, 0x8D };
+static const symbol s_244[] = { 'j', 'e', 't', 'i' };
+static const symbol s_245[] = { 'e' };
+static const symbol s_246[] = { 'a', 't' };
+static const symbol s_247[] = { 'l', 'u', 'c' };
+static const symbol s_248[] = { 's', 'n', 'j' };
+static const symbol s_249[] = { 'o', 's' };
+static const symbol s_250[] = { 'a', 'c' };
+static const symbol s_251[] = { 'e', 'c' };
+static const symbol s_252[] = { 'u', 'c' };
+static const symbol s_253[] = { 'r', 'o', 's', 'i' };
+static const symbol s_254[] = { 'a', 'c', 'a' };
+static const symbol s_255[] = { 'j', 'a', 's' };
+static const symbol s_256[] = { 't', 'a', 's' };
+static const symbol s_257[] = { 'g', 'a', 's' };
+static const symbol s_258[] = { 'n', 'a', 's' };
+static const symbol s_259[] = { 'k', 'a', 's' };
+static const symbol s_260[] = { 'v', 'a', 's' };
+static const symbol s_261[] = { 'b', 'a', 's' };
+static const symbol s_262[] = { 'a', 's' };
+static const symbol s_263[] = { 'c', 'i', 'n' };
+static const symbol s_264[] = { 'a', 's', 't', 'a', 'j' };
+static const symbol s_265[] = { 'i', 's', 't', 'a', 'j' };
+static const symbol s_266[] = { 'o', 's', 't', 'a', 'j' };
+static const symbol s_267[] = { 'a', 's', 't', 'a' };
+static const symbol s_268[] = { 'i', 's', 't', 'a' };
+static const symbol s_269[] = { 'o', 's', 't', 'a' };
+static const symbol s_270[] = { 'a', 'v', 'a' };
+static const symbol s_271[] = { 'e', 'v', 'a' };
+static const symbol s_272[] = { 'i', 'v', 'a' };
+static const symbol s_273[] = { 'u', 'v', 'a' };
+static const symbol s_274[] = { 'o', 'v', 'a' };
+static const symbol s_275[] = { 'j', 'e', 't', 'i' };
+static const symbol s_276[] = { 'i', 'n', 'j' };
+static const symbol s_277[] = { 'i', 's', 't' };
+static const symbol s_278[] = { 'e', 's' };
+static const symbol s_279[] = { 'e', 't' };
+static const symbol s_280[] = { 'i', 's' };
+static const symbol s_281[] = { 'i', 'r' };
+static const symbol s_282[] = { 'u', 'r' };
+static const symbol s_283[] = { 'u', 'j' };
+static const symbol s_284[] = { 'n', 'i' };
+static const symbol s_285[] = { 's', 'n' };
+static const symbol s_286[] = { 't', 'a' };
+static const symbol s_287[] = { 'a' };
+static const symbol s_288[] = { 'i' };
+static const symbol s_289[] = { 'e' };
+static const symbol s_290[] = { 'n' };
 
-extern struct SN_env * serbian_UTF_8_create_env(void);
-extern void serbian_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[2] = { 0xD0, 0xB0 };
 static const symbol s_0_1[2] = { 0xD0, 0xB1 };
 static const symbol s_0_2[2] = { 0xD0, 0xB2 };
@@ -4490,298 +4784,6 @@ static const unsigned char g_ca[] = { 119, 95, 23, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
 static const unsigned char g_rg[] = { 1 };
 
-static const symbol s_0[] = { 'a' };
-static const symbol s_1[] = { 'b' };
-static const symbol s_2[] = { 'v' };
-static const symbol s_3[] = { 'g' };
-static const symbol s_4[] = { 'd' };
-static const symbol s_5[] = { 0xC4, 0x91 };
-static const symbol s_6[] = { 'e' };
-static const symbol s_7[] = { 0xC5, 0xBE };
-static const symbol s_8[] = { 'z' };
-static const symbol s_9[] = { 'i' };
-static const symbol s_10[] = { 'j' };
-static const symbol s_11[] = { 'k' };
-static const symbol s_12[] = { 'l' };
-static const symbol s_13[] = { 'l', 'j' };
-static const symbol s_14[] = { 'm' };
-static const symbol s_15[] = { 'n' };
-static const symbol s_16[] = { 'n', 'j' };
-static const symbol s_17[] = { 'o' };
-static const symbol s_18[] = { 'p' };
-static const symbol s_19[] = { 'r' };
-static const symbol s_20[] = { 's' };
-static const symbol s_21[] = { 't' };
-static const symbol s_22[] = { 0xC4, 0x87 };
-static const symbol s_23[] = { 'u' };
-static const symbol s_24[] = { 'f' };
-static const symbol s_25[] = { 'h' };
-static const symbol s_26[] = { 'c' };
-static const symbol s_27[] = { 0xC4, 0x8D };
-static const symbol s_28[] = { 'd', 0xC5, 0xBE };
-static const symbol s_29[] = { 0xC5, 0xA1 };
-static const symbol s_30[] = { 'i', 'j', 'e' };
-static const symbol s_31[] = { 'e' };
-static const symbol s_32[] = { 'j', 'e' };
-static const symbol s_33[] = { 'e' };
-static const symbol s_34[] = { 'd', 'j' };
-static const symbol s_35[] = { 0xC4, 0x91 };
-static const symbol s_36[] = { 'l', 'o', 'g', 'a' };
-static const symbol s_37[] = { 'p', 'e', 'h' };
-static const symbol s_38[] = { 'v', 'o', 'j', 'k', 'a' };
-static const symbol s_39[] = { 'b', 'o', 'j', 'k', 'a' };
-static const symbol s_40[] = { 'j', 'a', 'k' };
-static const symbol s_41[] = { 0xC4, 0x8D, 'a', 'j', 'n', 'i' };
-static const symbol s_42[] = { 'c', 'a', 'j', 'n', 'i' };
-static const symbol s_43[] = { 'e', 'r', 'n', 'i' };
-static const symbol s_44[] = { 'l', 'a', 'r', 'n', 'i' };
-static const symbol s_45[] = { 'e', 's', 'n', 'i' };
-static const symbol s_46[] = { 'a', 'n', 'j', 'c', 'a' };
-static const symbol s_47[] = { 'a', 'j', 'c', 'a' };
-static const symbol s_48[] = { 'l', 'j', 'c', 'a' };
-static const symbol s_49[] = { 'e', 'j', 'c', 'a' };
-static const symbol s_50[] = { 'o', 'j', 'c', 'a' };
-static const symbol s_51[] = { 'a', 'j', 'k', 'a' };
-static const symbol s_52[] = { 'o', 'j', 'k', 'a' };
-static const symbol s_53[] = { 0xC5, 0xA1, 'c', 'a' };
-static const symbol s_54[] = { 'i', 'n', 'g' };
-static const symbol s_55[] = { 't', 'v', 'e', 'n', 'i', 'k' };
-static const symbol s_56[] = { 't', 'e', 't', 'i', 'k', 'a' };
-static const symbol s_57[] = { 'n', 's', 't', 'v', 'a' };
-static const symbol s_58[] = { 'n', 'i', 'k' };
-static const symbol s_59[] = { 't', 'i', 'k' };
-static const symbol s_60[] = { 'z', 'i', 'k' };
-static const symbol s_61[] = { 's', 'n', 'i', 'k' };
-static const symbol s_62[] = { 'k', 'u', 's', 'i' };
-static const symbol s_63[] = { 'k', 'u', 's', 'n', 'i' };
-static const symbol s_64[] = { 'k', 'u', 's', 't', 'v', 'a' };
-static const symbol s_65[] = { 'd', 'u', 0xC5, 0xA1, 'n', 'i' };
-static const symbol s_66[] = { 'd', 'u', 's', 'n', 'i' };
-static const symbol s_67[] = { 'a', 'n', 't', 'n', 'i' };
-static const symbol s_68[] = { 'b', 'i', 'l', 'n', 'i' };
-static const symbol s_69[] = { 't', 'i', 'l', 'n', 'i' };
-static const symbol s_70[] = { 'a', 'v', 'i', 'l', 'n', 'i' };
-static const symbol s_71[] = { 's', 'i', 'l', 'n', 'i' };
-static const symbol s_72[] = { 'g', 'i', 'l', 'n', 'i' };
-static const symbol s_73[] = { 'r', 'i', 'l', 'n', 'i' };
-static const symbol s_74[] = { 'n', 'i', 'l', 'n', 'i' };
-static const symbol s_75[] = { 'a', 'l', 'n', 'i' };
-static const symbol s_76[] = { 'o', 'z', 'n', 'i' };
-static const symbol s_77[] = { 'r', 'a', 'v', 'i' };
-static const symbol s_78[] = { 's', 't', 'a', 'v', 'n', 'i' };
-static const symbol s_79[] = { 'p', 'r', 'a', 'v', 'n', 'i' };
-static const symbol s_80[] = { 't', 'i', 'v', 'n', 'i' };
-static const symbol s_81[] = { 's', 'i', 'v', 'n', 'i' };
-static const symbol s_82[] = { 'a', 't', 'n', 'i' };
-static const symbol s_83[] = { 'e', 'n', 't', 'a' };
-static const symbol s_84[] = { 't', 'e', 't', 'n', 'i' };
-static const symbol s_85[] = { 'p', 'l', 'e', 't', 'n', 'i' };
-static const symbol s_86[] = { 0xC5, 0xA1, 'a', 'v', 'i' };
-static const symbol s_87[] = { 's', 'a', 'v', 'i' };
-static const symbol s_88[] = { 'a', 'n', 't', 'a' };
-static const symbol s_89[] = { 'a', 0xC4, 0x8D, 'k', 'a' };
-static const symbol s_90[] = { 'a', 'c', 'k', 'a' };
-static const symbol s_91[] = { 'u', 0xC5, 0xA1, 'k', 'a' };
-static const symbol s_92[] = { 'u', 's', 'k', 'a' };
-static const symbol s_93[] = { 'a', 't', 'k', 'a' };
-static const symbol s_94[] = { 'e', 't', 'k', 'a' };
-static const symbol s_95[] = { 'i', 't', 'k', 'a' };
-static const symbol s_96[] = { 'o', 't', 'k', 'a' };
-static const symbol s_97[] = { 'u', 't', 'k', 'a' };
-static const symbol s_98[] = { 'e', 's', 'k', 'n', 'a' };
-static const symbol s_99[] = { 't', 'i', 0xC4, 0x8D, 'n', 'i' };
-static const symbol s_100[] = { 't', 'i', 'c', 'n', 'i' };
-static const symbol s_101[] = { 'o', 'j', 's', 'k', 'a' };
-static const symbol s_102[] = { 'e', 's', 'm', 'a' };
-static const symbol s_103[] = { 'm', 'e', 't', 'r', 'a' };
-static const symbol s_104[] = { 'c', 'e', 'n', 't', 'r', 'a' };
-static const symbol s_105[] = { 'i', 's', 't', 'r', 'a' };
-static const symbol s_106[] = { 'o', 's', 't', 'i' };
-static const symbol s_107[] = { 'o', 's', 't', 'i' };
-static const symbol s_108[] = { 'd', 'b', 'a' };
-static const symbol s_109[] = { 0xC4, 0x8D, 'k', 'a' };
-static const symbol s_110[] = { 'm', 'c', 'a' };
-static const symbol s_111[] = { 'n', 'c', 'a' };
-static const symbol s_112[] = { 'v', 'o', 'l', 'j', 'n', 'i' };
-static const symbol s_113[] = { 'a', 'n', 'k', 'i' };
-static const symbol s_114[] = { 'v', 'c', 'a' };
-static const symbol s_115[] = { 's', 'c', 'a' };
-static const symbol s_116[] = { 'r', 'c', 'a' };
-static const symbol s_117[] = { 'a', 'l', 'c', 'a' };
-static const symbol s_118[] = { 'e', 'l', 'c', 'a' };
-static const symbol s_119[] = { 'o', 'l', 'c', 'a' };
-static const symbol s_120[] = { 'n', 'j', 'c', 'a' };
-static const symbol s_121[] = { 'e', 'k', 't', 'a' };
-static const symbol s_122[] = { 'i', 'z', 'm', 'a' };
-static const symbol s_123[] = { 'j', 'e', 'b', 'i' };
-static const symbol s_124[] = { 'b', 'a', 'c', 'i' };
-static const symbol s_125[] = { 'a', 0xC5, 0xA1, 'n', 'i' };
-static const symbol s_126[] = { 'a', 's', 'n', 'i' };
-static const symbol s_127[] = { 's', 'k' };
-static const symbol s_128[] = { 0xC5, 0xA1, 'k' };
-static const symbol s_129[] = { 's', 't', 'v' };
-static const symbol s_130[] = { 0xC5, 0xA1, 't', 'v' };
-static const symbol s_131[] = { 't', 'a', 'n', 'i', 'j' };
-static const symbol s_132[] = { 'm', 'a', 'n', 'i', 'j' };
-static const symbol s_133[] = { 'p', 'a', 'n', 'i', 'j' };
-static const symbol s_134[] = { 'r', 'a', 'n', 'i', 'j' };
-static const symbol s_135[] = { 'g', 'a', 'n', 'i', 'j' };
-static const symbol s_136[] = { 'a', 'n' };
-static const symbol s_137[] = { 'i', 'n' };
-static const symbol s_138[] = { 'o', 'n' };
-static const symbol s_139[] = { 'n' };
-static const symbol s_140[] = { 'a', 0xC4, 0x87 };
-static const symbol s_141[] = { 'e', 0xC4, 0x87 };
-static const symbol s_142[] = { 'u', 0xC4, 0x87 };
-static const symbol s_143[] = { 'u', 'g', 'o', 'v' };
-static const symbol s_144[] = { 'u', 'g' };
-static const symbol s_145[] = { 'l', 'o', 'g' };
-static const symbol s_146[] = { 'g' };
-static const symbol s_147[] = { 'r', 'a', 'r', 'i' };
-static const symbol s_148[] = { 'o', 't', 'i' };
-static const symbol s_149[] = { 's', 'i' };
-static const symbol s_150[] = { 'l', 'i' };
-static const symbol s_151[] = { 'u', 'j' };
-static const symbol s_152[] = { 'c', 'a', 'j' };
-static const symbol s_153[] = { 0xC4, 0x8D, 'a', 'j' };
-static const symbol s_154[] = { 0xC4, 0x87, 'a', 'j' };
-static const symbol s_155[] = { 0xC4, 0x91, 'a', 'j' };
-static const symbol s_156[] = { 'l', 'a', 'j' };
-static const symbol s_157[] = { 'r', 'a', 'j' };
-static const symbol s_158[] = { 'b', 'i', 'j' };
-static const symbol s_159[] = { 'c', 'i', 'j' };
-static const symbol s_160[] = { 'd', 'i', 'j' };
-static const symbol s_161[] = { 'l', 'i', 'j' };
-static const symbol s_162[] = { 'n', 'i', 'j' };
-static const symbol s_163[] = { 'm', 'i', 'j' };
-static const symbol s_164[] = { 0xC5, 0xBE, 'i', 'j' };
-static const symbol s_165[] = { 'g', 'i', 'j' };
-static const symbol s_166[] = { 'f', 'i', 'j' };
-static const symbol s_167[] = { 'p', 'i', 'j' };
-static const symbol s_168[] = { 'r', 'i', 'j' };
-static const symbol s_169[] = { 's', 'i', 'j' };
-static const symbol s_170[] = { 't', 'i', 'j' };
-static const symbol s_171[] = { 'z', 'i', 'j' };
-static const symbol s_172[] = { 'n', 'a', 'l' };
-static const symbol s_173[] = { 'i', 'j', 'a', 'l' };
-static const symbol s_174[] = { 'o', 'z', 'i', 'l' };
-static const symbol s_175[] = { 'o', 'l', 'o', 'v' };
-static const symbol s_176[] = { 'o', 'l' };
-static const symbol s_177[] = { 'l', 'e', 'm' };
-static const symbol s_178[] = { 'r', 'a', 'm' };
-static const symbol s_179[] = { 'a', 'r' };
-static const symbol s_180[] = { 'd', 'r' };
-static const symbol s_181[] = { 'e', 'r' };
-static const symbol s_182[] = { 'o', 'r' };
-static const symbol s_183[] = { 'e', 's' };
-static const symbol s_184[] = { 'i', 's' };
-static const symbol s_185[] = { 't', 'a', 0xC5, 0xA1 };
-static const symbol s_186[] = { 'n', 'a', 0xC5, 0xA1 };
-static const symbol s_187[] = { 'j', 'a', 0xC5, 0xA1 };
-static const symbol s_188[] = { 'k', 'a', 0xC5, 0xA1 };
-static const symbol s_189[] = { 'b', 'a', 0xC5, 0xA1 };
-static const symbol s_190[] = { 'g', 'a', 0xC5, 0xA1 };
-static const symbol s_191[] = { 'v', 'a', 0xC5, 0xA1 };
-static const symbol s_192[] = { 'e', 0xC5, 0xA1 };
-static const symbol s_193[] = { 'i', 0xC5, 0xA1 };
-static const symbol s_194[] = { 'i', 'k', 'a', 't' };
-static const symbol s_195[] = { 'l', 'a', 't' };
-static const symbol s_196[] = { 'e', 't' };
-static const symbol s_197[] = { 'e', 's', 't' };
-static const symbol s_198[] = { 'i', 's', 't' };
-static const symbol s_199[] = { 'k', 's', 't' };
-static const symbol s_200[] = { 'o', 's', 't' };
-static const symbol s_201[] = { 'i', 0xC5, 0xA1, 't' };
-static const symbol s_202[] = { 'o', 'v', 'a' };
-static const symbol s_203[] = { 'a', 'v' };
-static const symbol s_204[] = { 'e', 'v' };
-static const symbol s_205[] = { 'i', 'v' };
-static const symbol s_206[] = { 'o', 'v' };
-static const symbol s_207[] = { 'm', 'o', 'v' };
-static const symbol s_208[] = { 'l', 'o', 'v' };
-static const symbol s_209[] = { 'e', 'l' };
-static const symbol s_210[] = { 'a', 'n', 'j' };
-static const symbol s_211[] = { 'e', 'n', 'j' };
-static const symbol s_212[] = { 0xC5, 0xA1, 'n', 'j' };
-static const symbol s_213[] = { 'e', 'n' };
-static const symbol s_214[] = { 0xC5, 0xA1, 'n' };
-static const symbol s_215[] = { 0xC4, 0x8D, 'i', 'n' };
-static const symbol s_216[] = { 'r', 'o', 0xC5, 0xA1, 'i' };
-static const symbol s_217[] = { 'o', 0xC5, 0xA1 };
-static const symbol s_218[] = { 'e', 'v', 'i', 't' };
-static const symbol s_219[] = { 'o', 'v', 'i', 't' };
-static const symbol s_220[] = { 'a', 's', 't' };
-static const symbol s_221[] = { 'k' };
-static const symbol s_222[] = { 'e', 'v', 'a' };
-static const symbol s_223[] = { 'a', 'v', 'a' };
-static const symbol s_224[] = { 'i', 'v', 'a' };
-static const symbol s_225[] = { 'u', 'v', 'a' };
-static const symbol s_226[] = { 'i', 'r' };
-static const symbol s_227[] = { 'a', 0xC4, 0x8D };
-static const symbol s_228[] = { 'a', 0xC4, 0x8D, 'a' };
-static const symbol s_229[] = { 'n', 'i' };
-static const symbol s_230[] = { 'a' };
-static const symbol s_231[] = { 'u', 'r' };
-static const symbol s_232[] = { 'a', 's', 't', 'a', 'j' };
-static const symbol s_233[] = { 'i', 's', 't', 'a', 'j' };
-static const symbol s_234[] = { 'o', 's', 't', 'a', 'j' };
-static const symbol s_235[] = { 'a', 'j' };
-static const symbol s_236[] = { 'a', 's', 't', 'a' };
-static const symbol s_237[] = { 'i', 's', 't', 'a' };
-static const symbol s_238[] = { 'o', 's', 't', 'a' };
-static const symbol s_239[] = { 't', 'a' };
-static const symbol s_240[] = { 'i', 'n', 'j' };
-static const symbol s_241[] = { 'a', 's' };
-static const symbol s_242[] = { 'i' };
-static const symbol s_243[] = { 'l', 'u', 0xC4, 0x8D };
-static const symbol s_244[] = { 'j', 'e', 't', 'i' };
-static const symbol s_245[] = { 'e' };
-static const symbol s_246[] = { 'a', 't' };
-static const symbol s_247[] = { 'l', 'u', 'c' };
-static const symbol s_248[] = { 's', 'n', 'j' };
-static const symbol s_249[] = { 'o', 's' };
-static const symbol s_250[] = { 'a', 'c' };
-static const symbol s_251[] = { 'e', 'c' };
-static const symbol s_252[] = { 'u', 'c' };
-static const symbol s_253[] = { 'r', 'o', 's', 'i' };
-static const symbol s_254[] = { 'a', 'c', 'a' };
-static const symbol s_255[] = { 'j', 'a', 's' };
-static const symbol s_256[] = { 't', 'a', 's' };
-static const symbol s_257[] = { 'g', 'a', 's' };
-static const symbol s_258[] = { 'n', 'a', 's' };
-static const symbol s_259[] = { 'k', 'a', 's' };
-static const symbol s_260[] = { 'v', 'a', 's' };
-static const symbol s_261[] = { 'b', 'a', 's' };
-static const symbol s_262[] = { 'a', 's' };
-static const symbol s_263[] = { 'c', 'i', 'n' };
-static const symbol s_264[] = { 'a', 's', 't', 'a', 'j' };
-static const symbol s_265[] = { 'i', 's', 't', 'a', 'j' };
-static const symbol s_266[] = { 'o', 's', 't', 'a', 'j' };
-static const symbol s_267[] = { 'a', 's', 't', 'a' };
-static const symbol s_268[] = { 'i', 's', 't', 'a' };
-static const symbol s_269[] = { 'o', 's', 't', 'a' };
-static const symbol s_270[] = { 'a', 'v', 'a' };
-static const symbol s_271[] = { 'e', 'v', 'a' };
-static const symbol s_272[] = { 'i', 'v', 'a' };
-static const symbol s_273[] = { 'u', 'v', 'a' };
-static const symbol s_274[] = { 'o', 'v', 'a' };
-static const symbol s_275[] = { 'j', 'e', 't', 'i' };
-static const symbol s_276[] = { 'i', 'n', 'j' };
-static const symbol s_277[] = { 'i', 's', 't' };
-static const symbol s_278[] = { 'e', 's' };
-static const symbol s_279[] = { 'e', 't' };
-static const symbol s_280[] = { 'i', 's' };
-static const symbol s_281[] = { 'i', 'r' };
-static const symbol s_282[] = { 'u', 'r' };
-static const symbol s_283[] = { 'u', 'j' };
-static const symbol s_284[] = { 'n', 'i' };
-static const symbol s_285[] = { 's', 'n' };
-static const symbol s_286[] = { 't', 'a' };
-static const symbol s_287[] = { 'a' };
-static const symbol s_288[] = { 'i' };
-static const symbol s_289[] = { 'e' };
-static const symbol s_290[] = { 'n' };
-
 static int r_cyr_to_lat(struct SN_env * z) {
     int among_var;
     {
@@ -4791,7 +4793,7 @@ static int r_cyr_to_lat(struct SN_env * z) {
             while (1) {
                 int v_3 = z->c;
                 z->bra = z->c;
-                among_var = find_among(z, a_0, 30);
+                among_var = find_among(z, a_0, 30, 0);
                 if (!among_var) goto lab2;
                 z->ket = z->c;
                 switch (among_var) {
@@ -5095,7 +5097,7 @@ static int r_prelude(struct SN_env * z) {
 }
 
 static int r_mark_regions(struct SN_env * z) {
-    z->I[1] = 1;
+    ((SN_local *)z)->b_no_diacritics = 1;
     {
         int v_1 = z->c;
         {
@@ -5103,11 +5105,11 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[1] = 0;
+        ((SN_local *)z)->b_no_diacritics = 0;
     lab0:
         z->c = v_1;
     }
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
     {
         int v_2 = z->c;
         {
@@ -5115,14 +5117,14 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab1;
             z->c += ret;
         }
-        z->I[0] = z->c;
-        if (z->I[0] >= 2) goto lab1;
+        ((SN_local *)z)->i_p1 = z->c;
+        if (((SN_local *)z)->i_p1 >= 2) goto lab1;
         {
             int ret = in_grouping_U(z, g_v, 97, 117, 1);
             if (ret < 0) goto lab1;
             z->c += ret;
         }
-        z->I[0] = z->c;
+        ((SN_local *)z)->i_p1 = z->c;
     lab1:
         z->c = v_2;
     }
@@ -5139,21 +5141,18 @@ static int r_mark_regions(struct SN_env * z) {
                 z->c = ret;
             }
         }
-        {
-            int v_4 = z->c;
-            if (z->c < 2) goto lab5;
-            goto lab4;
-        lab5:
-            z->c = v_4;
+        do {
+            if (z->c < 2) goto lab4;
+            break;
+        lab4:
             {
                 int ret = in_grouping_U(z, g_rg, 114, 114, 1);
                 if (ret < 0) goto lab2;
                 z->c += ret;
             }
-        }
-    lab4:
-        if ((z->I[0] - z->c) <= 1) goto lab2;
-        z->I[0] = z->c;
+        } while (0);
+        if ((((SN_local *)z)->i_p1 - z->c) <= 1) goto lab2;
+        ((SN_local *)z)->i_p1 = z->c;
     lab2:
         z->c = v_3;
     }
@@ -5161,14 +5160,14 @@ static int r_mark_regions(struct SN_env * z) {
 }
 
 static int r_R1(struct SN_env * z) {
-    return z->I[0] <= z->c;
+    return ((SN_local *)z)->i_p1 <= z->c;
 }
 
 static int r_Step_1(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((3435050 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_1, 130);
+    among_var = find_among_b(z, a_1, 130, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -5209,7 +5208,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 7:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_42);
                 if (ret < 0) return ret;
@@ -5354,7 +5353,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 31:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_66);
                 if (ret < 0) return ret;
@@ -5481,7 +5480,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 52:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_87);
                 if (ret < 0) return ret;
@@ -5500,7 +5499,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 55:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_90);
                 if (ret < 0) return ret;
@@ -5513,7 +5512,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 57:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_92);
                 if (ret < 0) return ret;
@@ -5562,7 +5561,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 65:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_100);
                 if (ret < 0) return ret;
@@ -5605,7 +5604,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 72:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_107);
                 if (ret < 0) return ret;
@@ -5720,7 +5719,7 @@ static int r_Step_1(struct SN_env * z) {
             }
             break;
         case 91:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_126);
                 if (ret < 0) return ret;
@@ -5733,7 +5732,7 @@ static int r_Step_1(struct SN_env * z) {
 static int r_Step_2(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_2, 2035);
+    among_var = find_among_b(z, a_2, 2035, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -6462,308 +6461,308 @@ static int r_Step_2(struct SN_env * z) {
             }
             break;
         case 121:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_247);
                 if (ret < 0) return ret;
             }
             break;
         case 122:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_248);
                 if (ret < 0) return ret;
             }
             break;
         case 123:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_249);
                 if (ret < 0) return ret;
             }
             break;
         case 124:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_250);
                 if (ret < 0) return ret;
             }
             break;
         case 125:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_251);
                 if (ret < 0) return ret;
             }
             break;
         case 126:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_252);
                 if (ret < 0) return ret;
             }
             break;
         case 127:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_253);
                 if (ret < 0) return ret;
             }
             break;
         case 128:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_254);
                 if (ret < 0) return ret;
             }
             break;
         case 129:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_255);
                 if (ret < 0) return ret;
             }
             break;
         case 130:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_256);
                 if (ret < 0) return ret;
             }
             break;
         case 131:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_257);
                 if (ret < 0) return ret;
             }
             break;
         case 132:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_258);
                 if (ret < 0) return ret;
             }
             break;
         case 133:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_259);
                 if (ret < 0) return ret;
             }
             break;
         case 134:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_260);
                 if (ret < 0) return ret;
             }
             break;
         case 135:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_261);
                 if (ret < 0) return ret;
             }
             break;
         case 136:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_262);
                 if (ret < 0) return ret;
             }
             break;
         case 137:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_263);
                 if (ret < 0) return ret;
             }
             break;
         case 138:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_264);
                 if (ret < 0) return ret;
             }
             break;
         case 139:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_265);
                 if (ret < 0) return ret;
             }
             break;
         case 140:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 5, s_266);
                 if (ret < 0) return ret;
             }
             break;
         case 141:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_267);
                 if (ret < 0) return ret;
             }
             break;
         case 142:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_268);
                 if (ret < 0) return ret;
             }
             break;
         case 143:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_269);
                 if (ret < 0) return ret;
             }
             break;
         case 144:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_270);
                 if (ret < 0) return ret;
             }
             break;
         case 145:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_271);
                 if (ret < 0) return ret;
             }
             break;
         case 146:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_272);
                 if (ret < 0) return ret;
             }
             break;
         case 147:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_273);
                 if (ret < 0) return ret;
             }
             break;
         case 148:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_274);
                 if (ret < 0) return ret;
             }
             break;
         case 149:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 4, s_275);
                 if (ret < 0) return ret;
             }
             break;
         case 150:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_276);
                 if (ret < 0) return ret;
             }
             break;
         case 151:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 3, s_277);
                 if (ret < 0) return ret;
             }
             break;
         case 152:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_278);
                 if (ret < 0) return ret;
             }
             break;
         case 153:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_279);
                 if (ret < 0) return ret;
             }
             break;
         case 154:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_280);
                 if (ret < 0) return ret;
             }
             break;
         case 155:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_281);
                 if (ret < 0) return ret;
             }
             break;
         case 156:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_282);
                 if (ret < 0) return ret;
             }
             break;
         case 157:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_283);
                 if (ret < 0) return ret;
             }
             break;
         case 158:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_284);
                 if (ret < 0) return ret;
             }
             break;
         case 159:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_285);
                 if (ret < 0) return ret;
             }
             break;
         case 160:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 2, s_286);
                 if (ret < 0) return ret;
             }
             break;
         case 161:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 1, s_287);
                 if (ret < 0) return ret;
             }
             break;
         case 162:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 1, s_288);
                 if (ret < 0) return ret;
             }
             break;
         case 163:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 1, s_289);
                 if (ret < 0) return ret;
             }
             break;
         case 164:
-            if (!(z->I[1])) return 0;
+            if (!((SN_local *)z)->b_no_diacritics) return 0;
             {
                 int ret = slice_from_s(z, 1, s_290);
                 if (ret < 0) return ret;
@@ -6776,14 +6775,14 @@ static int r_Step_2(struct SN_env * z) {
 static int r_Step_3(struct SN_env * z) {
     z->ket = z->c;
     if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((3188642 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    if (!find_among_b(z, a_3, 26)) return 0;
+    if (!find_among_b(z, a_3, 26, 0)) return 0;
     z->bra = z->c;
     {
         int ret = r_R1(z);
         if (ret <= 0) return ret;
     }
     {
-        int ret = slice_from_s(z, 0, 0);
+        int ret = slice_del(z);
         if (ret < 0) return ret;
     }
     return 1;
@@ -6813,23 +6812,22 @@ extern int serbian_UTF_8_stem(struct SN_env * z) {
     }
     {
         int v_2 = z->l - z->c;
-        {
+        do {
             int v_3 = z->l - z->c;
             {
                 int ret = r_Step_2(z);
-                if (ret == 0) goto lab2;
+                if (ret == 0) goto lab1;
                 if (ret < 0) return ret;
             }
-            goto lab1;
-        lab2:
+            break;
+        lab1:
             z->c = z->l - v_3;
             {
                 int ret = r_Step_3(z);
                 if (ret == 0) goto lab0;
                 if (ret < 0) return ret;
             }
-        }
-    lab1:
+        } while (0);
     lab0:
         z->c = z->l - v_2;
     }
@@ -6837,7 +6835,16 @@ extern int serbian_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * serbian_UTF_8_create_env(void) { return SN_create_env(0, 2); }
+extern struct SN_env * serbian_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p1 = 0;
+        ((SN_local *)z)->b_no_diacritics = 0;
+    }
+    return z;
+}
 
-extern void serbian_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void serbian_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

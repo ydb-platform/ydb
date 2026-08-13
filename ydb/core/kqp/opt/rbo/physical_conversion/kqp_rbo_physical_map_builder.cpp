@@ -5,7 +5,8 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputColumns = Map->GetInput()->GetOutputIUs();
+    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(*Map, 0);
+    const auto liveOutputs = NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Map));
 
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -38,6 +39,9 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
             continue;
         }
         const auto& fullName = input.GetFullName();
+        if (!liveOutputs.contains(fullName)) {
+            continue;
+        }
         auto it = colNamesToIndices.find(fullName);
         Y_ENSURE(it != colNamesToIndices.end());
         lambdaResults.push_back(lambdaArgs[it->second]);
@@ -45,6 +49,11 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     }
 
     for (const auto& mapElement : Map->MapElements) {
+        const auto outColName = mapElement.GetElementName().GetFullName();
+        if (!liveOutputs.contains(outColName)) {
+            continue;
+        }
+
         if (mapElement.IsRename()){
             const auto colName = mapElement.GetRename().GetFullName();
             auto it = colNamesToIndices.find(colName);
@@ -74,7 +83,6 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
             lambdaResults.push_back(Ctx.ReplaceNodes(std::move(lambdaBody), replaces));
         }
 
-        const auto outColName = mapElement.GetElementName().GetFullName();
         outputColumns.push_back(outColName);
     }
 
@@ -88,7 +96,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, NPhysicalConvertionUtils::BuildNameSet(Map->GetOutputIUs()), Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, liveOutputs, Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

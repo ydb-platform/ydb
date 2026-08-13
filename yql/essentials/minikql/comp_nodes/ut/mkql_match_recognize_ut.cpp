@@ -24,7 +24,7 @@ TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
 }
 
 struct TSetup {
-    TSetup(TScopedAlloc& alloc)
+    explicit TSetup(TScopedAlloc& alloc)
         : Alloc(alloc)
     {
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -78,7 +78,7 @@ THolder<IComputationGraph> BuildGraph(
     }
 
     const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, rowItems);
-    auto inputFlow = pgmBuilder.ToFlow(list);
+    auto inputFlow = pgmBuilder.ToFlow(list, {});
     auto pgmReturn = pgmBuilder.MatchRecognizeCore(
         inputFlow,
         [&](TRuntimeNode item) {
@@ -89,13 +89,13 @@ THolder<IComputationGraph> BuildGraph(
         {[&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
             return NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(56));
         }},
-        {{NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}},
+        {{NYql::NMatchRecognize::TRowPatternFactor{.Primary = "A", .QuantityMin = 3, .QuantityMax = 3, .Greedy = false, .Output = false, .Unused = false}}},
         {"A"sv},
         {[&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
             return NTest::ConvertValueToLiteralNode(pgmBuilder, bool(true));
         }},
         streamingMode,
-        {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""},
+        {.To = NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, .Var = ""},
         NYql::NMatchRecognize::ERowsPerMatch::OneRow);
 
     auto graph = setup.BuildGraph(pgmReturn);

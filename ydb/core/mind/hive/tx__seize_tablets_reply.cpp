@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -18,7 +20,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxSeizeTabletsReply::Execute");
+        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Execute processing seize tablets reply",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletInfo& protoTabletInfo : request.GetTablets()) {
             TTabletId tabletId = protoTabletInfo.GetTabletID();
@@ -32,6 +35,9 @@ public:
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
             tablet.BootMode = protoTabletInfo.GetTabletBootMode();
+            if (protoTabletInfo.HasIsBackup()) {
+                tablet.IsBackup = protoTabletInfo.GetIsBackup();
+            }
             tablet.ObjectId = {owner.first, protoTabletInfo.GetObjectId()};
 
             TVector<TSubDomainKey> allowedDomains;
@@ -72,6 +78,7 @@ public:
                         NIceDb::TUpdate<Schema::Tablet::LockedToActor>(tablet.LockedToActor),
                         NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(protoTabletInfo.GetLockedReconnectTimeout()),
                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(protoTabletInfo.GetObjectDomain()),
+                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
                         NIceDb::TUpdate<Schema::Tablet::NeedToReleaseFromParent>(true));
 
             TVector<TTabletChannelInfo>& tabletChannels = tablet.TabletStorageInfo->Channels;
@@ -156,7 +163,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSeizeTabletsReply::Complete");
+        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Complete",
+            {"logPrefix", GetLogPrefix()});
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
             request->Record.SetNewOwnerID(Self->TabletID());
@@ -165,7 +173,9 @@ public:
             }
             ctx.Send(Request->Sender, request.Release());
         } else {
-            BLOG_D("Migration complete (" << Self->MigrationProgress << " tablets migrated)");
+            YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Complete migration complete",
+                {"logPrefix", GetLogPrefix()},
+                {"migrationProgress", Self->MigrationProgress});
             Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_COMPLETE;
         }
     }

@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
@@ -31,7 +32,7 @@ namespace NKikimr::NStorage {
         YDB_LOG_DEBUG("Bootstrap",
             {"marker", "NWDC00"});
 
-        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ns = NNodeBroker::BuildNameserverTable(*Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
 
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
@@ -48,7 +49,7 @@ namespace NKikimr::NStorage {
                 pileNames.emplace(bridge.GetPiles(i).GetName(), i);
             }
 
-            for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
+            for (const auto& item : Cfg->NameserviceConfig->GetNode()) {
                 const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
                     : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
                     : TNodeLocation();

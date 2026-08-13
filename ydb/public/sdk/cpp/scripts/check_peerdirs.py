@@ -42,6 +42,10 @@ def peerdirs(text):
                 yield i, s
 
 
+def allowed(dep):
+    return any(dep == p.rstrip("/") or dep.startswith(p) for p in ALLOWED)
+
+
 def targets(changed_path):
     all_targets = [
         p for p in sorted(SDK.rglob("ya.make")) if ok(p.relative_to(SDK))
@@ -72,7 +76,7 @@ def main():
     bad = []
     for ya_make in files:
         for line_no, dep in peerdirs(ya_make.read_text(encoding="utf-8")):
-            if not any(dep.startswith(p) for p in ALLOWED):
+            if not allowed(dep):
                 rel = PREFIX / ya_make.relative_to(SDK)
                 bad.append(f"{rel}:{line_no}: forbidden PEERDIR {dep!r}")
     if bad:

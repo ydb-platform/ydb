@@ -20,7 +20,13 @@ namespace NKikimr::NKqp {
         if (CheckpointId) {
             o << ", CheckpointId: " << CheckpointId;
         }
+        if (WatermarkLateEventsPolicy) {
+            o << ", WatermarkLateEventsPolicy: " << WatermarkLateEventsPolicy;
+        }
         o << ", IsStreamingQuery: " << IsStreamingQuery;
+        if (UseBatchPool) {
+            o << ", UseBatchPool: " << UseBatchPool;
+        }
         o << "}";
     }
 
@@ -35,5 +41,6 @@ namespace NKikimr::NKqp {
         resultMap["RunScriptActorId"] = ctx.RunScriptActorId.ToString();  // Only for logging
         resultMap["CheckpointId"] = ctx.CheckpointId;
         resultMap["StreamingQueryPath"] = ctx.StreamingQueryPath;
+        resultMap["WatermarkLateEventsPolicy"] = ctx.WatermarkLateEventsPolicy;
     }
 }

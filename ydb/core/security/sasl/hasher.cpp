@@ -84,8 +84,7 @@ public:
                 const auto& hashTypeDescription = HashesRegistry.HashTypesMap.at(hashType);
                 switch (hashTypeDescription.Class) {
                 case EHashClass::Argon: {
-                    response->ArgonHash = GenerateArgonHash(hashTypeDescription);
-                    hashes[hashTypeDescription.Name] = *ArgonHashToNewFormat(response->ArgonHash);
+                    hashes[hashTypeDescription.Name] = GenerateArgonHash(hashTypeDescription);
                     break;
                 }
                 case EHashClass::Scram: {
@@ -121,7 +120,6 @@ public:
             );
 
             hashes = NJson::TJsonValue();
-            response->ArgonHash.clear();
         }
 
         if (hashes.IsDefined()) {
@@ -134,8 +132,7 @@ public:
             ", Send TEvComputedHashes: " <<
             "{ error: " << response->Error <<
             ", username: " << response->PreparedUsername <<
-            ", hashes: " << Base64StrictDecode(response->Hashes) <<
-            ", argon hash: " << response->ArgonHash << " }"
+            ", hashes: " << Base64StrictDecode(response->Hashes) << " }"
         );
 
         Send(Sender, response.release());
@@ -143,21 +140,22 @@ public:
     }
 
     std::string GenerateArgonHash(const THashTypeDescription& hashParams) const {
-        char salt[hashParams.SaltSize];
-        char hash[hashParams.HashSize];
-        RAND_bytes(reinterpret_cast<unsigned char*>(salt), hashParams.SaltSize);
+        std::string salt;
+        salt.resize(hashParams.SaltSize);
+        std::string hash;
+        hash.resize(hashParams.HashSize);
+        RAND_bytes(reinterpret_cast<unsigned char*>(salt.data()), salt.size());
         ArgonHasher->Hash(
             reinterpret_cast<const ui8*>(StaticCreds.Password.data()),
             StaticCreds.Password.size(),
-            reinterpret_cast<ui8*>(salt),
-            hashParams.SaltSize,
-            reinterpret_cast<ui8*>(hash),
-            hashParams.HashSize);
-        NJson::TJsonValue json;
-        json["type"] = hashParams.Name;
-        json["salt"] = Base64Encode(std::string_view(salt, hashParams.SaltSize));
-        json["hash"] = Base64Encode(std::string_view(hash, hashParams.HashSize));
-        return NJson::WriteJson(json, false);
+            reinterpret_cast<ui8*>(salt.data()),
+            salt.size(),
+            reinterpret_cast<ui8*>(hash.data()),
+            hash.size());
+
+        std::stringstream secret;
+        secret << Base64Encode(salt) << '$' << Base64Encode(hash);
+        return secret.str();
     }
 
     std::string GenerateScramHash(const THashTypeDescription& hashParams, std::string& error) const {

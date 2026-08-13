@@ -140,7 +140,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
@@ -161,7 +160,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             auto* logStream = settings.LogStream;
             ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
                 });
             });
         } else {

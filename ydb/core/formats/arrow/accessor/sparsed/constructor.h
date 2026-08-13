@@ -22,7 +22,7 @@ private:
     virtual bool DoIsEqualWithSameTypeTo(const IConstructor& /*item*/) const override {
         return true;
     }
-    virtual TString DoSerializeToString(
+    virtual TBlobWithAdditionalAccessorData DoSerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoDeserializeFromString(

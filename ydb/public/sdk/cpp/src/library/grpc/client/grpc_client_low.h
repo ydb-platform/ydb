@@ -14,6 +14,8 @@
 
 #include <deque>
 #include <condition_variable>
+#include <functional>
+#include <memory>
 #include <typeinfo>
 #include <variant>
 #include <vector>
@@ -93,13 +95,47 @@ private:
 class IQueueClientContext;
 using IQueueClientContextPtr = std::shared_ptr<IQueueClientContext>;
 
+class IQueueClientCallbackGuard {
+public:
+    virtual ~IQueueClientCallbackGuard() = default;
+    virtual bool IsEntered() const noexcept = 0;
+};
+
+class TNoopQueueClientCallbackGuard final : public IQueueClientCallbackGuard {
+public:
+    bool IsEntered() const noexcept override {
+        return true;
+    }
+};
+
+using TQueueClientCallbackGuardFactory = std::function<std::unique_ptr<IQueueClientCallbackGuard>()>;
+
 // Provider of IQueueClientContext instances
 class IQueueClientContextProvider {
 public:
     virtual ~IQueueClientContextProvider() = default;
 
     virtual IQueueClientContextPtr CreateContext() = 0;
+
+    virtual TQueueClientCallbackGuardFactory GetCallbackGuardFactory() {
+        return [] {
+            return std::make_unique<TNoopQueueClientCallbackGuard>();
+        };
+    }
 };
+
+template<class F>
+void RunQueueClientCallback(const TQueueClientCallbackGuardFactory& guardFactory, F&& f) {
+    std::unique_ptr<IQueueClientCallbackGuard> guard;
+    if (guardFactory) {
+        guard = guardFactory();
+    } else {
+        guard = std::make_unique<TNoopQueueClientCallbackGuard>();
+    }
+    if (guard->IsEntered()) {
+        f();
+    }
+}
 
 // Activity context for a low-level client
 class IQueueClientContext : public IQueueClientContextProvider {
@@ -210,9 +246,19 @@ protected:
 
     void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata);
 
+    void InitCallbackGuard(IQueueClientContextProvider* provider) {
+        CallbackGuardFactory_ = provider->GetCallbackGuardFactory();
+    }
+
+    template<class F>
+    void RunGuarded(F&& f) {
+        RunQueueClientCallback(CallbackGuardFactory_, std::forward<F>(f));
+    }
+
     grpc::Status Status;
     grpc::ClientContext Context;
     std::shared_ptr<IQueueClientContext> LocalContext;
+    TQueueClientCallbackGuardFactory CallbackGuardFactory_;
 };
 
 template<typename TStub, typename TRequest, typename TResponse>
@@ -232,7 +278,9 @@ public:
 
     ~TSimpleRequestProcessor() {
         if (!Replied_ && Callback_) {
-            Callback_(TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
+            RunGuarded([&] {
+                Callback_(TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
+            });
             Callback_ = nullptr; // free resources as early as possible
         }
     }
@@ -249,7 +297,9 @@ public:
             status = TGrpcStatus::Internal("Unexpected error");
         }
         Replied_ = true;
-        Callback_(std::move(status), std::move(Reply_));
+        RunGuarded([&] {
+            Callback_(std::move(status), std::move(Reply_));
+        });
         Callback_ = nullptr; // free resources as early as possible
         return false;
     }
@@ -265,10 +315,13 @@ private:
     }
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
             Replied_ = true;
-            Callback_(TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+            RunGuarded([&] {
+                Callback_(TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+            });
             Callback_ = nullptr;
             return;
         }
@@ -312,7 +365,9 @@ public:
 
     ~TAdvancedRequestProcessor() {
         if (!Replied_ && Callback_) {
-            Callback_(Context, TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
+            RunGuarded([&] {
+                Callback_(Context, TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
+            });
             Callback_ = nullptr; // free resources as early as possible
         }
     }
@@ -329,7 +384,9 @@ public:
             status = TGrpcStatus::Internal("Unexpected error");
         }
         Replied_ = true;
-        Callback_(Context, std::move(status), std::move(Reply_));
+        RunGuarded([&] {
+            Callback_(Context, std::move(status), std::move(Reply_));
+        });
         Callback_ = nullptr; // free resources as early as possible
         return false;
     }
@@ -345,10 +402,13 @@ private:
     }
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
             Replied_ = true;
-            Callback_(Context, TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+            RunGuarded([&] {
+                Callback_(Context, TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+            });
             Callback_ = nullptr;
             return;
         }
@@ -585,7 +645,9 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void Read(TResponse* message, TReadCallback callback) override {
@@ -613,7 +675,9 @@ public:
             status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void Finish(TReadCallback callback) override {
@@ -638,7 +702,9 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
@@ -662,16 +728,21 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
 private:
     void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
             auto callback = std::move(Callback);
             TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
-            callback(std::move(status), nullptr);
+            RunGuarded([&] {
+                callback(std::move(status), nullptr);
+            });
             return;
         }
 
@@ -719,7 +790,9 @@ private:
             GetInitialMetadata(initialMetadata);
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void OnStartDone(bool ok) {
@@ -737,7 +810,9 @@ private:
             Callback = nullptr;
         }
 
-        callback({ }, typename TBase::TPtr(this));
+        RunGuarded([&] {
+            callback({ }, typename TBase::TPtr(this));
+        });
     }
 
     void OnFinished(bool ok) {
@@ -782,14 +857,18 @@ private:
 
         for (auto& finishedCallback : finishedCallbacks) {
             auto statusCopy = status;
-            finishedCallback(std::move(statusCopy));
+            RunGuarded([&] {
+                finishedCallback(std::move(statusCopy));
+            });
         }
 
         if (startCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::UNKNOWN, "Unknown stream failure");
             }
-            startCallback(std::move(status), nullptr);
+            RunGuarded([&] {
+                startCallback(std::move(status), nullptr);
+            });
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
@@ -799,9 +878,13 @@ private:
                         std::string(value.begin(), value.end()));
                 }
             }
-            readCallback(std::move(status));
+            RunGuarded([&] {
+                readCallback(std::move(status));
+            });
         } else if (finishCallback) {
-            finishCallback(std::move(status));
+            RunGuarded([&] {
+                finishCallback(std::move(status));
+            });
         }
     }
 
@@ -888,7 +971,9 @@ public:
         }
 
         if (!status.Ok() && callback) {
-            callback(std::move(status));
+            RunGuarded([&] {
+                callback(std::move(status));
+            });
         }
     }
 
@@ -918,7 +1003,9 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void Read(TResponse* message, TReadCallback callback) override {
@@ -946,7 +1033,9 @@ public:
             status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void Finish(TReadCallback callback) override {
@@ -976,7 +1065,9 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
@@ -1000,18 +1091,23 @@ public:
             }
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
 private:
     template<typename> friend class TServiceConnection;
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
             auto callback = std::move(ConnectedCallback);
             TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
-            callback(std::move(status), nullptr);
+            RunGuarded([&] {
+                callback(std::move(status), nullptr);
+            });
             return;
         }
 
@@ -1044,7 +1140,9 @@ private:
             ConnectedCallback = nullptr;
         }
 
-        callback({ }, typename TBase::TPtr(this));
+        RunGuarded([&] {
+            callback({ }, typename TBase::TPtr(this));
+        });
     }
 
     void OnReadDone(bool ok) {
@@ -1084,7 +1182,9 @@ private:
             GetInitialMetadata(initialMetadata);
         }
 
-        callback(std::move(status));
+        RunGuarded([&] {
+            callback(std::move(status));
+        });
     }
 
     void OnWriteDone(bool ok) {
@@ -1123,7 +1223,9 @@ private:
         }
 
         if (okCallback) {
-            okCallback(TGrpcStatus());
+            RunGuarded([&] {
+                okCallback(TGrpcStatus());
+            });
         }
     }
 
@@ -1174,20 +1276,26 @@ private:
                 if (writeStatus.Ok()) {
                     writeStatus = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
                 }
-                item.Callback(std::move(writeStatus));
+                RunGuarded([&] {
+                    item.Callback(std::move(writeStatus));
+                });
             }
         }
 
         for (auto& finishedCallback : finishedCallbacks) {
             TGrpcStatus statusCopy = status;
-            finishedCallback(std::move(statusCopy));
+            RunGuarded([&] {
+                finishedCallback(std::move(statusCopy));
+            });
         }
 
         if (connectedCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::UNKNOWN, "Unknown stream failure");
             }
-            connectedCallback(std::move(status), nullptr);
+            RunGuarded([&] {
+                connectedCallback(std::move(status), nullptr);
+            });
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
@@ -1197,9 +1305,13 @@ private:
                         std::string(value.begin(), value.end()));
                 }
             }
-            readCallback(std::move(status));
+            RunGuarded([&] {
+                readCallback(std::move(status));
+            });
         } else if (finishCallback) {
-            finishCallback(std::move(status));
+            RunGuarded([&] {
+                finishCallback(std::move(status));
+            });
         }
     }
 

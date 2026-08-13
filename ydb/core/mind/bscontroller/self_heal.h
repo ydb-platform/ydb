@@ -4,6 +4,11 @@
 
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+
 namespace NKikimr::NBsController {
 
     class TGroupGeometryInfo;
@@ -25,6 +30,7 @@ namespace NKikimr::NBsController {
                 bool IsReady;
                 TMonotonic ReadySince;
                 NKikimrBlobStorage::EVDiskStatus VDiskStatus;
+                std::optional<TString> DiskScope;
             };
             ui32 Generation;
             TBlobStorageGroupType Type;
@@ -44,6 +50,8 @@ namespace NKikimr::NBsController {
         std::optional<bool> GroupLayoutSanitizerEnabled;
         std::optional<bool> AllowMultipleRealmsOccupation;
         std::optional<bool> DonorMode;
+        std::optional<bool> UseSelfHealLocalPolicy;
+        std::optional<bool> TryToRelocateBrokenDisksLocallyFirst;
 
         ui64 ConfigTxSeqNo = 0;
 

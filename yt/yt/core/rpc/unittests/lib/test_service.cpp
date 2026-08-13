@@ -27,8 +27,8 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
-static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +43,9 @@ public:
 
     TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
     {
-        return MakeFuture(TAuthenticationResult());
+        return MakeFuture(TAuthenticationResult{
+            .User = "authenticated-user",
+        });
     }
 };
 
@@ -355,7 +357,7 @@ public:
     {
         context->SetRequestInfo();
 
-        auto data = TSharedRef::FromString("abacaba");
+        auto data = TSharedRef::FromString(std::string("abacaba"));
         WaitFor(context->GetResponseAttachmentsStream()->Write(data))
             .ThrowOnError();
 

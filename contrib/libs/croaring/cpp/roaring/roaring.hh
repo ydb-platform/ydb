@@ -666,8 +666,8 @@ class Roaring {
      * many, many bytes could be read. See also readSafe.
      *
      * The function may throw std::runtime_error if a bitmap could not be read.
-     * Note that even if it does not throw, the bitmap could still be unusable if
-     * the loaded data does not match the portable Roaring specification: you
+     * Note that even if it does not throw, the bitmap could still be unusable
+     * if the loaded data does not match the portable Roaring specification: you
      * should ensure that the data you load come from a serialized bitmap.
      */
     static Roaring read(const char *buf, bool portable = true) {
@@ -699,8 +699,8 @@ class Roaring {
      * method).
      *
      * The function may throw std::runtime_error if a bitmap could not be read.
-     * Note that even if it does not throw, the bitmap could still be unusable if
-     * the loaded data does not match the portable Roaring specification: you
+     * Note that even if it does not throw, the bitmap could still be unusable
+     * if the loaded data does not match the portable Roaring specification: you
      * should ensure that the data you load come from a serialized bitmap.
      */
     static Roaring readSafe(const char *buf, size_t maxbytes) {

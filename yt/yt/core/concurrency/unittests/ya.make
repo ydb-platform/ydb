@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    action_queue_ut.cpp
     async_barrier_ut.cpp
     async_looper_ut.cpp
     async_rw_lock_ut.cpp
@@ -34,6 +35,7 @@ SRCS(
     quantized_executor_ut.cpp
     scheduled_executor_ut.cpp
     scheduler_ut.cpp
+    serialized_invoker_ut.cpp
     suspendable_action_queue_ut.cpp
     suspendable_invoker_ut.cpp
     thread_affinity_ut.cpp
@@ -41,6 +43,7 @@ SRCS(
     thread_pool_ut.cpp
     throughput_throttler_ut.cpp
     two_level_fair_share_thread_pool_ut.cpp
+    watchdog_invoker_ut.cpp
 )
 
 IF (OS_LINUX)

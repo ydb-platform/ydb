@@ -1022,6 +1022,17 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                 return false;
             }
+        } else if (name == "DecimalCommonTypeConversionMode") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                return false;
+            }
+
+            auto arg = TString{args[0]};
+            if (!TryFromString(arg, Types_.DecimalConversionMode)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `without_common_type_fixup|with_common_type_fixup', but got: " << args[0]));
+                return false;
+            }
         } else if (name == "OptimizerFlags") {
             for (auto& arg : args) {
                 if (arg.empty()) {
@@ -1153,6 +1164,12 @@ private:
                 return false;
             }
             Types_.LineageSettings.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "EnableEvaluateExprCache") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableEvaluateExprCache = true;
         } else if (name == "LineageOutputLimit") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

@@ -289,6 +289,7 @@ struct TAppData {
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
+    bool AlwaysSetSystemOwner = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
@@ -339,6 +340,7 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
+    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

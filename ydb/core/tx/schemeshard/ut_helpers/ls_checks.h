@@ -170,6 +170,7 @@ namespace NLs {
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
+    TCheckFunc ColumnTableIndexesCount(ui32 count);
     TCheckFunc IndexesCount(ui32 count);
     TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
@@ -227,6 +228,9 @@ namespace NLs {
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
     TCheckFunc IncrementalBackup(bool flag);
+
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
 
     struct TInverseTag {
         bool Value = false;

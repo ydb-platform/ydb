@@ -1,5 +1,6 @@
 #include "kqp_operator.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
@@ -111,6 +112,46 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Y_UNUSED(planProps);
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
+}
+
+/***
+ * Compute metadata for table lookup
+ */
+void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(planProps);
+
+    auto path = TKqpTable(Table).Path();
+    const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
+
+    Props.Metadata = TRBOMetadata();
+    if (IsJoin() && GetInput()->Props.Metadata.has_value()) {
+        Props.Metadata = GetInput()->Props.Metadata;
+    }
+    Props.Metadata->ColumnsCount += OutputIUs.size();
+    Props.Metadata->StorageType = EStorageType::RowStorage;
+
+    Y_ENSURE(OutputIUs.size() == FetchColumns.size());
+    const TString alias = OutputIUs.empty() ? TString() : OutputIUs[0].GetAlias();
+    const int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, path.StringValue());
+    for (size_t i = 0; i < OutputIUs.size(); i++) {
+        Props.Metadata->ColumnLineage.AddMapping(OutputIUs[i], TColumnLineageEntry(alias, path.StringValue(), FetchColumns[i], duplicateId));
+    }
+
+    if (IsJoin()) {
+        Props.Metadata->KeyColumns = {};
+        return;
+    }
+
+    TVector<TInfoUnit> keyColumns;
+    for (const auto& key : tableData.Metadata->KeyColumnNames) {
+        for (size_t i = 0; i < FetchColumns.size(); i++) {
+            if (FetchColumns[i] == key) {
+                keyColumns.push_back(OutputIUs[i]);
+                break;
+            }
+        }
+    }
+    Props.Metadata->KeyColumns = std::move(keyColumns);
 }
 
 /***
@@ -235,6 +276,15 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
                 Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
             }
         }
+    }
+
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+    auto hintCandidates = BuildTableHintCandidates(Alias, path.StringValue());
+    if (hints.CardinalityHints) {
+        ApplySingleLabelHint(*hints.CardinalityHints, hintCandidates, Props.Statistics->ERows);
+    }
+    if (hints.BytesHints) {
+        ApplySingleLabelHint(*hints.BytesHints, hintCandidates, Props.Statistics->EBytes);
     }
 
     const auto totalColumns = tableData.Metadata->Columns.size();
@@ -628,8 +678,10 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Metadata.has_value() || !GetRightInput()->Props.Metadata.has_value()) {
-        return;
+    for (const auto& input : Children) {
+        if (!input->Props.Metadata.has_value()) {
+            return;
+        }
     }
 
     Props.Metadata = TRBOMetadata();
@@ -639,16 +691,28 @@ void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Statistics.has_value() || !GetRightInput()->Props.Statistics.has_value()) {
-        return;
+    for (const auto& input : Children) {
+        if (!input->Props.Statistics.has_value()) {
+            return;
+        }
     }
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->EBytes = GetLeftInput()->Props.Statistics->EBytes + GetRightInput()->Props.Statistics->EBytes;
-    Props.Statistics->ERows = GetLeftInput()->Props.Statistics->ERows + GetRightInput()->Props.Statistics->ERows;
 
-    if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
-        Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;
+    double cost = 0.0;
+    bool allInputsHaveCost = true;
+    for (const auto& input : Children) {
+        Props.Statistics->EBytes += input->Props.Statistics->EBytes;
+        Props.Statistics->ERows += input->Props.Statistics->ERows;
+        if (input->Props.Cost.has_value()) {
+            cost += *input->Props.Cost;
+        } else {
+            allInputsHaveCost = false;
+        }
+    }
+
+    if (allInputsHaveCost) {
+        Props.Cost = cost;
     } else {
         Props.Cost = std::nullopt;
     }
@@ -672,13 +736,13 @@ void TOpCBOTree::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 }
 
 void TOpRoot::ComputePlanMetadata(TRBOContext& ctx) {
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         it.Current->ComputeMetadata(ctx, PlanProps);
     }
 }
 
 void TOpRoot::ComputePlanStatistics(TRBOContext& ctx) {
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         it.Current->ComputeStatistics(ctx, PlanProps);
     }
 }

@@ -22,7 +22,7 @@
 
 namespace NMonitoring {
     namespace {
-        constexpr ui32 MAX_LABEL_VALUE_LEN = 256;
+        constexpr ui32 MAX_LABEL_VALUE_LEN = 1024;
 
         using TLabelsMap = THashMap<TString, TString>;
 

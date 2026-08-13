@@ -21,7 +21,8 @@ def _dedupe_history_rows(rows):
 
 
 BASE_DATE = datetime.date(1970, 1, 1)
-DEFAULT_MONTHS_BACK = 180  # 6 months
+DEFAULT_DAYS_BACK = 30  # cold start when branch has no flaky_tests_window history
+MAX_RESUME_GAP_DAYS = 180  # safety cap on incremental resume if collection was paused a long time
 
 
 def parse_arguments():
@@ -89,12 +90,17 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     
     Logic:
     1. If start_date_override is provided, use it (must be <= end_date)
-    2. If history exists, use max_date_window from history (but not after end_date)
-    3. If no history, check test_runs_table for min_run_date
-    4. Default to 6 months ago from end_date
+    2. If history exists, continue from max(date_window) (incremental; no cold-start cap),
+       but never look back further than MAX_RESUME_GAP_DAYS even if collection was
+       paused for a long time — avoids re-creating the unbounded-backfill problem this
+       cold-start rework was meant to fix, at the cost of leaving an un-backfilled gap
+       in the rare case collection was dormant that long.
+    3. If no history, check test_runs_table for min_run_date, capped at DEFAULT_DAYS_BACK
+    4. Default cold start to DEFAULT_DAYS_BACK ago from end_date
     """
     end_date = end_date_override if end_date_override else datetime.date.today()
-    default_start_date = end_date - datetime.timedelta(days=DEFAULT_MONTHS_BACK)
+    default_start_date = end_date - datetime.timedelta(days=DEFAULT_DAYS_BACK)
+    max_resume_start_date = end_date - datetime.timedelta(days=MAX_RESUME_GAP_DAYS)
     
     # If user explicitly provided start_date_override, use it
     if start_date_override:
@@ -106,13 +112,16 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Clamp max_date_window to not exceed end_date before comparison
-        max_date_clamped = min(max_date_window, end_date)
-        # Use max_date_clamped if it's greater than default_start_date
-        if max_date_clamped > default_start_date:
-            start_date = max_date_clamped
-        else:
-            start_date = default_start_date
+        # Incremental resume: continue from the last stored day (do not apply cold-start
+        # lookback), capped so a long-dormant branch cannot trigger an unbounded backfill.
+        start_date = min(max_date_window, end_date)
+        if start_date < max_resume_start_date:
+            print(
+                f'⚠️  Last recorded date_window ({start_date}) is more than {MAX_RESUME_GAP_DAYS} days '
+                f'old — history collection looks paused. Capping resume start to '
+                f'{max_resume_start_date} instead of backfilling the full gap.'
+            )
+            start_date = max_resume_start_date
         return start_date, end_date
     
     # No history exists, check test_runs_table for min date

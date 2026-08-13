@@ -89,7 +89,6 @@ message TTableServiceConfig {
         // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
         optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
         optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
-        optional uint64 VectorIndexHnswCacheMaxSize = 39 [default = 0]; // bytes, 0 is unlimited
     }
 
     message TSpillingServiceConfig {

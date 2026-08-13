@@ -1617,8 +1617,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }
 
-    AppData->VectorIndexHnswCacheMaxSize = runConfig.AppConfig.GetTableServiceConfig()
-        .GetResourceManager().GetVectorIndexHnswCacheMaxSize();
+    AppData->VectorIndexHnswCacheMemoryTracker->SetLimit(
+        AppData->DataShardConfig.GetVectorIndexHnswCacheMaxSize());
 
     if (runConfig.AppConfig.HasColumnShardConfig()) {
         AppData->ColumnShardConfig = runConfig.AppConfig.GetColumnShardConfig();

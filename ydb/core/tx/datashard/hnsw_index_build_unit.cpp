@@ -181,7 +181,8 @@ protected:
         }
 
         const auto& settings = alter.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
-        if (settings.hnsw_max_memory_bytes() == 0) {
+        const ui64 maxMemoryBytes = AppData(ctx)->VectorIndexHnswCacheMemoryTracker->GetLimit();
+        if (!maxMemoryBytes) {
             return false;
         }
         if (settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
@@ -216,7 +217,7 @@ protected:
         LocalTid = table.LocalTid;
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
-                std::move(keysAndVectors), settings.hnsw_max_memory_bytes()),
+                std::move(keysAndVectors), maxMemoryBytes),
             TMailboxType::HTSwap,
             AppData(ctx)->BatchPoolId));
 

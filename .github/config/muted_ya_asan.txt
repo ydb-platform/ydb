@@ -569,6 +569,7 @@ ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeEmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
+ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.EmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.PurgeWhileMessagesLocked
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithData
@@ -943,6 +944,7 @@ ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer

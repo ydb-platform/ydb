@@ -39,7 +39,6 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
             ExecCmRequest(*stub, req, "create topic");
         }
 
-        // Step 1: write 10 messages to cluster_a while it is write-enabled.
         const std::vector<std::string> initialMsgs = {
             "msg-0", "msg-1", "msg-2", "msg-3", "msg-4",
             "msg-5", "msg-6", "msg-7", "msg-8", "msg-9",

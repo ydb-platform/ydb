@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -540,6 +541,94 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         TBlockItem item2 = reader->GetItem(col, 2);
         UNIT_ASSERT_C(!item2, "Row 2 must be NULL");
+    }
+
+    Y_UNIT_TEST(TestSingularColumns) {
+        TBlockLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        auto* const voidType = data.Env.GetTypeOfVoidLazy();
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, voidType, voidType};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload};
+
+        constexpr size_t testSize = 137;
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, testSize, nullptr);
+        for (size_t i = 0; i < testSize; i++) {
+            builder->Add(TBlockItem(i));
+        }
+        auto keyDatum = builder->Build(true);
+        Y_ENSURE(keyDatum.is_array());
+
+        TVector<arrow::Datum> columns{
+            keyDatum,
+            arrow::Datum(NYql::NUdf::MakeSingularArray(/*isNull=*/false, testSize)),
+            arrow::Datum(NYql::NUdf::MakeSingularArray(/*isNull=*/false, testSize))};
+
+        TPackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected same columns count after conversion");
+
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), int64Type);
+        const auto& keyBefore = columns.front().array();
+        const auto& keyAfter = columnsAfterConversion.front().array();
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*keyBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*keyAfter, elemIdx);
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<i64>(), rhs.Get<i64>(), "Expected the same data after conversion");
+        }
+
+        for (size_t colIdx = 1; colIdx < columns.size(); ++colIdx) {
+            const auto& before = columns[colIdx].array();
+            const auto& after = columnsAfterConversion[colIdx].array();
+            UNIT_ASSERT_VALUES_EQUAL_C(after->length, before->length, "Expected the same length after conversion");
+            UNIT_ASSERT_C(after->type->Equals(*before->type), "Expected the same arrow type after conversion");
+        }
+    }
+
+    // singular null has DataSize == 0
+    // without packing its allnull validity bitmap
+    // two Null keys compare equal and would match in the join.
+    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        TBlockLayoutConverterTestData data;
+
+        auto* const nullType = data.Env.GetTypeOfNullLazy();
+        TVector<NKikimr::NMiniKQL::TType*> types{nullType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        constexpr size_t testSize = 17;
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        TVector<arrow::Datum> columns{
+            arrow::Datum(NYql::NUdf::MakeSingularArray(/*isNull=*/true, testSize))};
+
+        TPackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
+
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->Columns[0].DataSize, 0u);
+
+        for (size_t row = 0; row < testSize; ++row) {
+            const ui8* tuple = packRes.PackedTuples.data() + row * layout->TotalRowSize;
+            const ui8 bit = (tuple[layout->BitmaskOffset] >> 0) & 1u;
+            UNIT_ASSERT_VALUES_EQUAL_C(bit, 0u, "Null key column must be packed as NULL");
+        }
+
+        const ui8* row0 = packRes.PackedTuples.data();
+        const ui8* row1 = packRes.PackedTuples.data() + layout->TotalRowSize;
+        UNIT_ASSERT_C(
+            !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must not compare equal");
     }
 
     Y_UNIT_TEST(TestBuckets) {

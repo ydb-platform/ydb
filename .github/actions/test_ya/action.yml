@@ -203,21 +203,12 @@ runs:
           sudo chmod 1777 "$COREDUMP_MNT"
 
           echo "/coredumps/%e.%p.%s" | sudo tee /proc/sys/kernel/core_pattern
-          ulimit -c unlimited
-
-          # systemd-run --scope ignores shell ulimit; sudo -u resets RLIMIT_CORE.
-          # Small helper: ulimit as root → setpriv to runner → ulimit again → ya.
-          FORCE_CORE_HELPER="${GITHUB_WORKSPACE}/.github/scripts/coredump/ya_make_with_core.sh"
-          chmod a+rx "$FORCE_CORE_HELPER"
 
           echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"
           echo "COREDUMP_MNT=$COREDUMP_MNT" >> "$GITHUB_ENV"
-          echo "FORCE_CORE_HELPER=$FORCE_CORE_HELPER" >> "$GITHUB_ENV"
 
           echo "::group::coredump diagnostics"
           echo "core_pattern=$(cat /proc/sys/kernel/core_pattern)"
-          echo "rlimit_core=$(ulimit -c)"
-          echo "force_core_helper=$FORCE_CORE_HELPER"
           echo "coredump_img=$COREDUMP_IMG (${COREDUMP_SIZE_GB}G)"
           ls -la "$COREDUMP_MNT"
           df -h "$COREDUMP_MNT" /
@@ -475,11 +466,13 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
-          # systemd-run --scope ignores shell ulimit; LimitCORE= rejected for scopes;
-          # sudo -u resets RLIMIT_CORE. Helper: ulimit → setpriv → ulimit → ya.
+          # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
+          # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
           if [ "${COLLECT_COREDUMPS}" = "true" ]; then
             YA_MAKE_RUN_CMD=(
-              "$FORCE_CORE_HELPER" "$(id -u)" "$(id -g)" "${YA_MAKE_CMD[@]}"
+              prlimit --core=unlimited:unlimited
+              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
+              "${YA_MAKE_CMD[@]}"
             )
           else
             YA_MAKE_RUN_CMD=(

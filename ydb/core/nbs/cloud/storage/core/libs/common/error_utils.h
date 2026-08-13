@@ -73,4 +73,16 @@ void SetCantAcquireStatus(T& record)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+void SetErrorStatus(
+    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
+    TStringBuf reason,
+    T& record)
+{
+    record.SetStatus(status);
+    record.SetErrorReason(TString(reason));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 }   // namespace NYdb::NBS

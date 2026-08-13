@@ -246,16 +246,20 @@ def _run(arguments, resource_loader, tool_revision):
                 try:
 
                     def on_event(event):
-                        step_id = next(
-                            step.id
-                            for step in plan.steps
-                            if step.benchmark == configuration.benchmark.name
-                            and step.profile == configuration.profile
-                            and step.affinity == event["affinity"]
-                            and step.threads == event["threads"]
-                            and step.case == event["case"]
-                            and step.repeat == event["repeat"]
+                        key = (
+                            configuration.benchmark.name,
+                            configuration.profile,
+                            event.get("affinity"),
+                            event.get("threads"),
+                            event.get("case"),
+                            event.get("repeat"),
                         )
+                        try:
+                            step_id = plan.step_ids[key]
+                        except KeyError as error:
+                            raise BenchmarkError(
+                                "benchmark event does not match a planned step: {!r}".format(key)
+                            ) from error
                         if event["type"] == "step-started":
                             store.transition_step(step_id, "running", **event.get("fields", {}))
                         elif event["type"] == "step-artifacts":

@@ -4,6 +4,10 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 
+def _single_process_measurement(_parameters):
+    return 1
+
+
 @dataclass(frozen=True)
 class ParameterDefinition:
     name: str
@@ -53,6 +57,8 @@ class BenchmarkDefinition:
     process_cases: object
     parse_worker_metrics: object = None
     render_worker_metrics: object = None
+    test_filter: str = ""
+    process_measurement_count: object = _single_process_measurement
 
     @property
     def csv_columns(self):

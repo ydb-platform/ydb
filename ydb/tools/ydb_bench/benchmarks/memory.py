@@ -74,7 +74,7 @@ def render_metrics(rows, benchmark):
     return output.getvalue()
 
 
-def validate_metrics(rows, configuration, case=None):
+def validate_metrics(rows, configuration, case):
     expected = {"threads": case["threads"], **{name.replace("-", "_"): value for name, value in case["parameters"].items()}}
     unexpected = [{name: (row.get(name), value) for name, value in expected.items() if row.get(name) != value} for row in rows]
     if not rows or any(unexpected):
@@ -147,6 +147,10 @@ def process_cases(configuration):
     )
 
 
+def process_measurement_count(_parameters):
+    return 1
+
+
 def command(binary_path, benchmark, configuration, case):
     values = case["parameters"]
     return [
@@ -193,5 +197,6 @@ MEMORY_BENCHMARK = BENCHMARKS.register(
         process_cases,
         parse_worker_metrics,
         render_worker_metrics,
+        process_measurement_count=process_measurement_count,
     )
 )

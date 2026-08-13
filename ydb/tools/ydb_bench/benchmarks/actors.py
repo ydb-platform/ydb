@@ -111,6 +111,13 @@ def process_cases(configuration):
     return tuple({"threads": threads, "parameters": {}} for threads in configuration.threads)
 
 
+def process_measurement_count(parameters):
+    count = 1
+    for values in parameters.values():
+        count *= len(values)
+    return count
+
+
 def _benchmark(name, description, test_filter, parameter):
     actor_pairs = ParameterDefinition("actor-pairs", "Actor pair counts", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs")
     dimensions = (DimensionDefinition("threads"), DimensionDefinition("actorPairs"), DimensionDefinition(parameter.column))
@@ -129,8 +136,9 @@ def _benchmark(name, description, test_filter, parameter):
         command,
         environment,
         process_cases,
+        test_filter=test_filter,
+        process_measurement_count=process_measurement_count,
     )
-    object.__setattr__(value, "test_filter", test_filter)
     return value
 
 

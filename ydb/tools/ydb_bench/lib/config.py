@@ -3,6 +3,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 import yaml
 from yaml.constructor import ConstructorError
@@ -159,19 +160,27 @@ class RunPlan:
     config_path: Path
     config_sha256: str
     steps: tuple
+    step_ids: object
+
+
+def _step_key(benchmark, profile, affinity, threads, case, repeat):
+    return benchmark, profile, affinity, threads, case, repeat
 
 
 def build_run_plan(loaded_config):
     """Expand validated config in YAML/config order into an immutable queue."""
     steps = []
+    step_ids = {}
     for configuration in loaded_config.runs:
         for affinity in configuration.affinity_modes:
             for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
                 threads = case["threads"]
                 for repeat in range(1, configuration.repetitions + 1):
                     step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, repeat)
-                    steps.append(RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, case["parameters"], repeat, configuration))
-    return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps))
+                    step = RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, case["parameters"], repeat, configuration)
+                    steps.append(step)
+                    step_ids[_step_key(step.benchmark, step.profile, step.affinity, step.threads, step.case, step.repeat)] = step.id
+    return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps), MappingProxyType(step_ids))
 
 
 def _config_error(location, message):
@@ -260,12 +269,9 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     duration = _positive_integer(value["duration"], location + ".duration")
     repetitions = _positive_integer(value["repetitions"], location + ".repetitions")
     affinity = _affinity_modes(value["affinity"], location + ".affinity")
-    combinations = len(threads)
-    for parameter in benchmark.parameters:
-        combinations *= len(parameters[parameter.name])
     timeout_explicit = "timeout" in value
     timeout = _timeout(
-        value["timeout"] if timeout_explicit else combinations * duration * 3 + 30,
+        value["timeout"] if timeout_explicit else benchmark.process_measurement_count(parameters) * duration * 3 + 30,
         location + ".timeout",
     )
     return RunConfiguration(

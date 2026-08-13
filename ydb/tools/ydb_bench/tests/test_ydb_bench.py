@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -14,11 +15,11 @@ import unittest
 import urllib.request
 import zipfile
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, fields, replace
 from pathlib import Path
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import actors_core, runner
+from ydb.tools.ydb_bench.lib import actors_core, cli, runner
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -27,7 +28,7 @@ from ydb.tools.ydb_bench.lib.actors_core import (
     run_actors_core,
 )
 from ydb.tools.ydb_bench.benchmarks import MEMORY_BENCHMARK
-from ydb.tools.ydb_bench.benchmarks.memory import parse_worker_metrics
+from ydb.tools.ydb_bench.benchmarks.memory import parse_worker_metrics, validate_metrics as validate_memory_metrics
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry, DimensionDefinition, ParameterDefinition
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
@@ -81,13 +82,11 @@ class YdbBenchTest(unittest.TestCase):
         )
 
     def _worker_metrics_benchmark(self):
-        benchmark = replace(
+        return replace(
             PING_BENCHMARK,
             parse_worker_metrics=MEMORY_BENCHMARK.parse_worker_metrics,
             render_worker_metrics=MEMORY_BENCHMARK.render_worker_metrics,
         )
-        object.__setattr__(benchmark, "test_filter", PING_BENCHMARK.test_filter)
-        return benchmark
 
     def test_extract_executable_is_atomic_executable_and_hashed(self):
         data = b"#!/bin/sh\nexit 0\n"
@@ -279,6 +278,13 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["benchmark"], "fake-bench")
         self.assertIn("samples", (output / "summary.csv").read_text().splitlines()[0])
 
+    def test_benchmark_definition_declares_immutable_test_filter(self):
+        """The actor test selector is frozen benchmark metadata, not a post-construction attribute."""
+        self.assertIn("test_filter", {field.name for field in fields(BenchmarkDefinition)})
+        self.assertEqual(PING_BENCHMARK.test_filter, "HeavyActorBenchmark::SendActivateReceiveCSVManual")
+        with self.assertRaises(FrozenInstanceError):
+            PING_BENCHMARK.test_filter = "Other::Filter"
+
     def test_config_supports_multiple_benchmarks_and_profiles(self):
         """Load ping baseline, ping focused, then star sweep while preserving YAML order."""
         config = self._config(
@@ -339,6 +345,73 @@ class YdbBenchTest(unittest.TestCase):
         ])
         self.assertEqual(len({step.id for step in plan.steps}), len(plan.steps))
 
+    def test_cli_reuses_precomputed_step_index_and_rejects_unknown_events(self):
+        """Event lookup never rescans the immutable plan and diagnoses keys absent from it."""
+
+        class OnePassSteps:
+            def __init__(self, values):
+                self.values = values
+                self.iterations = 0
+
+            def __iter__(self):
+                self.iterations += 1
+                if self.iterations > 1:
+                    raise AssertionError("plan steps were scanned again")
+                return iter(self.values)
+
+        config = self._config(
+            """
+            ping-bench:
+              indexed: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 1, affinity: [none]}
+            """,
+            name="indexed.yaml",
+        )
+
+        def indexed_plan():
+            plan = build_run_plan(load_config(config))
+            steps = OnePassSteps(plan.steps)
+            return replace(plan, steps=steps), steps
+
+        def successful_run(_binary, _configuration, _output_directory, **kwargs):
+            emit = kwargs["event_sink"]
+            event = {"affinity": "none", "threads": 1, "case": 1, "repeat": 1}
+            emit({"type": "step-started", **event})
+            emit({"type": "step-finished", "state": "passed", **event})
+            return {"summary": "summary.csv"}
+
+        plan, steps = indexed_plan()
+        with mock.patch.object(cli, "build_run_plan", return_value=plan), mock.patch.object(
+            cli, "run_benchmark", side_effect=successful_run
+        ):
+            self.assertEqual(
+                cli.main(
+                    ["run", "--config", str(config), "--output", str(self.root / "indexed-output")],
+                    resource_loader=lambda _: b"#!/bin/sh\nexit 0\n",
+                ),
+                0,
+            )
+        self.assertEqual(steps.iterations, 1)
+
+        def unknown_run(_binary, _configuration, _output_directory, **kwargs):
+            kwargs["event_sink"](
+                {"type": "step-started", "affinity": "none", "threads": 99, "case": 1, "repeat": 1}
+            )
+
+        plan, steps = indexed_plan()
+        error = io.StringIO()
+        with redirect_stderr(error), mock.patch.object(cli, "build_run_plan", return_value=plan), mock.patch.object(
+            cli, "run_benchmark", side_effect=unknown_run
+        ):
+            self.assertEqual(
+                cli.main(
+                    ["run", "--config", str(config), "--output", str(self.root / "unknown-event-output")],
+                    resource_loader=lambda _: b"#!/bin/sh\nexit 0\n",
+                ),
+                1,
+            )
+        self.assertEqual(steps.iterations, 1)
+        self.assertIn("benchmark event does not match a planned step", error.getvalue())
+
     def test_memory_config_expands_generic_parameter_matrix(self):
         loaded = load_config(self._config(
             """
@@ -363,6 +436,53 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(plan.steps[-1].parameters["random-mode"], "write")
         self.assertEqual({step.threads for step in plan.steps}, {1, 2})
         self.assertEqual({step.affinity for step in plan.steps}, {"none", "pack-numa"})
+
+    def test_automatic_timeout_counts_measurements_inside_each_process(self):
+        """Memory cases time one measurement; actor processes time their pairs/value matrix, never other threads."""
+        actors = load_config(
+            self._config(
+                """
+                ping-bench:
+                  sweep:
+                    threads: [1, 2, 4]
+                    actor-pairs: [32, 64]
+                    inflight: [1, 2, 4]
+                    duration: 5
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                name="actor-timeout.yaml",
+            )
+        ).runs[0]
+        memory = load_config(
+            self._config(
+                """
+                memory-bandwidth-bench:
+                  sweep:
+                    threads: [1, 2, 4]
+                    random-percent: [0, 50, 100]
+                    random-mode: [copy, write]
+                    buffer-size-mb: [8, 16]
+                    part-size-kb: [512, 1024]
+                    duration: 5
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                name="memory-timeout.yaml",
+            )
+        ).runs[0]
+
+        with self.subTest(benchmark="actors"):
+            self.assertEqual(actors.timeout_seconds, 2 * 3 * 5 * 3 + 30)
+        with self.subTest(benchmark="memory"):
+            self.assertEqual(memory.timeout_seconds, 5 * 3 + 30)
+
+    def test_memory_metric_validation_requires_process_case(self):
+        """The adapter contract exposes case as required and rejects old two-argument calls."""
+        case_parameter = inspect.signature(validate_memory_metrics).parameters["case"]
+        self.assertIs(case_parameter.default, inspect.Parameter.empty)
+        with self.assertRaises(TypeError):
+            validate_memory_metrics([], self._configuration(benchmark=MEMORY_BENCHMARK))
 
     def test_memory_worker_metrics_keep_raw_workers(self):
         stdout = "\n".join((

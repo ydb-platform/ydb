@@ -14,6 +14,7 @@ import unittest
 import urllib.request
 import zipfile
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -77,6 +78,15 @@ class YdbBenchTest(unittest.TestCase):
             repetitions=repetitions,
             timeout_seconds=timeout,
         )
+
+    def _worker_metrics_benchmark(self):
+        benchmark = replace(
+            PING_BENCHMARK,
+            parse_worker_metrics=MEMORY_BENCHMARK.parse_worker_metrics,
+            render_worker_metrics=MEMORY_BENCHMARK.render_worker_metrics,
+        )
+        object.__setattr__(benchmark, "test_filter", PING_BENCHMARK.test_filter)
+        return benchmark
 
     def test_extract_executable_is_atomic_executable_and_hashed(self):
         data = b"#!/bin/sh\nexit 0\n"
@@ -363,6 +373,117 @@ class YdbBenchTest(unittest.TestCase):
         rows = parse_worker_metrics(stdout, MEMORY_BENCHMARK)
         self.assertEqual([(row["worker"], row["scope"]) for row in rows], [(0, "sequential"), (1, "random")])
         self.assertEqual(rows[1]["ops_per_sec"], 300.0)
+
+    def test_missing_worker_metrics_finalizes_manifest_and_step(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script(
+            """
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            """
+        )
+        output = self.root / "missing-worker-output"
+        output.mkdir()
+        events = []
+
+        with self.assertRaisesRegex(BenchmarkError, "does not contain workers.csv"):
+            run_actors_core(
+                self._binary(script),
+                self._configuration(benchmark=benchmark),
+                output,
+                tool_revision={"commit_id": "test"},
+                event_sink=events.append,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        repetition = output / "none" / "threads-001" / "repeat-001"
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertIn("does not contain workers.csv", manifest["error"])
+        self.assertNotIn("metrics", manifest["runs"][0])
+        self.assertNotIn("worker_metrics", manifest["runs"][0])
+        self.assertFalse((repetition / "metrics.csv").exists())
+        self.assertFalse((repetition / "workers.csv").exists())
+        self.assertEqual([event["type"] for event in events], ["step-started", "step-finished"])
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
+
+    def test_empty_worker_metrics_finalizes_manifest_and_step(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script(
+            """
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "workers.csv"
+            echo "worker,scope,operations"
+            """
+        )
+        output = self.root / "empty-worker-output"
+        output.mkdir()
+        events = []
+
+        with self.assertRaisesRegex(BenchmarkError, "produced no worker metrics"):
+            run_actors_core(
+                self._binary(script),
+                self._configuration(benchmark=benchmark),
+                output,
+                tool_revision={"commit_id": "test"},
+                event_sink=events.append,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertIn("produced no worker metrics", manifest["runs"][0]["error"])
+        self.assertEqual(events[-1]["type"], "step-finished")
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
+
+    def test_worker_metrics_write_failure_rolls_back_metric_artifacts(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script(
+            """
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "workers.csv"
+            echo "worker,scope,operations"
+            echo "0,sequential,10"
+            """
+        )
+        output = self.root / "worker-write-failure-output"
+        output.mkdir()
+        events = []
+
+        from ydb.tools.ydb_bench.lib import actors_core
+        original_atomic_write_text = actors_core.atomic_write_text
+
+        def write_or_fail(path, contents):
+            if Path(path).name == "workers.csv":
+                raise OSError("worker metrics disk full")
+            return original_atomic_write_text(path, contents)
+
+        with mock.patch.object(actors_core, "atomic_write_text", side_effect=write_or_fail):
+            with self.assertRaisesRegex(BenchmarkError, "worker metrics disk full"):
+                run_actors_core(
+                    self._binary(script),
+                    self._configuration(benchmark=benchmark),
+                    output,
+                    tool_revision={"commit_id": "test"},
+                    event_sink=events.append,
+                )
+
+        manifest = json.loads((output / "run.json").read_text())
+        repetition = output / "none" / "threads-001" / "repeat-001"
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["error"], "worker metrics disk full")
+        self.assertNotIn("metrics", manifest["runs"][0])
+        self.assertNotIn("worker_metrics", manifest["runs"][0])
+        self.assertFalse((repetition / "metrics.csv").exists())
+        self.assertFalse((repetition / "workers.csv").exists())
+        self.assertEqual(events[-1]["type"], "step-finished")
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
 
     def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
         pending = {"id": "step-1", "state": "pending", "artifacts": []}

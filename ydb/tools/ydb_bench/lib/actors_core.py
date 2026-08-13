@@ -344,6 +344,7 @@ def run_benchmark(
 
             failure = None
             postprocessing_interrupted = False
+            processing_error = None
             if result.interrupted:
                 failure = "benchmark was interrupted"
             elif result.timed_out:
@@ -351,42 +352,65 @@ def run_benchmark(
             elif result.exit_code != 0:
                 failure = "benchmark exited with code {}".format(result.exit_code)
             else:
+                published_metric_paths = []
                 try:
                     metrics = benchmark.parse_metrics(result.stdout, benchmark)
                     benchmark.validate_metrics(metrics, process_configuration, case)
-                except BenchmarkError as error:
-                    failure = str(error)
-                else:
-                    atomic_write_text(
-                        repetition_directory / "metrics.csv",
-                        benchmark.render_metrics(metrics, benchmark),
-                    )
-                    run_record["metrics"] = str(relative_directory / "metrics.csv")
-                    run_record["metric_rows"] = len(metrics)
+                    metric_artifacts = [
+                        (
+                            repetition_directory / "metrics.csv",
+                            benchmark.render_metrics(metrics, benchmark),
+                        )
+                    ]
+                    worker_metrics = None
                     if benchmark.parse_worker_metrics is not None:
                         worker_metrics = benchmark.parse_worker_metrics(result.stdout, benchmark)
-                        atomic_write_text(repetition_directory / "workers.csv", benchmark.render_worker_metrics(worker_metrics, benchmark))
+                        metric_artifacts.append(
+                            (
+                                repetition_directory / "workers.csv",
+                                benchmark.render_worker_metrics(worker_metrics, benchmark),
+                            )
+                        )
+                    for metric_path, metric_contents in metric_artifacts:
+                        atomic_write_text(metric_path, metric_contents)
+                        published_metric_paths.append(metric_path)
+                    run_record["metrics"] = str(relative_directory / "metrics.csv")
+                    run_record["metric_rows"] = len(metrics)
+                    if worker_metrics is not None:
                         run_record["worker_metrics"] = str(relative_directory / "workers.csv")
                         run_record["worker_metric_rows"] = len(worker_metrics)
                     if configuration.perf_enabled:
+                        postprocessing = _run_perf_postprocessing(
+                            perf_data_path,
+                            repetition_directory,
+                            configuration.timeout_seconds,
+                            binary.path.name,
+                        )
+                        run_record["perf_postprocessing"] = postprocessing
+                except BenchmarkInterrupted as error:
+                    failure = str(error)
+                    postprocessing_interrupted = True
+                    processing_error = error
+                except Exception as error:
+                    failure = str(error) or type(error).__name__
+                    processing_error = error
+                if failure is not None:
+                    for metric_path in published_metric_paths:
                         try:
-                            postprocessing = _run_perf_postprocessing(
-                                perf_data_path,
-                                repetition_directory,
-                                configuration.timeout_seconds,
-                                binary.path.name,
-                            )
-                        except BenchmarkInterrupted as error:
-                            failure = str(error)
-                            postprocessing_interrupted = True
-                        except BenchmarkError as error:
-                            failure = str(error)
-                        else:
-                            run_record["perf_postprocessing"] = postprocessing
-                    if failure is None:
-                        repetition_rows.append((placement.mode, metrics))
-                        for metric_row in metrics:
-                            measurement_rows.append({"affinity_mode": placement.mode, "repeat": index, **metric_row})
+                            metric_path.unlink()
+                        except FileNotFoundError:
+                            pass
+                        except OSError:
+                            # Preserve the processing error; the files are not referenced as artifacts.
+                            pass
+                    run_record.pop("metrics", None)
+                    run_record.pop("metric_rows", None)
+                    run_record.pop("worker_metrics", None)
+                    run_record.pop("worker_metric_rows", None)
+                else:
+                    repetition_rows.append((placement.mode, metrics))
+                    for metric_row in metrics:
+                        measurement_rows.append({"affinity_mode": placement.mode, "repeat": index, **metric_row})
 
             if failure is not None:
                 run_record["error"] = failure
@@ -410,7 +434,9 @@ def run_benchmark(
                     })
                 if interrupted:
                     raise BenchmarkInterrupted(failure)
-                raise BenchmarkError(failure)
+                if isinstance(processing_error, BenchmarkError):
+                    raise processing_error
+                raise BenchmarkError(failure) from processing_error
             write_manifest(manifest_path, manifest)
             if event_sink is not None:
                 artifacts = [run_record["stdout"], run_record["stderr"]]

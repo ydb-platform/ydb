@@ -100,7 +100,7 @@ public:
     }
 
     TFsPath GetSpillingNodeDir() const {
-        return SpillingRoot_ / MakeSpillingNodeDirName(GetNodeId(), GetUsername());
+        return SpillingRoot_ / MakeSpillingNodeDirName(GetNodeId(), GetUsername(), SpillingSessionId_);
     }
 
 private:
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
             UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
         }
-        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername()));
+        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername(), runtime.GetSpillingSessionId()));
         (runtime.GetSpillingRoot() / nodePath / "1_test_0").ForceDelete();
 
         {
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername()));
+        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername(), runtime.GetSpillingSessionId()));
         const TFsPath spillingDir = runtime.GetSpillingRoot() / nodePath;
         const TFsPath firstFile = spillingDir / "1_test_0";
         const TFsPath secondFile = spillingDir / "1_test_1";
@@ -681,11 +681,11 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
 
         // Unblock the root: remove the file and create a real directory.
-        // The service does not create Root itself, only spilling-tmp-<nodeId>-<username> inside it.
+        // The service does not create Root itself, only spilling-tmp-<nodeId>-<username>-<sessionId> inside it.
         root.ForceDelete();
         root.MkDir();
 
-        const TFsPath nodeDir = root / MakeSpillingNodeDirName(runtime.GetNodeId(), GetUsername());
+        const TFsPath nodeDir = root / MakeSpillingNodeDirName(runtime.GetNodeId(), GetUsername(), runtime.GetSpillingSessionId());
 
         TDispatchOptions retryOptions;
         retryOptions.CustomFinalCondition = [&nodeDir]() { return nodeDir.IsDirectory(); };

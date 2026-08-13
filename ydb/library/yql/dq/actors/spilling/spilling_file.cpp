@@ -205,9 +205,14 @@ private:
             TFsPath TmpRoot;
             ui32 NodeId;
             TString Username;
+            TString SpillingSessionId;
 
-            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString username)
-                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), Username(std::move(username)) {}
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString username, TString spillingSessionId)
+                : TmpRoot(std::move(tmpRoot))
+                , NodeId(nodeId)
+                , Username(std::move(username))
+                , SpillingSessionId(std::move(spillingSessionId))
+            {}
         };
 
         struct TEvRetryStart : public TEventLocal<TEvRetryStart, EvRetryStart> {
@@ -234,7 +239,7 @@ public:
     void Bootstrap() {
         Username_ = GetUsername();
         Root_ = Config_.Root;
-        Root_ /= MakeSpillingNodeDirName(SelfId().NodeId(), Username_);
+        Root_ /= MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         CreateRoot(MaxStartupRetries);
@@ -259,7 +264,7 @@ private:
             }
             Root_.ForceDelete();
             // Config_.Root must already exist
-            // create only spilling-tmp-<nodeId>-<username> inside it
+            // create only spilling-tmp-<nodeId>-<username>-<sessionId> inside it
             Root_.MkDir(DIR_MODE);
         } catch (const yexception& e) {
             const TString root = Root_.GetPath();
@@ -274,7 +279,8 @@ private:
             Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
         }
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Username_));
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
+            Config_.Root, SelfId().NodeId(), Username_, Config_.SpillingSessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
@@ -794,42 +800,67 @@ private:
         const auto& msg = *ev->Get();
         const auto& root = msg.TmpRoot;
         const auto nodeIdString = ToString(msg.NodeId);
-        const auto currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username);
-        const auto newPrefix = TStringBuilder() << "spilling-tmp-" << nodeIdString << "-";
-        const auto oldPrefix = TStringBuilder() << "node_" << nodeIdString << "_";
+        const auto currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username, msg.SpillingSessionId);
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        const auto isDirOldTmp = [&](const TString& dirName) -> bool {
-            // New format: spilling-tmp-<nodeId>-<username>
-            if (dirName.StartsWith(newPrefix)) {
-                return dirName != currentDirName;
+        const auto isOwnNewFormatDir = [&](const TString& dirName) -> bool {
+            // spilling-tmp-<nodeId>-<username>-<sessionId>
+            TStringBuf rest = dirName;
+            if (!rest.SkipPrefix("spilling-tmp-")) {
+                return false;
             }
-            // Old format: node_<nodeId>_<sessionId>
-            return dirName.StartsWith(oldPrefix);
+            const auto id = rest.NextTok('-');
+            return id == nodeIdString && !rest.empty() && dirName != currentDirName;
+        };
+
+        const auto isOwnOldFormatDir = [&](const TString& dirName) -> bool {
+            // node_<nodeId>_<sessionId>
+            TStringBuf rest = dirName;
+            if (!rest.SkipPrefix("node_")) {
+                return false;
+            }
+            const auto id = rest.NextTok('_');
+            return id == nodeIdString && !rest.empty();
         };
 
         try {
-            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
+            RemoveMatchingChildren(root, isOwnNewFormatDir);
+            RemoveMatchingChildren(root, isOwnOldFormatDir);
 
-            TVector<TString> oldTmps;
-            for (const auto& dirEntry : iter) {
-                if (dirEntry.fts_info == FTS_DP) {
-                    continue;
-                }
-
-                const auto dirName = dirEntry.fts_name;
-                if (isDirOldTmp(dirName)) {
-                    LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
-                    oldTmps.emplace_back(std::move(dirName));
-                }
-            }
-
-            for (const auto& dirName : oldTmps) {
-                (root / dirName).ForceDelete();
+            // Legacy default root: $TMP/spilling-tmp-<username>. Other nodes may still
+            // write there during a rolling upgrade, so drop only this node's node_* dirs.
+            const TFsPath legacyRoot = TFsPath{GetSystemTempDir()} / ("spilling-tmp-" + msg.Username);
+            if (!(legacyRoot == root)) {
+                RemoveMatchingChildren(legacyRoot, isOwnOldFormatDir);
             }
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
+        }
+    }
+
+    template <typename TPred>
+    void RemoveMatchingChildren(const TFsPath& dir, TPred isOldTmp) {
+        if (!dir.Exists() || !dir.IsDirectory()) {
+            return;
+        }
+
+        TDirIterator iter(dir, TDirIterator::TOptions().SetMaxLevel(1));
+        TVector<TString> oldTmps;
+        for (const auto& dirEntry : iter) {
+            if (dirEntry.fts_info == FTS_DP) {
+                continue;
+            }
+
+            const auto dirName = dirEntry.fts_name;
+            if (isOldTmp(dirName)) {
+                LOG_D("[RemoveOldTmp] found old temporary at " << (dir / dirName));
+                oldTmps.emplace_back(dirName);
+            }
+        }
+
+        for (const auto& dirName : oldTmps) {
+            (dir / dirName).ForceDelete();
         }
     }
 

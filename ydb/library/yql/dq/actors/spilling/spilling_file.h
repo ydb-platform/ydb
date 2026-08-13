@@ -34,8 +34,8 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
 
 TFsPath GetTmpSpillingRootForCurrentUser();
 
-inline TString MakeSpillingNodeDirName(ui32 nodeId, TStringBuf username) {
-    return TStringBuilder() << "spilling-tmp-" << nodeId << "-" << username;
+inline TString MakeSpillingNodeDirName(ui32 nodeId, TStringBuf username, TStringBuf sessionId) {
+    return TStringBuilder() << "spilling-tmp-" << nodeId << "-" << username << "-" << sessionId;
 }
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);

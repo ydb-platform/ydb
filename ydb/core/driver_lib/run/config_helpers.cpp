@@ -94,12 +94,6 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
                 "HarmonizerNeedyCpuWindowSeconds must be in range [1, 32], got %" PRIu32,
                 harmonizerNeedyCpuWindowSeconds);
             basic.HarmonizerNeedyCpuWindowSeconds = static_cast<ui8>(harmonizerNeedyCpuWindowSeconds);
-            if (poolConfig.HasMinLocalQueueSize()) {
-                basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
-            }
-            if (poolConfig.HasMaxLocalQueueSize()) {
-                basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
-            }
             for (const auto& pool : poolConfig.GetAdjacentPools()) {
                 basic.AdjacentPools.push_back(pool);
             }

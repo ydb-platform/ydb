@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # Enabling logging
 
 Below are code examples of enabling logging in different {{ ydb-short-name }} SDKs.

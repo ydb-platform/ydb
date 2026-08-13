@@ -15,9 +15,27 @@ static void InitTypeCounters(TSpillingCounters::TTypeCounters& tc,
     tc.FileDescriptors = counters->GetCounter(prefix + "/FileDescriptors", false);
 }
 
+static void InitDDiskCounters(TSpillingCounters::TDDiskCounters& dc,
+                              const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
+    const TString prefix = "Spilling/DDisk";
+    dc.ActiveSessions = counters->GetCounter(prefix + "/ActiveSessions", false);
+    dc.Discoveries = counters->GetCounter(prefix + "/Discoveries", true);
+    dc.DiscoveryErrors = counters->GetCounter(prefix + "/DiscoveryErrors", true);
+    dc.Connects = counters->GetCounter(prefix + "/Connects", true);
+    dc.ConnectErrors = counters->GetCounter(prefix + "/ConnectErrors", true);
+    dc.WriteBytes = counters->GetCounter(prefix + "/WriteBytes", true);
+    dc.ReadBytes = counters->GetCounter(prefix + "/ReadBytes", true);
+    dc.WriteParts = counters->GetCounter(prefix + "/WriteParts", true);
+    dc.ReadParts = counters->GetCounter(prefix + "/ReadParts", true);
+    dc.Erases = counters->GetCounter(prefix + "/Erases", true);
+    dc.InFlightWrites = counters->GetCounter(prefix + "/InFlightWrites", false);
+    dc.InFlightReads = counters->GetCounter(prefix + "/InFlightReads", false);
+}
+
 TSpillingCounters::TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     InitTypeCounters(ComputeSpilling, counters, "Spilling/Compute");
     InitTypeCounters(ChannelSpilling, counters, "Spilling/Channel");
+    InitDDiskCounters(DDisk, counters);
     SpillingIOQueueSize = counters->GetCounter("Spilling/IOQueueSize", false);
 }
 

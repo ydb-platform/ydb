@@ -80,7 +80,15 @@ message TTableServiceConfig {
             optional TIoThreadPoolConfig IoThreadPool = 6;
         }
 
+        // Spill into a local DDisk PersistentBuffer instead of the filesystem.
+        // When Enable=true, KQP uses CreateDqDDiskSpillingActor (no tmp directories,
+        // no BS replication). The local PersistentBuffer is discovered via NodeWarden.
+        message TDDiskConfig {
+            optional bool Enable = 1 [default = false];
+        }
+
         optional TLocalFileConfig LocalFileConfig = 1;
+        optional TDDiskConfig DDiskConfig = 2;
     }
 
     message TCompileComputationPatternServiceConfig {

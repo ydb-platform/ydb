@@ -55,7 +55,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
     bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
         Self->MetricsOneHour.clear();
-        Self->MetricsOneHourEvictBeforeHourEndUs = 0;
 
         auto rowset = db.Table<Schema::MetricsOneHour>().Reverse().Select();
         if (!rowset.IsReady()) {
@@ -67,6 +66,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         ui64 bucketHourEndUs = 0;
         ui64 bucketBytes = 0;
         ui64 retainedBytes = 0;
+        bool byteLimitReached = false;
 
         auto flushBucket = [&]() {
             if (bucket.empty()) {
@@ -95,8 +95,19 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             const ui64 hourEndUs = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
             const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
 
+            // A previous cleanup may have been interrupted by a reboot. Rows
+            // below the persistent cutoff are already logically evicted and
+            // must not become visible again while their batched deletion
+            // resumes.
+            if (Self->MetricsOneHourEvictBeforeHourEndUs &&
+                hourEndUs < Self->MetricsOneHourEvictBeforeHourEndUs)
+            {
+                break;
+            }
+
             if (!bucket.empty() && bucketHourEndUs != hourEndUs) {
                 if (!flushBucket()) {
+                    byteLimitReached = true;
                     break;
                 }
             }
@@ -118,8 +129,12 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        if (!bucket.empty() && !Self->MetricsOneHourEvictBeforeHourEndUs) {
+        if (!bucket.empty() && !byteLimitReached) {
             flushBucket();
+        }
+
+        if (Self->MetricsOneHourEvictBeforeHourEndUs) {
+            Self->PersistMetricsOneHourEvictBeforeHourEnd(db);
         }
 
         Self->UpdateMetricsOneHourRetentionCounters(retainedBytes, 0);
@@ -259,6 +274,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         // SysParams
         {
+            Self->MetricsOneHourEvictBeforeHourEndUs = 0;
             auto rowset = db.Table<Schema::SysParams>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
@@ -288,6 +304,12 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                             TInstant::MicroSeconds(FromString<ui64>(value));
                         SVLOG_D("[" << Self->TabletID() << "] Loading last merged query metrics interval end: "
                             << Self->LastMergedQueryMetricsIntervalEnd);
+                        break;
+                    case Schema::SysParam_MetricsOneHourEvictBeforeHourEnd:
+                        Self->MetricsOneHourEvictBeforeHourEndUs = FromString<ui64>(value);
+                        SVLOG_D("[" << Self->TabletID()
+                            << "] Loading query metrics one hour eviction cutoff: "
+                            << Self->MetricsOneHourEvictBeforeHourEndUs);
                         break;
                     default:
                         SVLOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);

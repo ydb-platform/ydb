@@ -2637,7 +2637,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         const ui32 failedNodeId = failedActorSystem.NodeId;
         failedActorSystem.Send(
             MakeSysViewServiceID(failedNodeId),
-            new TEvSysView::TEvFailNextIntervalMetricsRequest());
+            new TEvSysView::TEvFailNextIntervalMetricsRequest(
+                /* duplicateFailure */ true));
 
         const ui64 endTimeMs = TInstant::Now().MilliSeconds();
         SendQueryMetric(env, goodNodeIdx, database, queryHash,
@@ -2670,18 +2671,21 @@ Y_UNIT_TEST_SUITE(SystemView) {
             WHERE QueryText = 'synthetic-delivery';
         )", true), 10);
 
-        const auto description = DescribePath(runtime, TString(database));
-        const ui64 processorId = description.GetDomainDescription()
-            .GetProcessingParams().GetSysViewProcessor();
-        const auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(processorId, sender,
-            new TEvInterconnect::TEvNodeDisconnected(failedNodeId));
+        // A restart must not restore the failed node request or merge the
+        // already finalized partial interval a second time.
+        env.GetTenants().Free(database);
+        env.GetTenants().Add(database);
 
-        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
-            SELECT Count
-            FROM `.sys/query_metrics_one_hour`
-            WHERE QueryText = 'synthetic-delivery';
-        )", true), 1);
+        WaitFor(TDuration::Minutes(1), "partial result after restart",
+            [&](TString& error) {
+                const ui64 count = ReadUint64(client, R"(
+                    SELECT Count
+                    FROM `.sys/query_metrics_one_hour`
+                    WHERE QueryText = 'synthetic-delivery';
+                )", true);
+                error = TStringBuilder() << "count after restart = " << count;
+                return count == 1;
+            });
     }
 
 }

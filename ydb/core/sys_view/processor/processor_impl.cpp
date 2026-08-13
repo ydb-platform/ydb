@@ -85,6 +85,11 @@ void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb
         ToString(LastMergedQueryMetricsIntervalEnd.MicroSeconds()));
 }
 
+void TSysViewProcessor::PersistMetricsOneHourEvictBeforeHourEnd(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_MetricsOneHourEvictBeforeHourEnd,
+        ToString(MetricsOneHourEvictBeforeHourEndUs));
+}
+
 template <typename TSchema>
 void TSysViewProcessor::PersistQueryTopResults(NIceDb::TNiceDb& db,
     TQueryTop& top, TResultStatsMap& results, TInstant intervalEnd)

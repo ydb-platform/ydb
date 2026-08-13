@@ -167,6 +167,7 @@ struct TProcessorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_CurrentStage = 2;
     static constexpr ui64 SysParam_IntervalEnd = 3;
     static constexpr ui64 SysParam_LastMergedQueryMetricsIntervalEnd = 4;
+    static constexpr ui64 SysParam_MetricsOneHourEvictBeforeHourEnd = 5;
 };
 
 }

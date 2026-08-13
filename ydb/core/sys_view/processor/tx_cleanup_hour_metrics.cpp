@@ -9,6 +9,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
     bool More = false;
     size_t Deleted = 0;
     ui64 SizeEvictedBuckets = 0;
+    ui64 NewEvictBeforeHourEndUs = 0;
 
     explicit TTxCleanupHourMetrics(TSelf* self)
         : TTxBase(self)
@@ -20,6 +21,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
         More = false;
         Deleted = 0;
         SizeEvictedBuckets = 0;
+        NewEvictBeforeHourEndUs = Self->MetricsOneHourEvictBeforeHourEndUs;
 
         NIceDb::TNiceDb db(txc.DB);
         auto rowset = db.Table<Schema::IntervalMetricsOneHour>().Range().Select();
@@ -49,7 +51,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
             }
         }
 
-        if (Deleted < BatchSize && Self->MetricsOneHourEvictBeforeHourEndUs) {
+        if (Deleted < BatchSize && NewEvictBeforeHourEndUs) {
             auto publicRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
             if (!publicRowset.IsReady()) {
                 return false;
@@ -58,8 +60,8 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
             while (!publicRowset.EndOfSet()) {
                 const ui64 hourEndUs =
                     publicRowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
-                if (hourEndUs >= Self->MetricsOneHourEvictBeforeHourEndUs) {
-                    Self->MetricsOneHourEvictBeforeHourEndUs = 0;
+                if (hourEndUs >= NewEvictBeforeHourEndUs) {
+                    NewEvictBeforeHourEndUs = 0;
                     break;
                 }
 
@@ -77,14 +79,22 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
                 }
             }
             if (publicRowset.EndOfSet()) {
-                Self->MetricsOneHourEvictBeforeHourEndUs = 0;
+                NewEvictBeforeHourEndUs = 0;
             }
+        }
+
+        if (NewEvictBeforeHourEndUs != Self->MetricsOneHourEvictBeforeHourEndUs) {
+            const ui64 previousCutoff = Self->MetricsOneHourEvictBeforeHourEndUs;
+            Self->MetricsOneHourEvictBeforeHourEndUs = NewEvictBeforeHourEndUs;
+            Self->PersistMetricsOneHourEvictBeforeHourEnd(db);
+            Self->MetricsOneHourEvictBeforeHourEndUs = previousCutoff;
         }
 
         return true;
     }
 
     void Complete(const TActorContext&) override {
+        Self->MetricsOneHourEvictBeforeHourEndUs = NewEvictBeforeHourEndUs;
         SVLOG_D("[" << Self->TabletID() << "] TTxCleanupHourMetrics::Complete: "
             << "deleted# " << Deleted
             << ", size evicted buckets# " << SizeEvictedBuckets

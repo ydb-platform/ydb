@@ -1468,6 +1468,13 @@ namespace NKikimr {
 
             const NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
             const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: received by SkeletonFront",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"request", ev->Get()->ToString()},
+                {"blobId", blob.ToString()},
+                {"cost", cost},
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie});
             LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
 
@@ -1494,6 +1501,13 @@ namespace NKikimr {
             const ui64 cost = VCtx->CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
 
             const NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVMultiPut: received by SkeletonFront",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"request", ev->Get()->ToString()},
+                {"itemCount", record.ItemsSize()},
+                {"cost", cost},
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie});
             LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                  VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), record.ItemsSize(),
                  ev->Get()->GetSumBlobSize());
@@ -1644,6 +1658,14 @@ namespace NKikimr {
         template<typename TPtr>
         void Reply(TPtr& ev, const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason,
                 TInstant now) {
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "Replying from SkeletonFront",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"type", TypeName(*ev->Get())},
+                {"request", ev->Get()->ToString()},
+                {"status", NKikimrProto::EReplyStatus_Name(status)},
+                {"errorReason", errorReason},
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie});
             using namespace NErrBuilder;
             auto res = ErroneousResult(VCtx, status, errorReason, ev, now, nullptr, SelfVDiskId, VDiskIncarnationGuid, GInfo);
             SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx, TCommonHandleClass(*ev->Get()));

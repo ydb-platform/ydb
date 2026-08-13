@@ -76,19 +76,19 @@ def _create_parser():
 
 def _benchmark_record(benchmark):
     return {
-        "name": benchmark.name, "description": benchmark.description,
+        "name": benchmark.name,
+        "description": benchmark.description,
         "resource": benchmark.resource_name,
-        "parameters": [{"name": item.name, "description": item.description, "type": item.value_type,
-                        "default": list(item.default), "matrix": item.matrix, "choices": list(item.choices)}
-                       for item in benchmark.parameters],
+        "parameters": [
+            {"name": item.name, "description": item.description, "type": item.value_type, "default": list(item.default), "matrix": item.matrix, "choices": list(item.choices)}
+            for item in benchmark.parameters
+        ],
         "dimensions": [item.name for item in benchmark.dimensions],
         "metrics": [{"name": item.name, "unit": item.unit} for item in benchmark.metrics],
         "defaults": {item.name: list(item.default) for item in benchmark.parameters},
-        "affinity_modes": list(AFFINITY_MODES), "csv_columns": list(benchmark.csv_columns),
-        "examples": [
-            {benchmark.name: {"example": {"threads": [1], "duration": 1,
-                "repetitions": 1, "affinity": ["none"]}}}
-        ],
+        "affinity_modes": list(AFFINITY_MODES),
+        "csv_columns": list(benchmark.csv_columns),
+        "examples": [{benchmark.name: {"example": {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}}}],
     }
 
 
@@ -146,9 +146,7 @@ def _cancel_unfinished_steps(store, reason, benchmark=None, profile=None):
         except Exception as error:
             # Finalization is best-effort specifically so a secondary storage
             # failure cannot replace the benchmark error which stopped the run.
-            store.manifest.setdefault("finalization_errors", []).append(
-                "cannot cancel step {}: {}".format(step["id"], error)
-            )
+            store.manifest.setdefault("finalization_errors", []).append("cannot cancel step {}: {}".format(step["id"], error))
 
 
 def _run(arguments, resource_loader, tool_revision):
@@ -246,9 +244,11 @@ def _run(arguments, resource_loader, tool_revision):
                 manifest["runs"].append(run_record)
                 store.write()
                 try:
+
                     def on_event(event):
                         step_id = next(
-                            step.id for step in plan.steps
+                            step.id
+                            for step in plan.steps
                             if step.benchmark == configuration.benchmark.name
                             and step.profile == configuration.profile
                             and step.affinity == event["affinity"]
@@ -267,6 +267,7 @@ def _run(arguments, resource_loader, tool_revision):
                             store.transition_step(step_id, event["state"], **event.get("fields", {}))
                         else:
                             raise BenchmarkError("unknown benchmark step event: {}".format(event["type"]))
+
                     profile_manifest = run_benchmark(
                         binary,
                         configuration,
@@ -383,9 +384,15 @@ def main(argv=None, resource_loader=None, tool_revision=None):
             if not 0 <= arguments.port <= 65535:
                 raise BenchmarkError("--port must be between 0 and 65535")
             revision = tool_revision or {"commit_id": "unknown"}
-            serve(arguments.listen, arguments.port, arguments.output, arguments.no_open, arguments.allow_remote,
-                  executor=production_executor(resource_loader, revision),
-                  perf_available=str(revision.get("build_type", "")).lower() == "profile")
+            serve(
+                arguments.listen,
+                arguments.port,
+                arguments.output,
+                arguments.no_open,
+                arguments.allow_remote,
+                executor=production_executor(resource_loader, revision),
+                perf_available=str(revision.get("build_type", "")).lower() == "profile",
+            )
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

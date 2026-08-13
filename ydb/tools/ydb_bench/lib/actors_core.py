@@ -15,7 +15,7 @@ from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
-from ydb.tools.ydb_bench.benchmarks import BENCHMARKS, PING_BENCHMARK, STAR_PING_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks import PING_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition
 
 
@@ -150,8 +150,7 @@ def run_benchmark(
     benchmark = configuration.benchmark
     topology = discover_topology()
     cases = configuration.benchmark.process_cases(configuration)
-    placements = [(case_index, case, plan_affinity(mode, topology, case["threads"]))
-                  for mode in configuration.affinity_modes for case_index, case in enumerate(cases, 1)]
+    placements = [(case_index, case, plan_affinity(mode, topology, case["threads"])) for mode in configuration.affinity_modes for case_index, case in enumerate(cases, 1)]
     binary_record = {
         "name": binary.path.name,
         "sha256": binary.sha256,
@@ -217,10 +216,17 @@ def run_benchmark(
             for case_index, case, placement in placements:
                 threads = case["threads"]
                 for index in range(1, configuration.repetitions + 1):
-                    event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
-                        "state": "unsupported", "fields": {"reason": placement.reason},
-                    })
+                    event_sink(
+                        {
+                            "type": "step-finished",
+                            "affinity": placement.mode,
+                            "threads": threads,
+                            "case": case_index,
+                            "repeat": index,
+                            "state": "unsupported",
+                            "fields": {"reason": placement.reason},
+                        }
+                    )
         failure = "none of the selected affinity modes is supported: {}".format(
             "; ".join("{}/{} threads: {}".format(placement.mode, case["threads"], placement.reason) for _, case, placement in placements)
         )
@@ -240,15 +246,23 @@ def run_benchmark(
         if not placement.supported:
             if event_sink is not None:
                 for index in range(1, configuration.repetitions + 1):
-                    event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
-                        "state": "unsupported", "fields": {"reason": placement.reason},
-                    })
+                    event_sink(
+                        {
+                            "type": "step-finished",
+                            "affinity": placement.mode,
+                            "threads": threads,
+                            "case": case_index,
+                            "repeat": index,
+                            "state": "unsupported",
+                            "fields": {"reason": placement.reason},
+                        }
+                    )
             continue
         affinity_record["status"] = "running"
         case_suffix = "case-{:03d}".format(case_index) if case["parameters"] else None
         mode_directory = output_directory / placement.mode / "threads-{:03d}".format(threads)
-        if case_suffix: mode_directory /= case_suffix
+        if case_suffix:
+            mode_directory /= case_suffix
         mode_directory.mkdir(parents=True)
         process_configuration = replace(configuration, threads=(threads,))
         environment = benchmark.environment(process_configuration, case)
@@ -268,13 +282,19 @@ def run_benchmark(
                 command = base_command
             started_at = _utc_now()
             if event_sink is not None:
-                event_sink({
-                    "type": "step-started", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
-                    "fields": {
-                        "cpus": None if placement.cpus is None else list(placement.cpus),
-                        "started_at": started_at,
-                    },
-                })
+                event_sink(
+                    {
+                        "type": "step-started",
+                        "affinity": placement.mode,
+                        "threads": threads,
+                        "case": case_index,
+                        "repeat": index,
+                        "fields": {
+                            "cpus": None if placement.cpus is None else list(placement.cpus),
+                            "started_at": started_at,
+                        },
+                    }
+                )
             try:
                 result = run_command(
                     command,
@@ -289,7 +309,9 @@ def run_benchmark(
                 finished_at = _utc_now()
                 manifest["runs"].append(
                     {
-                        "affinity_mode": placement.mode, "case": case_index, "parameters": case["parameters"],
+                        "affinity_mode": placement.mode,
+                        "case": case_index,
+                        "parameters": case["parameters"],
                         "threads": threads,
                         "cpus": None if placement.cpus is None else list(placement.cpus),
                         "index": index,
@@ -314,11 +336,7 @@ def run_benchmark(
                 repetition_directory.mkdir()
             atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
             atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
-            relative_directory = (
-                Path(placement.mode)
-                / "threads-{:03d}".format(threads)
-                / (case_suffix or repetition_directory.name)
-            )
+            relative_directory = Path(placement.mode) / "threads-{:03d}".format(threads) / (case_suffix or repetition_directory.name)
             if case_suffix:
                 relative_directory /= repetition_directory.name
             run_record = {
@@ -423,15 +441,21 @@ def run_benchmark(
                 manifest["state"] = "cancelled" if interrupted else "failed"
                 write_manifest(manifest_path, manifest)
                 if event_sink is not None:
-                    event_sink({
-                        "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
-                        "state": "cancelled" if interrupted else "failed",
-                        "fields": {
-                            "error": failure,
-                            "finished_at": result.finished_at,
-                            "duration_seconds": result.duration_seconds,
-                        },
-                    })
+                    event_sink(
+                        {
+                            "type": "step-finished",
+                            "affinity": placement.mode,
+                            "threads": threads,
+                            "case": case_index,
+                            "repeat": index,
+                            "state": "cancelled" if interrupted else "failed",
+                            "fields": {
+                                "error": failure,
+                                "finished_at": result.finished_at,
+                                "duration_seconds": result.duration_seconds,
+                            },
+                        }
+                    )
                 if interrupted:
                     raise BenchmarkInterrupted(failure)
                 if isinstance(processing_error, BenchmarkError):
@@ -447,19 +471,27 @@ def run_benchmark(
                 if "perf_data" in run_record:
                     artifacts.append(run_record["perf_data"])
                 for record in run_record.get("perf_postprocessing", []):
-                    artifacts.extend((
-                        str(relative_directory / record["stdout"]),
-                        str(relative_directory / record["stderr"]),
-                    ))
+                    artifacts.extend(
+                        (
+                            str(relative_directory / record["stdout"]),
+                            str(relative_directory / record["stderr"]),
+                        )
+                    )
                 event_sink({"type": "step-artifacts", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index, "artifacts": artifacts})
-                event_sink({
-                    "type": "step-finished", "affinity": placement.mode, "threads": threads, "case": case_index, "repeat": index,
-                    "state": "passed",
-                    "fields": {
-                        "finished_at": result.finished_at,
-                        "duration_seconds": result.duration_seconds,
-                    },
-                })
+                event_sink(
+                    {
+                        "type": "step-finished",
+                        "affinity": placement.mode,
+                        "threads": threads,
+                        "case": case_index,
+                        "repeat": index,
+                        "state": "passed",
+                        "fields": {
+                            "finished_at": result.finished_at,
+                            "duration_seconds": result.duration_seconds,
+                        },
+                    }
+                )
         affinity_record["status"] = "completed"
         write_manifest(manifest_path, manifest)
 
@@ -468,7 +500,8 @@ def run_benchmark(
     measurement_output = io.StringIO()
     measurement_columns = ["affinity_mode", "repeat"] + list(benchmark.csv_columns)
     measurement_writer = csv.DictWriter(measurement_output, fieldnames=measurement_columns, lineterminator="\n")
-    measurement_writer.writeheader(); measurement_writer.writerows(measurement_rows)
+    measurement_writer.writeheader()
+    measurement_writer.writerows(measurement_rows)
     atomic_write_text(output_directory / "repetitions.csv", measurement_output.getvalue())
     manifest["status"] = "completed"
     manifest["state"] = "passed"

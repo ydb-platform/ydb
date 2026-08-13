@@ -66,9 +66,12 @@ def _positive_integer_array(description):
 
 def _parameter_schema(parameter):
     item = {"type": parameter.value_type}
-    if parameter.minimum is not None: item["minimum"] = parameter.minimum
-    if parameter.maximum is not None: item["maximum"] = parameter.maximum
-    if parameter.choices: item["enum"] = list(parameter.choices)
+    if parameter.minimum is not None:
+        item["minimum"] = parameter.minimum
+    if parameter.maximum is not None:
+        item["maximum"] = parameter.maximum
+    if parameter.choices:
+        item["enum"] = list(parameter.choices)
     return {"type": "array", "description": parameter.description, "items": item, "minItems": 1, "uniqueItems": True}
 
 
@@ -123,12 +126,7 @@ def config_schema(registry=BENCHMARKS):
         "type": "object",
         "minProperties": 1,
         "additionalProperties": False,
-        "properties": {
-            benchmark.name: _profiles_schema(
-                _profile_schema(benchmark)
-            )
-            for benchmark in registry.values()
-        },
+        "properties": {benchmark.name: _profiles_schema(_profile_schema(benchmark)) for benchmark in registry.values()},
     }
 
 
@@ -171,9 +169,7 @@ def build_run_plan(loaded_config):
             for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
                 threads = case["threads"]
                 for repeat in range(1, configuration.repetitions + 1):
-                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(
-                        len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, repeat
-                    )
+                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, repeat)
                     steps.append(RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, case["parameters"], repeat, configuration))
     return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps))
 
@@ -265,7 +261,8 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     repetitions = _positive_integer(value["repetitions"], location + ".repetitions")
     affinity = _affinity_modes(value["affinity"], location + ".affinity")
     combinations = len(threads)
-    for parameter in benchmark.parameters: combinations *= len(parameters[parameter.name])
+    for parameter in benchmark.parameters:
+        combinations *= len(parameters[parameter.name])
     timeout_explicit = "timeout" in value
     timeout = _timeout(
         value["timeout"] if timeout_explicit else combinations * duration * 3 + 30,

@@ -4,6 +4,7 @@ The HTTP handlers in this module deliberately only translate requests.  A
 ``RunService`` owns workers, manifests and the replayable event log, so closing
 a browser connection cannot stop a benchmark.
 """
+
 import csv
 import hashlib
 import json
@@ -12,7 +13,6 @@ import mimetypes
 import socket
 import tempfile
 import threading
-import time
 import uuid
 import webbrowser
 from collections import deque
@@ -32,255 +32,652 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
-_HTML = """<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>YDB benchmark</title><link rel=stylesheet href=/app.css><body><div id=app>Loading YDB benchmark…</div><script src=/app.js></script></body></html>"""
-_CSS = r"""
-:root{color-scheme:light dark;font:14px/1.45 system-ui,sans-serif;--line:#8992a2;--panel:#f4f7fb;--text:#172033;--muted:#667085;--accent:#1b62b9;--good:#087443;--bad:#b42318;--warn:#a15c00;--topology-accent:#6b5bd2}
-*{box-sizing:border-box}body{margin:0;color:var(--text);background:#fff}a{color:var(--accent);cursor:pointer;text-decoration:none}a:hover{text-decoration:underline}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid #667085;border-radius:5px;background:#fff;color:var(--text);padding:.38rem .65rem}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button.danger{color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}.shell{display:grid;grid-template-columns:14rem minmax(0,1fr);min-height:100vh}.sidebar{padding:1.4rem 1rem;background:#172033;color:#fff}.brand{font-weight:700;font-size:1.05rem;margin:0 0 1.7rem}.sidebar a{display:block;color:#d6e2f7;padding:.55rem .65rem;border-radius:5px;margin:.15rem 0}.sidebar a.active,.sidebar a:hover{color:#fff;background:#315882;text-decoration:none}.content{min-width:0}.topbar{min-height:3.7rem;border-bottom:1px solid #d0d5dd;padding:.8rem 1.6rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}.topbar .active-run{font-size:.9rem;color:var(--muted)}main{max-width:1160px;padding:1.5rem 1.6rem 3rem}.breadcrumbs{color:var(--muted);font-size:.9rem;margin:0 0 .6rem}.page-title{margin:0 0 1rem;font-size:1.5rem}.toolbar{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;margin:.8rem 0}.filters,.grid{display:grid;gap:.7rem}.filters{grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));background:var(--panel);padding:.8rem;border:1px solid #d0d5dd;border-radius:6px}.field{display:grid;gap:.25rem}.field label{font-size:.85rem;color:var(--muted)}input,select,textarea{border:1px solid #98a2b3;border-radius:4px;padding:.42rem;background:#fff;color:var(--text)}textarea.yaml{width:100%;min-height:33rem;tab-size:2;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.35}.notice{padding:.7rem .85rem;border-radius:5px;background:#eef4ff;border:1px solid #b2ccff;margin:.8rem 0}.notice.error{background:#fff0f0;border-color:#fecdca;color:var(--bad)}.notice.good{background:#ecfdf3;border-color:#abefc6;color:var(--good)}table{border-collapse:collapse;width:100%;margin:.7rem 0}th,td{border-bottom:1px solid #d0d5dd;padding:.52rem;text-align:left;vertical-align:top}th{font-size:.8rem;color:var(--muted);font-weight:600}.status{font-weight:600}.status.completed,.status.passed{color:var(--good)}.status.failed,.status.cancelled{color:var(--bad)}.status.running,.status.pending{color:var(--warn)}.muted{color:var(--muted)}.split{display:grid;grid-template-columns:minmax(13rem,22rem) minmax(0,1fr);gap:1rem}.card{border:1px solid #d0d5dd;border-radius:7px;padding:1rem;margin:.8rem 0}.profile-list button{display:block;width:100%;text-align:left;border:0;border-radius:0;margin:0;padding:.55rem;background:transparent}.profile-list button.selected{background:#dbeafe;color:#0b4a8b}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.checkboxes{display:flex;flex-wrap:wrap;gap:.4rem .8rem;padding:.5rem;border:1px solid #d0d5dd;border-radius:4px;max-height:13rem;overflow:auto}.checkboxes label{font-size:.9rem}.run-tree details{padding:.45rem 0;border-bottom:1px solid #e4e7ec}.run-tree summary{cursor:pointer}.log{white-space:pre-wrap;overflow:auto;max-height:20rem;background:#101828;color:#e4e7ec;border-radius:5px;padding:.7rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.metric{font-size:1.1rem;font-weight:650}.actions{display:flex;gap:.35rem;flex-wrap:wrap}.tabs{display:flex;gap:.2rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}.tabs a{padding:.55rem .85rem}.tabs a.active{color:var(--text);border-bottom:3px solid var(--accent);font-weight:650}.empty{padding:2rem;text-align:center;color:var(--muted);border:1px dashed #98a2b3;border-radius:7px}.topology-summary{display:grid;grid-template-columns:minmax(12rem,18rem) minmax(0,1fr);gap:1rem;align-items:center}.cpu-ranges{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.topology-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:.8rem}.numa-block{border:1px solid #c9c1ff;border-left:4px solid var(--topology-accent);border-radius:6px;background:#f8f7ff;padding:.75rem}.numa-header{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}.chiplet-list{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.65rem}.cpu-block{border:1px solid #c9c1ff;border-radius:4px;background:#fff;padding:.35rem .45rem;min-width:5.5rem}.cpu-block small{display:block;color:var(--muted);font-size:.75rem}.topology-level{margin-top:1rem}.topology-level summary{cursor:pointer;font-weight:650}.cpu-block-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.45rem;margin-top:.65rem}.cpu-block-grid .cpu-block{border-color:#d0d5dd}.affinity-mask{min-width:12rem}.affinity-mask code{white-space:normal;overflow-wrap:anywhere}.chart-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem}.series-picker{max-height:15rem;overflow:auto;border:1px solid #d0d5dd;border-radius:5px;padding:.55rem}.series-picker label{display:block;margin:.25rem 0}.series-cpus{display:block;margin-left:1.35rem;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.chart-panel{border-top:1px solid #e4e7ec;padding-top:1rem;margin-top:1rem}.chart-surface{position:relative}.chart-panel svg{display:block;width:100%;height:auto;background:#fff}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;min-width:15rem;max-width:28rem;padding:.55rem .65rem;border-radius:5px;background:#101828;color:#fff;box-shadow:0 4px 14px #10182855;font-size:.82rem}.chart-tooltip[hidden]{display:none}.chart-tooltip strong{display:block;margin-bottom:.3rem}.tooltip-row{display:grid;grid-template-columns:.65rem minmax(8rem,1fr) auto;gap:.4rem;align-items:center;margin:.16rem 0}.tooltip-dot{width:.55rem;height:.55rem;border-radius:50%}.tooltip-value{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}.chart-cursor{stroke:#475467;stroke-width:1;stroke-dasharray:4 3;pointer-events:none}.chart-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem}.legend-swatch{display:inline-block;width:.9rem;height:.2rem;vertical-align:middle;margin-right:.3rem}.chart-grid{stroke:#e4e7ec;stroke-width:1}.chart-axis{stroke:#667085;stroke-width:1}.chart-label{fill:#475467;font:12px system-ui,sans-serif}.chart-line{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.chart-point{stroke:#fff;stroke-width:1.5}.coverage{font-size:.85rem;color:var(--muted)}.chart-color-0{color:#1b62b9}.chart-color-1{color:#c2410c}.chart-color-2{color:#087443}.chart-color-3{color:#7c3aed}.chart-color-4{color:#be185d}.chart-color-5{color:#0e7490}.chart-color-6{color:#854d0e}.chart-color-7{color:#94a3b8}.chart-color-8{color:#ef4444}.chart-color-9{color:#818cf8}.chart-color-10{color:#22c55e}.chart-color-11{color:#d946ef}.chart-bg-0{background:#1b62b9}.chart-bg-1{background:#c2410c}.chart-bg-2{background:#087443}.chart-bg-3{background:#7c3aed}.chart-bg-4{background:#be185d}.chart-bg-5{background:#0e7490}.chart-bg-6{background:#854d0e}.chart-bg-7{background:#94a3b8}.chart-bg-8{background:#ef4444}.chart-bg-9{background:#818cf8}.chart-bg-10{background:#22c55e}.chart-bg-11{background:#d946ef}@media(max-width:760px){.shell{display:block}.sidebar{padding:.7rem;display:flex;gap:.3rem;overflow:auto}.brand{display:none}.sidebar a{white-space:nowrap}.topbar,main{padding-left:1rem;padding-right:1rem}.split,.topology-summary{grid-template-columns:1fr}}
-.grid,.grid>*{min-width:0}.run-tree{overflow:hidden}.run-tree details{min-width:0}.affinity-details>td>details{overflow:hidden}.affinity-details table{display:block;max-width:100%;overflow-x:auto}.modal-backdrop{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:1.5rem;background:#10182899}.modal{display:flex;flex-direction:column;width:min(68rem,100%);max-height:calc(100vh - 3rem);overflow:hidden;border-radius:8px;background:#fff;box-shadow:0 20px 40px #10182855}.modal-header,.modal-footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.2rem}.modal-header{border-bottom:1px solid #d0d5dd}.modal-header h2{margin:0}.modal-body{overflow:auto;padding:0 1.2rem 1rem}.modal-footer{justify-content:flex-end;border-top:1px solid #d0d5dd}.line-filter{min-width:0;border:1px solid #d0d5dd;border-radius:5px;padding:.5rem}.line-filter label{display:block;margin:.25rem 0}.chart-settings-summary{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin:.8rem 0}.chart-board>.card{position:relative}.query-row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.55rem;margin:.45rem 0;border:1px solid #d0d5dd;border-radius:6px;background:var(--panel)}.query-row select{max-width:15rem}.query-token{display:flex;align-items:center;gap:.3rem;padding:.2rem .35rem;border-radius:4px;background:#fff;border:1px solid #d0d5dd}.query-token b{color:#6941c6;font-weight:600}.query-actions{margin-left:auto}
-.status.queued{color:var(--warn)}
-"""
-_JS = r"""
-/* Offline UI: every request goes to the loopback ydb_bench service. */
-const app=document.querySelector('#app');
-const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const enc=value=>encodeURIComponent(value);
-let editor={yaml:sessionStorage.getItem('ydb-bench-draft')||'ping-bench:\n  baseline:\n    threads: [1]\n    duration: 3\n    repetitions: 1\n    affinity: [none]\n',perf:false,continueOnError:false,model:null,error:null,selected:null};
-let activeRun=sessionStorage.getItem('ydb-bench-active-run')||'';
-let refreshTimer=null;
-async function api(path,options={}){const response=await fetch(path,options);const type=response.headers.get('content-type')||'';const body=type.includes('application/json')?await response.json():await response.text();if(!response.ok)throw Error(body.error||body||response.statusText);return body}
-function jsonOptions(value){return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}}
-function route(){return decodeURIComponent(location.hash.slice(1)||'runs')}
-function setRoute(value){location.hash=value}
-function displayError(error){return '<div class="notice error">'+esc(error.message||error)+'</div>'}
-function secondsLabel(seconds){return Number.isFinite(Number(seconds))?Math.max(0,Number(seconds)).toFixed(1)+' s':'—'}
-function duration(record){if(!record.started_at||!record.finished_at)return '—';return secondsLabel((Date.parse(record.finished_at)-Date.parse(record.started_at))/1000)}
-function cpuRanges(cpus){if(!Array.isArray(cpus)||!cpus.length)return '—';const values=[...new Set(cpus.map(Number).filter(Number.isSafeInteger))].sort((left,right)=>left-right);const ranges=[];for(let index=0;index<values.length;){let end=index;while(end+1<values.length&&values[end+1]===values[end]+1)end++;ranges.push(values[index]===values[end]?String(values[index]):values[index]+'-'+values[end]);index=end+1}return ranges.join(', ')}
-function stepDuration(step){if(step.duration_seconds!==null&&step.duration_seconds!==undefined&&Number.isFinite(Number(step.duration_seconds)))return secondsLabel(step.duration_seconds);if(step.state==='running'&&step.started_at)return secondsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}
-function status(value){return '<span class="status '+esc(value||'unknown')+'">'+esc(value||'unknown')+'</span>'}
-function shell(current,body,breadcrumb=''){const navigation=[['runs','Runs'],['new','New run'],['topology','System topology'],['comparisons','Comparisons']];return '<div class=shell><aside class=sidebar><div class=brand>YDB benchmark</div>'+navigation.map(([id,label])=>'<a class="'+(current===id?'active':'')+'" href="#'+id+'">'+label+'</a>').join('')+'</aside><div class=content><header class=topbar><strong>'+esc(current==='new'?'New run':current==='topology'?'System topology':current==='comparisons'?'Comparisons':'Runs')+'</strong><span class=active-run>'+ (activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':'No active run')+'</span></header><main>'+breadcrumb+body+'</main></div></div>'}
-function breadcrumbs(items){return items.length?'<div class=breadcrumbs>'+items.map((item,index)=>index===items.length-1?esc(item.label):'<a href="#'+esc(item.route)+'">'+esc(item.label)+'</a>').join(' / ')+'</div>':''}
-function saveDraft(){sessionStorage.setItem('ydb-bench-draft',editor.yaml)}
-function compactIntegerRanges(values){const numbers=values.map(Number);if(!numbers.length)return '';const parts=[];for(let index=0;index<numbers.length;){let end=index;while(end+1<numbers.length&&numbers[end+1]===numbers[end]+1)end++;parts.push(index===end?String(numbers[index]):numbers[index]+'-'+numbers[end]);index=end+1}return parts.join(', ')}
-function yamlArray(values){return '['+values.map(value=>String(value)).join(', ')+']'}
-function serializeConfig(model){let lines=[];for(const benchmark of model.benchmarks||[]){const entries=(model.profiles||[]).filter(profile=>profile.benchmark===benchmark.name);if(!entries.length)continue;lines.push(benchmark.name+':');for(const profile of entries){lines.push('  '+profile.name+':');lines.push('    threads: '+yamlArray(profile.threads));for(const parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions);lines.push('    affinity: '+yamlArray(profile.affinity));if(profile.timeout!==null&&profile.timeout!==undefined&&profile.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\n')+'\n'}
-async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.perf}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].key;return value}catch(error){editor.model=null;editor.error=error.message;return null}}
-function profileByKey(key){return (editor.model?.profiles||[]).find(profile=>profile.key===key)}
-function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serializeConfig(editor.model);saveDraft()}
-function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {count,seconds}}
-function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Download YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'checked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on error</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}
-function parameterCases(benchmark,profile){let cases=[[]];for(const parameter of benchmark.parameters.filter(item=>item.matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value=>[...parts,parameter.name+'='+value]))}return cases}
-function bindEditorControls(){
-  const message=document.querySelector('#editor-message');
-  const showMessage=(text,kind='good')=>{message.innerHTML='<div class="notice '+kind+'">'+esc(text)+'</div>'};
-  if(editor.model&&document.querySelector('.profile-list')){
-    const queue=[];
-    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark);for(const affinity of profile.affinity)for(const threads of profile.threads)for(const parameters of parameterCases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile.name+' / '+affinity+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}
-    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');
-  }
-  document.querySelector('#perf').onchange=async event=>{editor.perf=event.target.checked;await syncEditor();renderNew()};
-  document.querySelector('#continue').onchange=event=>{editor.continueOnError=event.target.checked};
-  document.querySelector('#validate').onclick=async()=>{
-    try {const value=await api('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid?'Valid configuration: '+value.steps+' planned processes.':value.error,value.valid?'good':'error')}
-    catch(error){showMessage(error.message,'error')}
-  };
-  document.querySelector('#download-yaml').onclick=()=>{
-    const blob=new Blob([editor.yaml],{type:'application/x-yaml'}),link=document.createElement('a');
-    link.href=URL.createObjectURL(blob);link.download='ydb-bench.yaml';link.click();URL.revokeObjectURL(link.href)
-  };
-  document.querySelector('#save-host').onclick=async()=>{
-    try {const value=await api('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}
-    catch(error){showMessage(error.message,'error')}
-  };
-  document.querySelector('#start-run').onclick=async()=>{
-    try {const value=await api('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.continueOnError}));activeRun=value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(value.id))}
-    catch(error){showMessage(error.message,'error')}
-  }
-}
-function profileEditor(profile){
-  const benchmark=(editor.model.benchmarks||[]).find(item=>item.name===profile.benchmark);
-  const field=(id,label,value,help='')=>'<div class=field><label for="'+id+'">'+esc(label)+'</label><input id="'+id+'" value="'+esc(value)+'"><small class=muted>'+esc(help)+'</small></div>';
-  const parameterFields=benchmark.parameters.map((parameter,index)=>parameter.choices.length?'<div class=field><label>'+esc(parameter.name)+'</label><div class=checkboxes>'+parameter.choices.map(choice=>'<label><input type=checkbox class=parameter-choice data-parameter-index="'+index+'" value="'+esc(choice)+'" '+((profile.parameters[parameter.name]||[]).includes(choice)?'checked':'')+'> '+esc(choice)+'</label>').join('')+'</div><small class=muted>'+esc(parameter.description)+'</small></div>':field('parameter-'+index,parameter.name,parameter.type==='integer'?compactIntegerRanges(profile.parameters[parameter.name]||[]):(profile.parameters[parameter.name]||[]).join(', '),parameter.description)).join('');
-  const memoryMb=profile.benchmark==='memory-bandwidth-bench'?Math.max(...profile.threads)*Math.max(...(profile.parameters['buffer-size-mb']||[0])):0;
-  return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+(memoryMb?'<div class=notice>Maximum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div class=field><label>Benchmark</label><select id=benchmark>'+editor.model.benchmarks.map(item=>'<option value="'+esc(item.name)+'" '+(item.name===profile.benchmark?'selected':'')+'>'+esc(item.name)+'</option>').join('')+'</select></div>'+field('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+field('threads','Threads',compactIntegerRanges(profile.threads),'values and ranges, for example 1-16')+parameterFields+field('duration','Duration (seconds)',profile.duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><div class=checkboxes>'+editor.model.affinity_modes.map(mode=>'<label><input class=affinity type=checkbox value="'+esc(mode)+'" '+(profile.affinity.includes(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div>'
-}
-function arrayField(value,minimum=1){
-  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;
-  if(!parts.length)throw Error('Enter one or more integers or ranges.');
-  for(const part of parts){
-    const match=/^(\d+)(?:\s*-\s*(\d+))?$/.exec(part);
-    if(!match)throw Error('Values must be integers or ranges such as 1-16.');
-    const first=Number(match[1]),last=Number(match[2]||match[1]);
-    if(!Number.isSafeInteger(first)||!Number.isSafeInteger(last)||first<minimum||last<first)throw Error('Ranges must use integers not below '+minimum+' in ascending order.');
-    if(last-first+1>10000||values.length+last-first+1>10000)throw Error('A field may expand to at most 10,000 values.');
-    for(let number=first;number<=last;number++){
-      if(seen.has(number))throw Error('Values and ranges must not overlap.');
-      seen.add(number);values.push(number);
-    }
-  }
-  return values
-}
-function bindProfileEditor(profile){const update=event=>{try{const name=document.querySelector('#profile-name').value.trim(),benchmarkName=document.querySelector('#benchmark').value,benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName),benchmarkChanged=event?.target?.id==='benchmark';if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');if(editor.model.profiles.some(item=>item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name))throw Error('A profile with this benchmark and name already exists.');updateProfile(profile.key,item=>{item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;item.threads=arrayField(document.querySelector('#threads').value);item.parameters={};benchmark.parameters.forEach((parameter,index)=>{if(benchmarkChanged){item.parameters[parameter.name]=[...parameter.default];return}if(parameter.choices.length){const selected=[...document.querySelectorAll('.parameter-choice[data-parameter-index="'+index+'"]:checked')].map(input=>input.value);if(!selected.length)throw Error('Select at least one value for '+parameter.name+'.');item.parameters[parameter.name]=selected;return}const raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=parameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});item.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetitions').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value)});editor.selected=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('parameter-choice'))renderNew()}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};for(const input of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repetitions,.affinity'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}}
-function addProfile(){const selectedBenchmark=document.querySelector('#add-benchmark')?.value;const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;editor.model.profiles.push({key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none']});editor.selected=benchmark.name+'/'+name;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}
-async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorage.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-title>New run</h1><div class=tabs><a class="'+(tab==='builder'?'active':'')+'" href="#new">Builder</a><a class="'+(tab==='yaml'?'active':'')+'" href="#new/yaml">YAML</a></div>'+editorControls();if(tab==='yaml'){content+='<textarea class=yaml id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is not overwritten by Builder.</div>';app.innerHTML=shell('new',content);document.querySelector('#yaml-editor').oninput=event=>{editor.yaml=event.target.value;saveDraft();clearTimeout(window.ydbBenchYamlTimer);window.ydbBenchYamlTimer=setTimeout(async()=>{await syncEditor();document.querySelector('#editor-message').innerHTML=editor.error?'<div class="notice error">'+esc(editor.error)+'</div>':'<div class="notice good">Builder model is synchronized.</div>'},350)};bindEditorControls();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Builder.</p>';app.innerHTML=shell('new',content);bindEditorControls();return}const selected=profileByKey(editor.selected)||editor.model.profiles[0];content+='<div class=notice>Plan: <strong>'+summary.count+'</strong> processes; requested measurement time <strong>'+Math.ceil(summary.seconds)+' s</strong>; output root is <code>'+esc(editor.model.output)+'</code>.</div><div class=split><section class="card profile-list"><div class=toolbar><strong>Profiles</strong><button id=add-profile>Add</button></div>'+editor.model.profiles.map(profile=>'<button data-profile="'+esc(profile.key)+'" class="'+(profile.key===selected?.key?'selected':'')+'">'+esc(profile.benchmark)+' / '+esc(profile.name)+'</button>').join('')+'</section><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclick=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button.dataset.profile;renderNew()};if(selected)bindProfileEditor(selected)}
-function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}
-function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-benchmark placeholder="ping-bench"></div><div class=field><label>Profile</label><input id=f-profile placeholder="baseline"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Local</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since type=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}
-function runHref(id,kind){return '/api/runs/'+enc(id)+'/'+kind}
-async function renderRuns(){clearRefresh();let content='<h1 class=page-title>Runs</h1><p class=muted>Local and imported benchmark results. Filters apply without leaving this page.</p>'+runFilters()+'<div class=toolbar><input id=import-file type=file accept=.zip><button id=import-run>Import results</button><button id=apply-filters>Apply filters</button></div><div id=runs-table></div>';app.innerHTML=shell('runs',content);async function load(){const query=new URLSearchParams();for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)}try{const runs=await api('/api/runs?'+query);document.querySelector('#runs-table').innerHTML=runs.length?'<table><thead><tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Actions</th></tr></thead><tbody>'+runs.map(run=>'<tr><td><a href="#run/'+enc(run.id)+'">'+esc(run.id)+'</a><br><small class=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</td><td>'+esc(run.started_at||'—')+'<br><small>'+duration(run)+'</small></td><td>'+run.profiles+' / '+run.repetitions+'</td><td>'+ (run.perf?'yes':'no')+'</td><td><div class=actions><a href="#run/'+enc(run.id)+'">Open</a><a data-repeat="'+esc(run.id)+'">Repeat</a><a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a><a href="'+runHref(run.id,'archive')+'">Archive</a></div></td></tr>').join('')+'</tbody></table>':'<div class=empty>No runs match these filters.</div>';for(const item of document.querySelectorAll('[data-repeat]'))item.onclick=event=>{event.preventDefault();reuseRun(item.dataset.repeat)}}catch(error){document.querySelector('#runs-table').innerHTML=displayError(error)}}document.querySelector('#apply-filters').onclick=load;document.querySelector('#import-run').onclick=async()=>{try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive first.');await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}catch(error){document.querySelector('#runs-table').innerHTML=displayError(error)}};await load()}
-async function reuseRun(id){try{const value=await api('/api/runs/'+enc(id)+'/config.json');editor.yaml=value.yaml;editor.perf=Boolean(value.perf);editor.continueOnError=Boolean(value.continue_on_error);saveDraft();setRoute('new')}catch(error){alert(error.message)}}
-const chartColors=['#1b62b9','#c2410c','#087443','#7c3aed','#be185d','#0e7490','#854d0e','#94a3b8','#ef4444','#818cf8','#22c55e','#d946ef'];
-function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs(number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}
-function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+series.affinity}
-function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Object.entries(series.cpu_masks).sort((left,right)=>Number(left[0])-Number(right[0])).map(([threads,cpus])=>threads+' → '+(cpus===null?'unrestricted':cpuRanges(cpus))).join('; ');return Object.hasOwn(series,'cpus')?(series.cpus===null?'CPUs: unrestricted':'CPUs: '+cpuRanges(series.cpus)):'CPUs: not recorded'}
-function svgChart(metric,xName,xValues,seriesRows,colors){
-  const width=900,height=330,left=78,right=24,top=24,bottom=52,plotWidth=width-left-right,plotHeight=height-top-bottom,valueFor=(item,row)=>Number(row?.[item.metric||metric]);
-  const values=[];for(const item of seriesRows)for(const x of xValues){const value=valueFor(item,item.rows.get(String(x)));if(Number.isFinite(value))values.push(value)}
-  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';
-  let yMin=Math.min(...values),yMax=Math.max(...values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+=pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}
-  const numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth),yPos=value=>top+(yMax-Number(value))/(yMax-yMin)*plotHeight;
-  let svg='<svg viewBox="0 0 '+width+' '+height+'" role=img aria-label="'+esc(metric)+' by '+esc(xName)+'">';
-  for(let tick=0;tick<=4;tick++){const y=top+plotHeight*tick/4,value=yMax-(yMax-yMin)*tick/4;svg+='<line class=chart-grid x1="'+left+'" y1="'+y+'" x2="'+(width-right)+'" y2="'+y+'"/><text class=chart-label x="'+(left-8)+'" y="'+(y+4)+'" text-anchor=end>'+esc(metricLabel(value))+'</text>'}
-  const tickValues=xValues.length<=10?xValues:[...new Set([0,1,2,3,4,5].map(index=>xValues[Math.round(index*(xValues.length-1)/5)]))];
-  for(const value of tickValues){const x=xPos(value);svg+='<line class=chart-grid x1="'+x+'" y1="'+top+'" x2="'+x+'" y2="'+(top+plotHeight)+'"/><text class=chart-label x="'+x+'" y="'+(height-25)+'" text-anchor=middle>'+esc(metricLabel(value))+'</text>'}
-  svg+='<line class=chart-axis x1="'+left+'" y1="'+(top+plotHeight)+'" x2="'+(width-right)+'" y2="'+(top+plotHeight)+'"/><line class=chart-axis x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+(top+plotHeight)+'"/><text class=chart-label x="'+(left+plotWidth/2)+'" y="'+(height-5)+'" text-anchor=middle>'+esc(xName)+'</text>';
-  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],points=xValues.map(x=>{const row=item.rows.get(String(x)),y=valueFor(item,row);return Number.isFinite(y)?{x,y,row}:null}).filter(Boolean);svg+='<polyline class=chart-line stroke="'+color+'" points="'+points.map(point=>xPos(point.x)+','+yPos(point.y)).join(' ')+'"/>';for(const point of points)svg+='<circle class=chart-point fill="'+color+'" cx="'+xPos(point.x)+'" cy="'+yPos(point.y)+'" r="4"><title>'+esc(item.label+'; '+xName+'='+point.x+'; '+(item.metric||metric)+'='+point.y)+'</title></circle>'});
-  svg+='<line class=chart-cursor x1="0" y1="'+top+'" x2="0" y2="'+(top+plotHeight)+'" visibility=hidden/>';
-  return '<div class=chart-surface>'+svg+'</svg><div class=chart-tooltip hidden></div></div>'
-}
-function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors){
-  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
-  for(const panel of container.querySelectorAll('.chart-panel')){
-    const metric=panel.dataset.metric,svg=panel.querySelector('svg'),surface=panel.querySelector('.chart-surface'),tooltip=panel.querySelector('.chart-tooltip'),cursor=panel.querySelector('.chart-cursor');
-    if(!svg||!surface||!tooltip||!cursor||!metrics.includes(metric))continue;
-    const hide=()=>{tooltip.hidden=true;cursor.setAttribute('visibility','hidden')};
-    svg.onmouseleave=hide;
-    svg.onmousemove=event=>{
-      const bounds=svg.getBoundingClientRect(),viewX=(event.clientX-bounds.left)*width/bounds.width;
-      const selected=xValues.reduce((best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xValues[0]),cursorX=xPos(selected);
-      const values=seriesRows.map((item,index)=>({label:item.label,colorClass:(item.colorIndex??index)%chartColors.length,value:Number(item.rows.get(String(selected))?.[item.metric||metric])})).filter(item=>Number.isFinite(item.value)).sort((leftItem,rightItem)=>rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label));
-      if(!values.length)return hide();
-      cursor.setAttribute('x1',cursorX);cursor.setAttribute('x2',cursorX);cursor.setAttribute('visibility','visible');
-      tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+values.map(item=>'<div class=tooltip-row><i class="tooltip-dot chart-bg-'+item.colorClass+'"></i><span class="chart-color-'+item.colorClass+'">'+esc(item.label)+'</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');
-      tooltip.hidden=false;
-      const surfaceBounds=surface.getBoundingClientRect(),tooltipWidth=tooltip.offsetWidth,rawLeft=event.clientX-surfaceBounds.left+12;
-      tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';tooltip.style.top=Math.max(4,event.clientY-surfaceBounds.top-tooltip.offsetHeight-10)+'px'
-    }
-  }
-}
-async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/chart-data?'+query)}
-function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(item=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,offset);if(found<0)return false;offset=found+part.length}return mask.endsWith('*')||offset===value.length})}
-function mountSingleChart(container,data,scope={}){
-  if(!container)return;
-  if(!data.series.length){container.innerHTML='<div class=empty>No completed summary.csv data is available for this selection.</div>';return}
-  const state={benchmark:scope.benchmark||'',profile:scope.profile||'',x:data.dimensions.includes('threads')?'threads':data.dimensions[0],ys:new Set(data.metrics.includes('median_msgs_per_sec')?['median_msgs_per_sec']:data.metrics.slice(0,1)),lines:null,lineFilters:{},queries:[{}],settingsOpen:Boolean(scope.open)};
-  const available=(all=false)=>data.series.filter(series=>(!state.benchmark||series.benchmark===state.benchmark)&&(!state.profile||series.profile===state.profile));
-  const resetSeriesState=()=>{state.lines=null;state.lineFilters={}};
-  function expandedSeries(series){
-    const multiplierDimensions=data.dimensions.filter(name=>name!==state.x&&data.dimension_metadata?.[name]?.series!==false&&new Set(series.flatMap(item=>item.rows.map(row=>row[name]).filter(value=>value!==undefined)).map(String)).size>1);
-    const affinityVaries=new Set(series.map(item=>item.affinity)).size>1,result=[];
-    for(const item of series){const groups=new Map;for(const row of item.rows){const values=multiplierDimensions.map(name=>row[name]),key=JSON.stringify(values);if(!groups.has(key))groups.set(key,{values,rows:[]});groups.get(key).rows.push(row)}for(const [key,group] of groups){const labels=[],facets={};if(affinityVaries){labels.push('affinity='+item.affinity);facets.affinity=String(item.affinity)}multiplierDimensions.forEach((name,index)=>{labels.push(name+'='+group.values[index]);facets[name]=String(group.values[index])});const prefix=scope.profile?item.profile:item.run+' / '+item.profile;result.push({...item,id:item.id+'::'+key,label:prefix+(labels.length?'['+labels.join('; ')+']':''),facets,rows:group.rows})}}
-    return result
-  }
-  function render(){
-    const benchmarks=[...new Set(data.series.map(item=>item.benchmark))].sort();if(!state.benchmark)state.benchmark=benchmarks[0];
-    const profiles=[...new Set(data.series.filter(item=>item.benchmark===state.benchmark).map(item=>item.profile))].sort();if(!state.profile||!profiles.includes(state.profile))state.profile=profiles[0];
-    const baseSeries=available();
-    const dimensions=data.dimensions.filter(name=>baseSeries.some(item=>item.rows.some(row=>row[name]!==undefined)));if(!dimensions.includes(state.x))state.x=dimensions[0];
-    const allSeries=expandedSeries(baseSeries),filterOptions={};for(const item of allSeries)for(const [name,value] of Object.entries(item.facets))if((filterOptions[name]??=new Set).add(value));
-    for(const [name,values] of Object.entries(filterOptions))if(!state.lineFilters[name])state.lineFilters[name]=new Set(values);
-    const matches=(item,query)=>Object.entries(query).every(([name,value])=>name==='metric'||globLabelMatch(item.facets[name],value)),series=allSeries.filter(item=>state.queries.some(query=>matches(item,query)));if(state.lines===null)state.lines=new Set(series.map(item=>item.id));
-    const select=(id,label,values,current)=>'<div class=field><label for="'+id+'">'+esc(label)+'</label><select id="'+id+'">'+values.map(value=>'<option '+(value===current?'selected':'')+'>'+esc(value)+'</option>').join('')+'</select></div>';
-    const facetNames=Object.entries(filterOptions).filter(([,values])=>values.size>1).map(([name])=>name),queryRows=state.queries.map((query,index)=>'<div class=query-row data-query="'+index+'"><span class=query-token><b>metric</b> = <select class=query-metric>'+data.metrics.map(metric=>'<option '+(metric===(query.metric||[...state.ys][0])?'selected':'')+'>'+esc(metric)+'</option>').join('')+'</select></span>'+facetNames.map(name=>{const listId='query-values-'+index+'-'+name;return '<span class=query-token><b>'+esc(name)+'</b> = <input class=query-facet data-facet="'+esc(name)+'" value="'+esc(query[name]||'*')+'" list="'+esc(listId)+'" placeholder="*"><datalist id="'+esc(listId)+'"><option value="*">'+[...filterOptions[name]].sort((left,right)=>left.localeCompare(right,undefined,{numeric:true})).map(value=>'<option value="'+esc(value)+'">').join('')+'</datalist></span>'}).join('')+'<span class=query-actions><button class=remove-query '+(state.queries.length===1?'disabled':'')+'>Remove</button></span></div>').join('');
-    const settings='<div class=chart-controls>'+(scope.benchmark?'':select('chart-benchmark','Benchmark',benchmarks,state.benchmark))+(scope.profile?'':select('chart-profile','Profile',profiles,state.profile))+select('chart-x','X axis',dimensions,state.x)+'</div><h3>Lines</h3><p class=muted>Each row adds matching lines. Use <code>*</code> as a wildcard and <code>|</code> for alternatives, for example <code>pack-numa-*-pack-core</code> or <code>25|50|75</code>.</p>'+queryRows+'<button id=add-query>Add line row</button>';
-    let controls='<div class=chart-settings-summary><button id=open-chart-settings>Configure chart</button>'+(scope.onRemove?'<button class=danger id=remove-chart>Remove chart</button>':'')+'<span class=muted>X: '+esc(state.x)+'; metrics: '+esc([...new Set(state.queries.map(item=>item.metric||[...state.ys][0]))].join(', '))+'; lines: '+series.filter(item=>state.lines.has(item.id)).length+'</span></div>'+(state.settingsOpen?'<div class=modal-backdrop id=chart-settings-backdrop><section class=modal role=dialog aria-modal=true aria-labelledby=chart-settings-title><header class=modal-header><h2 id=chart-settings-title>Chart settings</h2><button id=close-chart-settings aria-label="Close chart settings">Close</button></header><div class=modal-body>'+settings+'</div><footer class=modal-footer><button class=primary id=apply-chart-settings>Done</button></footer></section></div>':'')+'<div id=chart-warning></div><div id=chart-output></div>';
-    container.innerHTML=controls;
-    container.querySelector('#open-chart-settings').onclick=()=>{state.settingsOpen=true;render()};
-    container.querySelector('#remove-chart')?.addEventListener('click',scope.onRemove);
-    const closeSettings=()=>{state.settingsOpen=false;render()};container.querySelector('#close-chart-settings')?.addEventListener('click',closeSettings);container.querySelector('#apply-chart-settings')?.addEventListener('click',closeSettings);container.querySelector('#chart-settings-backdrop')?.addEventListener('click',event=>{if(event.target.id==='chart-settings-backdrop')closeSettings()});
-    const benchmark=container.querySelector('#chart-benchmark');if(benchmark)benchmark.onchange=()=>{state.benchmark=benchmark.value;state.profile='';resetSeriesState();render()};
-    const profile=container.querySelector('#chart-profile');if(profile)profile.onchange=()=>{state.profile=profile.value;resetSeriesState();render()};
-    const xAxis=container.querySelector('#chart-x');if(xAxis)xAxis.onchange=event=>{state.x=event.target.value;resetSeriesState();render()};
-    container.querySelector('#add-query')?.addEventListener('click',()=>{state.queries.push({metric:[...state.ys][0]});render()});
-    for(const row of container.querySelectorAll('.query-row')){const index=Number(row.dataset.query),query=state.queries[index];row.querySelector('.query-metric').onchange=event=>{query.metric=event.target.value;state.ys=new Set(state.queries.map(item=>item.metric||[...state.ys][0]));render()};for(const input of row.querySelectorAll('.query-facet'))input.onchange=event=>{query[input.dataset.facet]=event.target.value;render()};row.querySelector('.remove-query').onclick=()=>{if(state.queries.length>1){state.queries.splice(index,1);state.ys=new Set(state.queries.map(item=>item.metric||[...state.ys][0]));render()}}}
-    draw()
-  }
-  function draw(){
-    const matches=(item,query)=>Object.entries(query).every(([name,value])=>name==='metric'||globLabelMatch(item.facets[name],value)),chosen=expandedSeries(available()).filter(item=>state.lines.has(item.id)).map(item=>({...item,metrics:new Set(state.queries.filter(query=>matches(item,query)).map(query=>query.metric||[...state.ys][0]))})).filter(item=>item.metrics.size);const output=container.querySelector('#chart-output'),warning=container.querySelector('#chart-warning');
-    if(!chosen.length||!state.ys.size){warning.innerHTML='';output.innerHTML='<div class=empty>Select at least one line and one Y axis.</div>';return}
-    const selectedMetrics=[...new Set(chosen.flatMap(item=>[...item.metrics]))],indexed=[];for(const item of chosen){const rows=new Map;for(const row of item.rows)if(row[state.x]!==undefined)rows.set(String(row[state.x]),row);for(const metric of item.metrics)indexed.push({item,rows,metric,label:item.label+(selectedMetrics.length>1?' · '+metric:''),colorIndex:indexed.length})}
-    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map(([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=new Set(sets.flatMap(set=>[...set]));
-    if(!common.length){warning.innerHTML='<div class="notice error">The selected lines have no common '+esc(state.x)+' values for these filters.</div>';output.innerHTML='';return}
-    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+common.length+' / '+item.rows.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> showing the intersection of '+common.length+' common '+esc(state.x)+' values ('+esc(common.join(', '))+').<div class=coverage>'+coverage+'</div></div>'}else warning.innerHTML='<div class="notice good">All selected lines share '+common.length+' '+esc(state.x)+' values.</div>';
-    const colors=indexed.map((_,index)=>chartColors[index%chartColors.length]);const legend='<div class=chart-legend>'+indexed.map((item,index)=>'<span><i class="legend-swatch chart-bg-'+index%chartColors.length+'"></i>'+esc(item.label)+'</span>').join('')+'</div>';
-    const metricTitle=selectedMetrics.join(', ');output.innerHTML=legend+'<section class=chart-panel data-metric="combined"><h3>'+esc(metricTitle)+'</h3>'+svgChart('combined',state.x,common,indexed,colors)+'</section>';bindChartTooltips(output,state.x,common,indexed,['combined'],colors)
-  }
-  render()
-}
-function mountChartBuilder(container,data,scope={}){
-  if(!container)return;let nextId=1,charts=[{id:nextId++,open:false}];
-  function renderBoard(){container.innerHTML='<div class=toolbar><button class=primary id=add-chart>Add chart</button></div><div class=chart-board>'+charts.map(chart=>'<section class=card data-chart="'+chart.id+'"></section>').join('')+'</div>';container.querySelector('#add-chart').onclick=()=>{charts.push({id:nextId++,open:true});renderBoard()};for(const chart of charts){const target=container.querySelector('[data-chart="'+chart.id+'"]');mountSingleChart(target,data,{...scope,open:chart.open,onRemove:charts.length>1?()=>{charts=charts.filter(item=>item.id!==chart.id);renderBoard()}:null});chart.open=false}}
-  renderBoard()
-}
-function profileGroups(steps){const groups={};for(const step of steps){const key=step.benchmark+'/'+step.profile;(groups[key]??=[]).push(step)}return groups}
-function affinityGroups(steps){const groups={};for(const step of steps)(groups[step.affinity]??=[]).push(step);return groups}
-function aggregateState(steps){if(steps.some(step=>step.state==='running'))return 'running';if(steps.some(step=>step.state==='failed'))return 'failed';if(steps.some(step=>step.state==='pending'))return 'pending';if(steps.some(step=>step.state==='cancelled'))return 'cancelled';if(steps.every(step=>step.state==='unsupported'))return 'unsupported';return 'passed'}
-function caseLabel(run){const entries=Object.entries(run.parameters||{});return entries.length?entries.map(([name,value])=>name+'='+value).join(', '):'—'}
-function affinityRows(id,steps){return Object.entries(affinityGroups(steps)).map(([affinity,runs])=>{const done=runs.filter(run=>!['pending','running'].includes(run.state)).length,details=runs.map(run=>'<tr><td>'+esc(run.threads??'—')+'</td><td>'+esc(caseLabel(run))+'</td><td>'+run.repeat+'</td><td>'+status(run.state)+'</td><td>'+esc(stepDuration(run))+'</td><td>'+(run.artifacts||[]).map(path=>'<a href="'+runHref(id,'artifact/'+path.split('/').map(enc).join('/'))+'">'+esc(path.split('/').pop())+'</a>').join(' ')+'</td></tr>').join('');return '<tr><td>'+esc(affinity)+'</td><td>'+done+' / '+runs.length+'</td><td>'+status(aggregateState(runs))+'</td></tr><tr class=affinity-details><td colspan=3><details><summary>Details</summary><table><tr><th>Threads</th><th>Parameters</th><th>Repeat</th><th>State</th><th>Duration</th><th>Artifacts</th></tr>'+details+'</table></details></td></tr>'}).join('')}
-async function renderRun(id,selectedProfile=''){
-  clearRefresh();
-  try{
-    const run=await api('/api/runs/'+enc(id));
-    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');
-    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.current_run_id?'<a href="#run/'+enc(run.current_run_id)+'">Currently running: '+esc(run.current_run_id)+'</a>':'Waiting for the dispatcher.')+'</div>':'';
-    sessionStorage.setItem('ydb-bench-active-run',activeRun);
-    const groups=profileGroups(run.steps||[]);
-    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+queueNotice+'<h1 class=page-title>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</button>'+(['queued','running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>':'')+'<button id=repeat-run>Repeat with this YAML</button><a href="'+runHref(id,'config')+'">Download YAML</a><a href="'+runHref(id,'manifest')+'">run.json</a><a href="'+runHref(id,'archive')+'">Archive artifacts</a></div><div class="grid"><section class=card><div class=form-grid><div><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.started_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';
-    const visible=selectedProfile?Object.fromEntries(Object.entries(groups).filter(([key])=>key===selectedProfile)):groups;
-    content+='<section class="card run-tree"><h2>Queue</h2>'+Object.entries(visible).map(([key,steps])=>'<details open><summary><a href="#run/'+enc(id)+'/profile/'+enc(key)+'">'+esc(key)+'</a></summary><table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details>').join('')+'</section>';
-    if(selectedProfile)content+='<section class=card><h2>Results chart</h2><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';
-    const running=(run.steps||[]).find(step=>step.state==='running');
-    content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+esc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repeat+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre></section></div>';
-    app.innerHTML=shell('runs',content);
-    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedProfile);
-    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);
-    const cancel=document.querySelector('#cancel-run');
-    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,selectedProfile)}catch(error){alert(error.message)}};
-    if(selectedProfile){const pieces=selectedProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile})}catch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}
-  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+displayError(error))}
-}
-function cpuBlock(label,index,cpus){return '<div class=cpu-block><small>'+esc(label)+' '+(index+1)+'</small><span class=cpu-ranges>'+esc(cpuRanges(cpus))+'</span></div>'}
-async function renderTopology(){
-  clearRefresh();
-  try{
-    const value=await api('/api/system-topology'),topology=value.topology;
-    const chipletsByNode=new Map;
-    for(const chiplet of topology.chiplets)chipletsByNode.set(chiplet.numa_node,[...(chipletsByNode.get(chiplet.numa_node)||[]),chiplet]);
-    const numaBlocks=topology.numa_nodes.map(node=>{
-      const chiplets=chipletsByNode.get(node.id)||[];
-      return '<article class=numa-block><div class=numa-header><strong>NUMA '+esc(node.id)+'</strong><small class=muted>'+node.cpus.length+' CPUs</small></div><div class=cpu-ranges>'+esc(cpuRanges(node.cpus))+'</div>'+(chiplets.length?'<div class=chiplet-list>'+chiplets.map((chiplet,index)=>'<div class=cpu-block><small>L3 / chiplet '+(index+1)+'</small><span class=cpu-ranges>'+esc(cpuRanges(chiplet.cpus))+'</span></div>').join('')+'</div>':'')+'</article>'
-    }).join('');
-    const blocks=(label,groups)=>groups.map((cpus,index)=>cpuBlock(label,index,cpus)).join('');
-    let content='<h1 class=page-title>System topology</h1><p class=muted>Only CPUs allowed by this process cpuset are shown. Unsupported modes are never silently substituted.</p><section class="card topology-summary"><div><div class=metric>'+topology.allowed_cpus.length+' allowed CPUs</div><div class=muted>Compressed CPU ranges</div></div><div class=cpu-ranges>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section><section class=card><h2>NUMA and cache layout</h2><div class=topology-map>'+numaBlocks+'</div></section><section class=card topology-level><details><summary>Physical cores ('+topology.physical_cores.length+')</summary><div class=cpu-block-grid>'+blocks('Core',topology.physical_cores)+'</div></details></section><section class=card topology-level><details><summary>SMT sibling sets ('+topology.smt_siblings.length+')</summary><div class=cpu-block-grid>'+blocks('SMT set',topology.smt_siblings)+'</div></details></section><section class=card><h2>Affinity availability</h2><table><tr><th>Mode</th><th>Status</th><th>First mask</th><th>Reason</th><th></th></tr>'+value.affinity.map(item=>'<tr><td><code>'+esc(item.mode)+'</code></td><td>'+status(item.supported?'passed':'unsupported')+'</td><td class=affinity-mask><code>'+esc(cpuRanges(item.cpus))+'</code></td><td>'+esc(item.reason||'')+'</td><td><button data-mode="'+esc(item.mode)+'">Use in new run</button></td></tr>').join('')+'</table></section>'+(topology.hierarchy_reasons.length?'<section class=card><h2>Topology notes</h2><ul>'+topology.hierarchy_reasons.map(item=>'<li><strong>'+esc(item.level)+':</strong> '+esc(item.reason)+'</li>').join('')+'</ul></section>':'');
-    app.innerHTML=shell('topology',content);
-    for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{const mode=button.dataset.mode;editor.yaml='ping-bench:\n  topology-template:\n    threads: [1]\n    duration: 3\n    repetitions: 1\n    affinity: ['+mode+']\n';editor.selected=null;saveDraft();setRoute('new')}
-  }catch(error){app.innerHTML=shell('topology',displayError(error))}
-}
-async function renderComparisons(){
-  clearRefresh();
-  try{
-    const value=await api('/api/comparisons');
-    let content='<h1 class=page-title>Comparisons</h1><p class=muted>Select runs, then choose a benchmark, profile, axes and exact affinity lines. Charts use the common X intersection and report incomplete coverage.</p><section class=card><h2>Runs</h2>'+ (value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=checkbox value="'+esc(run.id)+'" '+(value.selected.includes(run.id)?'checked':'')+'> '+esc(run.id)+' <span class=muted>('+esc(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><h2>Comparison chart</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div></section>';
-    app.innerHTML=shell('comparisons',content);
-    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([...document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};
-    if(value.selected.length)try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value.selected))}catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}
-  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
-}
-async function compose(){const current=route();if(current==='runs')return renderRuns();if(current==='new')return renderNew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(current==='comparisons')return renderComparisons();if(current.startsWith('run/')){const pieces=current.split('/');if(pieces[2]==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute('runs')}
-addEventListener('hashchange',compose);compose();
-"""
+_HTML = (
+    "<!doctype html><html lang=en><meta charset=utf-8>"
+    '<meta name=viewport content="width=device-width,initial-scale=1">'
+    "<title>YDB benchmark</title><link rel=stylesheet href=/app.css>"
+    "<body><div id=app>Loading YDB benchmark…</div><script src=/app.js></script></body></html>"
+)
+_CSS = (
+    "\n"
+    ':root{color-scheme:light dark;font:14px/1.45 system-ui,sans-serif;--line:#8992a2;--panel:#f4f7fb;--text:#172033;--muted:'
+    '#667085;--accent:#1b62b9;--good:#087443;--bad:#b42318;--warn:#a15c00;--topology-accent:#6b5bd2}\n'
+    '*{box-sizing:border-box}body{margin:0;color:var(--text);background:#fff}a{color:var(--accent);cursor:pointer;text-decora'
+    'tion:none}a:hover{text-decoration:underline}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px s'
+    'olid #667085;border-radius:5px;background:#fff;color:var(--text);padding:.38rem .65rem}button.primary{background:var(--a'
+    'ccent);color:#fff;border-color:var(--accent)}button.danger{color:var(--bad);border-color:var(--bad)}button:disabled{opac'
+    'ity:.5;cursor:not-allowed}.shell{display:grid;grid-template-columns:14rem minmax(0,1fr);min-height:100vh}.sidebar{paddin'
+    'g:1.4rem 1rem;background:#172033;color:#fff}.brand{font-weight:700;font-size:1.05rem;margin:0 0 1.7rem}.sidebar a{displa'
+    'y:block;color:#d6e2f7;padding:.55rem .65rem;border-radius:5px;margin:.15rem 0}.sidebar a.active,.sidebar a:hover{color:#'
+    'fff;background:#315882;text-decoration:none}.content{min-width:0}.topbar{min-height:3.7rem;border-bottom:1px solid #d0d5'
+    'dd;padding:.8rem 1.6rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}.topbar .active-run{font-'
+    'size:.9rem;color:var(--muted)}main{max-width:1160px;padding:1.5rem 1.6rem 3rem}.breadcrumbs{color:var(--muted);font-size'
+    ':.9rem;margin:0 0 .6rem}.page-title{margin:0 0 1rem;font-size:1.5rem}.toolbar{display:flex;gap:.55rem;align-items:center'
+    ';flex-wrap:wrap;margin:.8rem 0}.filters,.grid{display:grid;gap:.7rem}.filters{grid-template-columns:repeat(auto-fit,minm'
+    'ax(10rem,1fr));background:var(--panel);padding:.8rem;border:1px solid #d0d5dd;border-radius:6px}.field{display:grid;gap:'
+    '.25rem}.field label{font-size:.85rem;color:var(--muted)}input,select,textarea{border:1px solid #98a2b3;border-radius:4px'
+    ';padding:.42rem;background:#fff;color:var(--text)}textarea.yaml{width:100%;min-height:33rem;tab-size:2;font-family:ui-mo'
+    'nospace,SFMono-Regular,Menlo,monospace;line-height:1.35}.notice{padding:.7rem .85rem;border-radius:5px;background:#eef4f'
+    'f;border:1px solid #b2ccff;margin:.8rem 0}.notice.error{background:#fff0f0;border-color:#fecdca;color:var(--bad)}.notice'
+    '.good{background:#ecfdf3;border-color:#abefc6;color:var(--good)}table{border-collapse:collapse;width:100%;margin:.7rem 0'
+    '}th,td{border-bottom:1px solid #d0d5dd;padding:.52rem;text-align:left;vertical-align:top}th{font-size:.8rem;color:var(--'
+    'muted);font-weight:600}.status{font-weight:600}.status.completed,.status.passed{color:var(--good)}.status.failed,.status'
+    '.cancelled{color:var(--bad)}.status.running,.status.pending{color:var(--warn)}.muted{color:var(--muted)}.split{display:g'
+    'rid;grid-template-columns:minmax(13rem,22rem) minmax(0,1fr);gap:1rem}.card{border:1px solid #d0d5dd;border-radius:7px;pa'
+    'dding:1rem;margin:.8rem 0}.profile-list button{display:block;width:100%;text-align:left;border:0;border-radius:0;margin:'
+    '0;padding:.55rem;background:transparent}.profile-list button.selected{background:#dbeafe;color:#0b4a8b}.form-grid{displa'
+    'y:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.checkboxes{display:flex;flex-wrap:wrap;gap:.4rem .8rem;'
+    'padding:.5rem;border:1px solid #d0d5dd;border-radius:4px;max-height:13rem;overflow:auto}.checkboxes label{font-size:.9re'
+    'm}.run-tree details{padding:.45rem 0;border-bottom:1px solid #e4e7ec}.run-tree summary{cursor:pointer}.log{white-space:p'
+    're-wrap;overflow:auto;max-height:20rem;background:#101828;color:#e4e7ec;border-radius:5px;padding:.7rem;font-family:ui-m'
+    'onospace,SFMono-Regular,Menlo,monospace}.metric{font-size:1.1rem;font-weight:650}.actions{display:flex;gap:.35rem;flex-w'
+    'rap:wrap}.tabs{display:flex;gap:.2rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}.tabs a{padding:.55rem .85rem}.'
+    'tabs a.active{color:var(--text);border-bottom:3px solid var(--accent);font-weight:650}.empty{padding:2rem;text-align:cen'
+    'ter;color:var(--muted);border:1px dashed #98a2b3;border-radius:7px}.topology-summary{display:grid;grid-template-columns:'
+    'minmax(12rem,18rem) minmax(0,1fr);gap:1rem;align-items:center}.cpu-ranges{font-family:ui-monospace,SFMono-Regular,Menlo,'
+    'monospace;overflow-wrap:anywhere}.topology-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap'
+    ':.8rem}.numa-block{border:1px solid #c9c1ff;border-left:4px solid var(--topology-accent);border-radius:6px;background:#f'
+    '8f7ff;padding:.75rem}.numa-header{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-botto'
+    'm:.5rem}.chiplet-list{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.65rem}.cpu-block{border:1px solid #c9c1ff;border'
+    '-radius:4px;background:#fff;padding:.35rem .45rem;min-width:5.5rem}.cpu-block small{display:block;color:var(--muted);fon'
+    't-size:.75rem}.topology-level{margin-top:1rem}.topology-level summary{cursor:pointer;font-weight:650}.cpu-block-grid{dis'
+    'play:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.45rem;margin-top:.65rem}.cpu-block-grid .cpu-bloc'
+    'k{border-color:#d0d5dd}.affinity-mask{min-width:12rem}.affinity-mask code{white-space:normal;overflow-wrap:anywhere}.cha'
+    'rt-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem}.series-picker{max-height:1'
+    '5rem;overflow:auto;border:1px solid #d0d5dd;border-radius:5px;padding:.55rem}.series-picker label{display:block;margin:.'
+    '25rem 0}.series-cpus{display:block;margin-left:1.35rem;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,mo'
+    'nospace}.chart-panel{border-top:1px solid #e4e7ec;padding-top:1rem;margin-top:1rem}.chart-surface{position:relative}.cha'
+    'rt-panel svg{display:block;width:100%;height:auto;background:#fff}.chart-tooltip{position:absolute;z-index:2;pointer-eve'
+    'nts:none;min-width:15rem;max-width:28rem;padding:.55rem .65rem;border-radius:5px;background:#101828;color:#fff;box-shado'
+    'w:0 4px 14px #10182855;font-size:.82rem}.chart-tooltip[hidden]{display:none}.chart-tooltip strong{display:block;margin-b'
+    'ottom:.3rem}.tooltip-row{display:grid;grid-template-columns:.65rem minmax(8rem,1fr) auto;gap:.4rem;align-items:center;ma'
+    'rgin:.16rem 0}.tooltip-dot{width:.55rem;height:.55rem;border-radius:50%}.tooltip-value{font-family:ui-monospace,SFMono-R'
+    'egular,Menlo,monospace;font-variant-numeric:tabular-nums}.chart-cursor{stroke:#475467;stroke-width:1;stroke-dasharray:4 '
+    '3;pointer-events:none}.chart-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem}.legend-swatch{display:inline-block;width'
+    ':.9rem;height:.2rem;vertical-align:middle;margin-right:.3rem}.chart-grid{stroke:#e4e7ec;stroke-width:1}.chart-axis{strok'
+    'e:#667085;stroke-width:1}.chart-label{fill:#475467;font:12px system-ui,sans-serif}.chart-line{fill:none;stroke-width:2.5'
+    ';stroke-linejoin:round;stroke-linecap:round}.chart-point{stroke:#fff;stroke-width:1.5}.coverage{font-size:.85rem;color:v'
+    'ar(--muted)}.chart-color-0{color:#1b62b9}.chart-color-1{color:#c2410c}.chart-color-2{color:#087443}.chart-color-3{color:'
+    '#7c3aed}.chart-color-4{color:#be185d}.chart-color-5{color:#0e7490}.chart-color-6{color:#854d0e}.chart-color-7{color:#94a'
+    '3b8}.chart-color-8{color:#ef4444}.chart-color-9{color:#818cf8}.chart-color-10{color:#22c55e}.chart-color-11{color:#d946e'
+    'f}.chart-bg-0{background:#1b62b9}.chart-bg-1{background:#c2410c}.chart-bg-2{background:#087443}.chart-bg-3{background:#7'
+    'c3aed}.chart-bg-4{background:#be185d}.chart-bg-5{background:#0e7490}.chart-bg-6{background:#854d0e}.chart-bg-7{backgroun'
+    'd:#94a3b8}.chart-bg-8{background:#ef4444}.chart-bg-9{background:#818cf8}.chart-bg-10{background:#22c55e}.chart-bg-11{bac'
+    'kground:#d946ef}@media(max-width:760px){.shell{display:block}.sidebar{padding:.7rem;display:flex;gap:.3rem;overflow:auto'
+    '}.brand{display:none}.sidebar a{white-space:nowrap}.topbar,main{padding-left:1rem;padding-right:1rem}.split,.topology-su'
+    'mmary{grid-template-columns:1fr}}\n'
+    '.grid,.grid>*{min-width:0}.run-tree{overflow:hidden}.run-tree details{min-width:0}.affinity-details>td>details{overflow:'
+    'hidden}.affinity-details table{display:block;max-width:100%;overflow-x:auto}.modal-backdrop{position:fixed;inset:0;z-ind'
+    'ex:20;display:grid;place-items:center;padding:1.5rem;background:#10182899}.modal{display:flex;flex-direction:column;widt'
+    'h:min(68rem,100%);max-height:calc(100vh - 3rem);overflow:hidden;border-radius:8px;background:#fff;box-shadow:0 20px 40px'
+    ' #10182855}.modal-header,.modal-footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1r'
+    'em 1.2rem}.modal-header{border-bottom:1px solid #d0d5dd}.modal-header h2{margin:0}.modal-body{overflow:auto;padding:0 1.'
+    '2rem 1rem}.modal-footer{justify-content:flex-end;border-top:1px solid #d0d5dd}.line-filter{min-width:0;border:1px solid '
+    '#d0d5dd;border-radius:5px;padding:.5rem}.line-filter label{display:block;margin:.25rem 0}.chart-settings-summary{display'
+    ':flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin:.8rem 0}.chart-board>.card{position:relative}.query-row{display'
+    ':flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.55rem;margin:.45rem 0;border:1px solid #d0d5dd;border-radius:'
+    '6px;background:var(--panel)}.query-row select{max-width:15rem}.query-token{display:flex;align-items:center;gap:.3rem;pad'
+    'ding:.2rem .35rem;border-radius:4px;background:#fff;border:1px solid #d0d5dd}.query-token b{color:#6941c6;font-weight:60'
+    '0}.query-actions{margin-left:auto}\n'
+    '.status.queued{color:var(--warn)}\n'
+)
+_JS = (
+    "\n"
+    '/* Offline UI: every request goes to the loopback ydb_bench service. */\n'
+    "const app=document.querySelector('#app');\n"
+    'const esc=value=>String(value??\'\').replace(/[&<>"\']/g,char=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\',"\'":\'&#39;\''
+    '}[char]));\n'
+    'const enc=value=>encodeURIComponent(value);\n'
+    "let editor={yaml:sessionStorage.getItem('ydb-bench-draft')||'ping-bench:\\n  baseline:\\n    threads: [1]\\n    duration: 3"
+    "\\n    repetitions: 1\\n    affinity: [none]\\n',perf:false,continueOnError:false,model:null,error:null,selected:null};\n"
+    "let activeRun=sessionStorage.getItem('ydb-bench-active-run')||'';\n"
+    'let refreshTimer=null;\n'
+    "async function api(path,options={}){const response=await fetch(path,options);const type=response.headers.get('content-ty"
+    "pe')||'';const body=type.includes('application/json')?await response.json():await response.text();if(!response.ok)throw "
+    'Error(body.error||body||response.statusText);return body}\n'
+    "function jsonOptions(value){return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)"
+    '}}\n'
+    "function route(){return decodeURIComponent(location.hash.slice(1)||'runs')}\n"
+    'function setRoute(value){location.hash=value}\n'
+    'function displayError(error){return \'<div class="notice error">\'+esc(error.message||error)+\'</div>\'}\n'
+    "function secondsLabel(seconds){return Number.isFinite(Number(seconds))?Math.max(0,Number(seconds)).toFixed(1)+' s':'—'}\n"
+    "function duration(record){if(!record.started_at||!record.finished_at)return '—';return secondsLabel((Date.parse(record.f"
+    'inished_at)-Date.parse(record.started_at))/1000)}\n'
+    "function cpuRanges(cpus){if(!Array.isArray(cpus)||!cpus.length)return '—';const values=[...new Set(cpus.map(Number).filt"
+    'er(Number.isSafeInteger))].sort((left,right)=>left-right);const ranges=[];for(let index=0;index<values.length;){let end='
+    'index;while(end+1<values.length&&values[end+1]===values[end]+1)end++;ranges.push(values[index]===values[end]?String(valu'
+    "es[index]):values[index]+'-'+values[end]);index=end+1}return ranges.join(', ')}\n"
+    'function stepDuration(step){if(step.duration_seconds!==null&&step.duration_seconds!==undefined&&Number.isFinite(Number(s'
+    "tep.duration_seconds)))return secondsLabel(step.duration_seconds);if(step.state==='running'&&step.started_at)return seco"
+    "ndsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}\n"
+    'function status(value){return \'<span class="status \'+esc(value||\'unknown\')+\'">\'+esc(value||\'unknown\')+\'</span>\'}\n'
+    "function shell(current,body,breadcrumb=''){const navigation=[['runs','Runs'],['new','New run'],['topology','System topol"
+    "ogy'],['comparisons','Comparisons']];return '<div class=shell><aside class=sidebar><div class=brand>YDB benchmark</div>'"
+    '+navigation.map(([id,label])=>\'<a class="\'+(current===id?\'active\':\'\')+\'" href="#\'+id+\'">\'+label+\'</a>\').join(\'\')+\'</asid'
+    "e><div class=content><header class=topbar><strong>'+esc(current==='new'?'New run':current==='topology'?'System topology'"
+    ':current===\'comparisons\'?\'Comparisons\':\'Runs\')+\'</strong><span class=active-run>\'+ (activeRun?\'<a href="#run/\'+enc(activ'
+    'eRun)+\'">Active run: \'+esc(activeRun)+\'</a>\':\'No active run\')+\'</span></header><main>\'+breadcrumb+body+\'</main></div></d'
+    "iv>'}\n"
+    "function breadcrumbs(items){return items.length?'<div class=breadcrumbs>'+items.map((item,index)=>index===items.length-1"
+    '?esc(item.label):\'<a href="#\'+esc(item.route)+\'">\'+esc(item.label)+\'</a>\').join(\' / \')+\'</div>\':\'\'}\n'
+    "function saveDraft(){sessionStorage.setItem('ydb-bench-draft',editor.yaml)}\n"
+    "function compactIntegerRanges(values){const numbers=values.map(Number);if(!numbers.length)return '';const parts=[];for(l"
+    'et index=0;index<numbers.length;){let end=index;while(end+1<numbers.length&&numbers[end+1]===numbers[end]+1)end++;parts.'
+    "push(index===end?String(numbers[index]):numbers[index]+'-'+numbers[end]);index=end+1}return parts.join(', ')}\n"
+    "function yamlArray(values){return '['+values.map(value=>String(value)).join(', ')+']'}\n"
+    'function serializeConfig(model){let lines=[];for(const benchmark of model.benchmarks||[]){const entries=(model.profiles|'
+    "|[]).filter(profile=>profile.benchmark===benchmark.name);if(!entries.length)continue;lines.push(benchmark.name+':');for("
+    "const profile of entries){lines.push('  '+profile.name+':');lines.push('    threads: '+yamlArray(profile.threads));for(c"
+    "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
+    "]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions)"
+    ";lines.push('    affinity: '+yamlArray(profile.affinity));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
+    "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
+    "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
+    'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
+    'ey;return value}catch(error){editor.model=null;editor.error=error.message;return null}}\n'
+    'function profileByKey(key){return (editor.model?.profiles||[]).find(profile=>profile.key===key)}\n'
+    'function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serial'
+    'izeConfig(editor.model);saveDraft()}\n'
+    'function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){co'
+    'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter'
+    '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
+    'length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou'
+    'nt,seconds}}\n'
+    "function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Downl"
+    "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
+    "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
+    "rror</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}\n"
+    'function parameterCases(benchmark,profile){let cases=[[]];for(const parameter of benchmark.parameters.filter(item=>item.'
+    'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
+    ">[...parts,parameter.name+'='+value]))}return cases}\n"
+    'function bindEditorControls(){\n'
+    "  const message=document.querySelector('#editor-message');\n"
+    '  const showMessage=(text,kind=\'good\')=>{message.innerHTML=\'<div class="notice \'+kind+\'">\'+esc(text)+\'</div>\'};\n'
+    "  if(editor.model&&document.querySelector('.profile-list')){\n"
+    '    const queue=[];\n'
+    '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
+    'enchmark);for(const affinity of profile.affinity)for(const threads of profile.threads)for(const parameters of parameterC'
+    "ases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile"
+    ".name+' / '+affinity+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
+    "    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</"
+    "summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');\n"
+    '  }\n'
+    "  document.querySelector('#perf').onchange=async event=>{editor.perf=event.target.checked;await syncEditor();renderNew()"
+    '};\n'
+    "  document.querySelector('#continue').onchange=event=>{editor.continueOnError=event.target.checked};\n"
+    "  document.querySelector('#validate').onclick=async()=>{\n"
+    "    try {const value=await api('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid"
+    "?'Valid configuration: '+value.steps+' planned processes.':value.error,value.valid?'good':'error')}\n"
+    "    catch(error){showMessage(error.message,'error')}\n"
+    '  };\n'
+    "  document.querySelector('#download-yaml').onclick=()=>{\n"
+    "    const blob=new Blob([editor.yaml],{type:'application/x-yaml'}),link=document.createElement('a');\n"
+    "    link.href=URL.createObjectURL(blob);link.download='ydb-bench.yaml';link.click();URL.revokeObjectURL(link.href)\n"
+    '  };\n'
+    "  document.querySelector('#save-host').onclick=async()=>{\n"
+    "    try {const value=await api('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}"
+    '\n'
+    "    catch(error){showMessage(error.message,'error')}\n"
+    '  };\n'
+    "  document.querySelector('#start-run').onclick=async()=>{\n"
+    "    try {const value=await api('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.conti"
+    "nueOnError}));activeRun=value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(value.id))"
+    '}\n'
+    "    catch(error){showMessage(error.message,'error')}\n"
+    '  }\n'
+    '}\n'
+    'function profileEditor(profile){\n'
+    '  const benchmark=(editor.model.benchmarks||[]).find(item=>item.name===profile.benchmark);\n'
+    '  const field=(id,label,value,help=\'\')=>\'<div class=field><label for="\'+id+\'">\'+esc(label)+\'</label><input id="\'+id+\'" v'
+    'alue="\'+esc(value)+\'"><small class=muted>\'+esc(help)+\'</small></div>\';\n'
+    "  const parameterFields=benchmark.parameters.map((parameter,index)=>parameter.choices.length?'<div class=field><label>'+"
+    "esc(parameter.name)+'</label><div class=checkboxes>'+parameter.choices.map(choice=>'<label><input type=checkbox class=pa"
+    'rameter-choice data-parameter-index="\'+index+\'" value="\'+esc(choice)+\'" \'+((profile.parameters[parameter.name]||[]).incl'
+    "udes(choice)?'checked':'')+'> '+esc(choice)+'</label>').join('')+'</div><small class=muted>'+esc(parameter.description)+"
+    "'</small></div>':field('parameter-'+index,parameter.name,parameter.type==='integer'?compactIntegerRanges(profile.paramet"
+    "ers[parameter.name]||[]):(profile.parameters[parameter.name]||[]).join(', '),parameter.description)).join('');\n"
+    "  const memoryMb=profile.benchmark==='memory-bandwidth-bench'?Math.max(...profile.threads)*Math.max(...(profile.paramete"
+    "rs['buffer-size-mb']||[0])):0;\n"
+    "  return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+(memoryMb?'<div class=notice>Max"
+    "imum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div"
+    ' class=field><label>Benchmark</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
+    '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+fie'
+    "ld('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+field('threads','Threads',compactIntegerRang"
+    "es(profile.threads),'values and ranges, for example 1-16')+parameterFields+field('duration','Duration (seconds)',profile"
+    ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
+    'div class=checkboxes>\'+editor.model.affinity_modes.map(mode=>\'<label><input class=affinity type=checkbox value="\'+esc(mo'
+    'de)+\'" \'+(profile.affinity.includes(mode)?\'checked\':\'\')+\'> \'+esc(mode)+\'</label>\').join(\'\')+\'</div></div><div class=tool'
+    "bar><button class=danger id=delete-profile>Delete profile</button></div>'\n"
+    '}\n'
+    'function arrayField(value,minimum=1){\n'
+    "  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;\n"
+    "  if(!parts.length)throw Error('Enter one or more integers or ranges.');\n"
+    '  for(const part of parts){\n'
+    '    const match=/^(\\d+)(?:\\s*-\\s*(\\d+))?$/.exec(part);\n'
+    "    if(!match)throw Error('Values must be integers or ranges such as 1-16.');\n"
+    '    const first=Number(match[1]),last=Number(match[2]||match[1]);\n'
+    "    if(!Number.isSafeInteger(first)||!Number.isSafeInteger(last)||first<minimum||last<first)throw Error('Ranges must use"
+    " integers not below '+minimum+' in ascending order.');\n"
+    "    if(last-first+1>10000||values.length+last-first+1>10000)throw Error('A field may expand to at most 10,000 values.');"
+    '\n'
+    '    for(let number=first;number<=last;number++){\n'
+    "      if(seen.has(number))throw Error('Values and ranges must not overlap.');\n"
+    '      seen.add(number);values.push(number);\n'
+    '    }\n'
+    '  }\n'
+    '  return values\n'
+    '}\n'
+    "function bindProfileEditor(profile){const update=event=>{try{const name=document.querySelector('#profile-name').value.tr"
+    "im(),benchmarkName=document.querySelector('#benchmark').value,benchmark=editor.model.benchmarks.find(item=>item.name===b"
+    "enchmarkName),benchmarkChanged=event?.target?.id==='benchmark';if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw "
+    "Error('Profile name is unsafe.');if(editor.model.profiles.some(item=>item.key!==profile.key&&item.benchmark===benchmarkN"
+    "ame&&item.name===name))throw Error('A profile with this benchmark and name already exists.');updateProfile(profile.key,i"
+    "tem=>{item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;item.threads=arrayField(document.query"
+    "Selector('#threads').value);item.parameters={};benchmark.parameters.forEach((parameter,index)=>{if(benchmarkChanged){ite"
+    'm.parameters[parameter.name]=[...parameter.default];return}if(parameter.choices.length){const selected=[...document.quer'
+    'ySelectorAll(\'.parameter-choice[data-parameter-index="\'+index+\'"]:checked\')].map(input=>input.value);if(!selected.length'
+    ")throw Error('Select at least one value for '+parameter.name+'.');item.parameters[parameter.name]=selected;return}const "
+    "raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=par"
+    "ameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});i"
+    "tem.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetiti"
+    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value)});editor.selected"
+    "=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('parameter"
+    "-choice'))renderNew()}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};for(const i"
+    "nput of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repet"
+    "itions,.affinity'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=ed"
+    'itor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml'
+    '=serializeConfig(editor.model);saveDraft();renderNew()}}\n'
+    "function addProfile(){const selectedBenchmark=document.querySelector('#add-benchmark')?.value;const benchmark=editor.mod"
+    "el.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';while((e"
+    "ditor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;editor."
+    "model.profiles.push({key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries"
+    "(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none']});edi"
+    "tor.selected=benchmark.name+'/'+name;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}\n"
+    "async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
+    "e.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-"
+    'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
+    '=\'yaml\'?\'active\':\'\')+\'" href="#new/yaml">YAML</a></div>\'+editorControls();if(tab===\'yaml\'){content+=\'<textarea class=yam'
+    "l id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is n"
+    "ot overwritten by Builder.</div>';app.innerHTML=shell('new',content);document.querySelector('#yaml-editor').oninput=even"
+    't=>{editor.yaml=event.target.value;saveDraft();clearTimeout(window.ydbBenchYamlTimer);window.ydbBenchYamlTimer=setTimeou'
+    't(async()=>{await syncEditor();document.querySelector(\'#editor-message\').innerHTML=editor.error?\'<div class="notice erro'
+    'r">\'+esc(editor.error)+\'</div>\':\'<div class="notice good">Builder model is synchronized.</div>\'},350)};bindEditorControl'
+    "s();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Bui"
+    "lder.</p>';app.innerHTML=shell('new',content);bindEditorControls();return}const selected=profileByKey(editor.selected)||"
+    "editor.model.profiles[0];content+='<div class=notice>Plan: <strong>'+summary.count+'</strong> processes; requested measu"
+    "rement time <strong>'+Math.ceil(summary.seconds)+' s</strong>; output root is <code>'+esc(editor.model.output)+'</code>."
+    '</div><div class=split><section class="card profile-list"><div class=toolbar><strong>Profiles</strong><button id=add-pro'
+    'file>Add</button></div>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
+    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+\'</secti'
+    "on><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
+    "'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclic"
+    "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
+    'dataset.profile;renderNew()};if(selected)bindProfileEditor(selected)}\n'
+    'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}\n'
+    "function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value"
+    '="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>'
+    'cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-'
+    'benchmark placeholder="ping-bench"></div><div class=field><label>Profile</label><input id=f-profile placeholder="baselin'
+    'e"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Loca'
+    'l</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since t'
+    "ype=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}\n"
+    "function runHref(id,kind){return '/api/runs/'+enc(id)+'/'+kind}\n"
+    "async function renderRuns(){clearRefresh();let content='<h1 class=page-title>Runs</h1><p class=muted>Local and imported "
+    "benchmark results. Filters apply without leaving this page.</p>'+runFilters()+'<div class=toolbar><input id=import-file "
+    'type=file accept=.zip><button id=import-run>Import results</button><button id=apply-filters>Apply filters</button></div>'
+    "<div id=runs-table></div>';app.innerHTML=shell('runs',content);async function load(){const query=new URLSearchParams();f"
+    "or(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',si"
+    "nce:'f-since',until:'f-until'})){const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)}"
+    "try{const runs=await api('/api/runs?'+query);document.querySelector('#runs-table').innerHTML=runs.length?'<table><thead>"
+    '<tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Act'
+    'ions</th></tr></thead><tbody>\'+runs.map(run=>\'<tr><td><a href="#run/\'+enc(run.id)+\'">\'+esc(run.id)+\'</a><br><small class'
+    "=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</t"
+    "d><td>'+esc(run.started_at||'—')+'<br><small>'+duration(run)+'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
+    'd><td>\'+ (run.perf?\'yes\':\'no\')+\'</td><td><div class=actions><a href="#run/\'+enc(run.id)+\'">Open</a><a data-repeat="\'+esc'
+    '(run.id)+\'">Repeat</a><a href="\'+runHref(run.id,\'config\')+\'">YAML</a><a href="\'+runHref(run.id,\'manifest\')+\'">run.json</'
+    'a><a href="\'+runHref(run.id,\'archive\')+\'">Archive</a></div></td></tr>\').join(\'\')+\'</tbody></table>\':\'<div class=empty>No'
+    " runs match these filters.</div>';for(const item of document.querySelectorAll('[data-repeat]'))item.onclick=event=>{even"
+    "t.preventDefault();reuseRun(item.dataset.repeat)}}catch(error){document.querySelector('#runs-table').innerHTML=displayEr"
+    "ror(error)}}document.querySelector('#apply-filters').onclick=load;document.querySelector('#import-run').onclick=async()="
+    ">{try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive fir"
+    "st.');await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}catch(error){document.querySel"
+    "ector('#runs-table').innerHTML=displayError(error)}};await load()}\n"
+    "async function reuseRun(id){try{const value=await api('/api/runs/'+enc(id)+'/config.json');editor.yaml=value.yaml;editor"
+    ".perf=Boolean(value.perf);editor.continueOnError=Boolean(value.continue_on_error);saveDraft();setRoute('new')}catch(erro"
+    'r){alert(error.message)}}\n'
+    "const chartColors=['#1b62b9','#c2410c','#087443','#7c3aed','#be185d','#0e7490','#854d0e','#94a3b8','#ef4444','#818cf8','"
+    "#22c55e','#d946ef'];\n"
+    'function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs('
+    "number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number"
+    "/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}\n"
+    "function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+ser"
+    'ies.affinity}\n'
+    "function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Obje"
+    "ct.entries(series.cpu_masks).sort((left,right)=>Number(left[0])-Number(right[0])).map(([threads,cpus])=>threads+' → '+(c"
+    "pus===null?'unrestricted':cpuRanges(cpus))).join('; ');return Object.hasOwn(series,'cpus')?(series.cpus===null?'CPUs: un"
+    "restricted':'CPUs: '+cpuRanges(series.cpus)):'CPUs: not recorded'}\n"
+    'function svgChart(metric,xName,xValues,seriesRows,colors){\n'
+    '  const width=900,height=330,left=78,right=24,top=24,bottom=52,plotWidth=width-left-right,plotHeight=height-top-bottom,v'
+    'alueFor=(item,row)=>Number(row?.[item.metric||metric]);\n'
+    '  const values=[];for(const item of seriesRows)for(const x of xValues){const value=valueFor(item,item.rows.get(String(x)'
+    '));if(Number.isFinite(value))values.push(value)}\n'
+    "  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';\n"
+    '  let yMin=Math.min(...values),yMax=Math.max(...values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
+    'pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}\n'
+    '  const numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin'
+    '?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth),yPos=value=>top+(yMax-Number(value))/(yMax-yMin)*plotHeight;\n'
+    '  let svg=\'<svg viewBox="0 0 \'+width+\' \'+height+\'" role=img aria-label="\'+esc(metric)+\' by \'+esc(xName)+\'">\';\n'
+    "  for(let tick=0;tick<=4;tick++){const y=top+plotHeight*tick/4,value=yMax-(yMax-yMin)*tick/4;svg+='<line class=chart-gri"
+    'd x1="\'+left+\'" y1="\'+y+\'" x2="\'+(width-right)+\'" y2="\'+y+\'"/><text class=chart-label x="\'+(left-8)+\'" y="\'+(y+4)+\'" tex'
+    "t-anchor=end>'+esc(metricLabel(value))+'</text>'}\n"
+    '  const tickValues=xValues.length<=10?xValues:[...new Set([0,1,2,3,4,5].map(index=>xValues[Math.round(index*(xValues.len'
+    'gth-1)/5)]))];\n'
+    '  for(const value of tickValues){const x=xPos(value);svg+=\'<line class=chart-grid x1="\'+x+\'" y1="\'+top+\'" x2="\'+x+\'" y2='
+    '"\'+(top+plotHeight)+\'"/><text class=chart-label x="\'+x+\'" y="\'+(height-25)+\'" text-anchor=middle>\'+esc(metricLabel(value'
+    "))+'</text>'}\n"
+    '  svg+=\'<line class=chart-axis x1="\'+left+\'" y1="\'+(top+plotHeight)+\'" x2="\'+(width-right)+\'" y2="\'+(top+plotHeight)+\'"/'
+    '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
+    '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
+    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],points=xValues.map(x=>{co'
+    "nst row=item.rows.get(String(x)),y=valueFor(item,row);return Number.isFinite(y)?{x,y,row}:null}).filter(Boolean);svg+='<"
+    'polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+\',\'+yPos(point.y)).join(\' \')+\'"/>'
+    '\';for(const point of points)svg+=\'<circle class=chart-point fill="\'+color+\'" cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+'
+    '\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.metric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
+    '  svg+=\'<line class=chart-cursor x1="0" y1="\'+top+\'" x2="0" y2="\'+(top+plotHeight)+\'" visibility=hidden/>\';\n'
+    "  return '<div class=chart-surface>'+svg+'</svg><div class=chart-tooltip hidden></div></div>'\n"
+    '}\n'
+    'function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors){\n'
+    '  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number),xMin=Math.min(...numericX),xM'
+    'ax=Math.max(...numericX),xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);\n'
+    "  for(const panel of container.querySelectorAll('.chart-panel')){\n"
+    "    const metric=panel.dataset.metric,svg=panel.querySelector('svg'),surface=panel.querySelector('.chart-surface'),toolt"
+    "ip=panel.querySelector('.chart-tooltip'),cursor=panel.querySelector('.chart-cursor');\n"
+    '    if(!svg||!surface||!tooltip||!cursor||!metrics.includes(metric))continue;\n'
+    "    const hide=()=>{tooltip.hidden=true;cursor.setAttribute('visibility','hidden')};\n"
+    '    svg.onmouseleave=hide;\n'
+    '    svg.onmousemove=event=>{\n'
+    '      const bounds=svg.getBoundingClientRect(),viewX=(event.clientX-bounds.left)*width/bounds.width;\n'
+    '      const selected=xValues.reduce((best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xVal'
+    'ues[0]),cursorX=xPos(selected);\n'
+    '      const values=seriesRows.map((item,index)=>({label:item.label,colorClass:(item.colorIndex??index)%chartColors.lengt'
+    'h,value:Number(item.rows.get(String(selected))?.[item.metric||metric])})).filter(item=>Number.isFinite(item.value)).sort'
+    '((leftItem,rightItem)=>rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label));\n'
+    '      if(!values.length)return hide();\n'
+    "      cursor.setAttribute('x1',cursorX);cursor.setAttribute('x2',cursorX);cursor.setAttribute('visibility','visible');\n"
+    "      tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+values.map(item=>'<div class="
+    'tooltip-row><i class="tooltip-dot chart-bg-\'+item.colorClass+\'"></i><span class="chart-color-\'+item.colorClass+\'">\'+esc('
+    "item.label)+'</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');\n"
+    '      tooltip.hidden=false;\n'
+    '      const surfaceBounds=surface.getBoundingClientRect(),tooltipWidth=tooltip.offsetWidth,rawLeft=event.clientX-surface'
+    'Bounds.left+12;\n'
+    "      tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';tooltip.style.top=Math.ma"
+    "x(4,event.clientY-surfaceBounds.top-tooltip.offsetHeight-10)+'px'\n"
+    '    }\n'
+    '  }\n'
+    '}\n'
+    "async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);ret"
+    "urn api('/api/chart-data?'+query)}\n"
+    "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
+    "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
+    '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
+    "offset);if(found<0)return false;offset=found+part.length}return mask.endsWith('*')||offset===value.length})}\n"
+    'function mountSingleChart(container,data,scope={}){\n'
+    '  if(!container)return;\n'
+    "  if(!data.series.length){container.innerHTML='<div class=empty>No completed summary.csv data is available for this sele"
+    "ction.</div>';return}\n"
+    "  const state={benchmark:scope.benchmark||'',profile:scope.profile||'',x:data.dimensions.includes('threads')?'threads':d"
+    "ata.dimensions[0],ys:new Set(data.metrics.includes('median_msgs_per_sec')?['median_msgs_per_sec']:data.metrics.slice(0,1"
+    ')),lines:null,lineFilters:{},queries:[{}],settingsOpen:Boolean(scope.open)};\n'
+    '  const available=(all=false)=>data.series.filter(series=>(!state.benchmark||series.benchmark===state.benchmark)&&(!stat'
+    'e.profile||series.profile===state.profile));\n'
+    '  const resetSeriesState=()=>{state.lines=null;state.lineFilters={}};\n'
+    '  function expandedSeries(series){\n'
+    '    const multiplierDimensions=data.dimensions.filter(name=>name!==state.x&&data.dimension_metadata?.[name]?.series!==fa'
+    'lse&&new Set(series.flatMap(item=>item.rows.map(row=>row[name]).filter(value=>value!==undefined)).map(String)).size>1);\n'
+    '    const affinityVaries=new Set(series.map(item=>item.affinity)).size>1,result=[];\n'
+    '    for(const item of series){const groups=new Map;for(const row of item.rows){const values=multiplierDimensions.map(nam'
+    'e=>row[name]),key=JSON.stringify(values);if(!groups.has(key))groups.set(key,{values,rows:[]});groups.get(key).rows.push('
+    "row)}for(const [key,group] of groups){const labels=[],facets={};if(affinityVaries){labels.push('affinity='+item.affinity"
+    ");facets.affinity=String(item.affinity)}multiplierDimensions.forEach((name,index)=>{labels.push(name+'='+group.values[in"
+    "dex]);facets[name]=String(group.values[index])});const prefix=scope.profile?item.profile:item.run+' / '+item.profile;res"
+    "ult.push({...item,id:item.id+'::'+key,label:prefix+(labels.length?'['+labels.join('; ')+']':''),facets,rows:group.rows})"
+    '}}\n'
+    '    return result\n'
+    '  }\n'
+    '  function render(){\n'
+    '    const benchmarks=[...new Set(data.series.map(item=>item.benchmark))].sort();if(!state.benchmark)state.benchmark=benc'
+    'hmarks[0];\n'
+    '    const profiles=[...new Set(data.series.filter(item=>item.benchmark===state.benchmark).map(item=>item.profile))].sort'
+    '();if(!state.profile||!profiles.includes(state.profile))state.profile=profiles[0];\n'
+    '    const baseSeries=available();\n'
+    '    const dimensions=data.dimensions.filter(name=>baseSeries.some(item=>item.rows.some(row=>row[name]!==undefined)));if('
+    '!dimensions.includes(state.x))state.x=dimensions[0];\n'
+    '    const allSeries=expandedSeries(baseSeries),filterOptions={};for(const item of allSeries)for(const [name,value] of Ob'
+    'ject.entries(item.facets))if((filterOptions[name]??=new Set).add(value));\n'
+    '    for(const [name,values] of Object.entries(filterOptions))if(!state.lineFilters[name])state.lineFilters[name]=new Set'
+    '(values);\n'
+    "    const matches=(item,query)=>Object.entries(query).every(([name,value])=>name==='metric'||globLabelMatch(item.facets["
+    'name],value)),series=allSeries.filter(item=>state.queries.some(query=>matches(item,query)));if(state.lines===null)state.'
+    'lines=new Set(series.map(item=>item.id));\n'
+    '    const select=(id,label,values,current)=>\'<div class=field><label for="\'+id+\'">\'+esc(label)+\'</label><select id="\'+id'
+    '+\'">\'+values.map(value=>\'<option \'+(value===current?\'selected\':\'\')+\'>\'+esc(value)+\'</option>\').join(\'\')+\'</select></div>'
+    "';\n"
+    '    const facetNames=Object.entries(filterOptions).filter(([,values])=>values.size>1).map(([name])=>name),queryRows=stat'
+    'e.queries.map((query,index)=>\'<div class=query-row data-query="\'+index+\'"><span class=query-token><b>metric</b> = <selec'
+    "t class=query-metric>'+data.metrics.map(metric=>'<option '+(metric===(query.metric||[...state.ys][0])?'selected':'')+'>'"
+    "+esc(metric)+'</option>').join('')+'</select></span>'+facetNames.map(name=>{const listId='query-values-'+index+'-'+name;"
+    'return \'<span class=query-token><b>\'+esc(name)+\'</b> = <input class=query-facet data-facet="\'+esc(name)+\'" value="\'+esc('
+    'query[name]||\'*\')+\'" list="\'+esc(listId)+\'" placeholder="*"><datalist id="\'+esc(listId)+\'"><option value="*">\'+[...filte'
+    'rOptions[name]].sort((left,right)=>left.localeCompare(right,undefined,{numeric:true})).map(value=>\'<option value="\'+esc('
+    'value)+\'">\').join(\'\')+\'</datalist></span>\'}).join(\'\')+\'<span class=query-actions><button class=remove-query \'+(state.que'
+    "ries.length===1?'disabled':'')+'>Remove</button></span></div>').join('');\n"
+    "    const settings='<div class=chart-controls>'+(scope.benchmark?'':select('chart-benchmark','Benchmark',benchmarks,stat"
+    "e.benchmark))+(scope.profile?'':select('chart-profile','Profile',profiles,state.profile))+select('chart-x','X axis',dime"
+    "nsions,state.x)+'</div><h3>Lines</h3><p class=muted>Each row adds matching lines. Use <code>*</code> as a wildcard and <"
+    "code>|</code> for alternatives, for example <code>pack-numa-*-pack-core</code> or <code>25|50|75</code>.</p>'+queryRows+"
+    "'<button id=add-query>Add line row</button>';\n"
+    "    let controls='<div class=chart-settings-summary><button id=open-chart-settings>Configure chart</button>'+(scope.onRe"
+    "move?'<button class=danger id=remove-chart>Remove chart</button>':'')+'<span class=muted>X: '+esc(state.x)+'; metrics: '"
+    "+esc([...new Set(state.queries.map(item=>item.metric||[...state.ys][0]))].join(', '))+'; lines: '+series.filter(item=>st"
+    "ate.lines.has(item.id)).length+'</span></div>'+(state.settingsOpen?'<div class=modal-backdrop id=chart-settings-backdrop"
+    '><section class=modal role=dialog aria-modal=true aria-labelledby=chart-settings-title><header class=modal-header><h2 id'
+    '=chart-settings-title>Chart settings</h2><button id=close-chart-settings aria-label="Close chart settings">Close</button'
+    "></header><div class=modal-body>'+settings+'</div><footer class=modal-footer><button class=primary id=apply-chart-settin"
+    "gs>Done</button></footer></section></div>':'')+'<div id=chart-warning></div><div id=chart-output></div>';\n"
+    '    container.innerHTML=controls;\n'
+    "    container.querySelector('#open-chart-settings').onclick=()=>{state.settingsOpen=true;render()};\n"
+    "    container.querySelector('#remove-chart')?.addEventListener('click',scope.onRemove);\n"
+    "    const closeSettings=()=>{state.settingsOpen=false;render()};container.querySelector('#close-chart-settings')?.addEve"
+    "ntListener('click',closeSettings);container.querySelector('#apply-chart-settings')?.addEventListener('click',closeSettin"
+    "gs);container.querySelector('#chart-settings-backdrop')?.addEventListener('click',event=>{if(event.target.id==='chart-se"
+    "ttings-backdrop')closeSettings()});\n"
+    "    const benchmark=container.querySelector('#chart-benchmark');if(benchmark)benchmark.onchange=()=>{state.benchmark=ben"
+    "chmark.value;state.profile='';resetSeriesState();render()};\n"
+    "    const profile=container.querySelector('#chart-profile');if(profile)profile.onchange=()=>{state.profile=profile.value"
+    ';resetSeriesState();render()};\n'
+    "    const xAxis=container.querySelector('#chart-x');if(xAxis)xAxis.onchange=event=>{state.x=event.target.value;resetSeri"
+    'esState();render()};\n'
+    "    container.querySelector('#add-query')?.addEventListener('click',()=>{state.queries.push({metric:[...state.ys][0]});r"
+    'ender()});\n'
+    "    for(const row of container.querySelectorAll('.query-row')){const index=Number(row.dataset.query),query=state.queries"
+    "[index];row.querySelector('.query-metric').onchange=event=>{query.metric=event.target.value;state.ys=new Set(state.queri"
+    "es.map(item=>item.metric||[...state.ys][0]));render()};for(const input of row.querySelectorAll('.query-facet'))input.onc"
+    "hange=event=>{query[input.dataset.facet]=event.target.value;render()};row.querySelector('.remove-query').onclick=()=>{if"
+    '(state.queries.length>1){state.queries.splice(index,1);state.ys=new Set(state.queries.map(item=>item.metric||[...state.y'
+    's][0]));render()}}}\n'
+    '    draw()\n'
+    '  }\n'
+    '  function draw(){\n'
+    "    const matches=(item,query)=>Object.entries(query).every(([name,value])=>name==='metric'||globLabelMatch(item.facets["
+    'name],value)),chosen=expandedSeries(available()).filter(item=>state.lines.has(item.id)).map(item=>({...item,metrics:new '
+    'Set(state.queries.filter(query=>matches(item,query)).map(query=>query.metric||[...state.ys][0]))})).filter(item=>item.me'
+    "trics.size);const output=container.querySelector('#chart-output'),warning=container.querySelector('#chart-warning');\n"
+    "    if(!chosen.length||!state.ys.size){warning.innerHTML='';output.innerHTML='<div class=empty>Select at least one line "
+    "and one Y axis.</div>';return}\n"
+    '    const selectedMetrics=[...new Set(chosen.flatMap(item=>[...item.metrics]))],indexed=[];for(const item of chosen){con'
+    'st rows=new Map;for(const row of item.rows)if(row[state.x]!==undefined)rows.set(String(row[state.x]),row);for(const metr'
+    "ic of item.metrics)indexed.push({item,rows,metric,label:item.label+(selectedMetrics.length>1?' · '+metric:''),colorIndex"
+    ':indexed.length})}\n'
+    '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map('
+    '([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=ne'
+    'w Set(sets.flatMap(set=>[...set]));\n'
+    '    if(!common.length){warning.innerHTML=\'<div class="notice error">The selected lines have no common \'+esc(state.x)+\' v'
+    "alues for these filters.</div>';output.innerHTML='';return}\n"
+    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+common.length+' / '+item.rows.siz"
+    "e).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> showing the intersection of '+commo"
+    "n.length+' common '+esc(state.x)+' values ('+esc(common.join(', '))+').<div class=coverage>'+coverage+'</div></div>'}els"
+    'e warning.innerHTML=\'<div class="notice good">All selected lines share \'+common.length+\' \'+esc(state.x)+\' values.</div>\''
+    ';\n'
+    "    const colors=indexed.map((_,index)=>chartColors[index%chartColors.length]);const legend='<div class=chart-legend>'+i"
+    'ndexed.map((item,index)=>\'<span><i class="legend-swatch chart-bg-\'+index%chartColors.length+\'"></i>\'+esc(item.label)+\'</'
+    "span>').join('')+'</div>';\n"
+    '    const metricTitle=selectedMetrics.join(\', \');output.innerHTML=legend+\'<section class=chart-panel data-metric="combin'
+    'ed"><h3>\'+esc(metricTitle)+\'</h3>\'+svgChart(\'combined\',state.x,common,indexed,colors)+\'</section>\';bindChartTooltips(out'
+    "put,state.x,common,indexed,['combined'],colors)\n"
+    '  }\n'
+    '  render()\n'
+    '}\n'
+    'function mountChartBuilder(container,data,scope={}){\n'
+    '  if(!container)return;let nextId=1,charts=[{id:nextId++,open:false}];\n'
+    "  function renderBoard(){container.innerHTML='<div class=toolbar><button class=primary id=add-chart>Add chart</button></"
+    'div><div class=chart-board>\'+charts.map(chart=>\'<section class=card data-chart="\'+chart.id+\'"></section>\').join(\'\')+\'</d'
+    "iv>';container.querySelector('#add-chart').onclick=()=>{charts.push({id:nextId++,open:true});renderBoard()};for(const ch"
+    'art of charts){const target=container.querySelector(\'[data-chart="\'+chart.id+\'"]\');mountSingleChart(target,data,{...scop'
+    'e,open:chart.open,onRemove:charts.length>1?()=>{charts=charts.filter(item=>item.id!==chart.id);renderBoard()}:null});cha'
+    'rt.open=false}}\n'
+    '  renderBoard()\n'
+    '}\n'
+    "function profileGroups(steps){const groups={};for(const step of steps){const key=step.benchmark+'/'+step.profile;(groups"
+    '[key]??=[]).push(step)}return groups}\n'
+    'function affinityGroups(steps){const groups={};for(const step of steps)(groups[step.affinity]??=[]).push(step);return gr'
+    'oups}\n'
+    "function aggregateState(steps){if(steps.some(step=>step.state==='running'))return 'running';if(steps.some(step=>step.sta"
+    "te==='failed'))return 'failed';if(steps.some(step=>step.state==='pending'))return 'pending';if(steps.some(step=>step.sta"
+    "te==='cancelled'))return 'cancelled';if(steps.every(step=>step.state==='unsupported'))return 'unsupported';return 'passe"
+    "d'}\n"
+    'function caseLabel(run){const entries=Object.entries(run.parameters||{});return entries.length?entries.map(([name,value]'
+    ")=>name+'='+value).join(', '):'—'}\n"
+    'function affinityRows(id,steps){return Object.entries(affinityGroups(steps)).map(([affinity,runs])=>{const done=runs.fil'
+    "ter(run=>!['pending','running'].includes(run.state)).length,details=runs.map(run=>'<tr><td>'+esc(run.threads??'—')+'</td"
+    "><td>'+esc(caseLabel(run))+'</td><td>'+run.repeat+'</td><td>'+status(run.state)+'</td><td>'+esc(stepDuration(run))+'</td"
+    '><td>\'+(run.artifacts||[]).map(path=>\'<a href="\'+runHref(id,\'artifact/\'+path.split(\'/\').map(enc).join(\'/\'))+\'">\'+esc(pat'
+    "h.split('/').pop())+'</a>').join(' ')+'</td></tr>').join('');return '<tr><td>'+esc(affinity)+'</td><td>'+done+' / '+runs"
+    ".length+'</td><td>'+status(aggregateState(runs))+'</td></tr><tr class=affinity-details><td colspan=3><details><summary>D"
+    'etails</summary><table><tr><th>Threads</th><th>Parameters</th><th>Repeat</th><th>State</th><th>Duration</th><th>Artifact'
+    "s</th></tr>'+details+'</table></details></td></tr>'}).join('')}\n"
+    "async function renderRun(id,selectedProfile=''){\n"
+    '  clearRefresh();\n'
+    '  try{\n'
+    "    const run=await api('/api/runs/'+enc(id));\n"
+    "    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');\n"
+    "    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.c"
+    'urrent_run_id?\'<a href="#run/\'+enc(run.current_run_id)+\'">Currently running: \'+esc(run.current_run_id)+\'</a>\':\'Waiting f'
+    "or the dispatcher.')+'</div>':'';\n"
+    "    sessionStorage.setItem('ydb-bench-active-run',activeRun);\n"
+    '    const groups=profileGroups(run.steps||[]);\n'
+    "    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+queueNotice+'<h1 class=page-t"
+    "itle>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</"
+    "button>'+(['queued','running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</butto"
+    'n>\':\'\')+\'<button id=repeat-run>Repeat with this YAML</button><a href="\'+runHref(id,\'config\')+\'">Download YAML</a><a href'
+    '="\'+runHref(id,\'manifest\')+\'">run.json</a><a href="\'+runHref(id,\'archive\')+\'">Archive artifacts</a></div><div class="gri'
+    'd"><section class=card><div class=form-grid><div><div class=muted>Status</div>\'+status(run.status)+\'</div><div><div clas'
+    "s=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.starte"
+    "d_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' "
+    "steps</div></div></section>';\n"
+    '    const visible=selectedProfile?Object.fromEntries(Object.entries(groups).filter(([key])=>key===selectedProfile)):grou'
+    'ps;\n'
+    '    content+=\'<section class="card run-tree"><h2>Queue</h2>\'+Object.entries(visible).map(([key,steps])=>\'<details open><'
+    'summary><a href="#run/\'+enc(id)+\'/profile/\'+enc(key)+\'">\'+esc(key)+\'</a></summary><table><tr><th>Affinity</th><th>Runs</'
+    "th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details>').join('')+'</section>';\n"
+    "    if(selectedProfile)content+='<section class=card><h2>Results chart</h2><p class=muted>Affinity variants are lines. C"
+    'hoose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loadin'
+    "g summary data…</div></section>';\n"
+    "    const running=(run.steps||[]).find(step=>step.state==='running');\n"
+    "    content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+esc(runnin"
+    "g.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repeat+', elap"
+    "sed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout</h3><pre cl"
+    "ass=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc(run.tail?.std"
+    "err||'No stderr captured yet.')+'</pre></section></div>';\n"
+    "    app.innerHTML=shell('runs',content);\n"
+    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedProfile);\n"
+    "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
+    "    const cancel=document.querySelector('#cancel-run');\n"
+    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,select"
+    'edProfile)}catch(error){alert(error.message)}};\n'
+    "    if(selectedProfile){const pieces=selectedProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mo"
+    "untChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile})}catch(error){documen"
+    "t.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
+    "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
+    'splayError(error))}\n'
+    '}\n'
+    "function cpuBlock(label,index,cpus){return '<div class=cpu-block><small>'+esc(label)+' '+(index+1)+'</small><span class="
+    "cpu-ranges>'+esc(cpuRanges(cpus))+'</span></div>'}\n"
+    'async function renderTopology(){\n'
+    '  clearRefresh();\n'
+    '  try{\n'
+    "    const value=await api('/api/system-topology'),topology=value.topology;\n"
+    '    const chipletsByNode=new Map;\n'
+    '    for(const chiplet of topology.chiplets)chipletsByNode.set(chiplet.numa_node,[...(chipletsByNode.get(chiplet.numa_nod'
+    'e)||[]),chiplet]);\n'
+    '    const numaBlocks=topology.numa_nodes.map(node=>{\n'
+    '      const chiplets=chipletsByNode.get(node.id)||[];\n'
+    "      return '<article class=numa-block><div class=numa-header><strong>NUMA '+esc(node.id)+'</strong><small class=muted>"
+    "'+node.cpus.length+' CPUs</small></div><div class=cpu-ranges>'+esc(cpuRanges(node.cpus))+'</div>'+(chiplets.length?'<div"
+    " class=chiplet-list>'+chiplets.map((chiplet,index)=>'<div class=cpu-block><small>L3 / chiplet '+(index+1)+'</small><span"
+    " class=cpu-ranges>'+esc(cpuRanges(chiplet.cpus))+'</span></div>').join('')+'</div>':'')+'</article>'\n"
+    "    }).join('');\n"
+    "    const blocks=(label,groups)=>groups.map((cpus,index)=>cpuBlock(label,index,cpus)).join('');\n"
+    "    let content='<h1 class=page-title>System topology</h1><p class=muted>Only CPUs allowed by this process cpuset are sh"
+    'own. Unsupported modes are never silently substituted.</p><section class="card topology-summary"><div><div class=metric>'
+    "'+topology.allowed_cpus.length+' allowed CPUs</div><div class=muted>Compressed CPU ranges</div></div><div class=cpu-rang"
+    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section><section class=card><h2>NUMA and cache layout</h2><div class"
+    "=topology-map>'+numaBlocks+'</div></section><section class=card topology-level><details><summary>Physical cores ('+topol"
+    "ogy.physical_cores.length+')</summary><div class=cpu-block-grid>'+blocks('Core',topology.physical_cores)+'</div></detail"
+    "s></section><section class=card topology-level><details><summary>SMT sibling sets ('+topology.smt_siblings.length+')</su"
+    "mmary><div class=cpu-block-grid>'+blocks('SMT set',topology.smt_siblings)+'</div></details></section><section class=card"
+    "><h2>Affinity availability</h2><table><tr><th>Mode</th><th>Status</th><th>First mask</th><th>Reason</th><th></th></tr>'+"
+    "value.affinity.map(item=>'<tr><td><code>'+esc(item.mode)+'</code></td><td>'+status(item.supported?'passed':'unsupported'"
+    ")+'</td><td class=affinity-mask><code>'+esc(cpuRanges(item.cpus))+'</code></td><td>'+esc(item.reason||'')+'</td><td><but"
+    'ton data-mode="\'+esc(item.mode)+\'">Use in new run</button></td></tr>\').join(\'\')+\'</table></section>\'+(topology.hierarchy'
+    "_reasons.length?'<section class=card><h2>Topology notes</h2><ul>'+topology.hierarchy_reasons.map(item=>'<li><strong>'+es"
+    "c(item.level)+':</strong> '+esc(item.reason)+'</li>').join('')+'</ul></section>':'');\n"
+    "    app.innerHTML=shell('topology',content);\n"
+    "    for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{const mode=button.dataset.mode;edit"
+    "or.yaml='ping-bench:\\n  topology-template:\\n    threads: [1]\\n    duration: 3\\n    repetitions: 1\\n    affinity: ['+mode"
+    "+']\\n';editor.selected=null;saveDraft();setRoute('new')}\n"
+    "  }catch(error){app.innerHTML=shell('topology',displayError(error))}\n"
+    '}\n'
+    'async function renderComparisons(){\n'
+    '  clearRefresh();\n'
+    '  try{\n'
+    "    const value=await api('/api/comparisons');\n"
+    "    let content='<h1 class=page-title>Comparisons</h1><p class=muted>Select runs, then choose a benchmark, profile, axes"
+    ' and exact affinity lines. Charts use the common X intersection and report incomplete coverage.</p><section class=card><'
+    "h2>Runs</h2>'+ (value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
+    'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
+    "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
+    '><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><h2>Comparison '
+    "chart</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
+    "/section>';\n"
+    "    app.innerHTML=shell('comparisons',content);\n"
+    "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
+    ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
+    "    if(value.selected.length)try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value"
+    ".selected))}catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}\n"
+    "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
+    '}\n'
+    "async function compose(){const current=route();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
+    "t==='comparisons')return renderComparisons();if(current.startsWith('run/')){const pieces=current.split('/');if(pieces[2]"
+    "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
+    "'runs')}\n"
+    "addEventListener('hashchange',compose);compose();\n"
+)
 
 
 class _RunServiceHTTPServer(ThreadingHTTPServer):
     """Tie HTTP server teardown to the benchmark worker lifecycle."""
+
     def shutdown(self):
         super().shutdown()
         service = getattr(self, "service", None)
@@ -312,9 +709,12 @@ def _manifests(output):
         raise BenchmarkError("result directory does not exist: {}".format(root))
     records = []
     for candidate in root.rglob("run.json"):
-        try: manifest = load_manifest(candidate)
-        except BenchmarkError: continue
-        if "topology" not in manifest and "steps" not in manifest: continue
+        try:
+            manifest = load_manifest(candidate)
+        except BenchmarkError:
+            continue
+        if "topology" not in manifest and "steps" not in manifest:
+            continue
         records.append((str(candidate.parent.relative_to(root)) or ".", manifest))
     return sorted(records, key=lambda value: value[0])
 
@@ -345,11 +745,7 @@ def read_model(output):
         run_root = root / run_id
         steps = manifest.get("steps", [])
         runs = manifest.get("runs", [])
-        profile_keys = {
-            (str(item.get("benchmark")), str(item.get("profile")))
-            for item in steps + runs
-            if item.get("benchmark") is not None and item.get("profile") is not None
-        }
+        profile_keys = {(str(item.get("benchmark")), str(item.get("profile"))) for item in steps + runs if item.get("benchmark") is not None and item.get("profile") is not None}
         result[run_id] = {
             "id": run_id,
             "status": manifest.get("status", "unknown"),
@@ -384,10 +780,16 @@ def benchmark_catalog():
             "parameter_name": item.parameter_name,
             "parameter_description": item.parameter_description,
             "parameters": [
-                {"name": parameter.name, "description": parameter.description,
-                 "type": parameter.value_type, "default": list(parameter.default),
-                 "matrix": parameter.matrix, "choices": list(parameter.choices),
-                 "minimum": parameter.minimum, "maximum": parameter.maximum}
+                {
+                    "name": parameter.name,
+                    "description": parameter.description,
+                    "type": parameter.value_type,
+                    "default": list(parameter.default),
+                    "matrix": parameter.matrix,
+                    "choices": list(parameter.choices),
+                    "minimum": parameter.minimum,
+                    "maximum": parameter.maximum,
+                }
                 for parameter in item.parameters
             ],
             "dimensions": [{"name": dimension.name, "series": dimension.series} for dimension in item.dimensions],
@@ -429,7 +831,9 @@ def comparison_keys(model, selected):
     per_run = []
     for run_id in selected:
         steps = model[run_id].get("steps", [])
-        keys = {(str(s.get("benchmark")), str(s.get("profile")), str(s.get("affinity"))) for s in steps if s.get("benchmark") is not None and s.get("profile") is not None and s.get("affinity") is not None}
+        keys = {
+            (str(s.get("benchmark")), str(s.get("profile")), str(s.get("affinity"))) for s in steps if s.get("benchmark") is not None and s.get("profile") is not None and s.get("affinity") is not None
+        }
         # Older completed top-level records can lack steps; retain their local
         # benchmark/profile availability but never invent an affinity.
         pairs = {(str(r.get("benchmark")), str(r.get("profile"))) for r in model[run_id].get("runs", []) if r.get("benchmark") is not None and r.get("profile") is not None}
@@ -438,7 +842,11 @@ def comparison_keys(model, selected):
     common_pairs = set.intersection(*(item[1] for item in per_run)) if per_run else set()
     one_affinity_pairs = {pair for pair in common_pairs if all(len({a for x, y, a in keys if (x, y) == pair}) == 1 for keys, _ in per_run)}
     within_run = {run_id: sorted("/".join(pair) for pair in pairs) for run_id, (_, pairs) in zip(selected, per_run)}
-    return {"benchmark_profile_affinity": sorted("/".join(key) for key in common_affinity), "benchmark_profile_one_affinity": sorted("/".join(pair) for pair in one_affinity_pairs), "within_run_benchmark_profile": within_run}
+    return {
+        "benchmark_profile_affinity": sorted("/".join(key) for key in common_affinity),
+        "benchmark_profile_one_affinity": sorted("/".join(pair) for pair in one_affinity_pairs),
+        "within_run_benchmark_profile": within_run,
+    }
 
 
 def _summary_value(value):
@@ -510,7 +918,11 @@ def chart_data(output, run_ids):
                         with repetitions_path.open(newline="", encoding="utf-8") as repetitions_stream:
                             for row in csv.DictReader(repetitions_stream):
                                 affinity = row.get("affinity_mode")
-                                if affinity: grouped.setdefault(affinity, []).append({name: _summary_value(row.get(name)) for name in dimension_fields + ["repeat"] + [metric.name for metric in benchmark_definition.metrics]} | {"repeat_aggregation": "raw"})
+                                if affinity:
+                                    grouped.setdefault(affinity, []).append(
+                                        {name: _summary_value(row.get(name)) for name in dimension_fields + ["repeat"] + [metric.name for metric in benchmark_definition.metrics]}
+                                        | {"repeat_aggregation": "raw"}
+                                    )
                     dimension_fields += ["repeat_aggregation", "repeat"]
                     metric_fields = [metric.name for metric in benchmark_definition.metrics]
                 dimensions.update(dimension_fields)
@@ -519,7 +931,8 @@ def chart_data(output, run_ids):
                     for dimension in benchmark_definition.dimensions:
                         dimension_metadata[dimension.name] = {"series": dimension.series}
                     for metric in benchmark_definition.metrics:
-                        if normalized_repetitions: metric_metadata[metric.name] = {"unit": metric.unit, "description": metric.description}
+                        if normalized_repetitions:
+                            metric_metadata[metric.name] = {"unit": metric.unit, "description": metric.description}
                         else:
                             for prefix in ("median_", "min_", "max_"):
                                 metric_metadata[prefix + metric.name] = {"unit": metric.unit, "description": metric.description}
@@ -544,9 +957,12 @@ def chart_data(output, run_ids):
 def _load_yaml(yaml_text):
     """Use the CLI parser/validator without allocating a result directory."""
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml", delete=False) as stream:
-        stream.write(yaml_text); path = Path(stream.name)
-    try: return load_config(path)
-    finally: path.unlink(missing_ok=True)
+        stream.write(yaml_text)
+        path = Path(stream.name)
+    try:
+        return load_config(path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 class RunService:
@@ -557,8 +973,10 @@ class RunService:
     progress dictionaries. This small boundary makes web integration testable
     without a real benchmark binary.
     """
+
     def __init__(self, output, executor=None, event_limit=256, tail_limit=65536, perf_available=True):
-        self.output = Path(output).resolve(); self.output.mkdir(parents=True, exist_ok=True)
+        self.output = Path(output).resolve()
+        self.output.mkdir(parents=True, exist_ok=True)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
@@ -575,29 +993,37 @@ class RunService:
             # A process may still be live after a server restart. Never restart
             # it without an adapter-specific proof that it is gone.
             if manifest.get("state") == "running":
-                manifest["status"] = "recovery_required"; manifest["state"] = "recovery_required"
+                manifest["status"] = "recovery_required"
+                manifest["state"] = "recovery_required"
                 atomic_write_json(self.output / run_id / "run.json", manifest)
 
     def _load(self, yaml_text, perf=False):
         if perf and not self.perf_available:
             raise BenchmarkError("--perf requires ydb_bench built with --build=profile")
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml", delete=False) as stream:
-            stream.write(yaml_text); path = Path(stream.name)
+            stream.write(yaml_text)
+            path = Path(stream.name)
         try:
             return load_config(path, perf_enabled=perf)
         finally:
             path.unlink(missing_ok=True)
 
     def validate(self, yaml_text, perf=False):
-        try: loaded = self._load(yaml_text, perf)
-        except BenchmarkError as error: return {"valid": False, "error": str(error)}
+        try:
+            loaded = self._load(yaml_text, perf)
+        except BenchmarkError as error:
+            return {"valid": False, "error": str(error)}
         return {"valid": True, "sha256": hashlib.sha256(yaml_text.encode()).hexdigest(), "steps": len(build_run_plan(loaded).steps)}
 
     def plan(self, yaml_text, perf=False):
         validation = self.validate(yaml_text, perf)
-        if not validation["valid"]: return validation
+        if not validation["valid"]:
+            return validation
         plan = build_run_plan(self._load(yaml_text, perf))
-        validation["plan"] = [{"id": s.id, "benchmark": s.benchmark, "profile": s.profile, "affinity": s.affinity, "threads": s.threads, "case": s.case, "parameters": s.parameters, "repeat": s.repeat} for s in plan.steps]
+        validation["plan"] = [
+            {"id": s.id, "benchmark": s.benchmark, "profile": s.profile, "affinity": s.affinity, "threads": s.threads, "case": s.case, "parameters": s.parameters, "repeat": s.repeat}
+            for s in plan.steps
+        ]
         return validation
 
     def editor_config(self, yaml_text, perf=False):
@@ -616,7 +1042,8 @@ class RunService:
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
         plan_result = self.plan(yaml_text, perf)
-        if not plan_result["valid"]: raise BenchmarkError(plan_result["error"])
+        if not plan_result["valid"]:
+            raise BenchmarkError(plan_result["error"])
         loaded = self._load(yaml_text, perf)
         topology = topology_record(discover_topology())
         with self._lock:
@@ -626,8 +1053,11 @@ class RunService:
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
             run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
-            while (self.output / run_id).exists(): run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
-            root = self.output / run_id; root.mkdir(); atomic_write_text(root / "config.yaml", yaml_text)
+            while (self.output / run_id).exists():
+                run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
+            root = self.output / run_id
+            root.mkdir()
+            atomic_write_text(root / "config.yaml", yaml_text)
             queued_at = _utc_now()
             manifest = {
                 "schema_version": 4,
@@ -682,11 +1112,13 @@ class RunService:
                         if run["store"].manifest["state"] != "queued":
                             continue
                         self._active_run_id = run["id"]
-                        run["store"].manifest.update({
-                            "state": "running",
-                            "status": "running",
-                            "started_at": _utc_now(),
-                        })
+                        run["store"].manifest.update(
+                            {
+                                "state": "running",
+                                "status": "running",
+                                "started_at": _utc_now(),
+                            }
+                        )
                         self._emit_locked(run, {"type": "run-started"})
                     break
                 else:
@@ -705,9 +1137,12 @@ class RunService:
             self._emit_locked(run, event)
 
     def _emit_locked(self, run, event):
-        event = dict(event); event["sequence"] = run["store"].manifest.get("events", 0) + 1; event["at"] = _utc_now()
+        event = dict(event)
+        event["sequence"] = run["store"].manifest.get("events", 0) + 1
+        event["at"] = _utc_now()
         if event.get("type") in ("stdout", "stderr"):
-            key = event["type"]; run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit:]
+            key = event["type"]
+            run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit :]
         step_id = event.get("step_id")
         if event.get("type") == "step-started" and step_id:
             run["store"].transition_step(step_id, "running", **event.get("fields", {}))
@@ -717,11 +1152,15 @@ class RunService:
                 if str(artifact).endswith(("stdout.txt", "stderr.txt")):
                     key = "stdout" if str(artifact).endswith("stdout.txt") else "stderr"
                     try:
-                        run["tail"][key] = (run["tail"][key] + (run["root"] / artifact).read_text(encoding="utf-8"))[-self.tail_limit:]
-                    except OSError: pass
-        if event.get("type") == "step-finished" and step_id: run["store"].transition_step(step_id, event.get("state", "passed"), **event.get("fields", {}))
-        run["events"].append(event); run["store"].manifest["events"] = event["sequence"]
-        with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream: stream.write(json.dumps(event, sort_keys=True) + "\n")
+                        run["tail"][key] = (run["tail"][key] + (run["root"] / artifact).read_text(encoding="utf-8"))[-self.tail_limit :]
+                    except OSError:
+                        pass
+        if event.get("type") == "step-finished" and step_id:
+            run["store"].transition_step(step_id, event.get("state", "passed"), **event.get("fields", {}))
+        run["events"].append(event)
+        run["store"].manifest["events"] = event["sequence"]
+        with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, sort_keys=True) + "\n")
         run["store"].write()
 
     def _unsupported_executor(self, run, emit, cancelled):
@@ -789,11 +1228,13 @@ class RunService:
                     except ValueError:
                         pass
                     self._cancel_unfinished(run)
-                    run["store"].manifest.update({
-                        "state": "cancelled",
-                        "status": "cancelled",
-                        "finished_at": _utc_now(),
-                    })
+                    run["store"].manifest.update(
+                        {
+                            "state": "cancelled",
+                            "status": "cancelled",
+                            "finished_at": _utc_now(),
+                        }
+                    )
                     self._emit_locked(run, {"type": "cancel-requested"})
                     self._emit_locked(run, {"type": "run-finished", "state": "cancelled"})
                     run["finalized"] = True
@@ -842,33 +1283,46 @@ class RunService:
                 )
             }
             for run_id, item in model.items():
-                item.update({
-                    "current_run_id": self._active_run_id,
-                    "queue_position": positions.get(run_id),
-                })
+                item.update(
+                    {
+                        "current_run_id": self._active_run_id,
+                        "queue_position": positions.get(run_id),
+                    }
+                )
         return model
-    def settings(self): return {"output": str(self.output), "perf_available": self.perf_available}
+
+    def settings(self):
+        return {"output": str(self.output), "perf_available": self.perf_available}
+
     def topology(self):
         topology = discover_topology()
         return {
             "topology": topology_record(topology),
             "affinity": [
-                {"mode": mode, "supported": (placement := plan_affinity(mode, topology, 1)).supported,
-                 "cpus": None if placement.cpus is None else list(placement.cpus), "reason": placement.reason}
+                {"mode": mode, "supported": (placement := plan_affinity(mode, topology, 1)).supported, "cpus": None if placement.cpus is None else list(placement.cpus), "reason": placement.reason}
                 for mode in AFFINITY_MODES
             ],
         }
+
     def filtered_model(self, filters):
         def matches(record):
-            if filters.get("status") and record["status"] != filters["status"]: return False
-            if filters.get("source") and record["source"] != filters["source"]: return False
-            if filters.get("benchmark") and filters["benchmark"] not in record["benchmarks"]: return False
-            if filters.get("profile") and filters["profile"] not in record["profile_names"]: return False
+            if filters.get("status") and record["status"] != filters["status"]:
+                return False
+            if filters.get("source") and record["source"] != filters["source"]:
+                return False
+            if filters.get("benchmark") and filters["benchmark"] not in record["benchmarks"]:
+                return False
+            if filters.get("profile") and filters["profile"] not in record["profile_names"]:
+                return False
             started = record.get("started_at") or ""
-            if filters.get("since") and started[:10] < filters["since"]: return False
-            if filters.get("until") and started[:10] > filters["until"]: return False
+            if filters.get("since") and started[:10] < filters["since"]:
+                return False
+            if filters.get("until") and started[:10] > filters["until"]:
+                return False
             return True
+
         return [record for record in self.model().values() if matches(record)]
+
     def save_draft(self, yaml_text):
         # Store only generated IDs under the configured result root; the API
         # never accepts a host pathname supplied by the browser.
@@ -876,52 +1330,73 @@ class RunService:
         path = self.output / "drafts" / draft_id
         atomic_write_text(path, yaml_text)
         return {"id": draft_id, "path": str(path)}
+
     def run_config(self, run_id):
         root = _run_directory(self.output, run_id)
         manifest = load_manifest(root / "run.json")
         path = root / "config.yaml"
-        if path.is_file(): yaml_text = path.read_text(encoding="utf-8")
-        else: yaml_text = manifest.get("config", {}).get("snapshot")
-        if not isinstance(yaml_text, str): raise BenchmarkError("run does not contain a YAML configuration")
+        if path.is_file():
+            yaml_text = path.read_text(encoding="utf-8")
+        else:
+            yaml_text = manifest.get("config", {}).get("snapshot")
+        if not isinstance(yaml_text, str):
+            raise BenchmarkError("run does not contain a YAML configuration")
         options = manifest.get("options", {})
         return {"yaml": yaml_text, "perf": bool(options.get("perf", manifest.get("profiler"))), "continue_on_error": bool(options.get("continue_on_error", False))}
+
     def artifact(self, run_id, relative_path):
         root = _run_directory(self.output, run_id)
         candidate = (root / relative_path).resolve()
         if candidate == root or root not in candidate.parents or not candidate.is_file() or candidate.is_symlink():
             raise BenchmarkError("artifact not found: {}".format(relative_path))
         return candidate
-    def archive(self, run_id): return export_archive(_run_directory(self.output, run_id))
-    def chart_data(self, run_ids): return chart_data(self.output, run_ids)
+
+    def archive(self, run_id):
+        return export_archive(_run_directory(self.output, run_id))
+
+    def chart_data(self, run_ids):
+        return chart_data(self.output, run_ids)
+
     def comparisons(self, selected=None):
         model = self.model()
         if selected is None:
-            try: selected = json.loads(self._selection_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError): selected = []
+            try:
+                selected = json.loads(self._selection_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                selected = []
         selected = [item for item in selected if isinstance(item, str) and item in model]
         return {"runs": [{"id": item["id"], "source": item["source"]} for item in model.values()], "selected": selected, "keys": comparison_keys(model, selected)}
+
     def select_comparisons(self, selected):
-        if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected): raise BenchmarkError("comparison selection must be a list of run ids")
+        if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected):
+            raise BenchmarkError("comparison selection must be a list of run ids")
         atomic_write_json(self._selection_path, selected)
         return self.comparisons(selected)
+
     def detail(self, run_id):
         item = self.model().get(run_id)
         with self._lock:
             run = self._runs.get(run_id)
             if item and run:
-                with run["lock"]: item.update({"tail": dict(run["tail"])})
+                with run["lock"]:
+                    item.update({"tail": dict(run["tail"])})
         return item
+
     def events(self, run_id, after=0):
-        with self._lock: run = self._runs.get(run_id)
+        with self._lock:
+            run = self._runs.get(run_id)
         if run:
-            with run["lock"]: return [dict(e) for e in run["events"] if e["sequence"] > after]
+            with run["lock"]:
+                return [dict(e) for e in run["events"] if e["sequence"] > after]
         path = self.output / run_id / "events.jsonl"
-        if not path.is_file(): return []
+        if not path.is_file():
+            return []
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if json.loads(line)["sequence"] > after]
 
 
 def production_executor(resource_loader, tool_revision):
     """Adapt the existing actors-core executor to the durable web service."""
+
     def execute(run, emit, cancelled):
         if resource_loader is None:
             raise BenchmarkError("the benchmark executable resource loader is not configured")
@@ -932,32 +1407,48 @@ def production_executor(resource_loader, tool_revision):
                 if resource_name not in binaries:
                     binaries[resource_name] = extract_executable(resource_loader(resource_name), work, resource_name)
                 binary = binaries[resource_name]
-                if cancelled.is_set(): return
+                if cancelled.is_set():
+                    return
                 relative = Path(configuration.benchmark.name) / configuration.profile
-                directory = run["root"] / relative; directory.mkdir(parents=True, exist_ok=True)
+                directory = run["root"] / relative
+                directory.mkdir(parents=True, exist_ok=True)
                 with run["lock"]:
-                    if run["finalized"]: return
+                    if run["finalized"]:
+                        return
                     run["store"].manifest["runs"].append({"benchmark": configuration.benchmark.name, "profile": configuration.profile, "status": "running", "directory": str(relative)})
                     run["store"].write()
+
                 def event(event):
                     item = dict(event)
                     with run["lock"]:
                         if "affinity" in item:
-                            item["step_id"] = next(step["id"] for step in run["store"].manifest["steps"] if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["affinity"] == item["affinity"] and step["threads"] == item["threads"] and step["case"] == item["case"] and step["repeat"] == item["repeat"])
+                            item["step_id"] = next(
+                                step["id"]
+                                for step in run["store"].manifest["steps"]
+                                if step["benchmark"] == configuration.benchmark.name
+                                and step["profile"] == configuration.profile
+                                and step["affinity"] == item["affinity"]
+                                and step["threads"] == item["threads"]
+                                and step["case"] == item["case"]
+                                and step["repeat"] == item["repeat"]
+                            )
                         if item.get("type") == "step-artifacts":
                             item["artifacts"] = [str(relative / artifact) for artifact in item["artifacts"]]
                         emit(item)
+
                 try:
                     profile = run_benchmark(binary, configuration, directory, tool_revision, work_dir_hint=work, event_sink=event, cancel_event=cancelled)
                 except BenchmarkInterrupted:
                     with run["lock"]:
-                        if run["finalized"]: return
+                        if run["finalized"]:
+                            return
                         run["store"].manifest["runs"][-1].update({"status": "cancelled"})
                         run["store"].write()
                     raise
                 except BenchmarkError as error:
                     with run["lock"]:
-                        if run["finalized"]: return
+                        if run["finalized"]:
+                            return
                         run["store"].manifest["runs"][-1].update({"status": "failed", "error": str(error), "manifest": str(relative / "run.json")})
                         # The actor benchmark stops after its first failed process.
                         # The durable queue still records every remaining member of
@@ -968,114 +1459,183 @@ def production_executor(resource_loader, tool_revision):
                         run["store"].write()
                     if not run["continue_on_error"]:
                         raise
-                    with run["lock"]: run["failed"] = True
+                    with run["lock"]:
+                        run["failed"] = True
                     continue
                 with run["lock"]:
-                    if run["finalized"]: return
+                    if run["finalized"]:
+                        return
                     run["store"].manifest["runs"][-1].update({"status": "completed", "manifest": str(relative / "run.json"), "summary": str(relative / profile["summary"])})
                     run["store"].write()
+
     return execute
 
 
 def _handler(service):
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_args): pass
+        def log_message(self, *_args):
+            pass
+
         def _send(self, status, content_type, body, headers=None):
-            self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Security-Policy", _CSP); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("Content-Length", str(len(body)))
-            for name, value in (headers or {}).items(): self.send_header(name, value)
-            self.end_headers(); self.wfile.write(body)
-        def _json(self, status, value): self._send(status, "application/json", json.dumps(value).encode())
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Security-Policy", _CSP)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _json(self, status, value):
+            self._send(status, "application/json", json.dumps(value).encode())
+
         def _attachment(self, content_type, filename, body):
             self._send(200, content_type, body, {"Content-Disposition": 'attachment; filename="{}"'.format(filename)})
+
         def _raw_body(self):
-            try: size = int(self.headers.get("Content-Length", 0))
-            except ValueError: raise BenchmarkError("invalid Content-Length")
-            if size < 0 or size > MAX_TOTAL_SIZE: raise BenchmarkError("request exceeds import size limit")
+            try:
+                size = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                raise BenchmarkError("invalid Content-Length")
+            if size < 0 or size > MAX_TOTAL_SIZE:
+                raise BenchmarkError("request exceeds import size limit")
             return self.rfile.read(size)
+
         def _body(self):
-            try: return self._raw_body().decode("utf-8")
-            except UnicodeDecodeError as error: raise BenchmarkError("request body must be UTF-8") from error
+            try:
+                return self._raw_body().decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise BenchmarkError("request body must be UTF-8") from error
+
         def _options(self):
             body = self._body()
             if self.headers.get("Content-Type", "").split(";", 1)[0].lower() != "application/json":
                 return {"yaml": body, "perf": False, "continue_on_error": False}
-            try: value = json.loads(body)
-            except ValueError as error: raise BenchmarkError("malformed JSON request") from error
+            try:
+                value = json.loads(body)
+            except ValueError as error:
+                raise BenchmarkError("malformed JSON request") from error
             if not isinstance(value, dict) or not isinstance(value.get("yaml"), str):
                 raise BenchmarkError("request must contain a YAML string")
             if not isinstance(value.get("perf", False), bool) or not isinstance(value.get("continue_on_error", False), bool):
                 raise BenchmarkError("perf and continue_on_error must be booleans")
             return {"yaml": value["yaml"], "perf": value.get("perf", False), "continue_on_error": value.get("continue_on_error", False)}
+
         def _json_body(self):
-            try: value = json.loads(self._body())
-            except ValueError as error: raise BenchmarkError("malformed JSON request") from error
+            try:
+                value = json.loads(self._body())
+            except ValueError as error:
+                raise BenchmarkError("malformed JSON request") from error
             return value
+
         def do_GET(self):
-            parsed = urlparse(self.path); path = parsed.path
-            if path == "/": return self._send(200, "text/html; charset=utf-8", _HTML.encode())
-            if path == "/app.css": return self._send(200, "text/css; charset=utf-8", _CSS.encode())
-            if path == "/app.js": return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
-            if path == "/api/settings": return self._json(200, service.settings())
-            if path == "/api/benchmarks": return self._json(200, benchmark_catalog())
-            if path == "/api/system-topology": return self._json(200, service.topology())
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path == "/":
+                return self._send(200, "text/html; charset=utf-8", _HTML.encode())
+            if path == "/app.css":
+                return self._send(200, "text/css; charset=utf-8", _CSS.encode())
+            if path == "/app.js":
+                return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
+            if path == "/api/settings":
+                return self._json(200, service.settings())
+            if path == "/api/benchmarks":
+                return self._json(200, benchmark_catalog())
+            if path == "/api/system-topology":
+                return self._json(200, service.topology())
             if path == "/api/runs":
                 filters = {name: values[-1] for name, values in parse_qs(parsed.query).items() if name in ("status", "benchmark", "profile", "source", "since", "until")}
-                fields = ("id", "status", "state", "source", "queued_at", "started_at", "finished_at", "duration_seconds", "profiles", "repetitions", "perf", "config_path", "output_directory", "benchmarks", "profile_names", "current_run_id", "queue_position")
+                fields = (
+                    "id",
+                    "status",
+                    "state",
+                    "source",
+                    "queued_at",
+                    "started_at",
+                    "finished_at",
+                    "duration_seconds",
+                    "profiles",
+                    "repetitions",
+                    "perf",
+                    "config_path",
+                    "output_directory",
+                    "benchmarks",
+                    "profile_names",
+                    "current_run_id",
+                    "queue_position",
+                )
                 return self._json(200, [{key: item[key] for key in fields} for item in service.filtered_model(filters)])
-            if path == "/api/comparisons": return self._json(200, service.comparisons())
+            if path == "/api/comparisons":
+                return self._json(200, service.comparisons())
             if path == "/api/chart-data":
                 return self._json(200, service.chart_data(parse_qs(parsed.query).get("run", [])))
             if path.startswith("/api/runs/") and path.endswith("/config.json"):
-                return self._json(200, service.run_config(unquote(path[len("/api/runs/"):-len("/config.json")])))
+                return self._json(200, service.run_config(unquote(path[len("/api/runs/") : -len("/config.json")])))
             if path.startswith("/api/runs/") and path.endswith("/config"):
-                run_id = unquote(path[len("/api/runs/"):-len("/config")]); value = service.run_config(run_id)
+                run_id = unquote(path[len("/api/runs/") : -len("/config")])
+                value = service.run_config(run_id)
                 return self._attachment("application/x-yaml; charset=utf-8", "{}-config.yaml".format(run_id.replace("/", "-")), value["yaml"].encode("utf-8"))
             if path.startswith("/api/runs/") and path.endswith("/manifest"):
-                run_id = unquote(path[len("/api/runs/"):-len("/manifest")]); manifest = load_manifest(_run_directory(service.output, run_id) / "run.json")
+                run_id = unquote(path[len("/api/runs/") : -len("/manifest")])
+                manifest = load_manifest(_run_directory(service.output, run_id) / "run.json")
                 return self._attachment("application/json", "{}-run.json".format(run_id.replace("/", "-")), (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode())
             if path.startswith("/api/runs/") and path.endswith("/archive"):
-                run_id = unquote(path[len("/api/runs/"):-len("/archive")])
+                run_id = unquote(path[len("/api/runs/") : -len("/archive")])
                 return self._attachment("application/zip", "{}-results.zip".format(run_id.replace("/", "-")), service.archive(run_id))
             if path.startswith("/api/runs/") and "/artifact/" in path:
-                run_id, relative = path[len("/api/runs/"):].split("/artifact/", 1)
+                run_id, relative = path[len("/api/runs/") :].split("/artifact/", 1)
                 artifact = service.artifact(unquote(run_id), unquote(relative))
                 content_type = mimetypes.guess_type(artifact.name)[0] or "application/octet-stream"
                 return self._attachment(content_type, artifact.name, artifact.read_bytes())
             if path.endswith("/events") and path.startswith("/api/runs/"):
-                run_id = unquote(path[len("/api/runs/"):-len("/events")]); after = int(parse_qs(parsed.query).get("after", [0])[0]); events = service.events(run_id, after)
+                run_id = unquote(path[len("/api/runs/") : -len("/events")])
+                after = int(parse_qs(parsed.query).get("after", [0])[0])
+                events = service.events(run_id, after)
                 payload = b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events) or b": connected\n\n"
                 return self._send(200, "text/event-stream", payload)
             if path.startswith("/api/runs/"):
-                item = service.detail(unquote(path[len("/api/runs/"):]))
+                item = service.detail(unquote(path[len("/api/runs/") :]))
                 return self._json(200 if item else 404, item or {"error": "run not found"})
             return self._json(404, {"error": "not found"})
+
         def do_POST(self):
             path = urlparse(self.path).path
             try:
-                if path == "/api/import": return self._json(201, import_archive(service.output, self._raw_body()))
+                if path == "/api/import":
+                    return self._json(201, import_archive(service.output, self._raw_body()))
                 if path == "/api/validate":
-                    options = self._options(); return self._json(200, service.validate(options["yaml"], options["perf"]))
+                    options = self._options()
+                    return self._json(200, service.validate(options["yaml"], options["perf"]))
                 if path == "/api/plan":
-                    options = self._options(); return self._json(200, service.plan(options["yaml"], options["perf"]))
+                    options = self._options()
+                    return self._json(200, service.plan(options["yaml"], options["perf"]))
                 if path == "/api/editor-config":
-                    options = self._options(); return self._json(200, service.editor_config(options["yaml"], options["perf"]))
+                    options = self._options()
+                    return self._json(200, service.editor_config(options["yaml"], options["perf"]))
                 if path == "/api/drafts":
-                    options = self._options(); return self._json(201, service.save_draft(options["yaml"]))
+                    options = self._options()
+                    return self._json(201, service.save_draft(options["yaml"]))
                 if path == "/api/runs":
-                    options = self._options(); return self._json(201, service.start(options["yaml"], options["perf"], options["continue_on_error"]))
+                    options = self._options()
+                    return self._json(201, service.start(options["yaml"], options["perf"], options["continue_on_error"]))
                 if path == "/api/comparisons/selection":
                     selected = self._json_body()
                     return self._json(200, service.select_comparisons(selected))
                 if path.startswith("/api/runs/") and path.endswith("/repeat"):
-                    return self._json(200, service.run_config(unquote(path[len("/api/runs/"):-len("/repeat")])))
-                if path.startswith("/api/runs/") and path.endswith("/cancel"): return self._json(200, service.cancel(unquote(path[len("/api/runs/"):-len("/cancel")])))
-            except BenchmarkError as error: return self._json(400, {"error": str(error)})
+                    return self._json(200, service.run_config(unquote(path[len("/api/runs/") : -len("/repeat")])))
+                if path.startswith("/api/runs/") and path.endswith("/cancel"):
+                    return self._json(200, service.cancel(unquote(path[len("/api/runs/") : -len("/cancel")])))
+            except BenchmarkError as error:
+                return self._json(400, {"error": str(error)})
             return self._json(404, {"error": "not found"})
+
     return Handler
 
 
 def make_server(listen, port, output, allow_remote=False, executor=None, perf_available=True):
-    if not _is_loopback(listen) and not allow_remote: raise BenchmarkError("non-loopback --listen requires --allow-remote")
+    if not _is_loopback(listen) and not allow_remote:
+        raise BenchmarkError("non-loopback --listen requires --allow-remote")
     server_class = _IPv6ThreadingHTTPServer if ":" in listen else _RunServiceHTTPServer
     service = RunService(output, executor=executor, perf_available=perf_available)
     server = server_class((listen, port), _handler(service))
@@ -1084,8 +1644,15 @@ def make_server(listen, port, output, allow_remote=False, executor=None, perf_av
 
 
 def serve(listen, port, output, no_open=False, allow_remote=False, executor=None, perf_available=True):
-    server = make_server(listen, port, output, allow_remote, executor, perf_available); url_host = "[{}]".format(listen) if ":" in listen else listen; url = "http://{}:{}/".format(url_host, server.server_port); print(url)
-    if not no_open: webbrowser.open(url)
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
+    server = make_server(listen, port, output, allow_remote, executor, perf_available)
+    url_host = "[{}]".format(listen) if ":" in listen else listen
+    url = "http://{}:{}/".format(url_host, server.server_port)
+    print(url)
+    if not no_open:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()

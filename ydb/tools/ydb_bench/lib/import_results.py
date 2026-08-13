@@ -5,6 +5,7 @@ artifacts named by ``import.json.files``.  The import manifest is intentionally
 small and explicit: ``format_version`` is 1 and every member (including
 ``run.json``) has an exact relative path, byte size, and SHA-256 digest.
 """
+
 import hashlib
 import io
 import json
@@ -260,22 +261,27 @@ def import_archive(output, archive_data):
                     raise BenchmarkError("import manifest hash mismatch: {}".format(name))
             # Validate compatibility before allocating a durable destination.
             with tempfile.TemporaryDirectory(prefix="ydb-bench-import-check-") as check:
-                run_path = Path(check) / "run.json"; run_path.write_bytes(archive.read(members["run.json"]))
+                run_path = Path(check) / "run.json"
+                run_path.write_bytes(archive.read(members["run.json"]))
                 manifest = load_manifest(run_path)
                 _validate_portable_run_manifest(manifest, set(expected))
-            root = Path(output).resolve(); root.mkdir(parents=True, exist_ok=True)
+            root = Path(output).resolve()
+            root.mkdir(parents=True, exist_ok=True)
             destination = root / "imports" / ("import-" + uuid.uuid4().hex)
             destination.parent.mkdir(exist_ok=True)
-            if destination.exists(): raise BenchmarkError("import destination collision")
+            if destination.exists():
+                raise BenchmarkError("import destination collision")
             staging = Path(tempfile.mkdtemp(prefix=".import-", dir=str(destination.parent)))
             try:
                 for name in expected:
-                    target = staging / _safe_name(name); target.parent.mkdir(parents=True, exist_ok=True)
+                    target = staging / _safe_name(name)
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     with archive.open(members[name]) as source, target.open("xb") as sink:
                         shutil.copyfileobj(source, sink)
                 (staging / ".imported").write_text("portable-format-v1\n", encoding="ascii")
                 for path in staging.rglob("*"):
-                    if path.is_file(): path.chmod(0o444)
+                    if path.is_file():
+                        path.chmod(0o444)
                 for path in sorted((p for p in staging.rglob("*") if p.is_dir()), reverse=True):
                     path.chmod(0o555)
                 staging.chmod(0o555)
@@ -322,10 +328,7 @@ def export_archive(run_directory):
         raise BenchmarkError("result archive has invalid file count")
     manifest = {
         "format_version": 1,
-        "files": [
-            {"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
-            for path, data in files
-        ],
+        "files": [{"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for path, data in files],
     }
     destination = io.BytesIO()
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:

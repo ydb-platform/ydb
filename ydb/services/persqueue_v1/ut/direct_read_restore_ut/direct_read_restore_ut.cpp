@@ -997,6 +997,74 @@ protected:
         UNIT_ASSERT_C(future.HasValue(), "sparse write did not finish in time");
         future.GetValueSync();
     }
+
+    // Sparse wait used by PQRB+Register hang tests under UseRealThreads=false.
+    void WaitHeldRegisterSparse(ui64 minHeld = 1, TDuration timeout = TDuration::Seconds(30)) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.HeldRegisterDirectRead.load() < minHeld) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.HeldRegisterDirectRead.load() >= minHeld,
+            "expected RegisterDirectReadSession after PQRB re-lock; held="
+                << Env.HeldRegisterDirectRead.load());
+    }
+
+    void WaitStageOrPublishWhileRegisterHeldAtLeast(
+            ui64 minCount, TDuration timeout = TDuration::Seconds(30))
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.StageOrPublishWhileRegisterHeld.load() < minCount) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() >= minCount,
+            "expected Stage/Publish to cache while Register held; got="
+                << Env.StageOrPublishWhileRegisterHeld.load());
+    }
+
+    void WaitStageOrPublishWhileRegisterHeldAbove(
+            ui64 exclusiveMin, TDuration timeout = TDuration::Seconds(30))
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline
+                && Env.StageOrPublishWhileRegisterHeld.load() <= exclusiveMin) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() > exclusiveMin,
+            "expected further Stage/Publish while Register held; before="
+                << exclusiveMin
+                << "; after=" << Env.StageOrPublishWhileRegisterHeld.load());
+    }
+
+    void AssertRegisterStillHeld(const TString& what) {
+        UNIT_ASSERT_C(Env.HoldRegisterDirectRead.load() != 0
+                && !Env.HeldRegisterDirectReadEvents.empty(),
+            what);
+    }
+
+    void StopSdkSparse(
+            std::shared_ptr<TDriver>& driver,
+            std::shared_ptr<NTopic::IReadSession>& reader)
+    {
+        if (!driver) {
+            return;
+        }
+        auto stop = NThreading::Async([&] {
+            if (reader) {
+                reader->Close(TDuration::MilliSeconds(50));
+            }
+            driver->Stop(true);
+            return true;
+        }, DispatchPool());
+        for (int i = 0; i < 40 && !stop.HasValue() && !stop.HasException(); ++i) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        reader.reset();
+        driver.reset();
+    }
 };
 
 } // namespace
@@ -1160,35 +1228,15 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     Env.HoldRegisterDirectRead.store(1);
     Env.RebootPqrbTablet();
 
-    {
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        while (TInstant::Now() < deadline && Env.HeldRegisterDirectRead.load() < 1) {
-            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
-            Sleep(TDuration::MilliSeconds(50));
-        }
-    }
+    WaitHeldRegisterSparse();
     AssertNoErrorClose("PQRB restart must not kill the read proxy control session");
     UNIT_ASSERT_C(!sessionClosed.load(),
         "SDK read session closed during PQRB restart; expected control to stay alive");
-    UNIT_ASSERT_C(Env.HeldRegisterDirectRead.load() >= 1,
-        "expected RegisterDirectReadSession after PQRB re-lock; held="
-            << Env.HeldRegisterDirectRead.load());
 
-    // Wait until PQ Stage/Publish reaches cache while Register is still held (dropped as
-    // unregistered) — durable-hang precondition, same as raw gRPC test timing window.
-    {
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        while (TInstant::Now() < deadline && Env.StageOrPublishWhileRegisterHeld.load() < 1) {
-            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
-            Sleep(TDuration::MilliSeconds(50));
-        }
-    }
-    UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() >= 1,
-        "expected Stage/Publish to cache while Register held (unregistered drop); got="
-            << Env.StageOrPublishWhileRegisterHeld.load());
-    UNIT_ASSERT_C(Env.HoldRegisterDirectRead.load() != 0
-            && !Env.HeldRegisterDirectReadEvents.empty(),
-        "Register must still be held after unregistered Stage/Publish");
+    // Wait until PQ Stage/Publish reaches cache while Register is still held (buffered as
+    // unregistered until Register) — durable-hang precondition.
+    WaitStageOrPublishWhileRegisterHeldAtLeast(1);
+    AssertRegisterStillHeld("Register must still be held after unregistered Stage/Publish");
 
     // Second message while Register is still held — topic has unread data after release, so a
     // silent wait cannot be explained by an empty partition. Stage/Publish for the new data
@@ -1196,21 +1244,8 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     // DirectReadId and trip SDK VERIFY on NextDirectReadId gap).
     const ui64 stageBeforeSecondWrite = Env.StageOrPublishWhileRegisterHeld.load();
     WriteOneMessageSparse();
-    {
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        while (TInstant::Now() < deadline
-                && Env.StageOrPublishWhileRegisterHeld.load() <= stageBeforeSecondWrite) {
-            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
-            Sleep(TDuration::MilliSeconds(50));
-        }
-    }
-    UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() > stageBeforeSecondWrite,
-        "expected further Stage/Publish while Register held after second write; before="
-            << stageBeforeSecondWrite
-            << "; after=" << Env.StageOrPublishWhileRegisterHeld.load());
-    UNIT_ASSERT_C(Env.HoldRegisterDirectRead.load() != 0
-            && !Env.HeldRegisterDirectReadEvents.empty(),
-        "Register must still be held after second write");
+    WaitStageOrPublishWhileRegisterHeldAbove(stageBeforeSecondWrite);
+    AssertRegisterStillHeld("Register must still be held after second write");
 
     // Register lands; SDK retry should get past Unknown session. Hang remains if tablet already
     // advanced inFlight DirectRead the client never saw.
@@ -1220,21 +1255,7 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     const bool closed = sessionClosed.load();
 
     // Soft stop without RunWithDispatch: dense pump melts under DirectRead reconnects.
-    if (driver) {
-        auto stop = NThreading::Async([&] {
-            if (reader) {
-                reader->Close(TDuration::MilliSeconds(50));
-            }
-            driver->Stop(true);
-            return true;
-        }, DispatchPool());
-        for (int i = 0; i < 40 && !stop.HasValue() && !stop.HasException(); ++i) {
-            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
-            Sleep(TDuration::MilliSeconds(50));
-        }
-        reader.reset();
-        driver.reset();
-    }
+    StopSdkSparse(driver, reader);
 
     UNIT_ASSERT_C(!closed,
         "SDK read session closed after PQRB restart; expected control/session to stay alive");

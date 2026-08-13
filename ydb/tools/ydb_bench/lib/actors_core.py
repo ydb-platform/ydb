@@ -15,8 +15,18 @@ from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
-from ydb.tools.ydb_bench.benchmarks import PING_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks import PING_BENCHMARK, STAR_PING_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition
+
+
+__all__ = (
+    "PING_BENCHMARK",
+    "STAR_PING_BENCHMARK",
+    "RunConfiguration",
+    "parse_metrics",
+    "run_actors_core",
+    "run_benchmark",
+)
 
 
 @dataclass(frozen=True)

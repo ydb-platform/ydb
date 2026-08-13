@@ -300,6 +300,7 @@ message TEvVPut {
 
     repeated TExtraBlockCheck ExtraBlockChecks = 11;
     optional uint32 WriteSourceOp = 24;
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 25;
 }
 
 message TEvVPutResult {
@@ -336,6 +337,7 @@ message TVMultiPutItem {
 
     optional NActorsProto.TTraceId TraceId = 6;
     optional uint32 WriteSourceOp = 11;
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 13;
 }
 
 message TEvVMultiPut {
@@ -1663,6 +1665,7 @@ message TEvInterpilePut {
         optional bool IsZeroEntry = 8;
         repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
         optional NActorsProto.TTraceId TraceId = 7;
+        optional NKikimrBlobStorage.TDataKind.E DataKind = 9;
     }
 
     optional uint32 GroupId = 1;

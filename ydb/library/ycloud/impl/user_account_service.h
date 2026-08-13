@@ -6,13 +6,14 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-struct TUserAccountServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
+struct TUserAccountServiceSettings : NGrpcActorClient::TGrpcClientSettings {
+    TUserAccountServiceSettings(TString endpoint, TStringBuf userAgentHint);
+};
 
 IActor* CreateUserAccountService(const TUserAccountServiceSettings& settings);
 
-inline IActor* CreateUserAccountService(const TString& endpoint) {
-    TUserAccountServiceSettings settings;
-    settings.Endpoint = endpoint;
+inline IActor* CreateUserAccountService(TString endpoint, TStringBuf userAgentHint) {
+    TUserAccountServiceSettings settings(std::move(endpoint), userAgentHint);
     return CreateUserAccountService(settings);
 }
 

@@ -12,7 +12,6 @@ SRCS(
     describe_consumer.cpp
     describe_partition.cpp
     drop_topic.cpp
-    partitions_location.cpp
 )
 
 END()

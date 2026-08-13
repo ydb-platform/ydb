@@ -1,13 +1,17 @@
 #include "kafka_metadata_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
-#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -15,6 +19,188 @@
 namespace NKafka {
 using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
+using namespace NKikimr::NPQ;
+
+namespace {
+
+class TTopicLocationActor: public TActorBootstrapped<TTopicLocationActor>, protected TPipeCacheClient {
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
+    static constexpr ui64 TimeoutTag = 1;
+    static constexpr ui64 RetryTag = 2;
+
+public:
+    TTopicLocationActor(TActorId requester, TString path, TString database, TString token)
+        : TPipeCacheClient(this)
+        , Requester(requester)
+        , Path(std::move(path))
+        , Database(std::move(database))
+        , Token(std::move(token))
+        , Response(MakeHolder<TEvPQProxy::TEvPartitionLocationResponse>())
+    {
+    }
+
+    void Bootstrap() {
+        RequestStart = TActivationContext::Now();
+        Schedule(RequestTimeout, new TEvents::TEvWakeup(TimeoutTag));
+
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken;
+        if (!Token.empty()) {
+            userToken = new NACLib::TUserToken(Token);
+        }
+
+        DescriberId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
+            SelfId(),
+            CanonizePath(Database),
+            {Path},
+            {
+                .UserToken = userToken,
+                .AccessRights = NACLib::EAccessRights::DescribeSchema,
+            }));
+        Become(&TTopicLocationActor::StateWork);
+    }
+
+private:
+    void PassAway() override {
+        if (DescriberId) {
+            Send(DescriberId, new TEvents::TEvPoison());
+            DescriberId = {};
+        }
+        TPipeCacheClient::Close();
+        TActorBootstrapped::PassAway();
+    }
+
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
+        if (!Response) {
+            PassAway();
+            return;
+        }
+        Response->Status = status;
+        Response->Issues.AddIssue(message);
+        Send(Requester, Response.Release());
+        PassAway();
+    }
+
+    TDuration Remaining() const {
+        const auto deadline = RequestStart + RequestTimeout;
+        const auto now = TActivationContext::Now();
+        return now >= deadline ? TDuration::Zero() : deadline - now;
+    }
+
+    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+        DescriberId = {};
+        AFL_ENSURE(ev->Get()->Topics.size() == 1)("s", ev->Get()->Topics.size());
+        const auto& topicInfo = ev->Get()->Topics.begin()->second;
+        if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
+            // Match previous Kafka mapping: missing topic → SCHEME_ERROR (auto-create).
+            const auto status = topicInfo.Status == NDescriber::EStatus::UNKNOWN_ERROR
+                ? Ydb::StatusIds::INTERNAL_ERROR
+                : Ydb::StatusIds::SCHEME_ERROR;
+            return ReplyError(status, NDescriber::Description(Path, topicInfo.Status));
+        }
+
+        Response->PathId = topicInfo.Self->Info.GetPathId();
+        Response->SchemeShardId = topicInfo.Self->Info.GetSchemeshardId();
+        BalancerTabletId = topicInfo.Info->Description.GetBalancerTabletID();
+        RequestLocation();
+    }
+
+    void RequestLocation() {
+        const auto remaining = Remaining();
+        if (!remaining) {
+            return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
+        }
+        // Empty partition list: ReadBalancer returns its live PartitionsInfo.
+        SendToTablet(
+            BalancerTabletId,
+            new TEvPersQueue::TEvGetPartitionsLocation(TVector<ui64>{}, remaining));
+        LocationInflight = true;
+    }
+
+    void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev) {
+        if (!LocationInflight) {
+            return;
+        }
+        const auto& record = ev->Get()->Record;
+        if (!record.GetStatus()) {
+            return ScheduleRetry();
+        }
+
+        Response->Partitions.reserve(record.LocationsSize());
+        for (const auto& location : record.GetLocations()) {
+            TEvPQProxy::TPartitionLocationInfo part;
+            part.PartitionId = location.GetPartitionId();
+            part.Generation = location.GetGeneration();
+            part.NodeId = location.GetNodeId();
+            Response->Partitions.push_back(std::move(part));
+        }
+        Response->Status = Ydb::StatusIds::SUCCESS;
+        Send(Requester, Response.Release());
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (!OnUndelivered(ev) || ev->Get()->TabletId != BalancerTabletId || !LocationInflight) {
+            return;
+        }
+        ScheduleRetry();
+    }
+
+    void ScheduleRetry() {
+        if (!Remaining()) {
+            return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
+        }
+        if (!Backoff.HasMore()) {
+            return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Partition locations are not available");
+        }
+        if (RetryPending) {
+            return;
+        }
+        RetryPending = true;
+        Schedule(Backoff.Next(), new TEvents::TEvWakeup(RetryTag));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == TimeoutTag) {
+            return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
+        }
+        if (ev->Get()->Tag == RetryTag) {
+            RetryPending = false;
+            if (LocationInflight) {
+                RequestLocation();
+            }
+        }
+    }
+
+    void HandlePoison() {
+        if (DescriberId) {
+            Send(DescriberId, new TEvents::TEvPoison());
+            DescriberId = {};
+        }
+        ReplyError(Ydb::StatusIds::CANCELLED, "Request was cancelled");
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+        hFunc(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+        cFunc(TEvents::TEvPoison::EventType, HandlePoison);
+    )
+
+    TActorId Requester;
+    TString Path;
+    TString Database;
+    TString Token;
+    THolder<TEvPQProxy::TEvPartitionLocationResponse> Response;
+    TActorId DescriberId;
+    ui64 BalancerTabletId = 0;
+    TInstant RequestStart;
+    bool LocationInflight = false;
+    bool RetryPending = false;
+    TBackoff Backoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+};
+
+} // namespace
 
 TActorId MakeKafkaDiscoveryCacheID() {
     static const char x[12] = "kafka_dsc_c";
@@ -161,14 +347,13 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
         {"topic", topic},
         {"userName", GetUsernameOrAnonymous(Context)});
 
-    TGetPartitionsLocationRequest locationRequest{};
-    locationRequest.Topic = NormalizePath(Context->DatabasePath, topic);
-    locationRequest.Token = GetUserSerializedToken(Context);
-    locationRequest.Database = Context->DatabasePath;
-
     PendingResponses++;
 
-    return Register(NKikimr::NGRpcProxy::V1::NTopic::CreatePartitionsLocationActor(SelfId(), locationRequest));
+    return Register(new TTopicLocationActor(
+        SelfId(),
+        NormalizePath(Context->DatabasePath, topic),
+        Context->DatabasePath,
+        GetUserSerializedToken(Context)));
 }
 
 TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {

@@ -1429,6 +1429,51 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         checkColor(TColor::GREEN);
     }
 
+    // Verifies the UseDeviceOverestimationRatioMerged ICB option:
+    //  - it is registered under NKikimrConfig::TImmediateControlsConfig
+    //    ("icb->PDiskControls.UseDeviceOverestimationRatioMerged") as soon as
+    //    the PDisk actor is bootstrapped;
+    //  - it defaults to enabled (1), i.e. the merged (cross-source) metric is
+    //    used by default;
+    //  - its value can be flipped at runtime (0/1), without a PDisk/cluster
+    //    restart, exactly the way an admin would toggle it back to the legacy
+    //    algorithm via a console ICB command if the new metric misbehaved.
+    Y_UNIT_TEST(UseDeviceOverestimationRatioMergedControlDefaultsToEnabledAndIsToggleable) {
+        TActorTestContext testCtx{{}};
+        testCtx.GetPDisk(); // inits pdisk, which registers the ICB control
+
+        auto &icb = testCtx.GetRuntime()->GetAppData().Icb;
+        auto control = icb->PDiskControls.UseDeviceOverestimationRatioMerged.AtomicLoad();
+        UNIT_ASSERT_C(control, "UseDeviceOverestimationRatioMerged control must be registered by PDisk::Initialize");
+
+        // Enabled (merged metric) by default, as required: no operator action
+        // needed to get the improved metric.
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 1);
+        UNIT_ASSERT(control->IsDefault());
+
+        // Disabling reverts to the legacy algorithm -- this must be possible
+        // without restarting the PDisk/cluster, i.e. purely via the ICB value.
+        // This mirrors how a console ICB command (SetFromHtmlRequest under the
+        // hood) would toggle the option at runtime.
+        control->SetFromHtmlRequest(0);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+
+        // Re-enabling brings back the merged metric, again without a restart.
+        control->SetFromHtmlRequest(1);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+
+        // Out-of-range values must be clamped to [0, 1], same as any other
+        // boolean-like ICB control (e.g. SemiStrictSpaceIsolation's bounds).
+        control->SetFromHtmlRequest(5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+        control->SetFromHtmlRequest(-5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+
+        control->RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+    }
+
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx{{}};
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};

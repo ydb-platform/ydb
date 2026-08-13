@@ -1731,7 +1731,12 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
+        if (status == Ydb::StatusIds::SUCCESS) {
+            KQP_PROXY_LOG_D("Reply success, issues: " << issues.ToOneLineString());
+        } else {
+            KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
+        }
+
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,

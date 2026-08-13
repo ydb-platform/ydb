@@ -38,6 +38,8 @@ def load_manifest(path):
             value = json.load(stream)
     except (OSError, ValueError) as error:
         raise BenchmarkError("cannot read result manifest {}: {}".format(path, error)) from error
+    if not isinstance(value, dict):
+        raise BenchmarkError("result manifest must be a JSON object")
     if value.get("schema_version") != SCHEMA_VERSION:
         raise BenchmarkError("unsupported result manifest schema version {}".format(value.get("schema_version")))
     return value

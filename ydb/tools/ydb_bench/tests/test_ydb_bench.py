@@ -373,6 +373,9 @@ class YdbBenchTest(unittest.TestCase):
         old.write_text('{"schema_version": 3}', encoding="utf-8")
         with self.assertRaisesRegex(BenchmarkError, "unsupported result manifest schema"):
             load_manifest(old)
+        old.write_text("[]", encoding="utf-8")
+        with self.assertRaisesRegex(BenchmarkError, "JSON object"):
+            load_manifest(old)
 
     def test_result_store_never_publishes_missing_artifacts(self):
         path = self.root / "run.json"
@@ -1106,7 +1109,7 @@ class WebTest(unittest.TestCase):
             "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
             "steps": [{
                 "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                "affinity": "none", "repeat": 1,
+                "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
                 "state": "running" if status == "running" else "passed",
                 "artifacts": ["artifact.txt"],
             }],
@@ -1119,13 +1122,33 @@ class WebTest(unittest.TestCase):
                 "smt_siblings": [[0]], "hierarchy_reasons": [],
             },
         }
+        if status != "running":
+            value["finished_at"] = "2025-01-01T00:00:01+00:00"
         if imported:
             value["imported"] = True
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
         (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
-    def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False):
-        run = {"schema_version": version, "status": "completed", "state": "passed", "runs": [], "steps": [], "topology": {"version": 2}}
+    def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
+        run = {
+            "schema_version": version,
+            "status": "completed",
+            "state": "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "finished_at": "2025-01-01T00:00:01+00:00",
+            "runs": [],
+            "steps": [{
+                "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
+                "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+                "state": "passed", "artifacts": ["artifact.txt"],
+            }],
+            "topology": {
+                "version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}], "physical_cores": [[0]],
+                "smt_siblings": [[0]], "hierarchy_reasons": [],
+            },
+        }
+        run.update(run_updates or {})
         files = {"run.json": json.dumps(run).encode(), "artifact.txt": b"artifact"}
         entries = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for name, data in files.items()]
         if corrupt:
@@ -1155,6 +1178,34 @@ class WebTest(unittest.TestCase):
             archive.writestr("import.json", b'{"format_version":1,"files":[]}')
         with self.assertRaisesRegex(BenchmarkError, "unexpected member type"):
             import_archive(self.root, stream.getvalue())
+
+    def test_import_rejects_nonterminal_and_malformed_run_manifests(self):
+        with self.assertRaisesRegex(BenchmarkError, "state must be terminal"):
+            import_archive(self.root, self._portable_archive(run_updates={"status": "running", "state": "running"}))
+        with self.assertRaisesRegex(BenchmarkError, "steps must be a list"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": {}}))
+        with self.assertRaisesRegex(BenchmarkError, "topology is missing"):
+            import_archive(self.root, self._portable_archive(run_updates={"topology": {}}))
+        with self.assertRaisesRegex(BenchmarkError, "status must be terminal"):
+            import_archive(self.root, self._portable_archive(run_updates={"runs": [{
+                "benchmark": "ping-bench", "profile": "baseline", "status": "running",
+            }]}))
+        malformed_step = {
+            "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
+            "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+            "state": "passed", "artifacts": ["not-in-archive.txt"],
+        }
+        with self.assertRaisesRegex(BenchmarkError, "does not name a file in the archive"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": [malformed_step]}))
+
+    def test_import_rejects_duplicate_step_ids(self):
+        step = {
+            "id": "same", "benchmark": "ping-bench", "profile": "baseline",
+            "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+            "state": "passed", "artifacts": [],
+        }
+        with self.assertRaisesRegex(BenchmarkError, "duplicate step id"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": [step, dict(step)]}))
 
     def test_import_installs_immutable_normalized_result(self):
         imported = import_archive(self.root, self._portable_archive())

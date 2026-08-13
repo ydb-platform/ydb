@@ -14,16 +14,173 @@ import stat
 import tempfile
 import uuid
 import zipfile
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
-from ydb.tools.ydb_bench.lib.results import load_manifest
+from ydb.tools.ydb_bench.lib.results import TERMINAL_STATES, load_manifest
 
 
 MAX_FILES = 512
 MAX_MEMBER_SIZE = 64 * 1024 * 1024
 MAX_TOTAL_SIZE = 256 * 1024 * 1024
 IMPORT_MANIFEST = "import.json"
+
+
+def _manifest_error(message):
+    raise BenchmarkError("malformed portable run manifest: {}".format(message))
+
+
+def _nonempty_string(value, field):
+    if not isinstance(value, str) or not value:
+        _manifest_error("{} must be a non-empty string".format(field))
+
+
+def _timestamp(value, field):
+    _nonempty_string(value, field)
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        _manifest_error("{} must be an ISO-8601 timestamp".format(field))
+
+
+def _portable_path(value, field, files):
+    _nonempty_string(value, field)
+    try:
+        path = _safe_name(value)
+    except BenchmarkError:
+        _manifest_error("{} is not a safe relative path".format(field))
+    normalized = path.as_posix()
+    if normalized not in files:
+        _manifest_error("{} does not name a file in the archive: {}".format(field, value))
+    return normalized
+
+
+def _integer(value, field, minimum=0):
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        _manifest_error("{} must be an integer greater than or equal to {}".format(field, minimum))
+
+
+def _cpu_list(value, field):
+    if not isinstance(value, list):
+        _manifest_error("{} must be a list".format(field))
+    for index, cpu in enumerate(value):
+        _integer(cpu, "{}[{}]".format(field, index))
+
+
+def _validate_topology(value):
+    if not isinstance(value, dict):
+        _manifest_error("topology must be an object")
+    required = ("version", "allowed_cpus", "numa_nodes", "chiplets", "physical_cores", "smt_siblings", "hierarchy_reasons")
+    missing = [field for field in required if field not in value]
+    if missing:
+        _manifest_error("topology is missing {}".format(", ".join(missing)))
+    _integer(value["version"], "topology.version", 1)
+    _cpu_list(value["allowed_cpus"], "topology.allowed_cpus")
+    for collection, id_field in (("numa_nodes", "id"), ("chiplets", "numa_node")):
+        if not isinstance(value[collection], list):
+            _manifest_error("topology.{} must be a list".format(collection))
+        for index, item in enumerate(value[collection]):
+            if not isinstance(item, dict) or id_field not in item or "cpus" not in item:
+                _manifest_error("topology.{}[{}] is malformed".format(collection, index))
+            _integer(item[id_field], "topology.{}[{}].{}".format(collection, index, id_field))
+            _cpu_list(item["cpus"], "topology.{}[{}].cpus".format(collection, index))
+    for collection in ("physical_cores", "smt_siblings"):
+        if not isinstance(value[collection], list):
+            _manifest_error("topology.{} must be a list".format(collection))
+        for index, cpus in enumerate(value[collection]):
+            _cpu_list(cpus, "topology.{}[{}]".format(collection, index))
+    if not isinstance(value["hierarchy_reasons"], list):
+        _manifest_error("topology.hierarchy_reasons must be a list")
+    for index, reason in enumerate(value["hierarchy_reasons"]):
+        if not isinstance(reason, dict):
+            _manifest_error("topology.hierarchy_reasons[{}] must be an object".format(index))
+        _nonempty_string(reason.get("level"), "topology.hierarchy_reasons[{}].level".format(index))
+        _nonempty_string(reason.get("reason"), "topology.hierarchy_reasons[{}].reason".format(index))
+
+
+def _validate_portable_run_manifest(manifest, files):
+    """Validate the top-level run contract before installing immutable data.
+
+    Profile manifests deliberately have a different schema and continue to be
+    accepted by ``load_manifest``.  Portable archives, however, always name a
+    top-level run and must be safe to expose through the read model.
+    """
+    required = ("status", "state", "started_at", "finished_at", "runs", "steps", "topology")
+    missing = [field for field in required if field not in manifest]
+    if missing:
+        _manifest_error("missing {}".format(", ".join(missing)))
+
+    state, status = manifest["state"], manifest["status"]
+    compatible_statuses = {
+        "passed": frozenset(("completed",)),
+        "failed": frozenset(("failed",)),
+        "cancelled": frozenset(("cancelled", "interrupted")),
+        "unsupported": frozenset(("completed", "unsupported")),
+    }
+    if state not in TERMINAL_STATES:
+        _manifest_error("state must be terminal")
+    if status not in compatible_statuses[state]:
+        _manifest_error("status {} is inconsistent with state {}".format(status, state))
+    _timestamp(manifest["started_at"], "started_at")
+    _timestamp(manifest["finished_at"], "finished_at")
+    _validate_topology(manifest["topology"])
+    if not isinstance(manifest["runs"], list):
+        _manifest_error("runs must be a list")
+    if not isinstance(manifest["steps"], list):
+        _manifest_error("steps must be a list")
+    if "config" in manifest and not isinstance(manifest["config"], dict):
+        _manifest_error("config must be an object")
+    if "events" in manifest:
+        _integer(manifest["events"], "events")
+
+    terminal_run_statuses = frozenset(("completed", "failed", "cancelled", "interrupted", "unsupported"))
+    for index, record in enumerate(manifest["runs"]):
+        prefix = "runs[{}]".format(index)
+        if not isinstance(record, dict):
+            _manifest_error("{} must be an object".format(prefix))
+        _nonempty_string(record.get("benchmark"), prefix + ".benchmark")
+        _nonempty_string(record.get("profile"), prefix + ".profile")
+        if record.get("status") not in terminal_run_statuses:
+            _manifest_error("{}.status must be terminal".format(prefix))
+        for field in ("manifest", "summary"):
+            if field in record:
+                _portable_path(record[field], prefix + "." + field, files)
+        if "directory" in record:
+            _nonempty_string(record["directory"], prefix + ".directory")
+            try:
+                _safe_name(record["directory"])
+            except BenchmarkError:
+                _manifest_error("{}.directory is not a safe relative path".format(prefix))
+
+    step_ids = set()
+    for index, step in enumerate(manifest["steps"]):
+        prefix = "steps[{}]".format(index)
+        if not isinstance(step, dict):
+            _manifest_error("{} must be an object".format(prefix))
+        for field in ("id", "benchmark", "profile", "affinity"):
+            _nonempty_string(step.get(field), prefix + "." + field)
+        if step["id"] in step_ids:
+            _manifest_error("duplicate step id {}".format(step["id"]))
+        step_ids.add(step["id"])
+        _integer(step.get("threads"), prefix + ".threads", 1)
+        _integer(step.get("repeat"), prefix + ".repeat", 1)
+        for field in ("case", "parameters"):
+            if not isinstance(step.get(field), dict):
+                _manifest_error("{}.{} must be an object".format(prefix, field))
+        if step.get("state") not in TERMINAL_STATES:
+            _manifest_error("{}.state must be terminal".format(prefix))
+        artifacts = step.get("artifacts")
+        if not isinstance(artifacts, list):
+            _manifest_error("{}.artifacts must be a list".format(prefix))
+        seen_artifacts = set()
+        for artifact_index, artifact in enumerate(artifacts):
+            normalized = _portable_path(artifact, "{}.artifacts[{}]".format(prefix, artifact_index), files)
+            if normalized in seen_artifacts:
+                _manifest_error("{}.artifacts contains a duplicate path".format(prefix))
+            seen_artifacts.add(normalized)
+
+    return manifest
 
 
 def _safe_name(name):
@@ -101,7 +258,8 @@ def import_archive(output, archive_data):
             # Validate compatibility before allocating a durable destination.
             with tempfile.TemporaryDirectory(prefix="ydb-bench-import-check-") as check:
                 run_path = Path(check) / "run.json"; run_path.write_bytes(archive.read(members["run.json"]))
-                load_manifest(run_path)
+                manifest = load_manifest(run_path)
+                _validate_portable_run_manifest(manifest, set(expected))
             root = Path(output).resolve(); root.mkdir(parents=True, exist_ok=True)
             destination = root / "imports" / ("import-" + uuid.uuid4().hex)
             destination.parent.mkdir(exist_ok=True)

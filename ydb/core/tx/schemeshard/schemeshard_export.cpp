@@ -147,14 +147,13 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     }
 }
 
-void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, TExportInfo& exportInfo) {
     db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
         NIceDb::TUpdate<Schema::Exports::Uid>(exportInfo.Uid),
         NIceDb::TUpdate<Schema::Exports::Kind>(static_cast<ui8>(exportInfo.Kind)),
         NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.Settings),
         NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo.DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
         NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo.EnableChecksums),
         NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions),
         NIceDb::TUpdate<Schema::Exports::IncludeIndexData>(exportInfo.IncludeIndexData),
@@ -180,6 +179,16 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
             NIceDb::TUpdate<Schema::ExportItems::ParentIndex>(item.ParentIdx)
         );
     }
+
+    PersistExportItemCount(db, exportInfo, exportInfo.Items.size());
+}
+
+void TSchemeShard::PersistExportItemCount(NIceDb::TNiceDb& db, TExportInfo& exportInfo, ui32 count) {
+    exportInfo.PersistedItemCount = count;
+
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Exports::Items>(count)
+    );
 }
 
 void TSchemeShard::AddExport(const TExportInfo::TPtr& exportInfo) {
@@ -197,7 +206,9 @@ void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& e
     ExportsByTime.erase(std::make_pair(exportInfo.StartTime, exportInfo.Id));
     Exports.erase(exportInfo.Id);
 
-    for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
+    Y_ABORT_UNLESS(exportInfo.PersistedItemCount == exportInfo.Items.size());
+
+    for (ui32 itemIdx : xrange(exportInfo.PersistedItemCount)) {
         db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Delete();
     }
 

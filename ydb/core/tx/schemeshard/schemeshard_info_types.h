@@ -3597,6 +3597,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TString SanitizedToken;  // required for making audit log records
 
     TVector<TItem> Items;
+    ui32 PersistedItemCount = 0;
 
     TPathId ExportPathId = InvalidPathId;
     EState State = EState::Invalid;
@@ -3796,6 +3797,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    ui32 PersistedItemCount = 0;
     int WaitingSchemeObjects = 0;
 
     TSet<TActorId> Subscribers;

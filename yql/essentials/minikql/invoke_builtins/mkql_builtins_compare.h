@@ -4,8 +4,7 @@
 
 #include <array>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TLeft, typename TRight, class TImpl>
 struct TCompareArithmeticBinary: public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
@@ -670,5 +669,4 @@ void RegisterGreater(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry);
 void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

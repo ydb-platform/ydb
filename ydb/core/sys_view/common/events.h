@@ -78,12 +78,21 @@ struct TEvSysView {
 
         EvRosterUpdateFinished,
 
+        EvFailNextIntervalMetricsRequest,
+
         EvEnd,
     };
 
     struct TEvRosterUpdateFinished : public TEventLocal<
         TEvRosterUpdateFinished,
         EvRosterUpdateFinished>
+    {
+    };
+
+    // Test-only fault injection. Production-mode SysViewService ignores it.
+    struct TEvFailNextIntervalMetricsRequest : public TEventLocal<
+        TEvFailNextIntervalMetricsRequest,
+        EvFailNextIntervalMetricsRequest>
     {
     };
 

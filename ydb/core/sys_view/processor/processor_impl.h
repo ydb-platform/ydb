@@ -176,6 +176,9 @@ private:
     void MergeCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd);
     ui32 PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd,
         const TRankedQueryMetrics& rankedMetrics);
+    static ui64 QueryMetricsResultSize(const TQueryToMetrics& result);
+    void EnforceMetricsOneHourByteLimit(NIceDb::TNiceDb& db, TInstant activeHourEnd);
+    void UpdateMetricsOneHourRetentionCounters(ui64 retainedBytes, ui64 evictedBuckets);
     void LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const;
     void FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db);
     void PersistQueryResults(NIceDb::TNiceDb& db);
@@ -301,6 +304,8 @@ private:
     // public result limits
     static constexpr size_t PublicMinuteLimit = 256;
     static constexpr size_t PublicHourLimit = 1024;
+    // Serialized query text and metrics retained by the public hourly view.
+    static constexpr ui64 MetricsOneHourByteLimit = 256ull << 20;
     // limit on number of concurrent metrics requests from services
     static constexpr size_t MaxInFlightRequests = 16;
     // limit on scan batch size
@@ -342,6 +347,8 @@ private:
     std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
     TInstant CurrentHourEnd;
     TInstant LastMergedQueryMetricsIntervalEnd;
+    ui64 MetricsOneHourRetainedBytes = 0;
+    ui64 MetricsOneHourEvictBeforeHourEndUs = 0;
     bool HourMetricsCleanupInFlight = false;
 
     // NodesToRequest

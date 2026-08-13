@@ -55,10 +55,10 @@ def _assert_viewer_query_post(base_url, token, status=200, database=DATABASE):
     assert response.status_code == status, response.text
 
 
-def _build_endpoint_path(endpoint, with_database_cgi, extra_params=None):
+def _build_endpoint_path(endpoint, with_database_cgi, extra_params=None, database=DATABASE):
     params = dict(extra_params or {})
     if with_database_cgi:
-        params = {'database': DATABASE, **params}
+        params = {'database': database, **params}
     if not params:
         return endpoint
     separator = '&' if '?' in endpoint else '?'
@@ -272,6 +272,44 @@ def test_topic_data_access_controls(mon_base_url_with_extra_sids_control, topic_
                 token = 'root@builtin'
                 _assert_status(mon_base_url_with_extra_sids_control, _build_topic_path(ep, with_database_cgi=True), token, 200)
                 _assert_status(mon_base_url_with_extra_sids_control, _build_topic_path(ep, with_database_cgi=False), token, 200)
+
+
+def test_viewer_tenantinfo_show_all_databases_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+):
+    for ep in ['/viewer/tenantinfo', '/viewer/json/tenantinfo']:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'show_all_databases': 'true'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 403)
+        # Scope-param validation must not block tokens above database level.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            headers = {'Authorization': token}
+            response = requests.get(
+                mon_base_url_with_extra_sids_control + forbidden_path,
+                headers=headers,
+                verify=False,
+                timeout=5,
+            )
+            assert response.status_code != 403, response.text
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+        allowed_path_false = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'show_all_databases': 'false'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path_false, 'database@builtin', 200)
 
 
 # database@builtin is a strict database-only token and must be rejected when path is out of database scope.

@@ -7,6 +7,7 @@
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/memory_stats.h>
 
 namespace NKikimr::NViewer {
@@ -134,6 +135,12 @@ public:
         OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(Params.Get("metadata_cache"), MetadataCache);
         ShowAllDatabases = FromStringWithDefault<bool>(Params.Get("show_all_databases"), ShowAllDatabases);
+        if (ShowAllDatabases && IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()))) {
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "`show_all_databases` is not allowed for database-scoped access"),
+                "Access denied");
+            return;
+        }
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();

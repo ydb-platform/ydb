@@ -8,6 +8,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
 from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import grant_describe_schema_provided
+from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
@@ -183,6 +184,29 @@ def ydb_cluster_with_extra_sids_controls(certificates):
     cluster.start()
     yield cluster
     cluster.stop()
+
+
+TENANT_DATABASE = '/Root/Tenant'
+
+
+@pytest.fixture(scope='module')
+def tenant_database(ydb_cluster_with_extra_sids_controls):
+    cluster = ydb_cluster_with_extra_sids_controls
+    cluster.create_database(
+        TENANT_DATABASE,
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    slots = cluster.register_and_start_slots(TENANT_DATABASE, count=1)
+    cluster.wait_tenant_up(TENANT_DATABASE, token='root@builtin')
+    tenant_node = slots[0]
+    run_viewer_query(
+        f'https://{tenant_node.host}:{tenant_node.mon_port}',
+        f"GRANT 'ydb.granular.describe_schema' ON `{TENANT_DATABASE}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`, `root@builtin`;",
+        database=TENANT_DATABASE,
+    )
+    return TENANT_DATABASE
 
 
 @pytest.fixture

@@ -32,6 +32,8 @@ All changes in {{ ydb-short-name }} tables are arranged according to the order i
 
 Using these timestamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
 
+For single-shard transactions that do not go through the coordinator, the time is assigned from the mediator, and the transaction ID is not assigned and takes the maximum value `18446744073709551615` (2<sup>64</sup>–1, the maximum value of `Uint64`). A real transaction ID is present only for distributed transactions planned through the coordinator.
+
 {% note info %}
 
 By default, virtual timestamps are not emitted to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.

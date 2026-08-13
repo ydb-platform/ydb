@@ -55,6 +55,10 @@ struct TKeeperParams {
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
+
+    // Upper bound for the total chunk reserve of static group owners, in permille of the user chunk pool.
+    // 0 disables the reserve.
+    ui32 StaticGroupChunkReservePerMille = NPDisk::StaticGroupChunkReservePerMille;
 };
 
 } // NPDisk

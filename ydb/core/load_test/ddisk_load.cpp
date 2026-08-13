@@ -381,6 +381,7 @@ public:
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
+        Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
 
         PrepareDataAndStart(ctx);
     }
@@ -505,7 +506,7 @@ public:
             if (Connected && !DisconnectSent) {
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
+                Credentials.SerializeForRequest(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
             } else {
                 FinishAndDie(ctx);

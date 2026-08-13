@@ -69,12 +69,7 @@ public:
         if (MinSnapshotForNewReads < dropSnapshot) {
             return true;
         }
-        for (const auto& txSnapshot : TxInFlight) {
-            if (txSnapshot < dropSnapshot) {
-                return true;
-            }
-        }
-        return false;
+        return !TxInFlight.empty() && TxInFlight.front() < dropSnapshot;
     }
 };
 

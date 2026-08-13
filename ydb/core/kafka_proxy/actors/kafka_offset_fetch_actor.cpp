@@ -298,30 +298,29 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
         if (topicNotCreatedYet) {
             break;
         }
-        auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
-        for (const auto& topicPartition : topicResponse.Partitions) {
-            if (topicNotCreatedYet) {
-                break;
+        TString topicNameWithoutDb = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
+        TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
+        if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
+            auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
+            bool consumerMissing = false;
+            if (partitionsToOffsets) {
+                for (auto partitionIndex : topicRequest.PartitionIndexes) {
+                    auto partitionIt = partitionsToOffsets->find(partitionIndex);
+                    if (partitionIt != partitionsToOffsets->end() &&
+                        !partitionIt->second.contains(groupId)) {
+                        consumerMissing = true;
+                        break;
+                    }
+                }
             }
-            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
-            TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicExists &&
-                topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
-                Context->Config.GetAutoCreateConsumersEnable()) {
-                // consumer is not assigned to the topic case
-                TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
-                                                                        topicPath,
-                                                                        topicName,
-                                                                        groupId);
-                break;
-            } else if (!topicExists &&
-                        topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
-                        Context->Config.GetAutoCreateTopicsEnable()) {
-                // topic or partition does not exist case
-                CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
-                topicNotCreatedYet = true;
-                break;
+            if (consumerMissing) {
+                CreateConsumerGroupIfNecessary(topicNameWithoutDb, topicPath, topicNameWithoutDb, groupId);
             }
+        } else if (!topicExists &&
+                    TopicsToResponses[topicName]->Status == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
+                    Context->Config.GetAutoCreateTopicsEnable()) {
+            CreateTopicIfNecessary(topicNameWithoutDb, *topicRequest.Name, ctx);
+            topicNotCreatedYet = true;
         }
     }
     if (InflyTopics == 0) {
@@ -634,15 +633,19 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
-                    YDB_LOG_ERROR("Group not found for topic",
+                    // OffsetFetch: existing partition with no committed offset for this
+                    // group is NONE + committedOffset = -1, not UNKNOWN_TOPIC_OR_PARTITION.
+                    partition.CommittedOffset = -1;
+                    partition.ErrorCode = NONE_ERROR;
+                    YDB_LOG_DEBUG("No committed offset for group on partition",
                         {LogPrefix()},
                         {"groupId", groupId},
-                        {"topicName", topicName});
+                        {"topicName", topicName},
+                        {"requestPartition", requestPartition});
                 }
             } else {
                 partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
-                YDB_LOG_ERROR("Partition not found for topic",
+                YDB_LOG_DEBUG("Partition not found for topic",
                     {LogPrefix()},
                     {"requestPartition", requestPartition},
                     {"topicName", topicName});

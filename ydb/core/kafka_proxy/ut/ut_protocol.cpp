@@ -2045,7 +2045,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(partition.CommittedOffset, -1);
             }
         }
 
@@ -3580,7 +3581,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg1 = client.OffsetFetch(newConsumer3, topicsToPartions1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
 
 
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);

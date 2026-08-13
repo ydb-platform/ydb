@@ -19,7 +19,7 @@ from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
@@ -30,8 +30,8 @@ from ydb.tools.ydb_bench.lib.common import extract_executable
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 
-
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+_STREAM_CHUNK_SIZE = 1024 * 1024
 _HTML = (
     "<!doctype html><html lang=en><meta charset=utf-8>"
     '<meta name=viewport content="width=device-width,initial-scale=1">'
@@ -728,6 +728,22 @@ def _run_directory(output, run_id):
     return candidate
 
 
+def _content_disposition(filename):
+    fallback = "".join(
+        character if character.isascii() and (character.isalnum() or character in "._-") else "_"
+        for character in filename
+    )
+    return "attachment; filename=\"{}\"; filename*=UTF-8''{}".format(fallback or "download", quote(filename, safe=""))
+
+
+def _copy_stream(source, destination):
+    while True:
+        chunk = source.read(_STREAM_CHUNK_SIZE)
+        if not chunk:
+            return
+        destination.write(chunk)
+
+
 def _duration_seconds(manifest):
     started, finished = manifest.get("started_at"), manifest.get("finished_at")
     if not started or not finished:
@@ -745,28 +761,48 @@ def read_model(output):
         run_root = root / run_id
         steps = manifest.get("steps", [])
         runs = manifest.get("runs", [])
-        profile_keys = {(str(item.get("benchmark")), str(item.get("profile"))) for item in steps + runs if item.get("benchmark") is not None and item.get("profile") is not None}
+        profile_keys = {
+            (str(item.get("benchmark")), str(item.get("profile")))
+            for item in steps + runs
+            if item.get("benchmark") is not None and item.get("profile") is not None
+        }
         result[run_id] = {
             "id": run_id,
             "status": manifest.get("status", "unknown"),
             "state": manifest.get("state", "unknown"),
-            "source": "imported" if ((run_root / ".imported").is_file() or manifest.get("imported") or manifest.get("source") == "imported" or manifest.get("origin")) else "local",
+            "source": (
+                "imported"
+                if (
+                    (run_root / ".imported").is_file()
+                    or manifest.get("imported")
+                    or manifest.get("source") == "imported"
+                    or manifest.get("origin")
+                )
+                else "local"
+            ),
             "queued_at": manifest.get("queued_at"),
             "started_at": manifest.get("started_at"),
             "finished_at": manifest.get("finished_at"),
             "duration_seconds": _duration_seconds(manifest),
             "profiles": len(profile_keys),
             "repetitions": len(steps),
-            "benchmarks": sorted({str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}),
-            "profile_names": sorted({str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}),
+            "benchmarks": sorted(
+                {str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}
+            ),
+            "profile_names": sorted(
+                {str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}
+            ),
             "perf": bool(manifest.get("profiler")),
-            "config_path": manifest.get("config", {}).get("path") or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
+            "config_path": manifest.get("config", {}).get("path")
+            or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
             "output_directory": str(run_root),
             "runs": runs,
             "steps": steps,
             "topology": manifest.get("topology"),
             "events": manifest.get("events", 0),
-            "finished_steps": sum(1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")),
+            "finished_steps": sum(
+                1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")
+            ),
         }
     return result
 
@@ -832,15 +868,23 @@ def comparison_keys(model, selected):
     for run_id in selected:
         steps = model[run_id].get("steps", [])
         keys = {
-            (str(s.get("benchmark")), str(s.get("profile")), str(s.get("affinity"))) for s in steps if s.get("benchmark") is not None and s.get("profile") is not None and s.get("affinity") is not None
+            (str(s.get("benchmark")), str(s.get("profile")), str(s.get("affinity")))
+            for s in steps
+            if s.get("benchmark") is not None and s.get("profile") is not None and s.get("affinity") is not None
         }
         # Older completed top-level records can lack steps; retain their local
         # benchmark/profile availability but never invent an affinity.
-        pairs = {(str(r.get("benchmark")), str(r.get("profile"))) for r in model[run_id].get("runs", []) if r.get("benchmark") is not None and r.get("profile") is not None}
+        pairs = {
+            (str(r.get("benchmark")), str(r.get("profile")))
+            for r in model[run_id].get("runs", [])
+            if r.get("benchmark") is not None and r.get("profile") is not None
+        }
         per_run.append((keys, pairs | {(a, b) for a, b, _ in keys}))
     common_affinity = set.intersection(*(item[0] for item in per_run)) if per_run else set()
     common_pairs = set.intersection(*(item[1] for item in per_run)) if per_run else set()
-    one_affinity_pairs = {pair for pair in common_pairs if all(len({a for x, y, a in keys if (x, y) == pair}) == 1 for keys, _ in per_run)}
+    one_affinity_pairs = {
+        pair for pair in common_pairs if all(len({a for x, y, a in keys if (x, y) == pair}) == 1 for keys, _ in per_run)
+    }
     within_run = {run_id: sorted("/".join(pair) for pair in pairs) for run_id, (_, pairs) in zip(selected, per_run)}
     return {
         "benchmark_profile_affinity": sorted("/".join(key) for key in common_affinity),
@@ -897,7 +941,11 @@ def chart_data(output, run_ids):
                 normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
                 prefixes = ("median_", "mean_", "min_", "max_")
                 metric_fields = [name for name in fields if name.startswith(prefixes)]
-                dimension_fields = [name for name in fields if name not in metric_fields and name not in ("affinity_mode", "repetitions")]
+                dimension_fields = [
+                    name
+                    for name in fields
+                    if name not in metric_fields and name not in ("affinity_mode", "repetitions")
+                ]
                 grouped = {}
                 for index, row in enumerate(reader):
                     if index >= 100000:
@@ -908,10 +956,17 @@ def chart_data(output, run_ids):
                     if normalized_repetitions:
                         base = {name: _summary_value(row.get(name)) for name in dimension_fields}
                         for aggregation in ("median", "mean", "min", "max"):
-                            values = {metric.name: _summary_value(row.get(aggregation + "_" + metric.name)) for metric in benchmark_definition.metrics}
-                            grouped.setdefault(affinity, []).append({**base, "repeat_aggregation": aggregation, "repeat": "*", **values})
+                            values = {
+                                metric.name: _summary_value(row.get(aggregation + "_" + metric.name))
+                                for metric in benchmark_definition.metrics
+                            }
+                            grouped.setdefault(affinity, []).append(
+                                {**base, "repeat_aggregation": aggregation, "repeat": "*", **values}
+                            )
                     else:
-                        grouped.setdefault(affinity, []).append({name: _summary_value(row.get(name)) for name in fields})
+                        grouped.setdefault(affinity, []).append(
+                            {name: _summary_value(row.get(name)) for name in fields}
+                        )
                 if normalized_repetitions:
                     repetitions_path = path.with_name("repetitions.csv")
                     if repetitions_path.is_file():
@@ -920,7 +975,12 @@ def chart_data(output, run_ids):
                                 affinity = row.get("affinity_mode")
                                 if affinity:
                                     grouped.setdefault(affinity, []).append(
-                                        {name: _summary_value(row.get(name)) for name in dimension_fields + ["repeat"] + [metric.name for metric in benchmark_definition.metrics]}
+                                        {
+                                            name: _summary_value(row.get(name))
+                                            for name in dimension_fields
+                                            + ["repeat"]
+                                            + [metric.name for metric in benchmark_definition.metrics]
+                                        }
                                         | {"repeat_aggregation": "raw"}
                                     )
                     dimension_fields += ["repeat_aggregation", "repeat"]
@@ -935,7 +995,10 @@ def chart_data(output, run_ids):
                             metric_metadata[metric.name] = {"unit": metric.unit, "description": metric.description}
                         else:
                             for prefix in ("median_", "min_", "max_"):
-                                metric_metadata[prefix + metric.name] = {"unit": metric.unit, "description": metric.description}
+                                metric_metadata[prefix + metric.name] = {
+                                    "unit": metric.unit,
+                                    "description": metric.description,
+                                }
                 for affinity, rows in grouped.items():
                     benchmark, profile = path.relative_to(root).parts[:2]
                     series = {
@@ -951,7 +1014,13 @@ def chart_data(output, run_ids):
                     if affinity in affinity_cpu_masks:
                         series["cpu_masks"] = affinity_cpu_masks[affinity]
                     result.append(series)
-    return {"series": result, "dimensions": sorted(dimensions), "metrics": sorted(metrics), "metric_metadata": metric_metadata, "dimension_metadata": dimension_metadata}
+    return {
+        "series": result,
+        "dimensions": sorted(dimensions),
+        "metrics": sorted(metrics),
+        "metric_metadata": metric_metadata,
+        "dimension_metadata": dimension_metadata,
+    }
 
 
 def _load_yaml(yaml_text):
@@ -1013,7 +1082,11 @@ class RunService:
             loaded = self._load(yaml_text, perf)
         except BenchmarkError as error:
             return {"valid": False, "error": str(error)}
-        return {"valid": True, "sha256": hashlib.sha256(yaml_text.encode()).hexdigest(), "steps": len(build_run_plan(loaded).steps)}
+        return {
+            "valid": True,
+            "sha256": hashlib.sha256(yaml_text.encode()).hexdigest(),
+            "steps": len(build_run_plan(loaded).steps),
+        }
 
     def plan(self, yaml_text, perf=False):
         validation = self.validate(yaml_text, perf)
@@ -1021,7 +1094,16 @@ class RunService:
             return validation
         plan = build_run_plan(self._load(yaml_text, perf))
         validation["plan"] = [
-            {"id": s.id, "benchmark": s.benchmark, "profile": s.profile, "affinity": s.affinity, "threads": s.threads, "case": s.case, "parameters": s.parameters, "repeat": s.repeat}
+            {
+                "id": s.id,
+                "benchmark": s.benchmark,
+                "profile": s.profile,
+                "affinity": s.affinity,
+                "threads": s.threads,
+                "case": s.case,
+                "parameters": s.parameters,
+                "repeat": s.repeat,
+            }
             for s in plan.steps
         ]
         return validation
@@ -1066,7 +1148,11 @@ class RunService:
                 "queued_at": queued_at,
                 "config": {"snapshot": yaml_text, "sha256": plan_result["sha256"], "path": "config.yaml"},
                 "topology": topology,
-                "profiler": {"type": "perf-record", "event": "cycles:u", "frequency_hz": 99, "call_graph": "dwarf"} if perf else None,
+                "profiler": (
+                    {"type": "perf-record", "event": "cycles:u", "frequency_hz": 99, "call_graph": "dwarf"}
+                    if perf
+                    else None
+                ),
                 "options": {"perf": perf, "continue_on_error": bool(continue_on_error)},
                 "runs": [],
                 "steps": [dict(item, state="pending", artifacts=[]) for item in plan_result["plan"]],
@@ -1152,7 +1238,9 @@ class RunService:
                 if str(artifact).endswith(("stdout.txt", "stderr.txt")):
                     key = "stdout" if str(artifact).endswith("stdout.txt") else "stderr"
                     try:
-                        run["tail"][key] = (run["tail"][key] + (run["root"] / artifact).read_text(encoding="utf-8"))[-self.tail_limit :]
+                        run["tail"][key] = (run["tail"][key] + (run["root"] / artifact).read_text(encoding="utf-8"))[
+                            -self.tail_limit :
+                        ]
                     except OSError:
                         pass
         if event.get("type") == "step-finished" and step_id:
@@ -1299,7 +1387,12 @@ class RunService:
         return {
             "topology": topology_record(topology),
             "affinity": [
-                {"mode": mode, "supported": (placement := plan_affinity(mode, topology, 1)).supported, "cpus": None if placement.cpus is None else list(placement.cpus), "reason": placement.reason}
+                {
+                    "mode": mode,
+                    "supported": (placement := plan_affinity(mode, topology, 1)).supported,
+                    "cpus": None if placement.cpus is None else list(placement.cpus),
+                    "reason": placement.reason,
+                }
                 for mode in AFFINITY_MODES
             ],
         }
@@ -1342,7 +1435,11 @@ class RunService:
         if not isinstance(yaml_text, str):
             raise BenchmarkError("run does not contain a YAML configuration")
         options = manifest.get("options", {})
-        return {"yaml": yaml_text, "perf": bool(options.get("perf", manifest.get("profiler"))), "continue_on_error": bool(options.get("continue_on_error", False))}
+        return {
+            "yaml": yaml_text,
+            "perf": bool(options.get("perf", manifest.get("profiler"))),
+            "continue_on_error": bool(options.get("continue_on_error", False)),
+        }
 
     def artifact(self, run_id, relative_path):
         root = _run_directory(self.output, run_id)
@@ -1365,7 +1462,11 @@ class RunService:
             except (OSError, ValueError):
                 selected = []
         selected = [item for item in selected if isinstance(item, str) and item in model]
-        return {"runs": [{"id": item["id"], "source": item["source"]} for item in model.values()], "selected": selected, "keys": comparison_keys(model, selected)}
+        return {
+            "runs": [{"id": item["id"], "source": item["source"]} for item in model.values()],
+            "selected": selected,
+            "keys": comparison_keys(model, selected),
+        }
 
     def select_comparisons(self, selected):
         if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected):
@@ -1388,10 +1489,15 @@ class RunService:
         if run:
             with run["lock"]:
                 return [dict(e) for e in run["events"] if e["sequence"] > after]
-        path = self.output / run_id / "events.jsonl"
+        path = _run_directory(self.output, run_id) / "events.jsonl"
         if not path.is_file():
             return []
-        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if json.loads(line)["sequence"] > after]
+        events = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            event = json.loads(line)
+            if event["sequence"] > after:
+                events.append(event)
+        return events
 
 
 def production_executor(resource_loader, tool_revision):
@@ -1415,7 +1521,14 @@ def production_executor(resource_loader, tool_revision):
                 with run["lock"]:
                     if run["finalized"]:
                         return
-                    run["store"].manifest["runs"].append({"benchmark": configuration.benchmark.name, "profile": configuration.profile, "status": "running", "directory": str(relative)})
+                    run["store"].manifest["runs"].append(
+                        {
+                            "benchmark": configuration.benchmark.name,
+                            "profile": configuration.profile,
+                            "status": "running",
+                            "directory": str(relative),
+                        }
+                    )
                     run["store"].write()
 
                 def event(event):
@@ -1437,7 +1550,15 @@ def production_executor(resource_loader, tool_revision):
                         emit(item)
 
                 try:
-                    profile = run_benchmark(binary, configuration, directory, tool_revision, work_dir_hint=work, event_sink=event, cancel_event=cancelled)
+                    profile = run_benchmark(
+                        binary,
+                        configuration,
+                        directory,
+                        tool_revision,
+                        work_dir_hint=work,
+                        event_sink=event,
+                        cancel_event=cancelled,
+                    )
                 except BenchmarkInterrupted:
                     with run["lock"]:
                         if run["finalized"]:
@@ -1449,13 +1570,26 @@ def production_executor(resource_loader, tool_revision):
                     with run["lock"]:
                         if run["finalized"]:
                             return
-                        run["store"].manifest["runs"][-1].update({"status": "failed", "error": str(error), "manifest": str(relative / "run.json")})
+                        run["store"].manifest["runs"][-1].update(
+                            {"status": "failed", "error": str(error), "manifest": str(relative / "run.json")}
+                        )
                         # The actor benchmark stops after its first failed process.
                         # The durable queue still records every remaining member of
                         # this profile as terminal before the next profile starts.
                         for step in list(run["store"].manifest["steps"]):
-                            if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["state"] == "pending":
-                                emit({"type": "step-finished", "step_id": step["id"], "state": "cancelled", "fields": {"reason": "profile stopped after failure"}})
+                            if (
+                                step["benchmark"] == configuration.benchmark.name
+                                and step["profile"] == configuration.profile
+                                and step["state"] == "pending"
+                            ):
+                                emit(
+                                    {
+                                        "type": "step-finished",
+                                        "step_id": step["id"],
+                                        "state": "cancelled",
+                                        "fields": {"reason": "profile stopped after failure"},
+                                    }
+                                )
                         run["store"].write()
                     if not run["continue_on_error"]:
                         raise
@@ -1465,7 +1599,13 @@ def production_executor(resource_loader, tool_revision):
                 with run["lock"]:
                     if run["finalized"]:
                         return
-                    run["store"].manifest["runs"][-1].update({"status": "completed", "manifest": str(relative / "run.json"), "summary": str(relative / profile["summary"])})
+                    run["store"].manifest["runs"][-1].update(
+                        {
+                            "status": "completed",
+                            "manifest": str(relative / "run.json"),
+                            "summary": str(relative / profile["summary"]),
+                        }
+                    )
                     run["store"].write()
 
     return execute
@@ -1491,7 +1631,18 @@ def _handler(service):
             self._send(status, "application/json", json.dumps(value).encode())
 
         def _attachment(self, content_type, filename, body):
-            self._send(200, content_type, body, {"Content-Disposition": 'attachment; filename="{}"'.format(filename)})
+            self._send(200, content_type, body, {"Content-Disposition": _content_disposition(filename)})
+
+        def _file_attachment(self, content_type, filename, path):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Security-Policy", _CSP)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(path.stat().st_size))
+            self.send_header("Content-Disposition", _content_disposition(filename))
+            self.end_headers()
+            with path.open("rb") as stream:
+                _copy_stream(stream, self.wfile)
 
         def _raw_body(self):
             try:
@@ -1518,9 +1669,15 @@ def _handler(service):
                 raise BenchmarkError("malformed JSON request") from error
             if not isinstance(value, dict) or not isinstance(value.get("yaml"), str):
                 raise BenchmarkError("request must contain a YAML string")
-            if not isinstance(value.get("perf", False), bool) or not isinstance(value.get("continue_on_error", False), bool):
+            if not isinstance(value.get("perf", False), bool) or not isinstance(
+                value.get("continue_on_error", False), bool
+            ):
                 raise BenchmarkError("perf and continue_on_error must be booleans")
-            return {"yaml": value["yaml"], "perf": value.get("perf", False), "continue_on_error": value.get("continue_on_error", False)}
+            return {
+                "yaml": value["yaml"],
+                "perf": value.get("perf", False),
+                "continue_on_error": value.get("continue_on_error", False),
+            }
 
         def _json_body(self):
             try:
@@ -1545,7 +1702,11 @@ def _handler(service):
             if path == "/api/system-topology":
                 return self._json(200, service.topology())
             if path == "/api/runs":
-                filters = {name: values[-1] for name, values in parse_qs(parsed.query).items() if name in ("status", "benchmark", "profile", "source", "since", "until")}
+                filters = {
+                    name: values[-1]
+                    for name, values in parse_qs(parsed.query).items()
+                    if name in ("status", "benchmark", "profile", "source", "since", "until")
+                }
                 fields = (
                     "id",
                     "status",
@@ -1575,14 +1736,25 @@ def _handler(service):
             if path.startswith("/api/runs/") and path.endswith("/config"):
                 run_id = unquote(path[len("/api/runs/") : -len("/config")])
                 value = service.run_config(run_id)
-                return self._attachment("application/x-yaml; charset=utf-8", "{}-config.yaml".format(run_id.replace("/", "-")), value["yaml"].encode("utf-8"))
+                return self._attachment(
+                    "application/x-yaml; charset=utf-8",
+                    "{}-config.yaml".format(run_id.replace("/", "-")),
+                    value["yaml"].encode("utf-8"),
+                )
             if path.startswith("/api/runs/") and path.endswith("/manifest"):
                 run_id = unquote(path[len("/api/runs/") : -len("/manifest")])
                 manifest = load_manifest(_run_directory(service.output, run_id) / "run.json")
-                return self._attachment("application/json", "{}-run.json".format(run_id.replace("/", "-")), (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode())
+                return self._attachment(
+                    "application/json",
+                    "{}-run.json".format(run_id.replace("/", "-")),
+                    (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
+                )
             if path.startswith("/api/runs/") and path.endswith("/archive"):
                 run_id = unquote(path[len("/api/runs/") : -len("/archive")])
-                return self._attachment("application/zip", "{}-results.zip".format(run_id.replace("/", "-")), service.archive(run_id))
+                with service.archive(run_id) as archive:
+                    return self._file_attachment(
+                        "application/zip", "{}-results.zip".format(run_id.replace("/", "-")), archive
+                    )
             if path.startswith("/api/runs/") and "/artifact/" in path:
                 run_id, relative = path[len("/api/runs/") :].split("/artifact/", 1)
                 artifact = service.artifact(unquote(run_id), unquote(relative))
@@ -1590,9 +1762,15 @@ def _handler(service):
                 return self._attachment(content_type, artifact.name, artifact.read_bytes())
             if path.endswith("/events") and path.startswith("/api/runs/"):
                 run_id = unquote(path[len("/api/runs/") : -len("/events")])
-                after = int(parse_qs(parsed.query).get("after", [0])[0])
+                try:
+                    after = int(parse_qs(parsed.query).get("after", [0])[0])
+                except ValueError:
+                    return self._json(400, {"error": "events after must be an integer"})
                 events = service.events(run_id, after)
-                payload = b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events) or b": connected\n\n"
+                payload = (
+                    b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events)
+                    or b": connected\n\n"
+                )
                 return self._send(200, "text/event-stream", payload)
             if path.startswith("/api/runs/"):
                 item = service.detail(unquote(path[len("/api/runs/") :]))
@@ -1618,7 +1796,9 @@ def _handler(service):
                     return self._json(201, service.save_draft(options["yaml"]))
                 if path == "/api/runs":
                     options = self._options()
-                    return self._json(201, service.start(options["yaml"], options["perf"], options["continue_on_error"]))
+                    return self._json(
+                        201, service.start(options["yaml"], options["perf"], options["continue_on_error"])
+                    )
                 if path == "/api/comparisons/selection":
                     selected = self._json_body()
                     return self._json(200, service.select_comparisons(selected))

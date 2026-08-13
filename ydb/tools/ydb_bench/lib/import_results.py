@@ -15,17 +15,18 @@ import stat
 import tempfile
 import uuid
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.results import TERMINAL_STATES, load_manifest
 
-
 MAX_FILES = 512
 MAX_MEMBER_SIZE = 64 * 1024 * 1024
 MAX_TOTAL_SIZE = 256 * 1024 * 1024
 IMPORT_MANIFEST = "import.json"
+_COPY_CHUNK_SIZE = 1024 * 1024
 
 
 def _manifest_error(message):
@@ -72,7 +73,15 @@ def _cpu_list(value, field):
 def _validate_topology(value):
     if not isinstance(value, dict):
         _manifest_error("topology must be an object")
-    required = ("version", "allowed_cpus", "numa_nodes", "chiplets", "physical_cores", "smt_siblings", "hierarchy_reasons")
+    required = (
+        "version",
+        "allowed_cpus",
+        "numa_nodes",
+        "chiplets",
+        "physical_cores",
+        "smt_siblings",
+        "hierarchy_reasons",
+    )
     missing = [field for field in required if field not in value]
     if missing:
         _manifest_error("topology is missing {}".format(", ".join(missing)))
@@ -210,7 +219,15 @@ def _read_import_manifest(data):
             raise BenchmarkError("malformed import manifest entry")
         path, digest, size = item["path"], item["sha256"], item["size"]
         _safe_name(path)
-        if path in expected or not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest) or not isinstance(size, int) or size < 0 or size > MAX_MEMBER_SIZE:
+        if (
+            path in expected
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(c not in "0123456789abcdef" for c in digest)
+            or not isinstance(size, int)
+            or size < 0
+            or size > MAX_MEMBER_SIZE
+        ):
             raise BenchmarkError("malformed import manifest entry")
         expected[path] = (digest, size)
     if "run.json" not in expected:
@@ -287,13 +304,30 @@ def import_archive(output, archive_data):
                 staging.chmod(0o555)
                 os.replace(staging, destination)
             except Exception:
-                shutil.rmtree(staging, ignore_errors=True)
+                _remove_staging(staging)
                 raise
     except zipfile.BadZipFile as error:
         raise BenchmarkError("invalid import archive") from error
     return {"id": str(destination.relative_to(Path(output).resolve())), "source": "imported"}
 
 
+def _remove_staging(staging):
+    """Make an immutable staging tree removable after a failed install."""
+    if not staging.exists():
+        return
+    for path in staging.rglob("*"):
+        try:
+            path.chmod(0o700 if path.is_dir() else 0o600)
+        except OSError:
+            pass
+    try:
+        staging.chmod(0o700)
+    except OSError:
+        pass
+    shutil.rmtree(staging)
+
+
+@contextmanager
 def export_archive(run_directory):
     """Create a portable, self-describing result archive for one completed run.
 
@@ -321,18 +355,35 @@ def export_archive(run_directory):
         total += size
         if total > MAX_TOTAL_SIZE:
             raise BenchmarkError("result archive exceeds export size limit")
-        files.append((relative, path.read_bytes()))
-    if not any(path == "run.json" for path, _ in files):
+        files.append((relative, path, size))
+    if not any(relative == "run.json" for relative, _, _ in files):
         raise BenchmarkError("result archive is missing run.json")
     if not files or len(files) > MAX_FILES:
         raise BenchmarkError("result archive has invalid file count")
-    manifest = {
-        "format_version": 1,
-        "files": [{"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for path, data in files],
-    }
-    destination = io.BytesIO()
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(IMPORT_MANIFEST, json.dumps(manifest, sort_keys=True, separators=(",", ":")))
-        for path, data in files:
-            archive.writestr(path, data)
-    return destination.getvalue()
+    temporary = tempfile.NamedTemporaryFile(prefix="ydb-bench-export-", suffix=".zip", delete=False)
+    destination = Path(temporary.name)
+    temporary.close()
+    try:
+        entries = []
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for relative, path, expected_size in files:
+                digest = hashlib.sha256()
+                actual_size = 0
+                with path.open("rb") as source, archive.open(relative, "w", force_zip64=True) as sink:
+                    while True:
+                        chunk = source.read(_COPY_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        actual_size += len(chunk)
+                        if actual_size > expected_size or actual_size > MAX_MEMBER_SIZE:
+                            raise BenchmarkError("result artifact changed during export: {}".format(relative))
+                        digest.update(chunk)
+                        sink.write(chunk)
+                if actual_size != expected_size:
+                    raise BenchmarkError("result artifact changed during export: {}".format(relative))
+                entries.append({"path": relative, "sha256": digest.hexdigest(), "size": actual_size})
+            manifest = {"format_version": 1, "files": entries}
+            archive.writestr(IMPORT_MANIFEST, json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+        yield destination
+    finally:
+        destination.unlink(missing_ok=True)

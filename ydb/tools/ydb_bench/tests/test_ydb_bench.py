@@ -17,9 +17,11 @@ import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import FrozenInstanceError, fields, replace
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import quote
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import actors_core, cli, runner
+from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, web
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -887,7 +889,8 @@ class YdbBenchTest(unittest.TestCase):
         produced = load_manifest(output / "run.json")
         self.assertEqual(produced["steps"][0]["case"], 1)
         destination = self.root / "portable-destination"
-        imported = import_archive(destination, export_archive(output))
+        with export_archive(output) as archive:
+            imported = import_archive(destination, archive.read_bytes())
         restored = load_manifest(destination / imported["id"] / "run.json")
         self.assertEqual(restored["steps"][0]["case"], 1)
         self.assertEqual(restored["steps"][0]["parameters"], produced["steps"][0]["parameters"])
@@ -1674,13 +1677,123 @@ class WebTest(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             (run / "artifact.txt").open("x")
 
+    def test_import_removes_read_only_staging_after_atomic_install_failure(self):
+        with mock.patch.object(import_results.os, "replace", side_effect=OSError("injected replace failure")):
+            with self.assertRaisesRegex(OSError, "injected replace failure"):
+                import_archive(self.root, self._portable_archive())
+        self.assertEqual(list((self.root / "imports").glob(".import-*")), [])
+
     def test_export_uses_the_same_portable_archive_contract(self):
         self._manifest(self.root / "complete")
-        archive = export_archive(self.root / "complete")
         destination = self.root / "other-host"
-        imported = import_archive(destination, archive)
+        with export_archive(self.root / "complete") as archive:
+            imported = import_archive(destination, archive.read_bytes())
         self.assertEqual(imported["source"], "imported")
         self.assertEqual((destination / imported["id"] / "artifact.txt").read_text(), "artifact")
+
+    def test_web_archive_streams_from_temporary_file_and_cleans_it(self):
+        self._manifest(self.root / "complete")
+        (self.root / "complete" / "large.bin").write_bytes(b"x" * (web._STREAM_CHUNK_SIZE * 2 + 17))
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        temporary_paths = []
+        read_sizes = []
+        copy_stream = web._copy_stream
+
+        def track_copy(source, destination):
+            temporary_paths.append(Path(source.name))
+
+            class TrackedSource:
+                def read(self, size):
+                    read_sizes.append(size)
+                    return source.read(size)
+
+            copy_stream(TrackedSource(), destination)
+
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with mock.patch.object(web, "_copy_stream", side_effect=track_copy), mock.patch.object(
+                Path, "read_bytes", side_effect=AssertionError("archive must not materialize files")
+            ):
+                with urllib.request.urlopen(base + "/api/runs/complete/archive") as response:
+                    self.assertTrue(response.read().startswith(b"PK"))
+            self.assertEqual(len(temporary_paths), 1)
+            self.assertTrue(temporary_paths[0].name.startswith("ydb-bench-export-"))
+            self.assertFalse(temporary_paths[0].exists())
+            self.assertTrue(read_sizes)
+            self.assertEqual(set(read_sizes), {web._STREAM_CHUNK_SIZE})
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_run_service_events_rejects_path_traversal_for_persisted_runs(self):
+        with tempfile.TemporaryDirectory(prefix="ydb-bench-events-outside-", dir=self.root.parent) as outside:
+            outside_path = Path(outside)
+            (outside_path / "events.jsonl").write_text('{"sequence":1,"type":"outside"}\n', encoding="utf-8")
+            service = RunService(self.root)
+            with self.assertRaisesRegex(BenchmarkError, "run not found"):
+                service.events("../" + outside_path.name)
+
+    def test_run_service_events_decodes_each_persisted_line_once(self):
+        self._manifest(self.root / "complete")
+        (self.root / "complete" / "events.jsonl").write_text(
+            '{"sequence":1,"type":"first"}\n{"sequence":2,"type":"second"}\n',
+            encoding="utf-8",
+        )
+        service = RunService(self.root)
+        loads = json.loads
+        with mock.patch.object(web.json, "loads", wraps=loads) as decode:
+            events = service.events("complete", after=1)
+        self.assertEqual([event["type"] for event in events], ["second"])
+        self.assertEqual(decode.call_count, 2)
+
+    def test_download_content_disposition_encodes_hostile_run_and_artifact_names(self):
+        run_id = 'run"\r\n\\é'
+        artifact_name = 'report"\r\n\\é.txt'
+        self._manifest(self.root / run_id)
+        (self.root / run_id / artifact_name).write_text("artifact", encoding="utf-8")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            paths = (
+                "/api/runs/{}/config".format(quote(run_id, safe="")),
+                "/api/runs/{}/artifact/{}".format(quote(run_id, safe=""), quote(artifact_name, safe="")),
+            )
+            for path in paths:
+                with self.subTest(path=path), urllib.request.urlopen(base + path) as response:
+                    disposition = response.headers["Content-Disposition"]
+                    disposition.encode("ascii")
+                    self.assertEqual(disposition.count('"'), 2)
+                    self.assertNotIn("\r", disposition)
+                    self.assertNotIn("\n", disposition)
+                    self.assertNotIn("\\", disposition)
+                    self.assertNotIn("é", disposition)
+                    self.assertIn("filename*=UTF-8''", disposition)
+                    self.assertIn("%22%0D%0A%5C%C3%A9", disposition)
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_events_endpoint_rejects_non_integer_after_query(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with self.assertRaises(HTTPError) as caught:
+                urllib.request.urlopen(base + "/api/runs/complete/events?after=abc")
+            self.assertEqual(caught.exception.code, 400)
+            self.assertIn("must be an integer", caught.exception.read().decode())
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
 
     def test_comparison_key_rules(self):
         model = {
@@ -2082,7 +2195,7 @@ class WebTest(unittest.TestCase):
             except Exception as error:
                 errors.append(error)
 
-        with mock.patch("ydb.tools.ydb_bench.lib.web.discover_topology", side_effect=delayed_topology):
+        with mock.patch.object(web, "discover_topology", side_effect=delayed_topology):
             starter = threading.Thread(target=start)
             starter.start()
             self.assertTrue(discovering.wait(2))

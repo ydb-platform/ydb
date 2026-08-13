@@ -615,12 +615,14 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
-        if (TestMode && FailNextIntervalMetricsRequest) {
-            FailNextIntervalMetricsRequest = false;
-            Send(ev->Sender,
-                new TEvents::TEvUndelivered(
-                    ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected),
-                0, ev->Cookie);
+        if (TestMode && FailNextIntervalMetricsRequestCount) {
+            for (ui32 i = 0; i < FailNextIntervalMetricsRequestCount; ++i) {
+                Send(ev->Sender,
+                    new TEvents::TEvUndelivered(
+                        ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected),
+                    0, ev->Cookie);
+            }
+            FailNextIntervalMetricsRequestCount = 0;
             return;
         }
 
@@ -679,9 +681,9 @@ private:
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void Handle(TEvSysView::TEvFailNextIntervalMetricsRequest::TPtr&) {
+    void Handle(TEvSysView::TEvFailNextIntervalMetricsRequest::TPtr& ev) {
         if (TestMode) {
-            FailNextIntervalMetricsRequest = true;
+            FailNextIntervalMetricsRequestCount = ev->Get()->DuplicateFailure ? 2 : 1;
         }
     }
 
@@ -1037,7 +1039,7 @@ private:
     TExtCountersConfig Config;
     const bool HasExternalCounters;
     const bool TestMode;
-    bool FailNextIntervalMetricsRequest = false;
+    ui32 FailNextIntervalMetricsRequestCount = 0;
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;

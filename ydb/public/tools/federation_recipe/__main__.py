@@ -12,6 +12,7 @@ from library.python.testing.recipe import declare_recipe, set_env
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
 from ydb.public.tools.federation_recipe import cm_requests
 
@@ -56,11 +57,16 @@ class FederationRecipe(object):
             enable_pqcd=True,
             port_allocator=self.__port_allocators[name],
             use_legacy_pq=True,
+            additional_log_configs={
+                'PQ_MIRRORER': LogLevels.TRACE,
+            },
+            extra_feature_flags=["enable_topic_retention_delete_last_blob"]
         )
         configurator.yaml_config.setdefault('pqconfig', {})
         configurator.yaml_config['pqconfig']['pqdiscovery_config'] = {
             'lb_user_database_root': '/Root/logbroker-federation'
         }
+        configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True;
 
         cluster = kikimr_cluster_factory(configurator)
         cluster.start()

@@ -1,10 +1,11 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/admin/config_manager_admin.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/grpc/config_manager_admin.grpc.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/common.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_operation.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_status_codes.pb.h>
+#include <ydb/tests/functional/federation_test/common_functions.h>
+// #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+// #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+// #include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/admin/config_manager_admin.pb.h>
+// #include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/grpc/config_manager_admin.grpc.pb.h>
+// #include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/common.pb.h>
+// #include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_operation.pb.h>
+// #include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_status_codes.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
@@ -16,8 +17,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NTopic;
-
-namespace {
+using namespace NFederationTests;
 
 const TString prodDatabasePath  = "/Root/logbroker-federation/prod";
 const TString testDatabasePath  = "/Root/logbroker-federation/test";
@@ -27,151 +27,7 @@ const TString gapTopicPath = "gap-topic";
 const TString gapTopicCMPath = "/prod/gap-topic";
 const TString consumerName  = "consumer";
 
-TDriver MakeDriver(const std::string& endpoint, const std::string& database) {
-    return TDriver(
-        TDriverConfig()
-            .SetEndpoint(endpoint)
-            .SetDatabase(database)
-            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()))
-    );
-}
 
-void WriteMessages(const std::string& endpoint, const std::string& database,
-                   const std::string& topicPath, const std::string& producerId,
-                   const std::vector<std::string>& messages)
-{
-    TDriver driver = MakeDriver(endpoint, database);
-    TTopicClient client(driver);
-    auto session = client.CreateSimpleBlockingWriteSession(
-        TWriteSessionSettings()
-            .Path(topicPath)
-            .MessageGroupId(producerId)
-    );
-    for (const auto& msg : messages) {
-        UNIT_ASSERT(session->Write(msg));
-    }
-    session->Close();
-    driver.Stop(true);
-}
-
-std::vector<std::string> WriteLoadMessages(const std::string& endpoint, const std::string& database,
-                     const std::string& topicPath, const std::string& producerId,
-                     size_t count = 10000, size_t smallMessageSize = 2_MB, size_t bigMessageSize = 12_MB)
-{
-    TDriver driver = MakeDriver(endpoint, database);
-    TTopicClient client(driver);
-    auto session = client.CreateSimpleBlockingWriteSession(
-        TWriteSessionSettings()
-            .Path(topicPath)
-            .MessageGroupId(producerId)
-            .Codec(ECodec::RAW)
-    );
-    std::vector<std::string> payloads;
-    for (size_t i = 0; i < count; ++i) {
-        size_t targetSize = (i % 5 == 0) ? bigMessageSize : smallMessageSize;
-        std::string prefix = "msg-" + std::to_string(i) + ":";
-        std::string payload = prefix;
-        if (payload.size() < targetSize) {
-            payload.append(targetSize - payload.size(), '-');
-        }
-        UNIT_ASSERT_C(session->Write(payload),
-            "Verifiable write failed at index " + std::to_string(i));
-        payloads.push_back(std::move(payload));
-    }
-    session->Close();
-    driver.Stop(true);
-    return payloads;
-}
-
-std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
-                                          TDuration timeout = TDuration::Seconds(30))
-  {
-      std::map<uint64_t, std::string> result;
-      bool commitAckPending = false;
-      TInstant deadline = TInstant::Now() + timeout;
-
-      while (TInstant::Now() < deadline) {
-          auto event = session->GetEvent(/*block=*/false);
-          if (!event) {
-              Sleep(TDuration::MilliSeconds(50));
-              continue;
-          }
-          if (auto* e = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-              e->Confirm();
-          } else if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-              for (const auto& msg : e->GetMessages()) {
-                  result[msg.GetOffset()] = std::string(msg.GetData());
-              }
-              e->Commit();
-              commitAckPending = true;
-          } else if (std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
-              commitAckPending = false;
-          } else if (std::holds_alternative<TSessionClosedEvent>(*event)) {
-              break;
-          }
-
-          if (result.size() >= wantCount && !commitAckPending) {
-              break;
-          }
-      }
-      return result;
-  }
-
-using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
-
-NLogBroker::Operations::Operation WaitOperation(AdminStub& stub,
-                                                 const NLogBroker::Operations::Operation& initial,
-                                                 TDuration timeout = TDuration::Seconds(30))
-{
-    if (initial.ready()) {
-        return initial;
-    }
-    TInstant deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        Sleep(TDuration::MilliSeconds(200));
-        NLogBroker::Operations::GetOperationRequest req;
-        req.set_id(initial.id());
-        NLogBroker::Operations::GetOperationResponse resp;
-        grpc::ClientContext ctx;
-        if (stub.GetOperation(&ctx, req, &resp).ok() && resp.operation().ready()) {
-            return resp.operation();
-        }
-    }
-    return initial;
-}
-
-void ExecCmRequest(AdminStub& stub, NLogBroker::NAdmin::ExecuteModifyCommandsRequest& req,
-            const TString& comment)
-{
-    NLogBroker::ExecuteModifyCommandsResponse resp;
-    grpc::ClientContext ctx;
-    auto grpcStatus = stub.ExecuteModifyCommands(&ctx, req, &resp);
-    UNIT_ASSERT_C(grpcStatus.ok(),
-        comment + ": gRPC error: " + grpcStatus.error_message());
-
-    auto op = WaitOperation(stub, resp.operation());
-    UNIT_ASSERT_C(op.ready(), comment + ": operation never became ready");
-    UNIT_ASSERT_C((int)op.status() == (int)NLogBroker::StatusIds::SUCCESS,
-        comment + ": CM status " + std::to_string((int)op.status()));
-}
-
-void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& comment)
-{
-    NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
-    req.set_comment(comment);
-    // req.mutable_credentials()->set_oauth_token("test-token");
-
-    auto* action = req.add_actions();
-    action->mutable_create_topic()->mutable_path()->set_path(cmPath);
-    action->mutable_create_topic()->set_parent_template("default");
-    action->mutable_create_topic()->mutable_properties()->mutable_partitions_count()->set_user_defined(1);
-    action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_strategy()->set_user_defined("disabled");
-    action->mutable_create_topic()->mutable_properties()->mutable_supported_codecs()->set_user_defined("raw");
-
-    ExecCmRequest(stub, req, comment);
-}
-
-} // namespace
 
 struct TClusterEndpoints {
     TClusterEndpoints() {
@@ -334,37 +190,10 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
 
             auto* action = req.add_actions();
             action->mutable_update_topic()->mutable_path()->set_path(kDstTopicCmPath);
-            action->mutable_update_topic()->mutable_admin_properties()->mutable_max_partition_write_speed()->set_user_defined(5_MB);
+            action->mutable_update_topic()->mutable_admin_properties()->mutable_max_partition_write_speed()->set_user_defined(2_MB);
 
             ExecCmRequest(*stub, req, "set write quota on dst topic");
         }
-
-        // {
-        //     TDriver driver = MakeDriver(endpointA, prodDatabasePath);
-        //     TTopicClient client(driver);
-        //     auto result = client.AlterTopic(
-        //         kSrcTopicYdbPath,
-        //         TAlterTopicSettings().SetRetentionPeriod(TDuration::Seconds(1))
-        //     ).GetValueSync();
-        //     UNIT_ASSERT_C(result.IsSuccess(),
-        //         "AlterTopic retention on cluster_a failed: " + result.GetIssues().ToString());
-        //     driver.Stop(true);
-        // }
-
-        // {
-        //     TDriver driver = MakeDriver(endpointB, prodDatabasePath);
-        //     TTopicClient client(driver);
-        //     const uint64_t kDstWriteQuota = 10 * 1024; // 10 KB/s
-        //     auto result = client.AlterTopic(
-        //         kDstTopicYdbPath,
-        //         TAlterTopicSettings()
-        //             .SetPartitionWriteSpeedBytesPerSecond(kDstWriteQuota)
-        //             .SetPartitionWriteBurstBytes(kDstWriteQuota)
-        //     ).GetValueSync();
-        //     UNIT_ASSERT_C(result.IsSuccess(),
-        //         "AlterTopic write quota on cluster_b failed: " + result.GetIssues().ToString());
-        //     driver.Stop(true);
-        // }
 
         {
             NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
@@ -387,16 +216,17 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
         Sleep(TDuration::Seconds(30));
 
         std::vector<std::string> writtenPayloads = WriteLoadMessages(endpointA, prodDatabasePath, kSrcTopicYdbPath, "gaps-producer", 100);
+        UNIT_ASSERT_EQUAL(writtenPayloads.size(), 100);
         Sleep(TDuration::Seconds(5));
 
         {
             TDriver driverB = MakeDriver(endpointB, prodDatabasePath);
             TTopicClient client(driverB);
-                auto session = client.CreateReadSession(
-                    TReadSessionSettings()
-                        .ConsumerName(consumerName)
-                        .AppendTopics(TTopicReadSettings(kDstTopicYdbPath))
-                );
+            auto session = client.CreateReadSession(
+                TReadSessionSettings()
+                    .ConsumerName(consumerName)
+                    .AppendTopics(TTopicReadSettings(kDstTopicYdbPath))
+            );
 
             std::map<uint64_t, std::string> mirroredMessages = ReadMessages(session, 1000, TDuration::Seconds(10));
             Cerr << TInstant::Now() << " WrittenMessages.size()=" << writtenPayloads.size() << ", mirroredMessages.size()=" << mirroredMessages.size() << Endl;

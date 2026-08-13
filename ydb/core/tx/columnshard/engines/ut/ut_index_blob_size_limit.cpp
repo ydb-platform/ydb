@@ -31,8 +31,10 @@ constexpr ui32 NGrammIndexId = 1001;
 constexpr ui32 FilterSizeBytes = NLocalIndex::NBloom::TConstants::MaxFilterSizeBytes;
 constexpr i64 MaxBlobSize = FilterSizeBytes / 2;
 
+// falsePositiveProbability set => new sizing mode (IsOldSizingMode() == false).
 ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 filterSizeBytes = FilterSizeBytes,
-    const ui32 recordsCountBase = 1024, const TString& indexStorageId = IStoragesManager::DefaultStorageId) {
+    const ui32 recordsCountBase = 1024, const TString& indexStorageId = IStoragesManager::DefaultStorageId,
+    const std::optional<double> falsePositiveProbability = std::nullopt) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
@@ -48,9 +50,13 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 f
 
     NLocalIndex::NBloom::TRequestSettings request;
     request.NGrammSize = 3;
-    request.DeprecatedHashesCount = 2;
-    request.DeprecatedFilterSizeBytes = filterSizeBytes;
-    request.DeprecatedRecordsCount = recordsCountBase;
+    if (falsePositiveProbability) {
+        request.FalsePositiveProbability = *falsePositiveProbability;
+    } else {
+        request.DeprecatedHashesCount = 2;
+        request.DeprecatedFilterSizeBytes = filterSizeBytes;
+        request.DeprecatedRecordsCount = recordsCountBase;
+    }
     *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
         std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId, "ngramm_value", indexStorageId, false, ValueColumnId,
             NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
@@ -69,6 +75,27 @@ std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const ui32 firstPk = 1, const 
     for (ui32 i = 0; i < rowsCount; ++i) {
         UNIT_ASSERT(pkBuilder.Append(firstPk + i).ok());
         const TString value = "value_" + ::ToString(firstPk + i);
+        UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());
+    }
+    auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::utf8()) });
+    return arrow::RecordBatch::Make(schema, rowsCount, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+}
+
+// Values with many distinct n-grams so the FalsePositiveProbability-sized filter grows above the blob limit.
+std::shared_ptr<arrow::RecordBatch> MakeDiverseBatch(const ui32 firstPk, const ui32 rowsCount) {
+    static const TString alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    constexpr ui32 valueLength = 40;
+    arrow::UInt64Builder pkBuilder;
+    arrow::StringBuilder valueBuilder;
+    for (ui32 i = 0; i < rowsCount; ++i) {
+        const ui32 pk = firstPk + i;
+        UNIT_ASSERT(pkBuilder.Append(pk).ok());
+        TString value;
+        value.reserve(valueLength);
+        for (ui32 j = 0; j < valueLength; ++j) {
+            const ui64 mix = (ui64)pk * 2654435761ull + (ui64)j * 40503ull + (ui64)pk * j * 12289ull;
+            value.append(alphabet[mix % alphabet.size()]);
+        }
         UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());
     }
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::utf8()) });
@@ -227,6 +254,37 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
         UNIT_ASSERT(it != secondaryData.GetExternalData().end());
         UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 4);
+        ui32 recordsSum = 0;
+        for (const auto& chunk : it->second) {
+            UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            recordsSum += chunk->GetRecordsCountVerified();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recordsSum, 512);
+    }
+
+    // Same split, but in the new sizing mode (FalsePositiveProbability), exercising the !useOldSizing path.
+    Y_UNIT_TEST(OversizedIndexOnDefaultStorageIsSplitNewSizing) {
+        constexpr i64 blobLimit = 2_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        const auto schema = MakeSchemaWithNGrammIndex(1, FilterSizeBytes, 1024, IStoragesManager::DefaultStorageId, 0.005);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        for (ui32 i = 0; i < 4; ++i) {
+            batches.emplace_back(MakeDiverseBatch(1 + i * 128, 128));
+        }
+        const auto chunks = BuildColumnChunks(schema, batches);
+
+        TIndexInfo::TSecondaryData secondaryData;
+        secondaryData.MutableExternalData() = chunks;
+        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+            chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
+        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
+
+        const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
+        UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+        UNIT_ASSERT_GT(it->second.size(), 1);
         ui32 recordsSum = 0;
         for (const auto& chunk : it->second) {
             UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);

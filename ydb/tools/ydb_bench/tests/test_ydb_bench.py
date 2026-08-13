@@ -1123,6 +1123,53 @@ class YdbBenchTest(unittest.TestCase):
                 self.assertEqual(record["version"], 2)
                 self.assertEqual(record["allowed_cpus"], list(case["allowed"]))
 
+    def test_partial_l3_topology_disables_only_chiplet_affinity_modes(self):
+        sys_root = self.root / "partial-l3" / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-1"), (1, "2-3")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu in (0, 1):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text("0-1", encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(0, 1, 2, 3))
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)),))
+        self.assertIn("do not cover all allowed CPUs", topology.chiplet_topology_reason)
+        self.assertIn("missing: 2, 3", topology.chiplet_topology_reason)
+        self.assertIn(("chiplet", topology.chiplet_topology_reason), topology.hierarchy_reasons)
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            self.assertTrue(plan_affinity("pack-numa", topology, 1).supported)
+            placement = plan_affinity("pack-numa-pack-chiplet", topology, 1)
+        self.assertFalse(placement.supported)
+        self.assertIn("chiplet-based affinity is unavailable", placement.reason)
+
+    def test_cross_numa_l3_group_disables_chiplet_affinity_modes(self):
+        sys_root = self.root / "cross-numa-l3" / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-1"), (1, "2-3")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu in range(4):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text("0-3", encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(0, 1, 2, 3))
+
+        self.assertEqual(topology.chiplets, ())
+        self.assertIn("does not belong to exactly one NUMA node", topology.chiplet_topology_reason)
+        self.assertIn(("chiplet", topology.chiplet_topology_reason), topology.hierarchy_reasons)
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            self.assertTrue(plan_affinity("pack-numa", topology, 1).supported)
+            placement = plan_affinity("pack-numa-pack-chiplet", topology, 1)
+        self.assertFalse(placement.supported)
+        self.assertIn("chiplet-based affinity is unavailable", placement.reason)
+
     def test_affinity_modes_select_compositional_deterministic_masks(self):
         topology = CpuTopology(
             allowed_cpus=tuple(range(16)),

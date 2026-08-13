@@ -29,6 +29,10 @@ class CpuTopology:
     physical_cores: tuple = ()
     smt_siblings: tuple = ()
     hierarchy_reasons: tuple = ()
+    # A non-empty value means the discovered L3 groups cannot safely drive a
+    # chiplet-aware placement.  The raw hierarchy remains useful for display,
+    # while plan_affinity() rejects only modes which rely on this level.
+    chiplet_topology_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -134,13 +138,37 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
         if missing_die_id:
             reasons.append(("chiplet", "die_id is unavailable; affected CPUs are singleton chiplet groups"))
 
+    chiplet_topology_reasons = []
+    if l3_cpus:
+        missing_l3_cpus = tuple(sorted(allowed_set - l3_cpus))
+        if missing_l3_cpus:
+            chiplet_topology_reasons.append(
+                "L3 cache groups do not cover all allowed CPUs (missing: {})".format(
+                    ", ".join(str(cpu) for cpu in missing_l3_cpus)
+                )
+            )
+
     chiplets = []
     for cpus in sorted(chiplet_sets):
-        node_id = next(
-            (node_id for node_id, node_cpus in nodes if set(cpus).issubset(node_cpus)),
-            next((node_id for node_id, node_cpus in nodes if cpus[0] in node_cpus), -1),
+        node_ids = tuple(
+            node_id for node_id, node_cpus in nodes if set(cpus).issubset(node_cpus)
         )
+        if len(node_ids) != 1:
+            # The chiplet record has a NUMA-node identifier, so assigning this
+            # group to the node of its first CPU would fabricate a hierarchy.
+            # Keep chiplet-based modes unavailable until this topology is
+            # understood; NUMA-only modes do not rely on the L3 grouping.
+            chiplet_topology_reasons.append(
+                "L3 cache group {} does not belong to exactly one NUMA node".format(
+                    ", ".join(str(cpu) for cpu in cpus)
+                )
+            )
+            continue
+        node_id = node_ids[0]
         chiplets.append((node_id, cpus))
+    chiplet_topology_reason = "; ".join(chiplet_topology_reasons) or None
+    if chiplet_topology_reason:
+        reasons.append(("chiplet", chiplet_topology_reason))
     core_data = {}
     sibling_sets = set()
     incomplete_core_data = False
@@ -188,6 +216,7 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
         physical_cores=tuple(sorted(tuple(cpus) for cpus in core_groups.values())),
         smt_siblings=tuple(sorted(sibling_sets)),
         hierarchy_reasons=tuple(reasons),
+        chiplet_topology_reason=chiplet_topology_reason,
     )
 
 
@@ -287,6 +316,13 @@ def plan_affinity(mode, topology, required_cpus):
     if required_cpus < 1:
         return _unsupported(mode, "at least one CPU is required")
     policy = dict(_parse_mode(mode))
+    if policy.get("chiplet") and topology.chiplet_topology_reason:
+        return _unsupported(
+            mode,
+            "chiplet-based affinity is unavailable: {}".format(
+                topology.chiplet_topology_reason
+            ),
+        )
     numa_nodes = [cpus for _, cpus in topology.numa_nodes if cpus]
     if policy.get("numa") == "spread" and len(numa_nodes) < 2:
         return _unsupported(mode, "spread-numa requires at least two NUMA nodes with allowed CPUs")

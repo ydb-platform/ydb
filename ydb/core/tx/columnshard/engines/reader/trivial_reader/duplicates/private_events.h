@@ -3,9 +3,12 @@
 #include "context.h"
 #include "filters.h"
 
+#include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/common.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate {
 
@@ -29,6 +32,17 @@ public:
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 class TBuildFilterTaskExecutor;
+
+// Progressive merge state owned by either TBordersFlowController (idle) or TMergeBorders (inflight).
+// Never shared across concurrent merge tasks.
+struct TMergeRuntimeState {
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
+    TFiltersBuilder FiltersBuilder;
+    ui64 PrevRowsAdded = 0;
+    ui64 PrevRowsSkipped = 0;
+
+    explicit TMergeRuntimeState(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger);
+};
 
 class TBuildFilterTaskContext {
 private:
@@ -73,12 +87,14 @@ public:
 class TEvMergeBordersResult: public NActors::TEventLocal<TEvMergeBordersResult, NColumnShard::TEvPrivate::EvMergeBordersResult> {
 public:
     TBuildFilterTaskContext Context;
+    // Progressive Merger/FiltersBuilder ownership returned to the controller after the task.
+    std::optional<TMergeRuntimeState> MergeState;
     THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
     TConclusionStatus Result;
 
 public:
-    TEvMergeBordersResult(
-        TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
+    TEvMergeBordersResult(TBuildFilterTaskContext&& context, TMergeRuntimeState&& mergeState,
+        THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

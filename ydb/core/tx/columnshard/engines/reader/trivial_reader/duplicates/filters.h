@@ -75,7 +75,8 @@ public:
     bool AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     bool AbortWaitingPortion(const ui64 portionId, const TString& error);
-    void Abort(const TString& error);
+    // Returns number of waiting constructors aborted.
+    ui64 Abort(const TString& error);
 
     ~TFiltersStore();
 };

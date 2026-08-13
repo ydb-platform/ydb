@@ -4,10 +4,11 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext,
+TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, TMergeRuntimeState&& mergeState,
     const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata,
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
     : MergeContext(mergeContext)
+    , IdleMergeState(std::move(mergeState))
     , Counters(counters)
     , ReadMetadata(readMetadata)
 {
@@ -86,6 +87,7 @@ TString TBordersFlowController::DebugString() const {
     sb << "BordersQueue=" << BordersQueue.size() << ";";
     sb << "Reverse=" << IsReversed() << ";";
     sb << "MergeInflight=" << IsInflight << ";";
+    sb << "IdleMergeState=" << IdleMergeState.has_value() << ";";
     sb << "}";
     return sb;
 }
@@ -131,6 +133,7 @@ void TBordersFlowController::DrainQueue() {
     if (IsInflight || BordersQueue.empty()) {
         return;
     }
+    AFL_VERIFY(IdleMergeState.has_value());
     Counters->OnMergeQueue(-1);
     auto ev = BordersQueue.front();
     BordersQueue.pop_front();
@@ -139,23 +142,31 @@ void TBordersFlowController::DrainQueue() {
     while (auto readyBorder = NextReadyBorder()) {
         readyBorders.push_back(*readyBorder);
     }
-    const std::shared_ptr<TMergeBorders> task = std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, ev, readyBorders);
+    TMergeRuntimeState state = std::move(*IdleMergeState);
+    IdleMergeState.reset();
+    const std::shared_ptr<TMergeBorders> task =
+        std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, std::move(state), ev, readyBorders);
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     IsInflight = true;
     Counters->OnMergeInflight(1);
 }
 
-void TBordersFlowController::OnReadyMergeBorders() {
-    IsInflight = false;
-    Counters->OnMergeInflight(-1);
-    DrainQueue();
+void TBordersFlowController::ReturnMergeState(TMergeRuntimeState&& state) {
+    AFL_VERIFY(!IdleMergeState.has_value());
+    IdleMergeState.emplace(std::move(state));
 }
 
-void TBordersFlowController::ClearInflightOnAbort() {
-    if (IsInflight) {
-        IsInflight = false;
-        Counters->OnMergeInflight(-1);
+void TBordersFlowController::OnReadyMergeBorders(const bool allowDrain) {
+    AFL_VERIFY(IsInflight);
+    AFL_VERIFY(IdleMergeState.has_value());
+    IsInflight = false;
+    Counters->OnMergeInflight(-1);
+    if (allowDrain) {
+        DrainQueue();
     }
+}
+
+void TBordersFlowController::AbortPendingMerges() {
     if (!BordersQueue.empty()) {
         Counters->OnMergeQueue(-1 * static_cast<i64>(BordersQueue.size()));
         BordersQueue.clear();

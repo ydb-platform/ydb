@@ -7,31 +7,41 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
-    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions,
-    const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns)
-    : Merger(std::move(merger))
-    , Counters(std::move(counters))
+TMergeContext::TMergeContext(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed,
+    const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns,
+    const std::shared_ptr<const TAtomicCounter>& abortionFlag)
+    : Counters(std::move(counters))
     , IsReversed(reversed)
     , Portions(portions)
     , FetchingColumns(fetchingColumns)
+    , AbortionFlag(abortionFlag)
 {
 }
 
-TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context,
+TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, TMergeRuntimeState&& state,
     const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders)
     : Owner(owner)
     , Context(context)
+    , State(std::move(state))
     , Event(event)
     , ReadyBorders(readyBorders)
 {
 }
 
+void TMergeBorders::SendResult(THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion) {
+    TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
+                                                         std::move(State), std::move(readyFilters), std::move(conclusion)));
+}
+
 void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     auto sendFailure = [&](const TString& reason) {
-        TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
-                                                             THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
+        SendResult(THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason));
     };
+
+    if (Context->IsAborted()) {
+        sendFailure("duplicate filter merge aborted");
+        return;
+    }
 
     auto columnData = Event->Get()->Result->ExtractDataByPortion(Context->FetchingColumns);
     for (const auto& [portionId, data] : columnData) {
@@ -41,26 +51,26 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                                          << ": meta=" << expectedRecordsCount << ", fetched=" << data->GetRecordsCount());
             return;
         }
-        Context->Merger->AddSource(data, nullptr,
+        State.Merger->AddSource(data, nullptr,
             Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
-        Context->FiltersBuilder.AddSource(portionId, expectedRecordsCount);
+        State.FiltersBuilder.AddSource(portionId, expectedRecordsCount);
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
             {"event", "TMergeBorders::DoExecute"},
             {"type", "add_source"},
             {"portionId", portionId},
             {"recordsCount", data->GetRecordsCount()},
-            {"builder", Context->FiltersBuilder.DebugString()});
+            {"builder", State.FiltersBuilder.DebugString()});
     }
 
-    if (!(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty())) {
+    if (!(State.FiltersBuilder.CountSources() > 0 || ReadyBorders.empty())) {
         sendFailure("duplicate filter merge has ready borders but no sources");
         return;
     }
 
     for (const auto& readyBorder : ReadyBorders) {
-        Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
-        if (!Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true)) {
+        State.Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
+        if (!State.Merger->DrainToControlPoint(State.FiltersBuilder, true)) {
             sendFailure(TStringBuilder() << "cannot drain duplicate filter merger to control point "
                                          << readyBorder.BuildSortablePosition(Context->IsReversed).DebugString());
             return;
@@ -70,22 +80,20 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             {"event", "TMergeBorders::DoExecute"},
             {"type", "drain"},
             {"border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString()},
-            {"builder", Context->FiltersBuilder.DebugString()});
+            {"builder", State.FiltersBuilder.DebugString()});
     }
 
     Context->Counters->OnRowsMerged(
-        Context->FiltersBuilder.GetRowsAdded() - Context->PrevRowsAdded, Context->FiltersBuilder.GetRowsSkipped() - Context->PrevRowsSkipped, 0);
-    Context->PrevRowsAdded = Context->FiltersBuilder.GetRowsAdded();
-    Context->PrevRowsSkipped = Context->FiltersBuilder.GetRowsSkipped();
+        State.FiltersBuilder.GetRowsAdded() - State.PrevRowsAdded, State.FiltersBuilder.GetRowsSkipped() - State.PrevRowsSkipped, 0);
+    State.PrevRowsAdded = State.FiltersBuilder.GetRowsAdded();
+    State.PrevRowsSkipped = State.FiltersBuilder.GetRowsSkipped();
 
-    auto readyFilters = Context->FiltersBuilder.ExtractReadyFilters();
-    TActivationContext::AsActorContext().Send(Owner,
-        std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), std::move(readyFilters), TConclusionStatus::Success()));
+    auto readyFilters = State.FiltersBuilder.ExtractReadyFilters();
+    SendResult(std::move(readyFilters), TConclusionStatus::Success());
 }
 
 void TMergeBorders::DoOnCannotExecute(const TString& reason) {
-    TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
-                                                         THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
+    SendResult(THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason));
 }
 
 TString TMergeBorders::GetTaskClassIdentifier() const {

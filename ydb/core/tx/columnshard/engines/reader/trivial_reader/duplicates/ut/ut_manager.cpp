@@ -24,6 +24,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -39,6 +40,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
@@ -213,6 +216,67 @@ public:
     STFUNC(StateWork) {
         // Drop all conveyor tasks, including BUILD_DUPLICATE_FILTERS / TMergeBorders.
         Y_UNUSED(ev);
+    }
+};
+
+// Captures BUILD_DUPLICATE_FILTERS tasks so tests can abort the manager while merge is "inflight",
+// then execute the held task afterwards (lifetime race from #49177 / #48648).
+struct TEvReleaseHeldTasks: public NActors::TEventLocal<TEvReleaseHeldTasks, 12345> {};
+
+class THoldingDeduplicationConveyorService: public NActors::TActor<THoldingDeduplicationConveyorService> {
+    using TBase = NActors::TActor<THoldingDeduplicationConveyorService>;
+
+    TMutex Mutex;
+    std::vector<NConveyor::ITask::TPtr> Held;
+    std::atomic<bool> ExecuteImmediately{ false };
+    std::atomic<ui64> HeldCountAtomic{ 0 };
+
+public:
+    THoldingDeduplicationConveyorService()
+        : TBase(&THoldingDeduplicationConveyorService::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConveyorComposite::TEvExecution::TEvNewTask, Handle);
+            hFunc(TEvReleaseHeldTasks, HandleRelease);
+            default:
+                break;
+        }
+    }
+
+    void Handle(NConveyorComposite::TEvExecution::TEvNewTask::TPtr& ev) {
+        auto task = ev->Get()->GetTask();
+        AFL_VERIFY(!!task);
+        if (ExecuteImmediately.load()) {
+            task->Execute(nullptr, task);
+            return;
+        }
+        with_lock(Mutex) {
+            Held.push_back(std::move(task));
+            HeldCountAtomic.store(Held.size());
+        }
+    }
+
+    void HandleRelease(TEvReleaseHeldTasks::TPtr&) {
+        std::vector<NConveyor::ITask::TPtr> tasks;
+        with_lock(Mutex) {
+            tasks.swap(Held);
+            HeldCountAtomic.store(0);
+        }
+        // Must run under actor context: TMergeBorders::DoExecute uses TActivationContext::AsActorContext().
+        for (auto& task : tasks) {
+            task->Execute(nullptr, task);
+        }
+    }
+
+    ui64 HeldCount() const {
+        return HeldCountAtomic.load();
+    }
+
+    void SetExecuteImmediately(const bool value) {
+        ExecuteImmediately.store(value);
     }
 };
 
@@ -3950,5 +4014,180 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub1->Failed, "P1 must fail on records count mismatch, got: " << sub1->FailureReason);
         UNIT_ASSERT_C(sub2->Failed, "P2 must fail on records count mismatch, got: " << sub2->FailureReason);
         UNIT_ASSERT_STRING_CONTAINS(sub1->FailureReason, "records mismatch");
+    }
+
+    // Repro attempt for https://github.com/ydb-platform/ydb/issues/49177:
+    // AbortAndPassAway / AbortPendingMerges while TMergeBorders is held, then execute merge
+    // under a real actor context (Send to dead Owner) and keep driving Next on a fresh manager.
+    Y_UNIT_TEST(AbortWhileMergeHeldThenNextOnFreshManager) {
+        NActors::TTestActorRuntimeBase runtime(1, false);
+        InitializeRuntimeWithLogging(runtime);
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+        EnableDeduplicationConveyorFlag();
+        UNIT_ASSERT(NConveyorComposite::TServiceOperator::IsEnabled());
+        auto* holdingConveyor = new THoldingDeduplicationConveyorService();
+        const NActors::TActorId holdingId = runtime.Register(holdingConveyor);
+        const auto conveyorServiceId = NConveyorComposite::TServiceOperator::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(conveyorServiceId, holdingId);
+
+        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+        std::deque<std::shared_ptr<TPortionInfo>> portions;
+        TColumnDataMap columnStore;
+        for (ui64 i = 0; i < 20; ++i) {
+            const ui64 start = i;
+            const ui64 end = i + 8;
+            const ui32 records = 9;
+            portions.push_back(MakeTestPortion(i + 1, start, end, records));
+            std::vector<ui64> pk;
+            std::vector<ui64> ps;
+            std::vector<ui64> tx;
+            std::vector<ui64> wr;
+            for (ui64 k = start; k <= end; ++k) {
+                pk.push_back(k);
+                ps.push_back(10 + i);
+                tx.push_back(1);
+                wr.push_back(0);
+            }
+            RegisterColumnData(columnStore, tabletActorId, i + 1, pk, ps, tx, wr);
+        }
+
+        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(cacheId, runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+        TManagerSetupResult setup1;
+        auto manager1 = SetupDuplicateManager(runtime, TSnapshot(1000, 1), portions, dam, cdm, tabletActorId, setup1, ERequestSorting::NONE);
+        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        auto sub1 = std::make_shared<TTestFilterSubscriber>();
+        auto sub2 = std::make_shared<TTestFilterSubscriber>();
+        runtime.Send(MakeFilterRequestHandle(manager1, edgeActor, portions[0]->GetPortionId(), portions[0]->GetRecordsCount(), sub1));
+        runtime.Send(MakeFilterRequestHandle(manager1, edgeActor, portions[1]->GetPortionId(), portions[1]->GetRecordsCount(), sub2));
+
+        NActors::TDispatchOptions holdOpts;
+        holdOpts.CustomFinalCondition = [&]() {
+            return holdingConveyor->HeldCount() > 0;
+        };
+        runtime.DispatchEvents(holdOpts, TDuration::Seconds(10));
+        UNIT_ASSERT_C(holdingConveyor->HeldCount() > 0, "expected at least one held merge task");
+
+        // Abort while merge task is captured (abort must not clear merge inflight early).
+        runtime.Send(new NActors::IEventHandle(manager1, edgeActor, new NActors::TEvents::TEvPoison()));
+        runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::MilliSeconds(100));
+
+        // Execute merge after PassAway, but inside an actor (AsActorContext required by DoExecute).
+        runtime.Send(new NActors::IEventHandle(holdingId, edgeActor, new TEvReleaseHeldTasks()));
+        {
+            NActors::TDispatchOptions releaseOpts;
+            releaseOpts.CustomFinalCondition = [&]() {
+                return holdingConveyor->HeldCount() == 0;
+            };
+            runtime.DispatchEvents(releaseOpts, TDuration::Seconds(5));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(holdingConveyor->HeldCount(), 0);
+
+        // Switch to inline conveyor and hammer Next/BuildSortablePosition on a fresh manager.
+        runtime.RegisterService(conveyorServiceId, runtime.Register(new TInlineExecutingConveyorService()));
+
+        TManagerSetupResult setup2;
+        auto manager2 = SetupDuplicateManager(runtime, TSnapshot(1000, 1), portions, dam, cdm, tabletActorId, setup2, ERequestSorting::NONE);
+
+        std::vector<std::shared_ptr<TTestFilterSubscriber>> subs2;
+        for (ui32 i = 0; i < portions.size(); ++i) {
+            auto sub = std::make_shared<TTestFilterSubscriber>();
+            subs2.push_back(sub);
+            runtime.Send(MakeFilterRequestHandle(manager2, edgeActor, portions[i]->GetPortionId(), portions[i]->GetRecordsCount(), sub));
+        }
+
+        NActors::TDispatchOptions doneOpts;
+        doneOpts.CustomFinalCondition = [&]() {
+            for (const auto& s : subs2) {
+                if (!s->FilterReady && !s->Failed) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        runtime.DispatchEvents(doneOpts, TDuration::Seconds(30));
+
+        for (ui32 i = 0; i < subs2.size(); ++i) {
+            UNIT_ASSERT_C(subs2[i]->FilterReady || subs2[i]->Failed, "subscriber " << i << " stuck; reason=" << subs2[i]->FailureReason);
+        }
+    }
+
+    // Concurrent managers each calling Next/BuildSortablePosition (coredump had two such stacks).
+    Y_UNIT_TEST(ConcurrentManagersNextBuildSortablePositionStress) {
+        NActors::TTestActorRuntimeBase runtime(1, /*useRealThreads=*/true);
+        InitializeRuntimeWithLogging(runtime);
+        EnsureInlineDeduplicationConveyor(runtime);
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+        std::deque<std::shared_ptr<TPortionInfo>> portions;
+        TColumnDataMap columnStore;
+        for (ui64 i = 0; i < 30; ++i) {
+            const ui64 start = i * 2;
+            const ui64 end = start + 15;
+            const ui32 records = 16;
+            portions.push_back(MakeTestPortion(i + 1, start, end, records));
+            std::vector<ui64> pk;
+            std::vector<ui64> ps;
+            std::vector<ui64> tx;
+            std::vector<ui64> wr;
+            for (ui64 k = start; k <= end; ++k) {
+                pk.push_back(k);
+                ps.push_back(10 + i);
+                tx.push_back(1);
+                wr.push_back(0);
+            }
+            RegisterColumnData(columnStore, tabletActorId, i + 1, pk, ps, tx, wr);
+        }
+
+        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(cacheId, runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+        constexpr ui32 ManagerCount = 4;
+        std::vector<TManagerSetupResult> setups(ManagerCount);
+        std::vector<NActors::TActorId> managers;
+        for (ui32 m = 0; m < ManagerCount; ++m) {
+            managers.push_back(
+                SetupDuplicateManager(runtime, TSnapshot(1000, 1), portions, dam, cdm, tabletActorId, setups[m], ERequestSorting::NONE));
+        }
+
+        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+        std::vector<std::shared_ptr<TTestFilterSubscriber>> subs;
+        for (ui32 m = 0; m < ManagerCount; ++m) {
+            for (ui32 i = 0; i < portions.size(); ++i) {
+                auto sub = std::make_shared<TTestFilterSubscriber>();
+                subs.push_back(sub);
+                runtime.Send(
+                    MakeFilterRequestHandle(managers[m], edgeActor, portions[i]->GetPortionId(), portions[i]->GetRecordsCount(), sub), 0, true);
+            }
+        }
+
+        // Real-threads runtime: poll until subscribers settle.
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline) {
+            bool done = true;
+            for (const auto& s : subs) {
+                if (!s->FilterReady && !s->Failed) {
+                    done = false;
+                    break;
+                }
+            }
+            if (done) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+
+        for (ui32 i = 0; i < subs.size(); ++i) {
+            UNIT_ASSERT_C(subs[i]->FilterReady || subs[i]->Failed,
+                "subscriber " << i << " stuck; failed=" << subs[i]->Failed << " reason=" << subs[i]->FailureReason);
+        }
     }
 }

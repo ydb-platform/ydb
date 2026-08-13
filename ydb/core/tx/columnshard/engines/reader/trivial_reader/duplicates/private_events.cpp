@@ -87,9 +87,16 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
 {
 }
 
-TEvMergeBordersResult::TEvMergeBordersResult(
-    TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
+TMergeRuntimeState::TMergeRuntimeState(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
+    : Merger(std::move(merger))
+{
+    AFL_VERIFY(!!Merger);
+}
+
+TEvMergeBordersResult::TEvMergeBordersResult(TBuildFilterTaskContext&& context, TMergeRuntimeState&& mergeState,
+    THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
     : Context(std::move(context))
+    , MergeState(std::move(mergeState))
     , ReadyFilters(std::move(readyFilters))
     , Result(std::move(conclusion))
 {

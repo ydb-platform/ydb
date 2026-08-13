@@ -160,11 +160,13 @@ bool TFiltersStore::AbortWaitingPortion(const ui64 portionId, const TString& err
     return true;
 }
 
-void TFiltersStore::Abort(const TString& error) {
+ui64 TFiltersStore::Abort(const TString& error) {
+    const ui64 aborted = WaitingPortions.size();
     for (const auto& [_, constructor] : WaitingPortions) {
         constructor->Abort(error);
     }
     WaitingPortions.clear();
+    return aborted;
 }
 
 TFiltersStore::~TFiltersStore() {

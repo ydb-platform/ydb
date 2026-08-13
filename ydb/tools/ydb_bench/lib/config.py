@@ -13,7 +13,6 @@ from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
-
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 _PROFILE_NAME_RE = re.compile(PROFILE_NAME_PATTERN)
 _COMMON_REQUIRED_FIELDS = ("threads", "duration", "repetitions", "affinity")
@@ -176,10 +175,30 @@ def build_run_plan(loaded_config):
             for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
                 threads = case["threads"]
                 for repeat in range(1, configuration.repetitions + 1):
-                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, repeat)
-                    step = RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, threads, case_index, case["parameters"], repeat, configuration)
+                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(
+                        len(steps) + 1,
+                        configuration.benchmark.name,
+                        configuration.profile,
+                        affinity,
+                        threads,
+                        case_index,
+                        repeat,
+                    )
+                    step = RunStep(
+                        step_id,
+                        configuration.benchmark.name,
+                        configuration.profile,
+                        affinity,
+                        threads,
+                        case_index,
+                        case["parameters"],
+                        repeat,
+                        configuration,
+                    )
                     steps.append(step)
-                    step_ids[_step_key(step.benchmark, step.profile, step.affinity, step.threads, step.case, step.repeat)] = step.id
+                    step_ids[
+                        _step_key(step.benchmark, step.profile, step.affinity, step.threads, step.case, step.repeat)
+                    ] = step.id
     return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps), MappingProxyType(step_ids))
 
 
@@ -239,7 +258,9 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if not isinstance(value, dict):
         _config_error(location, "must be a mapping")
 
-    allowed_fields = set(_COMMON_REQUIRED_FIELDS + _COMMON_OPTIONAL_FIELDS + tuple(item.name for item in benchmark.parameters))
+    allowed_fields = set(
+        _COMMON_REQUIRED_FIELDS + _COMMON_OPTIONAL_FIELDS + tuple(item.name for item in benchmark.parameters)
+    )
     missing = sorted(set(_COMMON_REQUIRED_FIELDS) - set(value))
     unknown = sorted((field for field in value if field not in allowed_fields), key=str)
     if missing:
@@ -252,7 +273,11 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     for parameter in benchmark.parameters:
         raw = value.get(parameter.name, list(parameter.default))
         if parameter.value_type == "integer":
-            parsed = _positive_integer_list(raw, location + "." + parameter.name) if parameter.minimum != 0 else _nonnegative_integer_list(raw, location + "." + parameter.name)
+            parsed = (
+                _positive_integer_list(raw, location + "." + parameter.name)
+                if parameter.minimum != 0
+                else _nonnegative_integer_list(raw, location + "." + parameter.name)
+            )
         elif parameter.value_type == "string":
             if not isinstance(raw, list) or not raw or not all(isinstance(item, str) for item in raw):
                 _config_error(location + "." + parameter.name, "must be a non-empty array of strings")
@@ -262,7 +287,9 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
         if parameter.minimum is not None and any(item < parameter.minimum for item in parsed):
             _config_error(location + "." + parameter.name, "contains a value below {}".format(parameter.minimum))
         if parameter.choices and any(item not in parameter.choices for item in parsed):
-            _config_error(location + "." + parameter.name, "contains a value outside {}".format(list(parameter.choices)))
+            _config_error(
+                location + "." + parameter.name, "contains a value outside {}".format(list(parameter.choices))
+            )
         if parameter.maximum is not None and any(item > parameter.maximum for item in parsed):
             _config_error(location + "." + parameter.name, "contains a value above {}".format(parameter.maximum))
         parameters[parameter.name] = parsed

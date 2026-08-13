@@ -14,7 +14,6 @@ from ydb.tools.ydb_bench.benchmarks.registry import (
 )
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
-
 DIMENSIONS = (
     DimensionDefinition("threads"),
     DimensionDefinition("random_percent"),
@@ -75,13 +74,20 @@ def render_metrics(rows, benchmark):
 
 
 def validate_metrics(rows, configuration, case):
-    expected = {"threads": case["threads"], **{name.replace("-", "_"): value for name, value in case["parameters"].items()}}
-    unexpected = [{name: (row.get(name), value) for name, value in expected.items() if row.get(name) != value} for row in rows]
+    expected = {
+        "threads": case["threads"],
+        **{name.replace("-", "_"): value for name, value in case["parameters"].items()},
+    }
+    unexpected = [
+        {name: (row.get(name), value) for name, value in expected.items() if row.get(name) != value} for row in rows
+    ]
     if not rows or any(unexpected):
         raise BenchmarkError("memory benchmark dimensions do not match the process case: {}".format(unexpected))
     expected_rows = 5 * (1 + bool(rows[0]["sequential_threads"]) + bool(rows[0]["random_threads"]))
     if len(rows) != expected_rows:
-        raise BenchmarkError("memory benchmark produced {} aggregate rows instead of {}".format(len(rows), expected_rows))
+        raise BenchmarkError(
+            "memory benchmark produced {} aggregate rows instead of {}".format(len(rows), expected_rows)
+        )
 
 
 def parse_worker_metrics(stdout, benchmark):
@@ -93,7 +99,12 @@ def parse_worker_metrics(stdout, benchmark):
     result = []
     for row in csv.DictReader(lines[index:]):
         try:
-            result.append({name: (value if name == "scope" else int(value) if name == "worker" else float(value)) for name, value in row.items()})
+            result.append(
+                {
+                    name: (value if name == "scope" else int(value) if name == "worker" else float(value))
+                    for name, value in row.items()
+                }
+            )
         except (TypeError, ValueError):
             continue
     if not result:
@@ -122,7 +133,14 @@ def summarize_metrics(repetition_rows, benchmark):
         record.update({item.name: value for item, value in zip(benchmark.dimensions, key[1:])})
         for metric in benchmark.metrics:
             values = [row[metric.name] for row in rows]
-            record.update({"median_" + metric.name: statistics.median(values), "mean_" + metric.name: statistics.mean(values), "min_" + metric.name: min(values), "max_" + metric.name: max(values)})
+            record.update(
+                {
+                    "median_" + metric.name: statistics.median(values),
+                    "mean_" + metric.name: statistics.mean(values),
+                    "min_" + metric.name: min(values),
+                    "max_" + metric.name: max(values),
+                }
+            )
         result.append(record)
     return result
 
@@ -180,8 +198,23 @@ MEMORY_BENCHMARK = BENCHMARKS.register(
         "mixed sequential and random memory workload",
         "memory_benchmark",
         (
-            ParameterDefinition("random-percent", "Percentage of random workers", default=(0, 25, 50, 75, 100), matrix=True, minimum=0, maximum=100),
-            ParameterDefinition("random-mode", "Random worker operation", value_type="string", default=("copy",), matrix=True, minimum=None, choices=("copy", "write")),
+            ParameterDefinition(
+                "random-percent",
+                "Percentage of random workers",
+                default=(0, 25, 50, 75, 100),
+                matrix=True,
+                minimum=0,
+                maximum=100,
+            ),
+            ParameterDefinition(
+                "random-mode",
+                "Random worker operation",
+                value_type="string",
+                default=("copy",),
+                matrix=True,
+                minimum=None,
+                choices=("copy", "write"),
+            ),
             ParameterDefinition("buffer-size-mb", "Private buffer size per worker", default=(256,), matrix=True),
             ParameterDefinition("part-size-kb", "Sequential memcpy block size", default=(2048,), matrix=True),
         ),

@@ -80,7 +80,14 @@ def _benchmark_record(benchmark):
         "description": benchmark.description,
         "resource": benchmark.resource_name,
         "parameters": [
-            {"name": item.name, "description": item.description, "type": item.value_type, "default": list(item.default), "matrix": item.matrix, "choices": list(item.choices)}
+            {
+                "name": item.name,
+                "description": item.description,
+                "type": item.value_type,
+                "default": list(item.default),
+                "matrix": item.matrix,
+                "choices": list(item.choices),
+            }
             for item in benchmark.parameters
         ],
         "dimensions": [item.name for item in benchmark.dimensions],
@@ -88,7 +95,9 @@ def _benchmark_record(benchmark):
         "defaults": {item.name: list(item.default) for item in benchmark.parameters},
         "affinity_modes": list(AFFINITY_MODES),
         "csv_columns": list(benchmark.csv_columns),
-        "examples": [{benchmark.name: {"example": {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}}}],
+        "examples": [
+            {benchmark.name: {"example": {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}}}
+        ],
     }
 
 
@@ -146,7 +155,9 @@ def _cancel_unfinished_steps(store, reason, benchmark=None, profile=None):
         except Exception as error:
             # Finalization is best-effort specifically so a secondary storage
             # failure cannot replace the benchmark error which stopped the run.
-            store.manifest.setdefault("finalization_errors", []).append("cannot cancel step {}: {}".format(step["id"], error))
+            store.manifest.setdefault("finalization_errors", []).append(
+                "cannot cancel step {}: {}".format(step["id"], error)
+            )
 
 
 def _run(arguments, resource_loader, tool_revision):
@@ -222,7 +233,9 @@ def _run(arguments, resource_loader, tool_revision):
             for configuration in loaded_config.runs:
                 resource_name = configuration.benchmark.resource_name
                 if resource_name not in binaries:
-                    binaries[resource_name] = extract_executable(resource_loader(resource_name), temporary_directory, resource_name)
+                    binaries[resource_name] = extract_executable(
+                        resource_loader(resource_name), temporary_directory, resource_name
+                    )
                 binary = binaries[resource_name]
                 binary_record = {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
                 manifest["binaries"][resource_name] = binary_record
@@ -378,7 +391,11 @@ def main(argv=None, resource_loader=None, tool_revision=None):
                 else:
                     print("ydb_bench: error: {}".format(error), file=sys.stderr)
                 return 1
-            result = {"valid": True, "config": {"path": str(loaded.path), "sha256": loaded.sha256}, "steps": len(build_run_plan(loaded).steps)}
+            result = {
+                "valid": True,
+                "config": {"path": str(loaded.path), "sha256": loaded.sha256},
+                "steps": len(build_run_plan(loaded).steps),
+            }
             if arguments.json:
                 print(json.dumps(result, sort_keys=True))
             else:

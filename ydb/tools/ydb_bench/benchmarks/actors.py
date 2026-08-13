@@ -13,7 +13,6 @@ from ydb.tools.ydb_bench.benchmarks.registry import (
 )
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
-
 ACTOR_METRICS = (
     MetricDefinition("msgs_per_sec", "messages/s"),
     MetricDefinition("elapsed_seconds", "s"),
@@ -27,7 +26,9 @@ def parse_metrics(stdout, benchmark):
     try:
         header_index = next(index for index, line in enumerate(lines) if line.strip() == benchmark.csv_header)
     except StopIteration as error:
-        raise BenchmarkError("benchmark output does not contain the expected CSV header for {}".format(benchmark.name)) from error
+        raise BenchmarkError(
+            "benchmark output does not contain the expected CSV header for {}".format(benchmark.name)
+        ) from error
     rows = []
     for line in lines[header_index + 1 :]:
         try:
@@ -37,7 +38,12 @@ def parse_metrics(stdout, benchmark):
         if len(values) != len(benchmark.csv_columns):
             continue
         try:
-            rows.append({name: (float(value) if name in ("msgs_per_sec", "elapsed_seconds") else int(value)) for name, value in zip(benchmark.csv_columns, values)})
+            rows.append(
+                {
+                    name: (float(value) if name in ("msgs_per_sec", "elapsed_seconds") else int(value))
+                    for name, value in zip(benchmark.csv_columns, values)
+                }
+            )
         except ValueError:
             continue
     if not rows:
@@ -55,12 +61,20 @@ def render_metrics(rows, benchmark):
 
 def validate_metrics(rows, configuration, case=None):
     column = configuration.benchmark.parameter_column
-    expected = {(configuration.threads[0], pairs, value) for pairs in configuration.parameters["actor-pairs"] for value in configuration.parameters[configuration.benchmark.parameter_name]}
+    expected = {
+        (configuration.threads[0], pairs, value)
+        for pairs in configuration.parameters["actor-pairs"]
+        for value in configuration.parameters[configuration.benchmark.parameter_name]
+    }
     actual = {(row["threads"], row["actorPairs"], row[column]) for row in rows}
     if len(actual) != len(rows):
         raise BenchmarkError("benchmark produced duplicate metric rows")
     if actual != expected:
-        raise BenchmarkError("benchmark metric parameters do not match the request; missing={}, unexpected={}".format(sorted(expected - actual), sorted(actual - expected)))
+        raise BenchmarkError(
+            "benchmark metric parameters do not match the request; missing={}, unexpected={}".format(
+                sorted(expected - actual), sorted(actual - expected)
+            )
+        )
 
 
 def summarize_metrics(repetition_rows, benchmark):
@@ -76,7 +90,13 @@ def summarize_metrics(repetition_rows, benchmark):
         record.update({item.name: value for item, value in zip(benchmark.dimensions, key[1:])})
         for metric in benchmark.metrics:
             values = [row[metric.name] for row in rows]
-            record.update({"median_" + metric.name: statistics.median(values), "min_" + metric.name: min(values), "max_" + metric.name: max(values)})
+            record.update(
+                {
+                    "median_" + metric.name: statistics.median(values),
+                    "min_" + metric.name: min(values),
+                    "max_" + metric.name: max(values),
+                }
+            )
         summary.append(record)
     return summary
 
@@ -119,8 +139,14 @@ def process_measurement_count(parameters):
 
 
 def _benchmark(name, description, test_filter, parameter):
-    actor_pairs = ParameterDefinition("actor-pairs", "Actor pair counts", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs")
-    dimensions = (DimensionDefinition("threads"), DimensionDefinition("actorPairs"), DimensionDefinition(parameter.column))
+    actor_pairs = ParameterDefinition(
+        "actor-pairs", "Actor pair counts", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs"
+    )
+    dimensions = (
+        DimensionDefinition("threads"),
+        DimensionDefinition("actorPairs"),
+        DimensionDefinition(parameter.column),
+    )
     value = BenchmarkDefinition(
         name,
         description,
@@ -147,7 +173,13 @@ PING_BENCHMARK = BENCHMARKS.register(
         "ping-bench",
         "pairwise actor ping throughput",
         "HeavyActorBenchmark::SendActivateReceiveCSVManual",
-        ParameterDefinition("inflight", "Maximum in-flight messages per actor pair", default=(1,), environment="ACTORSYSTEM_INFLIGHTS", column="in_flight"),
+        ParameterDefinition(
+            "inflight",
+            "Maximum in-flight messages per actor pair",
+            default=(1,),
+            environment="ACTORSYSTEM_INFLIGHTS",
+            column="in_flight",
+        ),
     )
 )
 STAR_PING_BENCHMARK = BENCHMARKS.register(
@@ -155,6 +187,12 @@ STAR_PING_BENCHMARK = BENCHMARKS.register(
         "star-ping-bench",
         "star-topology actor ping throughput",
         "HeavyActorBenchmark::StarSendActivateReceiveCSVManual",
-        ParameterDefinition("stars", "Star multipliers used by the star-topology benchmark", default=(1,), environment="ACTORSYSTEM_STARS", column="star_multiply"),
+        ParameterDefinition(
+            "stars",
+            "Star multipliers used by the star-topology benchmark",
+            default=(1,),
+            environment="ACTORSYSTEM_STARS",
+            column="star_multiply",
+        ),
     )
 )

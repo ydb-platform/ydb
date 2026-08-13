@@ -29,7 +29,12 @@ from ydb.tools.ydb_bench.lib.actors_core import (
 )
 from ydb.tools.ydb_bench.benchmarks import MEMORY_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.memory import parse_worker_metrics, validate_metrics as validate_memory_metrics
-from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry, DimensionDefinition, ParameterDefinition
+from ydb.tools.ydb_bench.benchmarks.registry import (
+    BenchmarkDefinition,
+    BenchmarkRegistry,
+    DimensionDefinition,
+    ParameterDefinition,
+)
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
 from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, build_run_plan, config_schema, load_config
@@ -137,16 +142,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench", "memory-bandwidth-bench"})
 
     def test_cli_json_discovery_and_validation_do_not_create_output(self):
-        config = self._config(
-            """
+        config = self._config("""
             ping-bench:
               invalid:
                 threads: []
                 duration: 1
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertEqual(main(["list", "--json"]), 0)
@@ -165,23 +168,20 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse((self.root / "output").exists())
 
     def test_cli_report_stdout_and_queue_error_policies(self):
-        benchmark = self._script(
-            """
+        benchmark = self._script("""
             test "$ACTORSYSTEM_INFLIGHTS" = "2" || exit 23
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             echo "1,32,2,1000,1.0,900,1100"
-            """
-        )
-        config = self._config(
-            """
+            """)
+        config = self._config("""
             ping-bench:
               fails: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 2, affinity: [none]}
               succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
-            """
-        )
+            """)
 
         def loader(_):
             return benchmark.read_bytes()
+
         fail_fast = self.root / "fail-fast"
         fail_fast_stdout, fail_fast_stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(fail_fast_stdout), redirect_stderr(fail_fast_stderr):
@@ -195,7 +195,22 @@ class YdbBenchTest(unittest.TestCase):
 
         continued, stdout, stderr = self.root / "continued", io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            self.assertEqual(main(["run", "--config", str(config), "--output", str(continued), "--continue-on-error", "--report-json", "-"], loader), 1)
+            self.assertEqual(
+                main(
+                    [
+                        "run",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(continued),
+                        "--continue-on-error",
+                        "--report-json",
+                        "-",
+                    ],
+                    loader,
+                ),
+                1,
+            )
         report_payload = stdout.getvalue().strip()
         report, offset = json.JSONDecoder().raw_decode(report_payload)
         self.assertEqual(report_payload[offset:].strip(), "")
@@ -215,7 +230,22 @@ class YdbBenchTest(unittest.TestCase):
         continued_path = self.root / "continued-path"
         path_stdout, path_stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(path_stdout), redirect_stderr(path_stderr):
-            self.assertEqual(main(["run", "--config", str(config), "--output", str(continued_path), "--continue-on-error", "--report-json", str(report_json_output)], loader), 1)
+            self.assertEqual(
+                main(
+                    [
+                        "run",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(continued_path),
+                        "--continue-on-error",
+                        "--report-json",
+                        str(report_json_output),
+                    ],
+                    loader,
+                ),
+                1,
+            )
         self.assertEqual(path_stdout.getvalue(), "")
         report = json.loads(report_json_output.read_text())
         self.assertEqual(report["status"], "failed")
@@ -230,9 +260,19 @@ class YdbBenchTest(unittest.TestCase):
             name="fake-bench",
             description="test adapter",
             resource_name="actors_core_ut_fat",
-            parameters=(ParameterDefinition("actor-pairs", "pairs", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs"),
-                        ParameterDefinition("samples", "Sample counts", default=(1,), environment="FAKE_SAMPLES", column="samples")),
-            dimensions=(DimensionDefinition("threads"), DimensionDefinition("actorPairs"), DimensionDefinition("samples")),
+            parameters=(
+                ParameterDefinition(
+                    "actor-pairs", "pairs", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs"
+                ),
+                ParameterDefinition(
+                    "samples", "Sample counts", default=(1,), environment="FAKE_SAMPLES", column="samples"
+                ),
+            ),
+            dimensions=(
+                DimensionDefinition("threads"),
+                DimensionDefinition("actorPairs"),
+                DimensionDefinition("samples"),
+            ),
             metrics=PING_BENCHMARK.metrics,
             parse_metrics=PING_BENCHMARK.parse_metrics,
             render_metrics=PING_BENCHMARK.render_metrics,
@@ -252,16 +292,14 @@ class YdbBenchTest(unittest.TestCase):
         schema = config_schema(registry)
         self.assertEqual(set(schema["properties"]), {"fake-bench"})
         self.assertIn("samples", schema["properties"]["fake-bench"]["additionalProperties"]["properties"])
-        script = self._script(
-            """
+        script = self._script("""
             echo "threads,actorPairs,samples,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             if test "$ACTORSYSTEM_THREADS" = "1"; then
               echo "1,32,1,1000,1.0,900,1100"
             else
               echo "2,32,1,2000,1.0,1800,2200"
             fi
-            """
-        )
+            """)
         output = self.root / "fake-output"
         output.mkdir()
         configuration = RunConfiguration(
@@ -287,8 +325,7 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_config_supports_multiple_benchmarks_and_profiles(self):
         """Load ping baseline, ping focused, then star sweep while preserving YAML order."""
-        config = self._config(
-            """
+        config = self._config("""
             ping-bench:
               baseline:
                 threads: [1, 2, 4]
@@ -309,8 +346,7 @@ class YdbBenchTest(unittest.TestCase):
                 duration: 4
                 repetitions: 2
                 affinity: [none, spread-numa-pack-chiplet]
-            """
-        )
+            """)
         loaded = load_config(config, perf_enabled=True, perf_frequency=123)
         self.assertEqual(
             [(run.benchmark.name, run.profile) for run in loaded.runs],
@@ -328,21 +364,26 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(all(run.perf_frequency == 123 for run in loaded.runs))
 
     def test_run_plan_expands_config_in_stable_queue_order(self):
-        loaded = load_config(self._config(
-            """
+        loaded = load_config(self._config("""
             ping-bench:
               first: {threads: [1, 2], duration: 1, repetitions: 2, affinity: [none, pack-numa-pack-chiplet]}
               second: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}
-            """
-        ))
+            """))
         plan = build_run_plan(loaded)
-        self.assertEqual([(s.profile, s.affinity, s.threads, s.repeat) for s in plan.steps], [
-            ("first", "none", 1, 1), ("first", "none", 1, 2),
-            ("first", "none", 2, 1), ("first", "none", 2, 2),
-            ("first", "pack-numa-pack-chiplet", 1, 1), ("first", "pack-numa-pack-chiplet", 1, 2),
-            ("first", "pack-numa-pack-chiplet", 2, 1), ("first", "pack-numa-pack-chiplet", 2, 2),
-            ("second", "none", 1, 1),
-        ])
+        self.assertEqual(
+            [(s.profile, s.affinity, s.threads, s.repeat) for s in plan.steps],
+            [
+                ("first", "none", 1, 1),
+                ("first", "none", 1, 2),
+                ("first", "none", 2, 1),
+                ("first", "none", 2, 2),
+                ("first", "pack-numa-pack-chiplet", 1, 1),
+                ("first", "pack-numa-pack-chiplet", 1, 2),
+                ("first", "pack-numa-pack-chiplet", 2, 1),
+                ("first", "pack-numa-pack-chiplet", 2, 2),
+                ("second", "none", 1, 1),
+            ],
+        )
         self.assertEqual(len({step.id for step in plan.steps}), len(plan.steps))
 
     def test_cli_reuses_precomputed_step_index_and_rejects_unknown_events(self):
@@ -393,9 +434,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(steps.iterations, 1)
 
         def unknown_run(_binary, _configuration, _output_directory, **kwargs):
-            kwargs["event_sink"](
-                {"type": "step-started", "affinity": "none", "threads": 99, "case": 1, "repeat": 1}
-            )
+            kwargs["event_sink"]({"type": "step-started", "affinity": "none", "threads": 99, "case": 1, "repeat": 1})
 
         plan, steps = indexed_plan()
         error = io.StringIO()
@@ -413,8 +452,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("benchmark event does not match a planned step", error.getvalue())
 
     def test_memory_config_expands_generic_parameter_matrix(self):
-        loaded = load_config(self._config(
-            """
+        loaded = load_config(self._config("""
             memory-bandwidth-bench:
               mixed:
                 threads: [1, 2]
@@ -425,8 +463,7 @@ class YdbBenchTest(unittest.TestCase):
                 duration: 1
                 repetitions: 2
                 affinity: [none, pack-numa]
-            """
-        ))
+            """))
         configuration = loaded.runs[0]
         self.assertIs(configuration.benchmark, MEMORY_BENCHMARK)
         self.assertEqual(configuration.parameters["random-percent"], (0, 50))
@@ -485,24 +522,24 @@ class YdbBenchTest(unittest.TestCase):
             validate_memory_metrics([], self._configuration(benchmark=MEMORY_BENCHMARK))
 
     def test_memory_worker_metrics_keep_raw_workers(self):
-        stdout = "\n".join((
-            "workers.csv",
-            "worker,scope,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec",
-            "0,sequential,10,20,20,20,100,200,200,200,400",
-            "1,random,30,30,30,30,300,300,300,300,600",
-        ))
+        stdout = "\n".join(
+            (
+                "workers.csv",
+                "worker,scope,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec",
+                "0,sequential,10,20,20,20,100,200,200,200,400",
+                "1,random,30,30,30,30,300,300,300,300,600",
+            )
+        )
         rows = parse_worker_metrics(stdout, MEMORY_BENCHMARK)
         self.assertEqual([(row["worker"], row["scope"]) for row in rows], [(0, "sequential"), (1, "random")])
         self.assertEqual(rows[1]["ops_per_sec"], 300.0)
 
     def test_missing_worker_metrics_finalizes_manifest_and_step(self):
         benchmark = self._worker_metrics_benchmark()
-        script = self._script(
-            """
+        script = self._script("""
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             echo "1,32,1,1000,1.0,900,1100"
-            """
-        )
+            """)
         output = self.root / "missing-worker-output"
         output.mkdir()
         events = []
@@ -531,14 +568,12 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_empty_worker_metrics_finalizes_manifest_and_step(self):
         benchmark = self._worker_metrics_benchmark()
-        script = self._script(
-            """
+        script = self._script("""
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             echo "1,32,1,1000,1.0,900,1100"
             echo "workers.csv"
             echo "worker,scope,operations"
-            """
-        )
+            """)
         output = self.root / "empty-worker-output"
         output.mkdir()
         events = []
@@ -562,15 +597,13 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_worker_metrics_write_failure_rolls_back_metric_artifacts(self):
         benchmark = self._worker_metrics_benchmark()
-        script = self._script(
-            """
+        script = self._script("""
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             echo "1,32,1,1000,1.0,900,1100"
             echo "workers.csv"
             echo "worker,scope,operations"
             echo "0,sequential,10"
-            """
-        )
+            """)
         output = self.root / "worker-write-failure-output"
         output.mkdir()
         events = []
@@ -702,8 +735,7 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_config_rejects_duplicate_yaml_keys(self):
         """Parse a profile with duplicate threads keys and reject it before normalization."""
-        config = self._config(
-            """
+        config = self._config("""
             ping-bench:
               baseline:
                 threads: [1]
@@ -711,22 +743,19 @@ class YdbBenchTest(unittest.TestCase):
                 duration: 1
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
         with self.assertRaisesRegex(BenchmarkError, "duplicate key 'threads'"):
             load_config(config)
 
     def test_perf_requires_profile_build(self):
-        config = self._config(
-            """
+        config = self._config("""
             ping-bench:
               baseline:
                 threads: [1]
                 duration: 1
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
         error = io.StringIO()
         with redirect_stderr(error):
             code = main(
@@ -747,8 +776,7 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_cli_runs_multiple_benchmarks_and_profiles(self):
         """Run ping-bench/first, ping-bench/second, then star-ping-bench/star with separate summaries."""
-        benchmark = self._script(
-            """
+        benchmark = self._script("""
             test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 10
             test "$ACTORSYSTEM_THREADS" = "1" || exit 11
             test "$ACTORSYSTEM_ACTOR_PAIRS" = "32" || exit 12
@@ -768,10 +796,8 @@ class YdbBenchTest(unittest.TestCase):
                 ;;
               *) exit 16 ;;
             esac
-            """
-        )
-        config = self._config(
-            """
+            """)
+        config = self._config("""
             ping-bench:
               first:
                 threads: [1]
@@ -793,8 +819,7 @@ class YdbBenchTest(unittest.TestCase):
                 duration: 2
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
         output = self.root / "multi-output"
         console = io.StringIO()
         with redirect_stderr(console):
@@ -833,15 +858,12 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_cli_generated_manifest_round_trips_through_portable_archive(self):
         """A real CLI manifest keeps its integer case index when imported."""
-        benchmark = self._script(
-            """
+        benchmark = self._script("""
             test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             echo "1,32,1,1000,1.0,900,1100"
-            """
-        )
-        config = self._config(
-            """
+            """)
+        config = self._config("""
             ping-bench:
               portable:
                 threads: [1]
@@ -850,8 +872,7 @@ class YdbBenchTest(unittest.TestCase):
                 duration: 1
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
         output = self.root / "portable-source"
         with redirect_stderr(io.StringIO()):
             self.assertEqual(
@@ -872,16 +893,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(restored["steps"][0]["parameters"], produced["steps"][0]["parameters"])
 
     def test_cli_exit_code_uses_interruption_error_type(self):
-        config = self._config(
-            """
+        config = self._config("""
             ping-bench:
               test:
                 threads: [1]
                 duration: 1
                 repetitions: 1
                 affinity: [none]
-            """
-        )
+            """)
 
         def loader_for(error):
             def loader(_):
@@ -914,8 +933,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(all("benchmark stopped" in step["reason"] for step in interrupted_manifest["steps"]))
 
     def test_run_writes_manifest_raw_metrics_and_median_summary(self):
-        script = self._script(
-            """
+        script = self._script("""
             test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
             test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 11
             test "$ACTORSYSTEM_THREADS" = "1" -o "$ACTORSYSTEM_THREADS" = "2" || exit 12
@@ -929,8 +947,7 @@ class YdbBenchTest(unittest.TestCase):
             else
               echo "2,32,1,2000,1.0,1800,2200"
             fi
-            """
-        )
+            """)
         output = self.root / "output"
         output.mkdir()
         manifest = run_actors_core(
@@ -959,8 +976,7 @@ class YdbBenchTest(unittest.TestCase):
 
     def test_star_run_selects_star_filter_environment_and_summary(self):
         """Select the star filter, pass stars and duration, then render a star-specific summary."""
-        script = self._script(
-            """
+        script = self._script("""
             test "$1" = "HeavyActorBenchmark::StarSendActivateReceiveCSVManual" || exit 10
             test "$ACTORSYSTEM_STARS" = "2,4" || exit 11
             test "$ACTORSYSTEM_DURATION" = "3" || exit 12
@@ -972,8 +988,7 @@ class YdbBenchTest(unittest.TestCase):
               echo "2,32,2,3000,3.0,2800,3200"
               echo "2,32,4,4000,3.0,3800,4200"
             fi
-            """
-        )
+            """)
         output = self.root / "star-output"
         output.mkdir()
         configuration = RunConfiguration(
@@ -994,16 +1009,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("star_multiply", (output / "summary.csv").read_text().splitlines()[0])
 
     def test_perf_run_preserves_binary_data_report_and_buildids(self):
-        benchmark = self._script(
-            """
+        benchmark = self._script("""
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
             if test "$ACTORSYSTEM_THREADS" = "1"; then
               echo "1,32,1,1000,1.0,900,1100"
             else
               echo "2,32,1,2000,1.0,1800,2200"
             fi
-            """
-        )
+            """)
         fake_perf = self._script(
             """
             subcommand="$1"
@@ -1071,11 +1084,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual([record["name"] for record in run["perf_postprocessing"]], ["report", "buildid-list"])
 
     def test_empty_csv_fails_even_with_zero_exit_code(self):
-        script = self._script(
-            """
+        script = self._script("""
             echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
-            """
-        )
+            """)
         output = self.root / "empty-output"
         output.mkdir()
         with self.assertRaisesRegex(BenchmarkError, "no metric rows"):
@@ -1210,12 +1221,20 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(topology.chiplets, ((0, (1,)), (0, (2, 3))))
         record = topology_record(topology)
         self.assertEqual(record["version"], 2)
-        self.assertEqual(record["numa_nodes"], [
-            {"id": 0, "cpus": [1, 2, 3]}, {"id": 1, "cpus": [4]},
-        ])
-        self.assertEqual(record["chiplets"], [
-            {"numa_node": 0, "cpus": [1]}, {"numa_node": 0, "cpus": [2, 3]},
-        ])
+        self.assertEqual(
+            record["numa_nodes"],
+            [
+                {"id": 0, "cpus": [1, 2, 3]},
+                {"id": 1, "cpus": [4]},
+            ],
+        )
+        self.assertEqual(
+            record["chiplets"],
+            [
+                {"numa_node": 0, "cpus": [1]},
+                {"numa_node": 0, "cpus": [2, 3]},
+            ],
+        )
 
     def test_topology_hierarchy_from_synthetic_sysfs(self):
         cases = (
@@ -1223,32 +1242,40 @@ class YdbBenchTest(unittest.TestCase):
                 "name": "single_numa_smt",
                 "nodes": ((0, "0-3"),),
                 "l3": ((0, "0-3"),),
-                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"),
-                             (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"), (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
                 "allowed": (0, 1, 2, 3),
-                "cores": ((0, 1), (2, 3)), "siblings": ((0, 1), (2, 3)), "reasons": (),
+                "cores": ((0, 1), (2, 3)),
+                "siblings": ((0, 1), (2, 3)),
+                "reasons": (),
             },
             {
                 "name": "multi_numa_multiple_chiplets_smt_off",
                 "nodes": ((0, "0-1"), (1, "2-3")),
                 "l3": ((0, "0-1"), (1, "2-3")),
-                "cpu_data": ((0, 0, 0, "0"), (1, 0, 1, "1"),
-                             (2, 1, 0, "2"), (3, 1, 1, "3")),
+                "cpu_data": ((0, 0, 0, "0"), (1, 0, 1, "1"), (2, 1, 0, "2"), (3, 1, 1, "3")),
                 "allowed": (0, 1, 2, 3),
-                "cores": ((0,), (1,), (2,), (3,)), "siblings": ((0,), (1,), (2,), (3,)), "reasons": (),
+                "cores": ((0,), (1,), (2,), (3,)),
+                "siblings": ((0,), (1,), (2,), (3,)),
+                "reasons": (),
             },
             {
                 "name": "asymmetric_cpuset",
-                "nodes": ((0, "0-3"),), "l3": ((1, "0-1"), (2, "2-3")),
-                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"),
-                             (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
-                "allowed": (1, 2), "cores": ((1,), (2,)), "siblings": ((1,), (2,)), "reasons": (),
+                "nodes": ((0, "0-3"),),
+                "l3": ((1, "0-1"), (2, "2-3")),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"), (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "allowed": (1, 2),
+                "cores": ((1,), (2,)),
+                "siblings": ((1,), (2,)),
+                "reasons": (),
             },
             {
                 "name": "missing_numa_l3_and_incomplete_topology",
-                "nodes": (), "l3": (),
+                "nodes": (),
+                "l3": (),
                 "cpu_data": ((0, None, None, None), (1, 0, 1, None)),
-                "allowed": (0, 1), "cores": ((0,), (1,)), "siblings": ((0,), (1,)),
+                "allowed": (0, 1),
+                "cores": ((0,), (1,)),
+                "siblings": ((0,), (1,)),
                 "reasons": ("numa", "chiplet", "chiplet", "physical_core", "smt"),
             },
         )
@@ -1334,10 +1361,8 @@ class YdbBenchTest(unittest.TestCase):
         topology = CpuTopology(
             allowed_cpus=tuple(range(16)),
             numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
-            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)),
-                      (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
-            physical_cores=((0, 1), (2, 3), (4, 5), (6, 7),
-                            (8, 9), (10, 11), (12, 13), (14, 15)),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)), (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            physical_cores=((0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)),
         )
         expected = {
             "none": None,
@@ -1369,8 +1394,7 @@ class YdbBenchTest(unittest.TestCase):
         )
         with mock.patch.object(os, "sched_setaffinity", create=True):
             self.assertEqual(plan_affinity("pack-numa", topology, 2).cpus, (1, 2, 4, 7))
-            self.assertEqual(plan_affinity("pack-numa-spread-chiplet-spread-core", topology, 3).cpus,
-                             (1, 2, 4))
+            self.assertEqual(plan_affinity("pack-numa-spread-chiplet-spread-core", topology, 3).cpus, (1, 2, 4))
             unsupported = plan_affinity("spread-numa-pack-chiplet", topology, 2)
         self.assertFalse(unsupported.supported)
         self.assertIn("spread-numa", unsupported.reason)
@@ -1379,8 +1403,7 @@ class YdbBenchTest(unittest.TestCase):
         topology = CpuTopology(
             allowed_cpus=tuple(range(16)),
             numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
-            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)),
-                      (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)), (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
             physical_cores=tuple((cpu,) for cpu in range(16)),
         )
         expected = {
@@ -1434,11 +1457,9 @@ class YdbBenchTest(unittest.TestCase):
             affinity_modes=("spread-numa-pack-chiplet",),
         )
 
-        with mock.patch.object(
-            actors_core, "discover_topology", return_value=topology
-        ), mock.patch.object(os, "sched_setaffinity", create=True), self.assertRaisesRegex(
-            BenchmarkError, "none of the selected affinity modes is supported"
-        ):
+        with mock.patch.object(actors_core, "discover_topology", return_value=topology), mock.patch.object(
+            os, "sched_setaffinity", create=True
+        ), self.assertRaisesRegex(BenchmarkError, "none of the selected affinity modes is supported"):
             run_actors_core(
                 self._binary(script),
                 configuration,
@@ -1472,19 +1493,31 @@ class WebTest(unittest.TestCase):
             "state": "running" if status == "running" else "passed",
             "started_at": "2025-01-01T00:00:00+00:00",
             "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
-            "steps": [{
-                "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
-                "state": "running" if status == "running" else "passed",
-                "artifacts": ["artifact.txt"],
-            }],
+            "steps": [
+                {
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": 1,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "running" if status == "running" else "passed",
+                    "artifacts": ["artifact.txt"],
+                }
+            ],
             "config": {
                 "snapshot": "ping-bench:\n  baseline: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n",
             },
             "topology": {
-                "version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}],
-                "chiplets": [{"numa_node": 0, "cpus": [0]}], "physical_cores": [[0]],
-                "smt_siblings": [[0]], "hierarchy_reasons": [],
+                "version": 2,
+                "allowed_cpus": [0],
+                "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}],
+                "physical_cores": [[0]],
+                "smt_siblings": [[0]],
+                "hierarchy_reasons": [],
             },
         }
         if status != "running":
@@ -1502,20 +1535,36 @@ class WebTest(unittest.TestCase):
             "started_at": "2025-01-01T00:00:00+00:00",
             "finished_at": "2025-01-01T00:00:01+00:00",
             "runs": [],
-            "steps": [{
-                "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
-                "state": "passed", "artifacts": ["artifact.txt"],
-            }],
+            "steps": [
+                {
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": 1,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "passed",
+                    "artifacts": ["artifact.txt"],
+                }
+            ],
             "topology": {
-                "version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}],
-                "chiplets": [{"numa_node": 0, "cpus": [0]}], "physical_cores": [[0]],
-                "smt_siblings": [[0]], "hierarchy_reasons": [],
+                "version": 2,
+                "allowed_cpus": [0],
+                "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}],
+                "physical_cores": [[0]],
+                "smt_siblings": [[0]],
+                "hierarchy_reasons": [],
             },
         }
         run.update(run_updates or {})
         files = {"run.json": json.dumps(run).encode(), "artifact.txt": b"artifact"}
-        entries = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for name, data in files.items()]
+        entries = [
+            {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+            for name, data in files.items()
+        ]
         if corrupt:
             entries[0]["sha256"] = "0" * 64
         manifest = json.dumps({"format_version": 1, "files": entries}).encode()
@@ -1552,32 +1601,66 @@ class WebTest(unittest.TestCase):
         with self.assertRaisesRegex(BenchmarkError, "topology is missing"):
             import_archive(self.root, self._portable_archive(run_updates={"topology": {}}))
         with self.assertRaisesRegex(BenchmarkError, "status must be terminal"):
-            import_archive(self.root, self._portable_archive(run_updates={"runs": [{
-                "benchmark": "ping-bench", "profile": "baseline", "status": "running",
-            }]}))
+            import_archive(
+                self.root,
+                self._portable_archive(
+                    run_updates={
+                        "runs": [
+                            {
+                                "benchmark": "ping-bench",
+                                "profile": "baseline",
+                                "status": "running",
+                            }
+                        ]
+                    }
+                ),
+            )
         malformed_step = {
-            "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-            "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
-            "state": "passed", "artifacts": ["not-in-archive.txt"],
+            "id": "step-1",
+            "benchmark": "ping-bench",
+            "profile": "baseline",
+            "affinity": "none",
+            "threads": 1,
+            "case": 1,
+            "parameters": {},
+            "repeat": 1,
+            "state": "passed",
+            "artifacts": ["not-in-archive.txt"],
         }
         with self.assertRaisesRegex(BenchmarkError, "does not name a file in the archive"):
             import_archive(self.root, self._portable_archive(run_updates={"steps": [malformed_step]}))
 
     def test_import_rejects_invalid_case_indices(self):
         for case in (True, 0, 1.5):
-            with self.subTest(case=case), self.assertRaisesRegex(BenchmarkError, r"steps\[0\]\.case must be an integer greater than or equal to 1"):
+            with self.subTest(case=case), self.assertRaisesRegex(
+                BenchmarkError, r"steps\[0\]\.case must be an integer greater than or equal to 1"
+            ):
                 step = {
-                    "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                    "affinity": "none", "threads": 1, "case": case, "parameters": {}, "repeat": 1,
-                    "state": "passed", "artifacts": ["artifact.txt"],
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": case,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "passed",
+                    "artifacts": ["artifact.txt"],
                 }
                 import_archive(self.root, self._portable_archive(run_updates={"steps": [step]}))
 
     def test_import_rejects_duplicate_step_ids(self):
         step = {
-            "id": "same", "benchmark": "ping-bench", "profile": "baseline",
-            "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
-            "state": "passed", "artifacts": [],
+            "id": "same",
+            "benchmark": "ping-bench",
+            "profile": "baseline",
+            "affinity": "none",
+            "threads": 1,
+            "case": 1,
+            "parameters": {},
+            "repeat": 1,
+            "state": "passed",
+            "artifacts": [],
         }
         with self.assertRaisesRegex(BenchmarkError, "duplicate step id"):
             import_archive(self.root, self._portable_archive(run_updates={"steps": [step, dict(step)]}))
@@ -1601,8 +1684,20 @@ class WebTest(unittest.TestCase):
 
     def test_comparison_key_rules(self):
         model = {
-            "one": {"steps": [{"benchmark": "ping", "profile": "p", "affinity": "none"}, {"benchmark": "ping", "profile": "q", "affinity": "pack"}], "runs": []},
-            "two": {"steps": [{"benchmark": "ping", "profile": "p", "affinity": "none"}, {"benchmark": "ping", "profile": "q", "affinity": "none"}], "runs": []},
+            "one": {
+                "steps": [
+                    {"benchmark": "ping", "profile": "p", "affinity": "none"},
+                    {"benchmark": "ping", "profile": "q", "affinity": "pack"},
+                ],
+                "runs": [],
+            },
+            "two": {
+                "steps": [
+                    {"benchmark": "ping", "profile": "p", "affinity": "none"},
+                    {"benchmark": "ping", "profile": "q", "affinity": "none"},
+                ],
+                "runs": [],
+            },
         }
         keys = comparison_keys(model, ["one", "two"])
         self.assertEqual(keys["benchmark_profile_affinity"], ["ping/p/none"])
@@ -1629,12 +1724,17 @@ class WebTest(unittest.TestCase):
             "pack-numa,1,512,1,1,12,11,13,1.0\n",
             encoding="utf-8",
         )
-        summary.with_name("run.json").write_text(json.dumps({
-            "affinity": [
-                {"mode": "none", "cpus": None},
-                {"mode": "pack-numa", "cpus": [0, 1, 2, 4]},
-            ],
-        }), encoding="utf-8")
+        summary.with_name("run.json").write_text(
+            json.dumps(
+                {
+                    "affinity": [
+                        {"mode": "none", "cpus": None},
+                        {"mode": "pack-numa", "cpus": [0, 1, 2, 4]},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
         value = chart_data(self.root, ["complete"])
         self.assertEqual(value["dimensions"], ["actorPairs", "in_flight", "threads"])
         self.assertIn("median_msgs_per_sec", value["metrics"])
@@ -1712,6 +1812,7 @@ class WebTest(unittest.TestCase):
         base = "http://127.0.0.1:{}".format(server.server_port)
         yaml_text = "ping-bench:\n  ui: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
         try:
+
             def json_request(path, body):
                 request = urllib.request.Request(
                     base + path,
@@ -1779,7 +1880,7 @@ class WebTest(unittest.TestCase):
             emit({"type": "step-started", "step_id": step["id"]})
             emit({"type": "stdout", "data": "fake output\\n"})
             started.set()
-            while not release.wait(.01):
+            while not release.wait(0.01):
                 if cancelled.is_set():
                     return
             emit({"type": "step-finished", "step_id": step["id"], "state": "passed"})
@@ -1790,9 +1891,13 @@ class WebTest(unittest.TestCase):
         base = "http://127.0.0.1:{}".format(server.server_port)
         yaml_text = "ping-bench:\n  fake: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
         try:
+
             def request(path, method="GET", body=None):
-                value = urllib.request.urlopen(urllib.request.Request(base + path, data=body, method=method), timeout=3).read()
+                value = urllib.request.urlopen(
+                    urllib.request.Request(base + path, data=body, method=method), timeout=3
+                ).read()
                 return json.loads(value)
+
             self.assertTrue(request("/api/validate", "POST", yaml_text.encode())["valid"])
             self.assertEqual(len(request("/api/plan", "POST", yaml_text.encode())["plan"]), 1)
             created = request("/api/runs", "POST", yaml_text.encode())
@@ -1800,13 +1905,15 @@ class WebTest(unittest.TestCase):
             detail = request("/api/runs/" + created["id"])
             self.assertEqual(detail["steps"][0]["state"], "running")
             self.assertIn("fake output", detail["tail"]["stdout"])
-            self.assertIn("step-started", urllib.request.urlopen(base + "/api/runs/" + created["id"] + "/events").read().decode())
+            self.assertIn(
+                "step-started", urllib.request.urlopen(base + "/api/runs/" + created["id"] + "/events").read().decode()
+            )
             self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
             self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
             for _ in range(100):
                 if request("/api/runs/" + created["id"])["state"] == "cancelled":
                     break
-                time.sleep(.01)
+                time.sleep(0.01)
             self.assertEqual(request("/api/runs/" + created["id"])["state"], "cancelled")
         finally:
             release.set()
@@ -1928,10 +2035,10 @@ class WebTest(unittest.TestCase):
         self.assertTrue(started.wait(2))
         dispatcher = service._dispatcher_thread
         before = time.monotonic()
-        result = service.shutdown(timeout=.05)
+        result = service.shutdown(timeout=0.05)
         elapsed = time.monotonic() - before
         try:
-            self.assertLess(elapsed, .5)
+            self.assertLess(elapsed, 0.5)
             self.assertEqual(result["timed_out"], [run_id])
             manifest_path = service._runs[run_id]["root"] / "run.json"
             incomplete_manifest = load_manifest(manifest_path)
@@ -1979,7 +2086,7 @@ class WebTest(unittest.TestCase):
             starter = threading.Thread(target=start)
             starter.start()
             self.assertTrue(discovering.wait(2))
-            self.assertEqual(service.shutdown(timeout=.1)["cancelled"], [])
+            self.assertEqual(service.shutdown(timeout=0.1)["cancelled"], [])
             release.set()
             starter.join(2)
         self.assertFalse(starter.is_alive())
@@ -2007,7 +2114,9 @@ class WebTest(unittest.TestCase):
             emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
 
         def config(profile):
-            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(profile)
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(
+                profile
+            )
 
         service = RunService(self.root, executor=fake_executor)
         first = service.start(config("first"))
@@ -2064,7 +2173,9 @@ class WebTest(unittest.TestCase):
             second_finished.set()
 
         def config(profile):
-            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(profile)
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(
+                profile
+            )
 
         service = RunService(self.root, executor=fake_executor)
         failed = service.start(config("fail"), continue_on_error=True)

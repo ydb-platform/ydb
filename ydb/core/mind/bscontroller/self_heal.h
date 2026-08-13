@@ -18,7 +18,7 @@ namespace NKikimr::NBsController {
         bool WithAttentionToReplication = false;
     };
 
-    enum ESelfHealReassignmentPriority : ui8 {
+    enum class ESelfHealReassignmentPriority : ui8 {
         None = 0,           // Reassignment is not required
         MaintenanceStatus,  // Reassignment is only performed if *all* other
                             // VDisks are fully operational
@@ -45,7 +45,8 @@ namespace NKikimr::NBsController {
                 }
 
                 bool IsReassignmentUrgent() const {
-                    return ReassignmentPriority > ESelfHealReassignmentPriority::MaintenanceStatus;
+                    return static_cast<ui8>(ReassignmentPriority) >
+                           static_cast<ui8>(ESelfHealReassignmentPriority::MaintenanceStatus);
                 }
             };
             ui32 Generation;

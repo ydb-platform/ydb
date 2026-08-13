@@ -43,12 +43,14 @@ TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAn
     const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dictionary);
     const auto codec = GetCompressionCodec(externalInfo);
     const TString dictBlob = SerializeBinaryArray(dictBinary, codec);
-    const TString positionsBlob = SerializeIndices(
-        dict->GetPositions(), NDictionary::TConstructor::GetTypeByVariantsCount(dictBinary.length()), codec);
 
-    // [dictionary length][dictionary blob][positions blob]. The metadata stores the dictionary boundary.
     AFL_VERIFY(dictBinary.length() <= Max<ui32>())("length", dictBinary.length());
     const ui32 dictLength = static_cast<ui32>(dictBinary.length());
+    const TString positionsBlob = SerializeIndices(
+        dict->GetPositions(), NDictionary::TConstructor::GetTypeByVariantsCount(dictLength), codec);
+
+    // [dictionary length][dictionary blob][positions blob]. The metadata stores the dictionary boundary.
+
     AFL_VERIFY(sizeof(ui32) + dictBlob.size() <= Max<ui32>())("size", dictBlob.size());
     AFL_VERIFY(positionsBlob.size() <= Max<ui32>())("size", positionsBlob.size());
     const ui32 dictionaryBlobSize = static_cast<ui32>(sizeof(ui32) + dictBlob.size());

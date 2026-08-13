@@ -17,8 +17,6 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
-#include <thread>
-
 namespace NKikimr::NDataShard {
 
 namespace {
@@ -30,10 +28,10 @@ using Ydb::Table::VectorIndexSettings;
 // whether a build should be attempted at all. Actual usage additionally
 // depends on connectivity (M) and level distribution.
 constexpr size_t EstimatedBytesPerNodeOverhead = 256;
-// Several posting-table shards finalize concurrently on one node. Letting each
-// NMSLIB build consume every hardware thread causes severe oversubscription
-// (e.g. 4 shards x 56 threads) and makes construction slower, not faster.
-constexpr unsigned MaxBuildThreadsPerIndex = 16;
+// HNSW construction runs in a build actor registered in the actor system's
+// batch pool. Keep NMSLIB single-threaded so it does not create unmanaged
+// std::threads outside that pool.
+constexpr unsigned BuildThreadsPerIndex = 1;
 constexpr ui32 DefaultHnswConnectivity = 16;
 constexpr ui32 DefaultHnswConstructionCandidates = 200;
 constexpr ui32 DefaultHnswSearchCandidates = 15;
@@ -120,19 +118,12 @@ public:
 
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
-        unsigned indexThreads = std::thread::hardware_concurrency();
-        if (indexThreads == 0) {
-            indexThreads = 1;
-        }
-        indexThreads = Min(indexThreads, MaxBuildThreadsPerIndex);
-
-        const std::string indexThreadQtyParam = "indexThreadQty=" + std::to_string(indexThreads);
         similarity::AnyParams buildParams(std::vector<std::string>{
             "M=" + std::to_string(settings.has_hnsw_connectivity()
                 ? settings.hnsw_connectivity() : DefaultHnswConnectivity),
             "efConstruction=" + std::to_string(settings.has_hnsw_construction_candidates()
                 ? settings.hnsw_construction_candidates() : DefaultHnswConstructionCandidates),
-            indexThreadQtyParam,
+            "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
         Index->CreateIndex(buildParams);
         Index->SetQueryTimeParams(similarity::AnyParams({

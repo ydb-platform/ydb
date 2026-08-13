@@ -238,10 +238,10 @@ public:
 
     void Bootstrap() {
         SpillingRoot_ = Config_.Root ? TFsPath(Config_.Root) : GetDefaultSpillingRoot();
-        Root_ = SpillingRoot_ / MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
-        LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
+        SessionRoot_ = SpillingRoot_ / MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
+        LOG_I("Init DQ local file spilling service at " << SessionRoot_ << ", actor: " << SelfId());
 
-        CreateRoot(MaxStartupRetries);
+        CreateSessionRoot(MaxStartupRetries);
     }
 
     static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING_SERVICE";
@@ -251,21 +251,21 @@ protected:
         IoThreadPool_->Stop();
         IActor::PassAway();
         if (Config_.CleanupOnShutdown) {
-            Root_.ForceDelete();
+            SessionRoot_.ForceDelete();
         }
     }
 
 private:
-    void CreateRoot(ui32 retriesLeft) {
+    void CreateSessionRoot(ui32 retriesLeft) {
         try {
-            if (Root_.IsSymlink()) {
-                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
+            if (SessionRoot_.IsSymlink()) {
+                throw TIoException() << SessionRoot_ << " is a symlink, can not start Spilling Service";
             }
-            Root_.ForceDelete();
-            // Config_.Root must already exist, create only the per-node directory inside it
-            Root_.MkDir(DIR_MODE);
+            SessionRoot_.ForceDelete();
+            // SpillingRoot_ must already exist, create only the directory of this session inside it
+            SessionRoot_.MkDir(DIR_MODE);
         } catch (const yexception& e) {
-            const TString root = Root_.GetPath();
+            const TString root = SessionRoot_.GetPath();
             if (retriesLeft > 0) {
                 LOG_E("Cannot start DQ local file spilling service at " << root << ": " << e.what() << ". Retry "
                     << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
@@ -288,7 +288,7 @@ private:
             hFunc(NMon::TEvHttpInfo, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             case TEvPrivate::TEvRetryStart::EventType:
-                CreateRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
+                CreateSessionRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
                 break;
             default:
                 LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
@@ -464,7 +464,7 @@ private:
             fd.Parts.emplace(msg.BlobId, fp);
 
             auto fname = TStringBuilder() << fd.TxId << "_" << fd.Description << "_" << fd.NextPartListIndex++;
-            fp->FileName = (Root_ / fname).GetPath();
+            fp->FileName = (SessionRoot_ / fname).GetPath();
 
             LOG_D("[Write] create new FilePart " << fp->FileName);
             newFile = true;
@@ -1112,8 +1112,10 @@ private:
 
     const TFileSpillingServiceConfig Config_;
     const TString Username_ = GetUsername();
+    // Root of all spilling directories, either configured or the default one.
     TFsPath SpillingRoot_;
-    TFsPath Root_;
+    // Directory of this Spilling Service session inside SpillingRoot_, where the spilling files go.
+    TFsPath SessionRoot_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
     THolder<IThreadPool> IoThreadPool_;

@@ -21,10 +21,13 @@ namespace NKikimr::NDataShard {
 // same pattern). Index is nullptr when the build failed; Error says why.
 struct THnswIndexBuildProduct : public IDestructable {
     std::shared_ptr<THnswIndex> Index;
+    std::shared_ptr<void> MemoryReservation;
     TString Error;
 
-    THnswIndexBuildProduct(std::shared_ptr<THnswIndex> index, TString error)
+    THnswIndexBuildProduct(std::shared_ptr<THnswIndex> index,
+            std::shared_ptr<void> memoryReservation, TString error)
         : Index(std::move(index))
+        , MemoryReservation(std::move(memoryReservation))
         , Error(std::move(error))
     {}
 };
@@ -37,6 +40,6 @@ NActors::IActor* CreateHnswIndexBuildJob(
     ui64 txId,
     const Ydb::Table::VectorIndexSettings& settings,
     std::vector<std::pair<TString, TString>> keysAndVectors,
-    ui64 maxMemoryBytes);
+    std::shared_ptr<void> memoryReservation);
 
 } // namespace NKikimr::NDataShard

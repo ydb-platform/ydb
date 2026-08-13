@@ -1,21 +1,32 @@
 #pragma once
 
-#include "storage_transport.h"
+#include "direct_session_registry.h"
+#include "ic_storage_transport.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TICStorageTransport: public IStorageTransport
+// IStorageTransport that sends datapath events via IDirectSession from the
+// calling (NBS executor) thread, bypassing the transport actor mailbox.
+// Connect / disconnect still go through TICStorageTransport (actor path); the
+// actor publishes IDirectSession handles into DirectSessionRegistry together
+// with a long-lived reply ActorId and TSessionReplyRouter.
+//
+// When no session is registered for the destination node (local peer, mock IC,
+// brief window before TEvNodeConnected), datapath calls fall back to the
+// actor-based base class.
+class TICDirectStorageTransport: public TICStorageTransport
 {
 public:
-    TICStorageTransport(
+    TICDirectStorageTransport(
         NActors::TActorSystem* actorSystem,
-        NActors::TActorId icStorageTransportActorId);
+        NActors::TActorId icStorageTransportActorId,
+        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry);
 
-    ~TICStorageTransport() override = default;
-
-    TConnectResultFutures Connect(const THostConnection& connection) override;
+    ~TICDirectStorageTransport() override = default;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
@@ -78,17 +89,23 @@ public:
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
         const THostConnection& connection) override;
 
-    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
-        const THostConnection& connection) override;
-
-protected:
-    NActors::TActorSystem* const ActorSystem;
-
 private:
     using EConnectionType = THostConnection::EConnectionType;
 
-    const NActors::TActorId ICStorageTransportActorId;
+    const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
+
+    [[nodiscard]] TSessionEntry GetSessionEntry(
+        const THostConnection& connection) const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Convenience factory: creates the shared registry, transport actor and
+// TICDirectStorageTransport bound together.
+[[nodiscard]] std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
+    NActors::TActorSystem* actorSystem,
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 

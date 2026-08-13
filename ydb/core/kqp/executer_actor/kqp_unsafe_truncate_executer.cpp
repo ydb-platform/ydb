@@ -237,9 +237,13 @@ private:
             const TTableRange range(minKey, true, {}, false, false);
             YQL_ENSURE(range.IsFullRange(table.KeyColumnTypes.size()));
 
-            auto keyDesc = MakeHolder<TKeyDesc>(table.TableId, range, TKeyDesc::ERowOperation::Update,
+            auto keyDesc = MakeHolder<TKeyDesc>(table.TableId, range, TKeyDesc::ERowOperation::Erase,
                 table.KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
-            request->ResultSet.emplace_back(std::move(keyDesc));
+            auto& entry = request->ResultSet.emplace_back(std::move(keyDesc));
+            // The row operation alone checks nothing: rights are taken from this field, which
+            // defaults to zero. Without it DescribeSchema on the path would be enough to wipe the
+            // table, while a plain DELETE of a single row is refused.
+            entry.Access = NACLib::EAccessRights::EraseRow;
         }
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -250,12 +254,20 @@ private:
 
         if (request->ErrorCount > 0) {
             TStringBuilder details;
+            bool accessDenied = false;
             for (size_t i = 0; i < request->ResultSet.size(); ++i) {
                 const auto& entry = request->ResultSet[i];
                 if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
                     continue;
                 }
+                accessDenied = accessDenied
+                    || entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::AccessDenied;
                 details << " " << Tables.at(i).Path << ": " << ToString(entry.Status);
+            }
+            if (accessDenied) {
+                ReplyError(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
+                    TStringBuilder() << "Access denied for unsafe TRUNCATE TABLE:" << details);
+                return;
             }
             ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
                 TStringBuilder() << "Failed to resolve tables for unsafe truncate:" << details);

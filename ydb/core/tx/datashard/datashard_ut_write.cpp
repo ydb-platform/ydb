@@ -4820,5 +4820,51 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "the truncate is not rollbackable, a restart must not resurrect the rows");
     }
 
+    // Committing a lock applies that lock's uncommitted rows, which marks the table modified in the
+    // very same tablet transaction the truncate then runs in. NTable's TruncateTable asserts
+    // !DataModified, so this must be refused as a bad request rather than reach the local database.
+    Y_UNIT_TEST(UnsafeTruncateWithLockCommitRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 lockTxId = 1234567890123;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // An uncommitted write under the lock: the table now has an open tx for lockTxId.
+        NKikimrDataEvents::TLock lock;
+        {
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, opts.Columns_, /* key */ 100, /* value */ 1000);
+            req->SetLockId(lockTxId, lockNodeId);
+            runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TxLocksSize(), 1u);
+            lock = ev->Get()->Record.GetTxLocks(0);
+        }
+
+        auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        auto* kqpLocks = req->Record.MutableLocks();
+        kqpLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        *kqpLocks->AddLocks() = lock;
+
+        runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
+        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        Cerr << "LOCKCOMMIT result: " << ev->Get()->Record.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "committing a lock together with an unsafe truncate must not reach the local database");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

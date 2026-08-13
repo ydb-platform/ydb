@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -953,6 +954,61 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_C(swallowed.load() > 0, "the truncate never reached the prepare phase");
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "a truncate whose prepare was never answered cannot report success");
+    }
+
+    // Wiping a table is at least as destructive as deleting its rows, so the statement must require
+    // the same right a DELETE does. The UPSERT and the plain TRUNCATE under the same user are the
+    // negative controls: if either of them were allowed, the environment would be enforcing nothing
+    // and this test would measure nothing.
+    Y_UNIT_TEST(AclReaderCannotTruncate) {
+        const TString user = "user0@builtin";
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        TKikimrRunner kikimr(settings);
+
+        auto admin = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        CreateAndFill(admin);
+
+        auto grant = [&](const TString& path, const std::vector<std::string>& rights) {
+            auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin"));
+            auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+            auto result = schemeClient.ModifyPermissions(path,
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                    NYdb::NScheme::TPermissions(user, rights))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+        };
+
+        grant("/Root", {"ydb.database.connect"});
+        WaitForProxy(kikimr, user);
+        grant(TablePath, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        auto userClient = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken(user));
+        auto reader = userClient.GetSession().GetValueSync().GetSession();
+
+        auto select = reader.ExecuteQuery(CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
+
+        auto upsert = reader.ExecuteQuery(Sprintf(
+            "UPSERT INTO `%s` (Key, Value) VALUES (9u, \"x\");", TablePath),
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(upsert.GetStatus(), EStatus::SUCCESS,
+            "a reader may not write, otherwise this test measures nothing");
+
+        auto plain = reader.ExecuteQuery(Sprintf("TRUNCATE TABLE `%s`;", TablePath),
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::UNAUTHORIZED, plain.GetIssues().ToString());
+
+        auto unsafe = reader.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(unsafe.GetStatus(), EStatus::SUCCESS,
+            "a user who may not even delete a row must not be able to wipe the table");
+        UNIT_ASSERT_STRING_CONTAINS(unsafe.GetIssues().ToString(), "Access denied");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountRows(admin), 3u, "nothing may have been wiped");
     }
 }
 

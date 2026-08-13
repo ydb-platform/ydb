@@ -585,6 +585,20 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                                      << keyToString(sortedKeys[i]));
             }
         }
+
+        // DESC+LIMIT is the main passthrough trigger: sources arrive ascending, so the top-k are the
+        // last k keys in reverse; interleaved entity ids exercise the per-source PK reorder here too.
+        for (ui32 limit = 1; limit <= Min<ui32>(keys.size(), limitSweepMax); ++limit) {
+            auto rows = ExecuteScanQuery(tableClient, buildStatsQuery(true, limit));
+            auto limitKeys = readKeys(rows);
+            UNIT_ASSERT_VALUES_EQUAL(limitKeys.size(), limit);
+            for (ui32 i = 0; i < limit; ++i) {
+                const auto& expected = sortedKeys[sortedKeys.size() - 1 - i];
+                UNIT_ASSERT_C(limitKeys[i] == expected,
+                    TStringBuilder() << "wrong row for DESC limit " << limit << " at " << i << ": " << keyToString(limitKeys[i])
+                                     << " != " << keyToString(expected));
+            }
+        }
     }
 
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {

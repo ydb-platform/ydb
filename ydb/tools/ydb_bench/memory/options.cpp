@@ -70,6 +70,9 @@ TOptions ParseOptions(int argc, char** argv) {
     if (!result.Threads) {
         throw std::runtime_error("threads must be positive");
     }
+    if (!result.DurationMs) {
+        throw std::runtime_error("duration-ms must be positive");
+    }
     if (result.RandomPercent > 100) {
         throw std::runtime_error("random-percent must be between 0 and 100");
     }

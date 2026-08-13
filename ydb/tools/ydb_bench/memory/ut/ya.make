@@ -1,4 +1,4 @@
-UNITTEST()
+GTEST()
 
 SRCDIR(ydb/tools/ydb_bench/memory)
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -15,5 +16,9 @@ struct TOptions {
 };
 
 TOptions ParseOptions(int argc, char** argv);
+
+constexpr std::ptrdiff_t BarrierParticipantCount(uint32_t threads) {
+    return static_cast<std::ptrdiff_t>(threads) + 1;
+}
 
 } // namespace NMemoryBenchmark

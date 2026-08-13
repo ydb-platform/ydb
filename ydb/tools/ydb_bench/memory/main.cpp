@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
         const uint32_t randomThreads = RandomThreads(options.Threads, options.RandomPercent);
         const uint32_t sequentialThreads = options.Threads - randomThreads;
         std::vector<TStats> stats(options.Threads); std::vector<std::thread> workers;
-        std::barrier ready(options.Threads + 1); std::atomic<bool> stop = false;
+        std::barrier ready(NMemoryBenchmark::BarrierParticipantCount(options.Threads)); std::atomic<bool> stop = false;
         for (uint32_t i = 0; i < options.Threads; ++i) {
             // Interleave both workloads deterministically over the selected CPU set.
             const bool random = ((uint64_t(i + 1) * randomThreads) / options.Threads != (uint64_t(i) * randomThreads) / options.Threads);

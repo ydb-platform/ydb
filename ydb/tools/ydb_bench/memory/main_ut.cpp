@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
 
 #include "options.h"
 
@@ -22,14 +22,20 @@ TOptions Parse(std::initializer_list<const char*> options) {
 }
 
 void AssertInvalid(std::initializer_list<const char*> options, const std::string& expectedError) {
-    UNIT_ASSERT_EXCEPTION_CONTAINS(Parse(options), std::runtime_error, expectedError);
+    try {
+        Parse(options);
+        FAIL() << "expected std::runtime_error containing: " << expectedError;
+    } catch (const std::runtime_error& error) {
+        EXPECT_NE(std::string(error.what()).find(expectedError), std::string::npos)
+            << "actual error: " << error.what();
+    } catch (...) {
+        FAIL() << "expected std::runtime_error containing: " << expectedError;
+    }
 }
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TMemoryBenchmarkOptions) {
-
-Y_UNIT_TEST(RejectsTrailingGarbageAndSigns) {
+TEST(TMemoryBenchmarkOptions, RejectsTrailingGarbageAndSigns) {
     for (const char* option : {"--threads", "--random-percent", "--buffer-size-mb", "--part-size-kb", "--duration-ms"}) {
         AssertInvalid({"--threads", "1", option, "1garbage"}, "expected an unsigned integer");
     }
@@ -37,19 +43,19 @@ Y_UNIT_TEST(RejectsTrailingGarbageAndSigns) {
     AssertInvalid({"--threads", "+1"}, "invalid value for --threads");
 }
 
-Y_UNIT_TEST(RejectsValuesOutsideTheirStorageRange) {
+TEST(TMemoryBenchmarkOptions, RejectsValuesOutsideTheirStorageRange) {
     for (const char* option : {"--threads", "--random-percent", "--duration-ms"}) {
         AssertInvalid({"--threads", "1", option, "4294967296"}, "value for " + std::string(option) + " is out of range");
     }
     AssertInvalid({"--threads", "18446744073709551616"}, "value for --threads is out of range");
 }
 
-Y_UNIT_TEST(RejectsByteConversionOverflow) {
+TEST(TMemoryBenchmarkOptions, RejectsByteConversionOverflow) {
     AssertInvalid({"--threads", "1", "--buffer-size-mb", "17592186044416"}, "value for --buffer-size-mb overflows bytes");
     AssertInvalid({"--threads", "1", "--part-size-kb", "18014398509481984"}, "value for --part-size-kb overflows bytes");
 }
 
-Y_UNIT_TEST(AcceptsUint32Boundaries) {
+TEST(TMemoryBenchmarkOptions, AcceptsUint32Boundaries) {
     const TOptions options = Parse({
         "--threads", "4294967295",
         "--random-percent", "100",
@@ -57,10 +63,18 @@ Y_UNIT_TEST(AcceptsUint32Boundaries) {
         "--part-size-kb", "1",
         "--duration-ms", "4294967295",
     });
-    UNIT_ASSERT_EQUAL(options.Threads, std::numeric_limits<uint32_t>::max());
-    UNIT_ASSERT_EQUAL(options.DurationMs, std::numeric_limits<uint32_t>::max());
+    EXPECT_EQ(options.Threads, std::numeric_limits<uint32_t>::max());
+    EXPECT_EQ(options.DurationMs, std::numeric_limits<uint32_t>::max());
 }
 
-} // Y_UNIT_TEST_SUITE
+TEST(TMemoryBenchmarkOptions, RejectsZeroDuration) {
+    AssertInvalid({"--threads", "1", "--duration-ms", "0"}, "duration-ms must be positive");
+}
+
+TEST(TMemoryBenchmarkRuntime, PreservesBarrierParticipantCountForMaximumThreads) {
+    EXPECT_EQ(
+        BarrierParticipantCount(std::numeric_limits<uint32_t>::max()),
+        static_cast<std::ptrdiff_t>(std::numeric_limits<uint32_t>::max()) + 1);
+}
 
 } // namespace NMemoryBenchmark

@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // Decorates the boxed value produced by a UDF wrapper node with call-site
 // profiling (call count, slow-call count, total time, argument cardinality),
@@ -26,5 +25,4 @@ NUdf::TUnboxedValue MaybeWrapUdfProfiling(
     TComputationContext& ctx,
     ui32 profileStateIndex);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

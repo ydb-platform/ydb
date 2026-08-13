@@ -98,6 +98,9 @@ namespace NActors {
             // Add levelStr field in JSON for Y.Deploy log format
             bool AddLevelInJson = false;
 
+            // Json text message contains key-value pairs from structured message
+            bool JsonTextMessageWithValues = true;
+
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc
             // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and

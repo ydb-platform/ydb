@@ -145,9 +145,10 @@ public:
         AdmitSkippedNoSplitCount->Inc();
     }
 
-    // WaitQueue/Count is a gauge owned solely by SetWaitQueueCount (called from
-    // PublishMapSizes on every waiter map mutation). The On* events below must not also
-    // Inc/Dec it: a drain does both, which used to drift the gauge down by one per drain.
+    // WaitQueue/Count and DelayedRejectQueue/Count are gauges owned solely by
+    // SetWaitQueueCount / SetDelayedRejectQueueCount, which PublishMapSizes calls on every
+    // queue mutation. The On* events must never also Inc/Dec them: a drain does both, which
+    // used to drift the wait-queue gauge down by one per drain.
     void OnWaitQueueEnqueue() const {
         WaitQueueEnqueuedCount->Inc();
     }
@@ -285,12 +286,10 @@ public:
 
     void OnDelayedRejectEnqueue() const {
         DelayedRejectEnqueuedCount->Inc();
-        DelayedRejectQueueCount->Inc();
     }
 
     void OnDelayedRejectFired() const {
         DelayedRejectFiredCount->Inc();
-        DelayedRejectQueueCount->Dec();
     }
 
     void OnDelayedRejectQueueFull() const {

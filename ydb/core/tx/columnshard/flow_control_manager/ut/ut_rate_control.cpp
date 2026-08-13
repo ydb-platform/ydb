@@ -7,7 +7,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <cmath>
-#include <limits>
 
 // Unit tests for the parts of the flow control manager that carry no actor state. They run
 // without an actor system or a scheduler, so every clock is an explicit TInstant and the
@@ -253,6 +252,22 @@ Y_UNIT_TEST_SUITE(TNodeStateMapTest) {
         UNIT_ASSERT(nodes.AnyHot());
         UNIT_ASSERT(nodes.MarkReady(1, 5));
         UNIT_ASSERT(!nodes.AnyHot());
+    }
+
+    Y_UNIT_TEST(ReadyReportsOnlyGenuineCoolEdge) {
+        TNodeStateMap nodes;
+        // The overload manager re-publishes the current status to every FCM once a minute, so READY
+        // for a node that was never hot is routine. It must not look like a recovery: the caller
+        // reacts by clamping tokens and freezing growth for a cooldown period.
+        UNIT_ASSERT(!nodes.MarkReady(1, 1));
+
+        nodes.MarkHot(1, 1);
+        nodes.MarkHot(2, 1);
+        // Still one hot node left, so this is not the edge either.
+        UNIT_ASSERT(!nodes.MarkReady(1, 1));
+        UNIT_ASSERT(nodes.MarkReady(2, 1));
+        // A repeat of the same READY is a re-publication, not a second recovery.
+        UNIT_ASSERT(!nodes.MarkReady(2, 1));
     }
 
     Y_UNIT_TEST(UnknownTabletFailsOpen) {

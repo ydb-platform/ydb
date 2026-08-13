@@ -33,7 +33,8 @@ public:
 
     // Returns true on the empty -> non-empty hot edge, which is what triggers a rate cut.
     bool MarkHot(ui32 nodeId, ui64 generation);
-    // Ignores stale generations. Returns true if this cleared the last hot node.
+    // Ignores stale generations. Returns true only on the non-empty -> empty hot edge, i.e. when
+    // this call cleared the last hot node; a READY for a node that was not hot reports nothing.
     bool MarkReady(ui32 nodeId, ui64 generation);
 
     void SetTabletNode(ui64 tabletId, ui32 nodeId) {

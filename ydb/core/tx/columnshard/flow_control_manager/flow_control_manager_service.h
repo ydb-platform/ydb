@@ -69,6 +69,8 @@ public:
     static ui32 GetDelayedRejectTimeoutPercent();
     static TDuration GetMaxWaitDuration(TDuration operationTimeout);
     static TInstant ComputeWaitDeadline(TInstant deadline, TDuration operationTimeout);
+    // Instant at which a request that could not even be queued is failed with OVERLOADED.
+    static TInstant ComputeDelayedRejectAt(TInstant deadline, TDuration operationTimeout);
     static TDrainRateParams GetDrainRateParams();
 
     static TDuration PickDrainJitter();

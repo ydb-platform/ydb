@@ -205,6 +205,18 @@ TInstant TFlowControlManagerServiceOperator::ComputeWaitDeadline(TInstant deadli
     return deadline - operationTimeout * (100 - pct) / 100;
 }
 
+TInstant TFlowControlManagerServiceOperator::ComputeDelayedRejectAt(TInstant deadline, TDuration operationTimeout) {
+    // Same shape as ComputeWaitDeadline, and deliberately anchored to the operation start
+    // (Deadline - Timeout) rather than to "now". The point of DelayedRejectTimeoutPercent is to
+    // hold the caller for that share of its budget and hand the rest back for a retry; measured
+    // from the moment FCM sees the request it would really be (time already spent upstream) + pct%,
+    // so the reserve the knob promises would shrink by however long the navigate and split took.
+    // TInstant subtraction saturates, so a request that arrives with less than pct% of its budget
+    // left yields an instant in the past and is rejected immediately, which is what it deserves.
+    const ui32 pct = GetDelayedRejectTimeoutPercent();
+    return deadline - operationTimeout * (100 - pct) / 100;
+}
+
 TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceOperator::GetDrainRateParams() {
     // Prefer live ColumnShardConfig.FlowControl (Get* ⇒ proto defaults for unset fields).
     // Else UT drain overrides, else default-constructed TFlowControlConfig.

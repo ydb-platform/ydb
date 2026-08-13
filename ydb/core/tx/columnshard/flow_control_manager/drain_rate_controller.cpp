@@ -517,6 +517,11 @@ void TDrainRateController::NoteHotNode(TInstant now) {
 }
 
 void TDrainRateController::NoteAllNodesReady(const TDrainState& state) {
+    // The cooldown is anchored to the recovery edge rather than to the last overload signal on
+    // purpose: what has to stay quiet before growth resumes is the period *after* the burst that the
+    // clamp below releases, not the overload that preceded it. In practice the two are the same
+    // instant anyway, since ApplyHotDecay refreshes LastHotAt on every drain cycle while the node is
+    // hot. Only a genuine hot -> cool edge gets here, see TNodeStateMap::MarkReady.
     LastHotAt = state.Now;
     // Asymmetric on purpose: the count bucket keeps at least one whole admit so the queue can
     // always move, while the bytes bucket keeps at least the head's batch so one large request is

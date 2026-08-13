@@ -12,11 +12,16 @@ bool TNodeStateMap::MarkHot(ui32 nodeId, ui64 generation) {
 }
 
 bool TNodeStateMap::MarkReady(ui32 nodeId, ui64 generation) {
+    const bool wasHot = !HotNodes.empty();
     auto it = HotNodes.find(nodeId);
     if (it != HotNodes.end() && generation >= it->second) {
         HotNodes.erase(it);
     }
-    return HotNodes.empty();
+    // "Was hot and is no longer", not merely "is not hot": the overload manager re-publishes the
+    // current status to every FCM once a minute, so a healthy cluster delivers READY for nodes that
+    // were never in the set. Reporting those as an edge would clamp tokens and freeze growth on
+    // every node once a minute.
+    return wasHot && HotNodes.empty();
 }
 
 bool TNodeStateMap::IsAdmitAllowed(const TVector<ui64>& tabletIds) const {

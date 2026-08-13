@@ -53,6 +53,10 @@ public:
     TInstant GetWaitDeadline() const {
         return TFlowControlManagerServiceOperator::ComputeWaitDeadline(Deadline, OperationTimeout);
     }
+
+    TInstant GetDelayedRejectAt() const {
+        return TFlowControlManagerServiceOperator::ComputeDelayedRejectAt(Deadline, OperationTimeout);
+    }
 };
 
 class TEvTryAdmitResult: public NActors::TEventLocal<TEvTryAdmitResult, EvTryAdmitResult> {

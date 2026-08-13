@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr::NTxProxy {
@@ -51,6 +52,10 @@ bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>& tabletIds, u
     tabletIds.clear();
     batchSize = 0;
 
+    // A bad navigate result or a table with no columnshard splitter are both ordinary here — the
+    // write actor reports the former and the latter just means the table is not our business — so
+    // neither is logged. A split that fails on data we are about to hand to that same write actor is
+    // the one case worth a line, since it means the fail-open path is about to produce an error.
     const auto& navigate = tx.GetNavigateResult();
     if (!navigate || navigate->ErrorCount > 0 || navigate->ResultSet.empty()) {
         return false;
@@ -65,6 +70,8 @@ bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>& tabletIds, u
     TParsedBatchData accessor(tx.GetBatch());
     const auto initStatus = shardsSplitter->SplitData(entry, accessor);
     if (!initStatus.Ok()) {
+        AFL_WARN(NKikimrServices::LONG_TX_SERVICE)("event", "flow_control_split_failed")("path", tx.GetPath())(
+            "status", Ydb::StatusIds::StatusCode_Name(initStatus.GetStatus()))("reason", initStatus.GetErrorMessage());
         return false;
     }
 
@@ -181,7 +188,13 @@ private:
 
     void EnterDelayedReject(const TActorContext& ctx) {
         Become(&TThis::StateDelayedReject);
-        ctx.Schedule(Tx.GetOperationTimeout() + DelayedRejectFallbackMargin, new NActors::TEvents::TEvWakeup());
+        // The FCM derives its reject instant from the client's operation start, so the fallback has
+        // to be anchored the same way. Measured from now it would fire the margin plus whatever the
+        // navigate, split and admit round-trip already spent after the FCM's own timer, and that gap
+        // widens exactly when the cluster is loaded enough for the fallback to matter.
+        const TInstant fallbackAt = StartedAt + Tx.GetOperationTimeout() + DelayedRejectFallbackMargin;
+        const TInstant now = TActivationContext::Now();
+        ctx.Schedule(fallbackAt > now ? fallbackAt - now : TDuration::Zero(), new NActors::TEvents::TEvWakeup());
     }
 
     void HandleDelayedRejectCompleted(NActors::TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {

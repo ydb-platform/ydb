@@ -197,8 +197,10 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         }
 
         // Enqueue for delayed reject: the Arrow batch is dropped, OVERLOADED is sent after a delay.
-        const TInstant rejectAt =
-            now + (ev->Get()->GetOperationTimeout() * TFlowControlManagerServiceOperator::GetDelayedRejectTimeoutPercent() / 100);
+        // The instant is derived from the client's operation start, not from now, so the share of
+        // the budget the client keeps for its retry does not shrink by whatever the request already
+        // spent upstream. Already in the past (little budget left) means reject immediately.
+        const TInstant rejectAt = ev->Get()->GetDelayedRejectAt();
         const ui64 rejectId = DelayedRejects.Enqueue(ev->Sender, rejectAt);
         ctx.Schedule(rejectAt > now ? rejectAt - now : TDuration::Zero(), new TEvFireDelayedReject(rejectId));
 

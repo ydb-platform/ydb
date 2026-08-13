@@ -232,6 +232,39 @@ Y_UNIT_TEST(MultipleSessions) {
         }
     }
 }
+
+// LOGBROKER-10590: Stage/Publish may arrive before Register (fire-and-forget CreateSession).
+// Buffer them and apply on Register so tablet inFlight is not stranded without cache data.
+Y_UNIT_TEST(TestStagePublishBeforeRegister) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    {
+        auto* stage = new TEvPQ::TEvStageDirectReadData(
+                {"session1", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>()
+        );
+        runtime->Send(setup.ProxyId, TActorId{}, stage);
+    }
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session1", 1, 1}, 1)
+    );
+
+    // Not registered yet — nothing visible.
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1), /*status=*/false);
+    UNIT_ASSERT(resp->Error);
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session1", 1}, 1)
+    );
+
+    resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
 } // Test suite
 
 } //namespace NKikimr::NPQ

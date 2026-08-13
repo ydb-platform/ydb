@@ -120,6 +120,7 @@ private:
             return;
 
         assignIter->second.erase(ev->Get()->ReadKey.PartitionSessionId);
+        PendingBySession.erase(ev->Get()->ReadKey);
         ServerSessions.erase(ev->Get()->ReadKey);
     }
 
@@ -134,6 +135,7 @@ private:
 
         auto destroyDone = DestroyServerSession(ServerSessions.find(key), ev->Get()->Generation);
         if (destroyDone) {
+            PendingBySession.erase(key);
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
                 {"deregistered", key.SessionId});
         } else {
@@ -150,31 +152,21 @@ private:
         auto sessionKey = MakeSessionKey(ev->Get());
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: tried to stage direct read for unregistered session",
+            // LOGBROKER-10590: CreateSession Register is fire-and-forget; Stage can arrive first.
+            // Dropping it permanently leaves tablet inFlight without client-visible DirectRead.
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer stage for unregistered session",
                 {"session", sessionKey.SessionId},
-                {"partitionSessionId", sessionKey.PartitionSessionId});
+                {"partitionSessionId", sessionKey.PartitionSessionId},
+                {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
+                {"TabletGeneration", ev->Get()->TabletGeneration});
+            auto& pending = PendingBySession[sessionKey];
+            pending.Stages[ev->Get()->ReadKey.ReadId] = TPendingStage{
+                ev->Get()->TabletGeneration,
+                ev->Get()->Response
+            };
             return;
         }
-        if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
-            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
-                {"sessionId", sessionKey.SessionId},
-                {"TabletGeneration", ev->Get()->TabletGeneration},
-                {"generation", sessionIter->second.Generation});
-            return;
-        }
-        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, ev->Get()->Response));
-        if (!ins.second) {
-            YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read for session with id new data ignored",
-                {"sessionId", sessionKey.SessionId},
-                {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId});
-            return;
-        }
-        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", 1, false);
-        ChangeCounterValue("StagedReadsRate", 1, false, true);
-        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct read id",
-            {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
-            {"session", sessionKey.SessionId});
+        StageToSession(sessionIter, ev->Get()->ReadKey.ReadId, ev->Get()->TabletGeneration, ev->Get()->Response);
     }
 
     void HandlePublish(TEvPQ::TEvPublishDirectRead::TPtr& ev) {
@@ -189,38 +181,29 @@ private:
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish read for unknow session ignored",
-                {"sessionId", key.SessionId});
-            return;
-        }
-
-        if (iter->second.Generation != generation)
-            return;
-
-        auto stagedIter = iter->second.StagedReads.find(readId);
-        if (stagedIter == iter->second.StagedReads.end()) {
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer publish for unregistered session",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
                 {"readId", readId},
-                {"sessionId", key.SessionId});
+                {"generation", generation});
+            PendingBySession[key].Publishes[readId] = generation;
             return;
         }
-        auto inserted = iter->second.Reads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, stagedIter->second)).second;
-        if (inserted) {
-            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
-            ChangeCounterValue("PublishedReadsCount", 1, false);
-            ChangeCounterValue("PublishedReadsRate", 1, false, true);
-        }
-        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", -1, false);
 
-        iter->second.StagedReads.erase(stagedIter);
-
-        SendNextReadToClient(iter);
+        PublishToSession(iter, readId, generation);
     }
 
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
+        auto pendingIter = PendingBySession.find(key);
+        if (!pendingIter.IsEnd()) {
+            pendingIter->second.Stages.erase(ev->Get()->ReadKey.ReadId);
+            pendingIter->second.Publishes.erase(ev->Get()->ReadKey.ReadId);
+            if (pendingIter->second.Stages.empty() && pendingIter->second.Publishes.empty()) {
+                PendingBySession.erase(pendingIter);
+            }
+        }
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown session ignored",
@@ -299,18 +282,20 @@ private:
                 {"generation", generation});
 
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
+            FlushPendingDirectReads(key);
         } else if (sessionsIter->second.Generation == generation) {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to register duplicate server with same generation ignored",
                 {"session", key.SessionId},
                 {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
-
+            FlushPendingDirectReads(key);
         } else if (DestroyServerSession(sessionsIter, generation)) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
+            FlushPendingDirectReads(key);
         } else {
             YDB_LOG_INFO_CTX(ctx, "Direct read cache: attempted to register server with stale generation ignored",
                 {"session", key.SessionId},
@@ -318,6 +303,94 @@ private:
                 {"generation", generation});
         }
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
+    }
+
+    void StageToSession(
+            TSessionsMap::iterator sessionIter,
+            ui64 readId,
+            ui32 tabletGeneration,
+            const std::shared_ptr<NKikimrClient::TResponse>& response)
+    {
+        const auto& ctx = ActorContext();
+        if (sessionIter.IsEnd()) {
+            return;
+        }
+        if (sessionIter->second.Generation != tabletGeneration) {
+            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"TabletGeneration", tabletGeneration},
+                {"generation", sessionIter->second.Generation});
+            return;
+        }
+        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(readId, response));
+        if (!ins.second) {
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read for session with id new data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"ReadKey.ReadId", readId});
+            return;
+        }
+        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadsCount", 1, false);
+        ChangeCounterValue("StagedReadsRate", 1, false, true);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct read id",
+            {"ReadKey.ReadId", readId},
+            {"session", sessionIter->first.SessionId});
+    }
+
+    void PublishToSession(TSessionsMap::iterator iter, ui64 readId, ui32 generation) {
+        const auto& ctx = ActorContext();
+        if (iter.IsEnd()) {
+            return;
+        }
+        if (iter->second.Generation != generation)
+            return;
+
+        auto stagedIter = iter->second.StagedReads.find(readId);
+        if (stagedIter == iter->second.StagedReads.end()) {
+            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
+                {"readId", readId},
+                {"sessionId", iter->first.SessionId});
+            return;
+        }
+        auto inserted = iter->second.Reads.insert(std::make_pair(readId, stagedIter->second)).second;
+        if (inserted) {
+            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
+            ChangeCounterValue("PublishedReadsCount", 1, false);
+            ChangeCounterValue("PublishedReadsRate", 1, false, true);
+        }
+        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadsCount", -1, false);
+
+        iter->second.StagedReads.erase(stagedIter);
+
+        SendNextReadToClient(iter);
+    }
+
+    void FlushPendingDirectReads(const TReadSessionKey& key) {
+        auto pendingIter = PendingBySession.find(key);
+        if (pendingIter.IsEnd()) {
+            return;
+        }
+        auto sessionIter = ServerSessions.find(key);
+        if (sessionIter.IsEnd()) {
+            return;
+        }
+
+        const auto& ctx = ActorContext();
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: flush pending stage/publish after register",
+            {"sessionId", key.SessionId},
+            {"partitionSessionId", key.PartitionSessionId},
+            {"stages", pendingIter->second.Stages.size()},
+            {"publishes", pendingIter->second.Publishes.size()});
+
+        // Stage before Publish; maps are ordered by readId.
+        for (auto& [readId, stage] : pendingIter->second.Stages) {
+            StageToSession(sessionIter, readId, stage.Generation, stage.Response);
+        }
+        for (const auto& [readId, generation] : pendingIter->second.Publishes) {
+            PublishToSession(sessionIter, readId, generation);
+        }
+        PendingBySession.erase(pendingIter);
     }
 
     template<class TEv>
@@ -566,7 +639,17 @@ private:
         }
     }
 private:
+    struct TPendingStage {
+        ui32 Generation = 0;
+        std::shared_ptr<NKikimrClient::TResponse> Response;
+    };
+    struct TPendingDirectReads {
+        TMap<ui64, TPendingStage> Stages;
+        TMap<ui64, ui32> Publishes; // readId -> tablet generation
+    };
+
     TSessionsMap ServerSessions;
+    THashMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 
     ::NMonitoring::TDynamicCounterPtr Counters;

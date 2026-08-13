@@ -14,15 +14,19 @@ import stat
 class Workload:
     CONSUMER = "shared_consumer"
 
-    def __init__(self, endpoint, database, duration, sqs_endpoint):
+    def __init__(self, endpoint, database, duration, sqs_endpoint,
+                 write_workers=20, read_workers=50):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.database = database
         self.endpoint = endpoint
         self.sqs_endpoint = sqs_endpoint
         self.duration = duration
+        self.write_workers = write_workers
+        self.read_workers = read_workers
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.topic_name = f"topic_{self.id}"
         self.dlq_topic_name = f"dlq_topic_{self.id}"
+        self.with_dlq = True
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -43,24 +47,33 @@ class Workload:
         print(f"Running cmd {cmd} at {time.time()}")
         r = subprocess.run(cmd, check=check, text=True)
         print(f"End at {time.time()}, returncode={r.returncode}")
+        logging.info("cmd finished returncode=%s", r.returncode)
         return r
 
     def create_topics(self, *, keep_messages_order=True, max_processing_attempts=1,
-                      default_processing_timeout='PT5S'):
+                      default_processing_timeout='PT5S', with_dlq=True):
+        self.with_dlq = with_dlq
+        consumer_settings = [
+            "type='shared'",
+            f"keep_messages_order = {'true' if keep_messages_order else 'false'}",
+            f"default_processing_timeout = Interval('{default_processing_timeout}')",
+        ]
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(f"""
-                    CREATE TOPIC `{self.dlq_topic_name}`;
-                """)
+            if with_dlq:
+                session_pool.execute_with_retries(f"""
+                        CREATE TOPIC `{self.dlq_topic_name}`;
+                    """)
+                consumer_settings.extend([
+                    f"max_processing_attempts = {max_processing_attempts}",
+                    "dead_letter_policy = 'move'",
+                    f"dead_letter_queue = '{self.dlq_topic_name}'",
+                ])
+            settings = ",\n                          ".join(consumer_settings)
             session_pool.execute_with_retries(f"""
                     CREATE TOPIC `{self.topic_name}`
                       (CONSUMER `{self.CONSUMER}`
                         WITH (
-                          type='shared',
-                          keep_messages_order = {'true' if keep_messages_order else 'false'},
-                          default_processing_timeout = Interval('{default_processing_timeout}'),
-                          max_processing_attempts = {max_processing_attempts},
-                          dead_letter_policy = 'move',
-                          dead_letter_queue = '{self.dlq_topic_name}'
+                          {settings}
                         )
                 ) """)
 
@@ -90,9 +103,10 @@ class Workload:
                 session_pool.execute_with_retries(f"""
                         DROP TOPIC `{self.topic_name}`;
                     """)
-                session_pool.execute_with_retries(f"""
-                        DROP TOPIC `{self.dlq_topic_name}`;
-                    """)
+                if self.with_dlq:
+                    session_pool.execute_with_retries(f"""
+                            DROP TOPIC `{self.dlq_topic_name}`;
+                        """)
             except Exception as e:
                 logging.error(f"Error dropping topics: {e}")
                 pass
@@ -117,7 +131,7 @@ class Workload:
             'write',
             '-s', str(self.duration),
             '--warmup', '0',
-            '--workers', '20',
+            '--workers', str(self.write_workers),
             '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', self.CONSUMER,
@@ -128,12 +142,12 @@ class Workload:
             '--request-timeout', '20000',
         ])
 
-    def _read_command(self):
+    def _read_command(self, duration):
         return self.get_command(subcmds=[
             'read',
-            '-s', str(self.duration),
+            '-s', str(duration),
             '--warmup', '0',
-            '--workers', '50',
+            '--workers', str(self.read_workers),
             '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', self.CONSUMER,
@@ -150,9 +164,10 @@ class Workload:
         logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
         return self.cmd_run(self._write_command(), check=False)
 
-    def read_from_topic(self):
-        logging.info(f"Reading from topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
-        return self.cmd_run(self._read_command(), check=False)
+    def read_from_topic(self, duration=None):
+        duration = self.duration if duration is None else duration
+        logging.info(f"Reading from topic for {duration} seconds. SQS endpoint: {self.sqs_endpoint}")
+        return self.cmd_run(self._read_command(duration), check=False)
 
     def loop(self):
         self.create_topics()

@@ -14,7 +14,9 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <arrow/array/data.h>
 #include <arrow/datum.h>
+#include <arrow/util/bit_util.h>
 
+#include <cstring>
 #include <util/generic/vector.h>
 
 namespace NKikimr::NMiniKQL {
@@ -29,6 +31,13 @@ template<typename Buffer = NYql::NUdf::TResizeableBuffer>
 std::unique_ptr<arrow::Buffer> MakeBufferWithSize(int size, arrow::MemoryPool* pool){
     auto buff = NUdf::AllocateResizableBuffer<Buffer>(size, pool);
     ARROW_OK(buff->Resize(size));
+    return buff;
+}
+
+std::unique_ptr<arrow::Buffer> MakeZeroedBuffer(int64_t bytes, arrow::MemoryPool* pool) {
+    const int size = bytes > 0 ? static_cast<int>(bytes) : 1;
+    auto buff = MakeBufferWithSize(size, pool);
+    std::memset(buff->mutable_data(), 0, buff->size());
     return buff;
 }
 
@@ -82,9 +91,32 @@ public:
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-		MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size()));
-		return { reinterpret_cast<const ui8*>(array->GetValues<TLayout>(1)) };
-	}
+        MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size()));
+        return { GetFixedValues(array) };
+    }
+
+    // Pack always memcpy's DataSize bytes per row. Arrow may omit the values
+    // buffer (all-null optional) or store Bool as a bit-packed boolean array.
+    // Both used to SIGSEGV / overflow inside TTupleLayout::Pack.
+    const ui8* GetFixedValues(const std::shared_ptr<arrow::ArrayData>& array) {
+        if (array->type && array->type->id() == arrow::Type::BOOL) {
+            const int64_t len = array->length;
+            DummyData_ = MakeZeroedBuffer(len, Pool_);
+            auto* dst = DummyData_->mutable_data();
+            const auto* bits = array->buffers[1] ? array->buffers[1]->data() : nullptr;
+            for (int64_t i = 0; i < len; ++i) {
+                dst[i] = bits && arrow::BitUtil::GetBit(bits, array->offset + i) ? 1 : 0;
+            }
+            return dst;
+        }
+
+        if (const auto* ptr = array->GetValues<TLayout>(1)) {
+            return reinterpret_cast<const ui8*>(ptr);
+        }
+
+        DummyData_ = MakeZeroedBuffer(array->length * static_cast<int64_t>(sizeof(TLayout)), Pool_);
+        return DummyData_->data();
+    }
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -145,6 +177,7 @@ public:
 protected:
     arrow::MemoryPool* Pool_;
     std::shared_ptr<arrow::DataType> ArrowType_;
+    std::unique_ptr<arrow::Buffer> DummyData_;
 };
 
 template <bool Nullable>
@@ -157,10 +190,14 @@ public:
     }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-		Y_ENSURE(array->buffers.size() == 2);
-		Y_ENSURE(array->child_data.empty());
-		return { reinterpret_cast<const ui8*>(array->GetValues<NUdf::TUnboxedValue>(1)) };
-	}
+        Y_ENSURE(array->buffers.size() == 2);
+        Y_ENSURE(array->child_data.empty());
+        if (const auto* ptr = array->GetValues<NUdf::TUnboxedValue>(1)) {
+            return { reinterpret_cast<const ui8*>(ptr) };
+        }
+        DummyData_ = MakeZeroedBuffer(array->length * static_cast<int64_t>(sizeof(NUdf::TUnboxedValue)), Pool_);
+        return { DummyData_->data() };
+    }
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -222,6 +259,7 @@ public:
 protected:
     arrow::MemoryPool* Pool_;
     std::shared_ptr<arrow::DataType> ArrowType_;
+    std::unique_ptr<arrow::Buffer> DummyData_;
 };
 
 // singular types (Void, Null, EmptyList, EmptyDict) have no payload buffer

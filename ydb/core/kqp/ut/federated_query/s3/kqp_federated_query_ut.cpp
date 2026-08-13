@@ -3926,7 +3926,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = client.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
         const auto& issues = result.GetIssues().ToString();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for external table: db.[/Root/test_binding_disabled" << externalTableName);
+        UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for external table: db.[" << externalTableName);
     }
 }
 

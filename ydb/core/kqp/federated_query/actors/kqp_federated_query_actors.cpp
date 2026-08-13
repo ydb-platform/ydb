@@ -443,8 +443,7 @@ NActors::IActor* CreateAccessServiceActor() {
     auto enableV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
     auto& authConfig = AppData()->AuthConfig;
 
-    NCloud::TAccessServiceSettings asSettings;
-    asSettings.Endpoint = authConfig.GetAccessServiceEndpoint();
+    NCloud::TAccessServiceSettings asSettings(authConfig.GetAccessServiceEndpoint(), "ydb-kqp");
     asSettings.EnableSsl = authConfig.GetUseAccessServiceTLS();
     asSettings.GrpcKeepAliveTimeMs = authConfig.GetAccessServiceGrpcKeepAliveTimeMs();
     asSettings.GrpcKeepAliveTimeoutMs = authConfig.GetAccessServiceGrpcKeepAliveTimeoutMs();

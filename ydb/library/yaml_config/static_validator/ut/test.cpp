@@ -365,26 +365,27 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         };
 
         UNIT_ASSERT(Valid(validator.Validate(makeConfig(
-            "BlobStorage",
-            "    placement_groups: 2\n"
+            "BS",
+            "    placement_group_count: 2\n"
             "    placement_group_threads: 3\n"
             "    type: PLACEMENT\n"))));
 
         UNIT_ASSERT(Valid(validator.Validate(makeConfig(
-            "BlobStorage",
-            "    placement_groups: 2\n"
+            "BS",
+            "    placement_group_count: 2\n"
+            "    placement_groups: [1, 3]\n"
             "    type: PLACEMENT\n",
             "  blob_storage_executor: 0\n"))));
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
-            "BlobStorage",
-            "    placement_groups: 2\n"
+            "BS",
+            "    placement_group_count: 2\n"
             "    type: PLACEMENT\n",
             "  blob_storage_executor: 1\n")).Ok());
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
-            "BlobStorage",
-            "    placement_groups: 2\n"
+            "BS",
+            "    placement_group_count: 2\n"
             "    type: PLACEMENT\n",
             "  blob_storage_executor:\n"
             "  - 0\n")).Ok());
@@ -402,27 +403,77 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "  blob_storage_executor: 0\n"))));
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
-            "Storage",
-            "    placement_groups: 2\n"
+            "BlobStorage",
+            "    placement_group_count: 2\n"
             "    type: PLACEMENT\n")).Ok());
         UNIT_ASSERT(!validator.Validate(makeConfig(
-            "BlobStorage",
+            "BS",
             "    threads: 2\n"
-            "    placement_groups: 2\n"
+            "    placement_group_count: 2\n"
             "    type: PLACEMENT\n")).Ok());
         UNIT_ASSERT(!validator.Validate(makeConfig(
-            "BlobStorage",
+            "BS",
             "    type: PLACEMENT\n")).Ok());
-        UNIT_ASSERT(!validator.Validate(makeConfig(
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
             "User",
             "    threads: 2\n"
-            "    placement_groups: 2\n"
-            "    type: BASIC\n")).Ok());
+            "    placement_groups: [1, 3]\n"
+            "    type: BASIC\n"))));
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    placement_groups: [0, 2]\n"
+            "    type: IO\n"))));
         UNIT_ASSERT(!validator.Validate(makeConfig(
             "IO",
             "    threads: 1\n"
             "    placement_group_threads: 1\n"
             "    type: IO\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "User",
+            "    threads: 2\n"
+            "    placement_group_count: 2\n"
+            "    type: BASIC\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement_group_count: 2\n"
+            "    placement_groups: [0]\n"
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement_group_count: 2\n"
+            "    placement_groups: [1, 1]\n"
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement_group_count: 1\n"
+            "    placement_groups: []\n"
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement_group_count: 1\n"
+            "    placement_groups: [-1]\n"
+            "    type: PLACEMENT\n")).Ok());
+
+        UNIT_ASSERT(Valid(validator.Validate(
+            "actor_system_config:\n"
+            "  executor:\n"
+            "  - name: BS\n"
+            "    placement_group_count: 1\n"
+            "    placement_groups: [0]\n"
+            "    type: PLACEMENT\n"
+            "  - name: ICSession\n"
+            "    placement_group_count: 1\n"
+            "    type: PLACEMENT\n"
+            "  scheduler:\n"
+            "    progress_threshold: 10000\n"
+            "    resolution: 64\n"
+            "    spin_threshold: 0\n")));
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BS",
+            "    placement_group_count: 64\n"
+            "    type: PLACEMENT\n"))));
     }
 
     Y_UNIT_TEST(InterconnectSessionExecutor) {
@@ -445,7 +496,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "    threads: 1\n"
             "    type: BASIC\n"
             "  - name: ICSession\n"
-            "    placement_groups: 2\n"
+            "    placement_group_count: 2\n"
             "    type: PLACEMENT\n"
             "  sys_executor: 0\n"
             "  use_shared_threads: false\n"

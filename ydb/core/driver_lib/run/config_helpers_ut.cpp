@@ -93,7 +93,7 @@ Y_UNIT_TEST(SelectedPlacementBlobStorageExecutorExpandsIntoItsPools) {
     system->SetThreads(1);
 
     auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    blobStorage->SetPlacementGroups(2);
+    blobStorage->SetPlacementGroupCount(2);
 
     auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
     io->SetThreads(1);
@@ -109,7 +109,7 @@ Y_UNIT_TEST(BlobStorageExecutorIsNotSelectedByDefault) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* placement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    placement->SetPlacementGroups(2);
+    placement->SetPlacementGroupCount(2);
 
     UNIT_ASSERT(
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig).empty());
@@ -119,7 +119,7 @@ Y_UNIT_TEST(BlobStorageExecutorCanReferenceBasicOrIoExecutor) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* placement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    placement->SetPlacementGroups(2);
+    placement->SetPlacementGroupCount(2);
 
     auto* basic = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     basic->SetThreads(1);
@@ -154,11 +154,11 @@ Y_UNIT_TEST(InterconnectSessionExecutorExpandsPlacementPools) {
     auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     system->SetThreads(1);
 
-    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BlobStorage");
-    blobStorage->SetPlacementGroups(2);
+    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BS");
+    blobStorage->SetPlacementGroupCount(2);
 
     auto* interconnectSession = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "ICSession");
-    interconnectSession->SetPlacementGroups(3);
+    interconnectSession->SetPlacementGroupCount(3);
 
     systemConfig.SetBlobStorageExecutor(1);
     systemConfig.SetInterconnectSessionExecutor(2);
@@ -175,12 +175,12 @@ Y_UNIT_TEST(BlobStorageAndInterconnectSessionExecutorsUseDistinctPlacementGroups
     auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     system->SetThreads(1);
 
-    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BlobStorage");
-    blobStorage->SetPlacementGroups(2);
+    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BS");
+    blobStorage->SetPlacementGroupCount(2);
     blobStorage->SetPlacementGroupThreads(1);
 
     auto* interconnectSession = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "ICSession");
-    interconnectSession->SetPlacementGroups(2);
+    interconnectSession->SetPlacementGroupCount(2);
     interconnectSession->SetPlacementGroupThreads(1);
 
     auto* interconnect = AddExecutor(systemConfig, TExecutorConfig::BASIC, "IC");
@@ -223,14 +223,144 @@ Y_UNIT_TEST(BlobStorageAndInterconnectSessionExecutorsUseDistinctPlacementGroups
     AssertCpuMask(secondInterconnectSessionPool->Affinity, "6-7");
 }
 
+Y_UNIT_TEST(ExplicitPlacementGroupsCanBeSharedByPlacementAndRegularExecutors) {
+    NKikimrConfig::TActorSystemConfig systemConfig;
+
+    auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
+    system->SetThreads(2);
+    system->AddPlacementGroups(1);
+    system->AddPlacementGroups(2);
+
+    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BS");
+    blobStorage->SetPlacementGroupCount(2);
+    blobStorage->SetPlacementGroupThreads(3);
+    blobStorage->AddPlacementGroups(1);
+    blobStorage->AddPlacementGroups(2);
+
+    auto* interconnectSession = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "ICSession");
+    interconnectSession->SetPlacementGroupCount(2);
+    interconnectSession->SetPlacementGroupThreads(4);
+    interconnectSession->AddPlacementGroups(1);
+    interconnectSession->AddPlacementGroups(2);
+
+    auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
+    io->SetThreads(1);
+
+    TCpuTopology cpuTopology;
+    cpuTopology.AllCpus = TCpuMask(TString("0-7"));
+    cpuTopology.PlacementGroups = {
+        {.Id = 0, .Cpus = TCpuMask(TString("0-1"))},
+        {.Id = 1, .Cpus = TCpuMask(TString("2-3"))},
+        {.Id = 2, .Cpus = TCpuMask(TString("4-5"))},
+        {.Id = 3, .Cpus = TCpuMask(TString("6-7"))},
+    };
+
+    NActors::TCpuManagerConfig cpuManager;
+    NActorSystemConfigHelpers::AddExecutorPools(cpuManager, systemConfig, nullptr, cpuTopology);
+
+    UNIT_ASSERT_VALUES_EQUAL(cpuManager.GetExecutorsCount(), 6);
+
+    const auto* systemPool = FindBasicPool(cpuManager, 0);
+    UNIT_ASSERT(systemPool);
+    AssertCpuMask(systemPool->Affinity, "2-5");
+
+    const auto* firstBlobStoragePool = FindBasicPool(cpuManager, 1);
+    UNIT_ASSERT(firstBlobStoragePool);
+    UNIT_ASSERT_VALUES_EQUAL(firstBlobStoragePool->PoolName, "BS0");
+    UNIT_ASSERT_VALUES_EQUAL(firstBlobStoragePool->Threads, 3);
+    AssertCpuMask(firstBlobStoragePool->Affinity, "2-3");
+
+    const auto* secondBlobStoragePool = FindBasicPool(cpuManager, 2);
+    UNIT_ASSERT(secondBlobStoragePool);
+    UNIT_ASSERT_VALUES_EQUAL(secondBlobStoragePool->PoolName, "BS1");
+    AssertCpuMask(secondBlobStoragePool->Affinity, "4-5");
+
+    const auto* firstInterconnectSessionPool = FindBasicPool(cpuManager, 3);
+    UNIT_ASSERT(firstInterconnectSessionPool);
+    UNIT_ASSERT_VALUES_EQUAL(firstInterconnectSessionPool->PoolName, "ICSession0");
+    UNIT_ASSERT_VALUES_EQUAL(firstInterconnectSessionPool->Threads, 4);
+    AssertCpuMask(firstInterconnectSessionPool->Affinity, "2-3");
+
+    const auto* secondInterconnectSessionPool = FindBasicPool(cpuManager, 4);
+    UNIT_ASSERT(secondInterconnectSessionPool);
+    UNIT_ASSERT_VALUES_EQUAL(secondInterconnectSessionPool->PoolName, "ICSession1");
+    AssertCpuMask(secondInterconnectSessionPool->Affinity, "4-5");
+
+    UNIT_ASSERT_VALUES_EQUAL(cpuManager.IO.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(cpuManager.IO[0].PoolId, 5);
+    AssertCpuMask(cpuManager.IO[0].Affinity, "0-1,6-7");
+}
+
+Y_UNIT_TEST(ExplicitPlacementGroupOrderControlsExpandedPoolAffinity) {
+    NKikimrConfig::TActorSystemConfig systemConfig;
+
+    auto* placement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BS");
+    placement->SetPlacementGroupCount(3);
+    placement->SetPlacementGroupThreads(1);
+    placement->AddPlacementGroups(2);
+    placement->AddPlacementGroups(0);
+    placement->AddPlacementGroups(1);
+
+    TCpuTopology cpuTopology;
+    cpuTopology.AllCpus = TCpuMask(TString("0-5"));
+    cpuTopology.PlacementGroups = {
+        {.Id = 0, .Cpus = TCpuMask(TString("0-1"))},
+        {.Id = 1, .Cpus = TCpuMask(TString("2-3"))},
+        {.Id = 2, .Cpus = TCpuMask(TString("4-5"))},
+    };
+
+    NActors::TCpuManagerConfig cpuManager;
+    NActorSystemConfigHelpers::AddExecutorPools(cpuManager, systemConfig, nullptr, cpuTopology);
+
+    const auto* firstPool = FindBasicPool(cpuManager, 0);
+    const auto* secondPool = FindBasicPool(cpuManager, 1);
+    const auto* thirdPool = FindBasicPool(cpuManager, 2);
+    UNIT_ASSERT(firstPool);
+    UNIT_ASSERT(secondPool);
+    UNIT_ASSERT(thirdPool);
+    AssertCpuMask(firstPool->Affinity, "4-5");
+    AssertCpuMask(secondPool->Affinity, "0-1");
+    AssertCpuMask(thirdPool->Affinity, "2-3");
+}
+
+Y_UNIT_TEST(RegularExecutorsCanUsePlacementGroupsWithoutPlacementExecutors) {
+    NKikimrConfig::TActorSystemConfig systemConfig;
+
+    auto* basic = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
+    basic->SetThreads(2);
+    basic->AddPlacementGroups(0);
+    basic->AddPlacementGroups(2);
+
+    auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
+    io->SetThreads(1);
+    io->AddPlacementGroups(1);
+    io->AddPlacementGroups(2);
+
+    TCpuTopology cpuTopology;
+    cpuTopology.AllCpus = TCpuMask(TString("0-5"));
+    cpuTopology.PlacementGroups = {
+        {.Id = 0, .Cpus = TCpuMask(TString("0-1"))},
+        {.Id = 1, .Cpus = TCpuMask(TString("2-3"))},
+        {.Id = 2, .Cpus = TCpuMask(TString("4-5"))},
+    };
+
+    NActors::TCpuManagerConfig cpuManager;
+    NActorSystemConfigHelpers::AddExecutorPools(cpuManager, systemConfig, nullptr, cpuTopology);
+
+    UNIT_ASSERT_VALUES_EQUAL(cpuManager.Basic.size(), 1);
+    AssertCpuMask(cpuManager.Basic[0].Affinity, "0-1,4-5");
+    UNIT_ASSERT_VALUES_EQUAL(cpuManager.IO.size(), 1);
+    AssertCpuMask(cpuManager.IO[0].Affinity, "2-5");
+}
+
 Y_UNIT_TEST(PlacementExecutorsUsePlacementGroupAffinityAndLeaveOtherCpusForRegularPools) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     system->SetThreads(2);
 
-    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BlobStorage");
-    blobStorage->SetPlacementGroups(2);
+    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "BS");
+    blobStorage->SetPlacementGroupCount(2);
     blobStorage->SetPlacementGroupThreads(3);
 
     auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
@@ -256,7 +386,7 @@ Y_UNIT_TEST(PlacementExecutorsUsePlacementGroupAffinityAndLeaveOtherCpusForRegul
 
     const auto* firstPlacementPool = FindBasicPool(cpuManager, 1);
     UNIT_ASSERT(firstPlacementPool);
-    UNIT_ASSERT_VALUES_EQUAL(firstPlacementPool->PoolName, "BlobStorage0");
+    UNIT_ASSERT_VALUES_EQUAL(firstPlacementPool->PoolName, "BS0");
     UNIT_ASSERT_VALUES_EQUAL(firstPlacementPool->Threads, 3);
     UNIT_ASSERT_VALUES_EQUAL(firstPlacementPool->MinThreadCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(firstPlacementPool->MaxThreadCount, 3);
@@ -264,7 +394,7 @@ Y_UNIT_TEST(PlacementExecutorsUsePlacementGroupAffinityAndLeaveOtherCpusForRegul
 
     const auto* secondPlacementPool = FindBasicPool(cpuManager, 2);
     UNIT_ASSERT(secondPlacementPool);
-    UNIT_ASSERT_VALUES_EQUAL(secondPlacementPool->PoolName, "BlobStorage1");
+    UNIT_ASSERT_VALUES_EQUAL(secondPlacementPool->PoolName, "BS1");
     UNIT_ASSERT_VALUES_EQUAL(secondPlacementPool->Threads, 3);
     AssertCpuMask(secondPlacementPool->Affinity, "2-3");
 

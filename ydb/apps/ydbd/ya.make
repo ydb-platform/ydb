@@ -6,6 +6,10 @@ ENDIF()
 
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
+
+    PEERDIR(
+        contrib/libs/tcmalloc/malloc_extension
+    )
 ENDIF()
 
 IF (OS_DARWIN)

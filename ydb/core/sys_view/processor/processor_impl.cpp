@@ -1,5 +1,6 @@
 #include "processor_impl.h"
 
+#include <ydb/core/sys_view/common/query_metrics_retention.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
@@ -244,6 +245,46 @@ ui32 TSysViewProcessor::PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db,
     return hourRank;
 }
 
+ui64 TSysViewProcessor::QueryMetricsResultSize(const TQueryToMetrics& result) {
+    return result.Text.size() + result.Metrics.ByteSizeLong();
+}
+
+void TSysViewProcessor::UpdateMetricsOneHourRetentionCounters(
+    ui64 retainedBytes, ui64 evictedBuckets)
+{
+    MetricsOneHourRetainedBytes = retainedBytes;
+    auto* counters = Executor()->GetCounters();
+    counters->Simple()[COUNTER_QUERY_METRICS_ONE_HOUR_RETAINED_BYTES]
+        .Set(retainedBytes);
+    if (evictedBuckets) {
+        counters->Cumulative()[COUNTER_QUERY_METRICS_ONE_HOUR_BUCKETS_EVICTED_BY_SIZE]
+            .Increment(evictedBuckets);
+    }
+}
+
+void TSysViewProcessor::EnforceMetricsOneHourByteLimit(
+    NIceDb::TNiceDb& db, TInstant activeHourEnd)
+{
+    TMap<ui64, ui64> bucketBytes;
+    for (const auto& [key, result] : MetricsOneHour) {
+        bucketBytes[key.first] += QueryMetricsResultSize(result);
+    }
+
+    const auto plan = PlanQueryMetricsRetention(
+        bucketBytes, activeHourEnd.MicroSeconds(), MetricsOneHourByteLimit);
+
+    for (ui64 hourEndUs : plan.BucketsToEvict) {
+        auto it = MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
+        while (it != MetricsOneHour.end() && it->first.first == hourEndUs) {
+            db.Table<Schema::MetricsOneHour>().Key(it->first).Delete();
+            it = MetricsOneHour.erase(it);
+        }
+    }
+
+    UpdateMetricsOneHourRetentionCounters(
+        plan.RetainedBytes, plan.BucketsToEvict.size());
+}
+
 void TSysViewProcessor::LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const {
     ui64 receivedCpuTimeUs = 0;
     for (const auto& [_, metrics] : QueryMetrics) {
@@ -291,6 +332,7 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
     const auto hourMetrics = RankCurrentHourQueryMetrics();
     const ui32 persistedHourMetrics =
         PersistCurrentHourQueryMetrics(db, hourEnd, hourMetrics);
+    EnforceMetricsOneHourByteLimit(db, hourEnd);
 
     LastMergedQueryMetricsIntervalEnd = IntervalEnd;
     PersistLastMergedQueryMetricsIntervalEnd(db);
@@ -520,6 +562,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CutHistory<Schema::TopPartitionsOneHour>(db, TopPartitionsByCpuOneHour, hourHistorySize);
     CutHistory<Schema::TopPartitionsByTliOneMinute>(db, TopPartitionsByTliOneMinute, minuteHistorySize);
     CutHistory<Schema::TopPartitionsByTliOneHour>(db, TopPartitionsByTliOneHour, hourHistorySize);
+
+    EnforceMetricsOneHourByteLimit(db, newHourEnd);
 }
 
 void TSysViewProcessor::SendRequests() {

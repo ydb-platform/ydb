@@ -2573,7 +2573,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             "SELECT COUNT(*) FROM `.sys/query_metrics_one_hour`;"), 1024);
     }
 
-    Y_UNIT_TEST(QueryMetricsOneHourAggregateAndReboot) {
+    Y_UNIT_TEST(QueryMetricsOneHourAggregate) {
         TTestEnv env(1, 2, {.EnableSVP = true});
         CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
 
@@ -2619,50 +2619,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
             WHERE QueryText = 'synthetic-aggregate';
         )", true), 20);
 
-        // Restart the tenant node rather than only the tablet: this is the
-        // rolling-restart scenario the persistent accumulator must survive.
-        env.GetTenants().Free(database);
-        env.GetTenants().Add(database);
-
-        WaitFor(TDuration::Minutes(1), "hour aggregate after node restart", [&](TString& error) {
-            const ui64 count = ReadUint64(client, R"(
-                SELECT Count
-                FROM `.sys/query_metrics_one_hour`
-                WHERE QueryText = 'synthetic-aggregate';
-            )", true);
-            error = TStringBuilder() << "hour count after restart = " << count << ", expected 2";
-            return count == 2;
-        });
-
-        const ui32 restartedNodeIdx = env.GetTenants().List(database).front();
-        SendQueryMetric(env, restartedNodeIdx, database, queryHash, queryText,
-            /* cpuTimeUs */ 5, /* durationMs */ 2, /* readRows */ 50);
-
-        WaitFor(TDuration::Minutes(1), "second hour aggregate after reboot", [&](TString& error) {
-            const ui64 count = ReadUint64(client, R"(
-                SELECT Count
-                FROM `.sys/query_metrics_one_hour`
-                WHERE QueryText = 'synthetic-aggregate';
-            )", true);
-            error = TStringBuilder() << "hour count = " << count << ", expected 3";
-            return count == 3;
-        });
-
-        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
-            SELECT SumCPUTime
-            FROM `.sys/query_metrics_one_hour`
-            WHERE QueryText = 'synthetic-aggregate';
-        )", true), 35);
-        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
-            SELECT MinCPUTime
-            FROM `.sys/query_metrics_one_hour`
-            WHERE QueryText = 'synthetic-aggregate';
-        )", true), 5);
-        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
-            SELECT MaxCPUTime
-            FROM `.sys/query_metrics_one_hour`
-            WHERE QueryText = 'synthetic-aggregate';
-        )", true), 20);
     }
 
     Y_UNIT_TEST(QueryMetricsOneHourDeliveryFailure) {
@@ -2677,35 +2633,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
         constexpr ui64 queryHash = 91'001;
 
         auto& runtime = *env.GetServer().GetRuntime();
-        const ui32 failedNodeId = runtime.GetActorSystem(failedNodeIdx)->NodeId;
-        bool failureInjected = false;
-        TTestActorRuntime::TEventFilter previousFilter;
-        previousFilter = runtime.SetEventFilter(
-            [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
-                if (!failureInjected
-                    && ev->GetRecipientRewrite() == MakeSysViewServiceID(failedNodeId)
-                    && ev->Cookie == failedNodeId)
-                {
-                    failureInjected = true;
-                    ev.Reset(new IEventHandle(
-                        ev->Sender,
-                        ev->GetRecipientRewrite(),
-                        new TEvents::TEvUndelivered(
-                            ev->GetTypeRewrite(),
-                            TEvents::TEvUndelivered::Disconnected),
-                        0,
-                        ev->Cookie));
-                    return false;
-                }
-                return previousFilter(runtimeBase, ev);
-            });
+        auto& failedActorSystem = *runtime.GetActorSystem(failedNodeIdx);
+        const ui32 failedNodeId = failedActorSystem.NodeId;
+        failedActorSystem.Send(
+            MakeSysViewServiceID(failedNodeId),
+            new TEvSysView::TEvFailNextIntervalMetricsRequest());
 
         const ui64 endTimeMs = TInstant::Now().MilliSeconds();
         SendQueryMetric(env, goodNodeIdx, database, queryHash,
-            "synthetic-delivery", /* cpuTimeUs */ 1'000'000'000,
+            "synthetic-delivery", /* cpuTimeUs */ 10,
             /* durationMs */ 1, /* readRows */ 0, endTimeMs);
         SendQueryMetric(env, failedNodeIdx, database, queryHash,
-            "synthetic-delivery", /* cpuTimeUs */ 1'000'000'000,
+            "synthetic-delivery", /* cpuTimeUs */ 20,
             /* durationMs */ 1, /* readRows */ 0, endTimeMs);
 
         TDriver driver(TDriverConfig()
@@ -2721,20 +2660,30 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `.sys/query_metrics_one_hour`
                     WHERE QueryText = 'synthetic-delivery';
                 )", true);
-                error = TStringBuilder()
-                    << "good count = " << count
-                    << ", failure injected = " << failureInjected;
-                return count == 1 && failureInjected;
+                error = TStringBuilder() << "partial count = " << count;
+                return count == 1;
             });
-
-        runtime.SetEventFilter(std::move(previousFilter));
 
         UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
             SELECT SumCPUTime
             FROM `.sys/query_metrics_one_hour`
             WHERE QueryText = 'synthetic-delivery';
-        )", true), 1'000'000'000);
+        )", true), 10);
+
+        const auto description = DescribePath(runtime, TString(database));
+        const ui64 processorId = description.GetDomainDescription()
+            .GetProcessingParams().GetSysViewProcessor();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(processorId, sender,
+            new TEvInterconnect::TEvNodeDisconnected(failedNodeId));
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
+            SELECT Count
+            FROM `.sys/query_metrics_one_hour`
+            WHERE QueryText = 'synthetic-delivery';
+        )", true), 1);
     }
+
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {
 

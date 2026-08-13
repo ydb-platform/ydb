@@ -210,6 +210,7 @@ public:
         EProcessorMode processorMode)
         : Config(std::move(config))
         , HasExternalCounters(hasExternalCounters)
+        , TestMode(processorMode == EProcessorMode::FAST)
         , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
         , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
         , SendInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 2 : 20))
@@ -286,6 +287,7 @@ public:
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
+            hFunc(TEvSysView::TEvFailNextIntervalMetricsRequest, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -605,6 +607,15 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
+        if (TestMode && FailNextIntervalMetricsRequest) {
+            FailNextIntervalMetricsRequest = false;
+            Send(ev->Sender,
+                new TEvents::TEvUndelivered(
+                    ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected),
+                0, ev->Cookie);
+            return;
+        }
+
         auto response = MakeHolder<TEvSysView::TEvGetIntervalMetricsResponse>();
 
         if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
@@ -658,6 +669,12 @@ private:
             << ", texts count# " << response->Record.QueryTextsSize());
 
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
+    }
+
+    void Handle(TEvSysView::TEvFailNextIntervalMetricsRequest::TPtr&) {
+        if (TestMode) {
+            FailNextIntervalMetricsRequest = true;
+        }
     }
 
     void Handle(TEvPrivate::TEvProcessCounters::TPtr&) {
@@ -1005,6 +1022,8 @@ private:
 private:
     TExtCountersConfig Config;
     const bool HasExternalCounters;
+    const bool TestMode;
+    bool FailNextIntervalMetricsRequest = false;
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;

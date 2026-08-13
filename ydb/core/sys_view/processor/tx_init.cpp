@@ -53,6 +53,83 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         return true;
     };
 
+    bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
+        Self->MetricsOneHour.clear();
+        Self->MetricsOneHourEvictBeforeHourEndUs = 0;
+
+        auto rowset = db.Table<Schema::MetricsOneHour>().Reverse().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        using TBucketEntry = std::pair<THistoryKey, TQueryToMetrics>;
+        TVector<TBucketEntry> bucket;
+        ui64 bucketHourEndUs = 0;
+        ui64 bucketBytes = 0;
+        ui64 retainedBytes = 0;
+
+        auto flushBucket = [&]() {
+            if (bucket.empty()) {
+                return true;
+            }
+
+            const bool isActive = bucketHourEndUs == Self->CurrentHourEnd.MicroSeconds();
+            if (!isActive && retainedBytes + bucketBytes > Self->MetricsOneHourByteLimit) {
+                Self->MetricsOneHourEvictBeforeHourEndUs =
+                    Self->MetricsOneHour.empty()
+                        ? Self->CurrentHourEnd.MicroSeconds()
+                        : Self->MetricsOneHour.begin()->first.first;
+                return false;
+            }
+
+            retainedBytes += bucketBytes;
+            for (auto& [key, result] : bucket) {
+                Self->MetricsOneHour.emplace(key, std::move(result));
+            }
+            bucket.clear();
+            bucketBytes = 0;
+            return true;
+        };
+
+        while (!rowset.EndOfSet()) {
+            const ui64 hourEndUs = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
+            const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
+
+            if (!bucket.empty() && bucketHourEndUs != hourEndUs) {
+                if (!flushBucket()) {
+                    break;
+                }
+            }
+            if (bucket.empty()) {
+                bucketHourEndUs = hourEndUs;
+            }
+
+            TQueryToMetrics result;
+            result.Text = rowset.GetValue<Schema::MetricsOneHour::Text>();
+            TString data = rowset.GetValue<Schema::MetricsOneHour::Data>();
+            if (data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
+            }
+            bucketBytes += result.Text.size() + data.size();
+            bucket.emplace_back(std::make_pair(hourEndUs, rank), std::move(result));
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        if (!bucket.empty() && !Self->MetricsOneHourEvictBeforeHourEndUs) {
+            flushBucket();
+        }
+
+        Self->UpdateMetricsOneHourRetentionCounters(retainedBytes, 0);
+        SVLOG_D("[" << Self->TabletID() << "] Loading byte-bounded hour metrics: "
+            << "result count# " << Self->MetricsOneHour.size()
+            << ", retained bytes# " << retainedBytes
+            << ", evict before# " << Self->MetricsOneHourEvictBeforeHourEndUs);
+        return true;
+    }
+
     template <typename S>
     bool LoadPartitionResults(NIceDb::TNiceDb& db, TSelf::TResultPartitionsMap& results) {
         results.clear();
@@ -144,7 +221,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto intervalTopsRowset = db.Table<Schema::IntervalTops>().Range().Select();
             auto nodesToRequestRowset = db.Table<Schema::NodesToRequest>().Range().Select();
             auto metricsOneMinuteRowset = db.Table<Schema::MetricsOneMinute>().Range().Select();
-            auto metricsOneHourRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
             auto durationOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
             auto durationOneHourRowset = db.Table<Schema::TopByDurationOneHour>().Range().Select();
             auto readBytesOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
@@ -164,7 +240,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !intervalTopsRowset.IsReady() ||
                 !nodesToRequestRowset.IsReady() ||
                 !metricsOneMinuteRowset.IsReady() ||
-                !metricsOneHourRowset.IsReady() ||
                 !durationOneMinuteRowset.IsReady() ||
                 !durationOneHourRowset.IsReady() ||
                 !readBytesOneMinuteRowset.IsReady() ||
@@ -449,7 +524,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         // Metrics...
         if (!LoadQueryResults<Schema::MetricsOneMinute>(db, Self->MetricsOneMinute))
             return false;
-        if (!LoadQueryResults<Schema::MetricsOneHour>(db, Self->MetricsOneHour))
+        if (!LoadMetricsOneHour(db))
             return false;
 
         // TopBy...

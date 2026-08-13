@@ -136,6 +136,14 @@ public:
         bool local = false,
         bool checkResult = true);
 
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        NYdb::NTopic::TTopicClient& topicClient,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool checkResult = true);
+
     void TestReadTopicBasic(const std::string& testSuffix);
 
     // Table client SDK

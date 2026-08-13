@@ -90,11 +90,7 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
-<<<<<<< HEAD
-=======
-            "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
->>>>>>> 5fb33b8c5f9 (ydb streaming: eds iam auth: add tests for generic provider/fq connector (#47771))
         },
         replication_config={
             "iam_service_control": {

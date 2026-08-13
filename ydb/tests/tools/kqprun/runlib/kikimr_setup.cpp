@@ -3,7 +3,6 @@
 
 #include <util/system/hostname.h>
 
-#include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
@@ -87,11 +86,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
     serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
-<<<<<<< HEAD
     serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken));
-=======
-    serverSettings.SetCredentialsFactory(NFq::CreateKikimrStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
->>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

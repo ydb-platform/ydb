@@ -208,53 +208,13 @@ runs:
           # Soft RLIMIT_CORE=1 is a magic "disable dumps" value (LLVM/ASan). Something
           # in the ya/test stack lowers soft to 1 after startup; force unlimited for
           # the whole process tree (incl. ydbd) and block setrlimit from lowering it.
+          # Sources live in .github/scripts/coredump/ (not inline heredocs — those break YAML).
           FORCE_CORE_SO="${RUNNER_TEMP:-/tmp}/force_rlimit_core.so"
-          cat > "${RUNNER_TEMP:-/tmp}/force_rlimit_core.c" <<'EOF'
-#define _GNU_SOURCE
-#include <dlfcn.h>
-#include <sys/resource.h>
-static int (*real_setrlimit)(__rlimit_resource_t, const struct rlimit *);
-static void force_unlimited_core(void) {
-    struct rlimit inf = { RLIM_INFINITY, RLIM_INFINITY };
-    if (!real_setrlimit)
-        real_setrlimit = (int (*)(__rlimit_resource_t, const struct rlimit *))dlsym(RTLD_NEXT, "setrlimit");
-    if (real_setrlimit)
-        real_setrlimit(RLIMIT_CORE, &inf);
-}
-int setrlimit(__rlimit_resource_t resource, const struct rlimit *rlim) {
-    if (!real_setrlimit)
-        real_setrlimit = (int (*)(__rlimit_resource_t, const struct rlimit *))dlsym(RTLD_NEXT, "setrlimit");
-    if (resource == RLIMIT_CORE) {
-        struct rlimit inf = { RLIM_INFINITY, RLIM_INFINITY };
-        return real_setrlimit(resource, &inf);
-    }
-    return real_setrlimit(resource, rlim);
-}
-__attribute__((constructor)) static void init(void) { force_unlimited_core(); }
-EOF
-          cc -shared -fPIC -O2 -o "$FORCE_CORE_SO" "${RUNNER_TEMP:-/tmp}/force_rlimit_core.c" -ldl
+          cc -shared -fPIC -O2 -o "$FORCE_CORE_SO" .github/scripts/coredump/force_rlimit_core.c -ldl
           chmod a+r "$FORCE_CORE_SO"
 
-          # Helper inside systemd-run scope: raise core as root, setpriv to runner,
-          # raise again + LD_PRELOAD (preload is cleared on root→user transition).
           FORCE_CORE_HELPER="${RUNNER_TEMP:-/tmp}/ya_make_with_core.sh"
-          cat > "$FORCE_CORE_HELPER" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-UID_TO="$1"
-GID_TO="$2"
-FORCE_SO="$3"
-shift 3
-ulimit -c unlimited
-exec setpriv --reuid="$UID_TO" --regid="$GID_TO" --init-groups -- \
-  env "LD_PRELOAD=${FORCE_SO}${LD_PRELOAD:+:$LD_PRELOAD}" \
-  bash -c '
-    set -euo pipefail
-    ulimit -c unlimited
-    python3 -c "import resource; inf=resource.RLIM_INFINITY; resource.setrlimit(resource.RLIMIT_CORE,(inf,inf)); s,h=resource.getrlimit(resource.RLIMIT_CORE); print(\"ya-make rlimit_core=\", (s,h)); assert s == inf or s > 1, (s,h)"
-    exec "$@"
-  ' bash "$@"
-EOF
+          cp -f .github/scripts/coredump/ya_make_with_core.sh "$FORCE_CORE_HELPER"
           chmod a+rx "$FORCE_CORE_HELPER"
 
           echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"

@@ -2315,27 +2315,26 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         const ui32 overloadedBeforeRefresh = overloadedCount;
         const ui32 readyBeforeRefresh = readyCount;
 
-        // Periodic ListNodes refresh while READY: must not re-broadcast. A fresh FCM already
-        // assumes everyone is cool (empty HotNodes), so a forced READY conveys nothing and used
-        // to cost O(N) messages per node every minute on a healthy cluster.
+        // Periodic ListNodes refresh must re-publish READY (current truth): an FCM that saw
+        // OVERLOADED and missed the cool edge has no other way to heal HotNodes.
         SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(overloadedCount, overloadedBeforeRefresh);
-        UNIT_ASSERT_VALUES_EQUAL(readyCount, readyBeforeRefresh);
+        UNIT_ASSERT_C(readyCount > readyBeforeRefresh, "refresh should re-push READY from current state");
 
-        // While OVERLOADED the same refresh must re-assert: an FCM that missed the edge (or came
-        // up after it) has no other way to learn that this node is hot.
+        // While OVERLOADED the same refresh must re-assert for late FCMs.
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
                          new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         const ui32 overloadedBeforeHotRefresh = overloadedCount;
         UNIT_ASSERT_C(overloadedBeforeHotRefresh > overloadedBeforeRefresh, "expected OVERLOADED on re-enter");
 
+        const ui32 readyBeforeHotRefresh = readyCount;
         SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT_C(overloadedCount > overloadedBeforeHotRefresh, "refresh must re-push OVERLOADED so late FCMs learn the hot node");
-        UNIT_ASSERT_VALUES_EQUAL(readyCount, readyBeforeRefresh);
+        UNIT_ASSERT_VALUES_EQUAL(readyCount, readyBeforeHotRefresh);
     }
 
     Y_UNIT_TEST(OverloadManagerPushesToAllCachedNodes) {

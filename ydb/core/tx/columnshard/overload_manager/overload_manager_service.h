@@ -62,7 +62,9 @@ public:
     static void ReleaseResources(ui64 writesCount, ui64 writesSize);
 
     // Edge-triggered from ColumnShard write queue: tablet entered/left compaction wait.
-    static void ReportCompactionOverload(ui64 tabletId, bool overloaded);
+    // Returns true when the event was actually handed to the overload manager (feature flag on
+    // and an actor system present); callers must only advance sticky local state on success.
+    static bool ReportCompactionOverload(ui64 tabletId, bool overloaded);
 };
 
 }   // namespace NKikimr::NColumnShard::NOverload

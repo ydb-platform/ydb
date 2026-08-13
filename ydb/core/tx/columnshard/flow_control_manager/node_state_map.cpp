@@ -5,18 +5,24 @@
 namespace NKikimr::NColumnShard::NFlowControl {
 
 bool TNodeStateMap::MarkHot(ui32 nodeId, ui64 generation) {
+    auto& last = LastGeneration[nodeId];
+    if (generation < last) {
+        return false;
+    }
+    last = generation;
     const bool firstHot = HotNodes.empty();
-    ui64& stored = HotNodes[nodeId];
-    stored = Max(stored, generation);
+    HotNodes[nodeId] = generation;
     return firstHot;
 }
 
 bool TNodeStateMap::MarkReady(ui32 nodeId, ui64 generation) {
-    const bool wasHot = !HotNodes.empty();
-    auto it = HotNodes.find(nodeId);
-    if (it != HotNodes.end() && generation >= it->second) {
-        HotNodes.erase(it);
+    auto& last = LastGeneration[nodeId];
+    if (generation < last) {
+        return false;
     }
+    last = generation;
+    const bool wasHot = !HotNodes.empty();
+    HotNodes.erase(nodeId);
     // "Was hot and is no longer", not merely "is not hot": the overload manager re-publishes the
     // current status to every FCM once a minute, so a healthy cluster delivers READY for nodes that
     // were never in the set. Reporting those as an edge would clamp tokens and freeze growth on
@@ -31,6 +37,9 @@ void TNodeStateMap::SetTabletNode(ui64 tabletId, ui32 nodeId) {
         // one round of traffic, and until then the affected tablets are simply admitted.
         TabletToNode.clear();
         LastRecheck.clear();
+        // An in-flight resolve for a tablet that just disappeared would otherwise permanently
+        // suppress rechecks after the tablet is relearned.
+        RecheckInFlight.clear();
     }
     TabletToNode[tabletId] = nodeId;
 }

@@ -14,6 +14,9 @@ namespace NKikimr::NColumnShard::NFlowControl {
 class TNodeStateMap {
     // nodeId -> last overload generation (present => hot)
     THashMap<ui32, ui64> HotNodes;
+    // Survives READY: without it a delayed OVERLOADED with an older generation is accepted after
+    // the watermark was erased and re-heats a cool node indefinitely.
+    THashMap<ui32, ui64> LastGeneration;
     THashMap<ui64, ui32> TabletToNode;
     THashMap<ui64, TInstant> LastRecheck;
     THashSet<ui64> RecheckInFlight;

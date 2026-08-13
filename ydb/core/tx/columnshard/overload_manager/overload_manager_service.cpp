@@ -25,6 +25,16 @@ void SendToOverloadManager(NActors::IEventBase* event) {
     actorSystem->Send(new NActors::IEventHandle(TOverloadManagerServiceOperator::MakeServiceId(), NActors::TActorId(), event));
 }
 
+bool TrySendToOverloadManager(NActors::IEventBase* event) {
+    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    if (!actorSystem) {
+        delete event;
+        return false;
+    }
+    actorSystem->Send(new NActors::IEventHandle(TOverloadManagerServiceOperator::MakeServiceId(), NActors::TActorId(), event));
+    return true;
+}
+
 }   // namespace
 
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
@@ -114,11 +124,11 @@ void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 wr
     NotifyIfResourcesAvailable(false);
 }
 
-void TOverloadManagerServiceOperator::ReportCompactionOverload(ui64 tabletId, bool overloaded) {
+bool TOverloadManagerServiceOperator::ReportCompactionOverload(ui64 tabletId, bool overloaded) {
     if (!TFlowControlManagerServiceOperator::IsEnabled()) {
-        return;
+        return false;
     }
-    SendToOverloadManager(new TEvCompactionOverloadState(tabletId, overloaded));
+    return TrySendToOverloadManager(new TEvCompactionOverloadState(tabletId, overloaded));
 }
 
 }   // namespace NKikimr::NColumnShard::NOverload

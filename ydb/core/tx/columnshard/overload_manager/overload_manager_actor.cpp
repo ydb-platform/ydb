@@ -78,12 +78,11 @@ void TOverloadManager::SyncPublication(bool force) {
 
     const auto want = IsNodeOverloaded() ? NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED
                                          : NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY;
-    // A forced READY re-broadcast carries no information: an FCM that missed the edge, or came up
-    // fresh after a restart, starts with an empty hot set, which already means "everyone is READY".
-    // Only OVERLOADED has to be re-asserted periodically, so on a healthy cluster the 60s refresh
-    // costs nothing instead of N messages per node per minute.
-    const bool informative = force && want == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED;
-    if (!informative && !NeedPublicationFlush && LastSentStatus == want) {
+    // A forced refresh re-publishes the *current* status, including READY. Interconnect drops can
+    // lose the one-shot cool edge: an FCM that saw OVERLOADED and missed READY would otherwise keep
+    // that node hot forever if we only re-asserted OVERLOADED. Dedup still suppresses unchanged
+    // non-forced publishes on the healthy path between refreshes.
+    if (!force && !NeedPublicationFlush && LastSentStatus == want) {
         return;
     }
     PublishToFlowControlManagers(want);
@@ -159,9 +158,8 @@ void TOverloadManager::Handle(const NActors::TEvInterconnect::TEvNodesInfo::TPtr
     for (const auto& node : ev->Get()->Nodes) {
         CachedNodeIds.insert(node.NodeId);
     }
-    // Refresh pushes *current* write+compaction truth, never a stale OVERLOADED snapshot. The node
-    // list may have grown, and an FCM that never heard from this node has to learn an OVERLOADED
-    // one; a READY one it already assumes, so SyncPublication treats only OVERLOADED as forcible.
+    // Refresh pushes *current* write+compaction truth, never a stale OVERLOADED snapshot — including
+    // READY, so an FCM that missed the cool edge can heal within one NodesListRefreshPeriod.
     SyncPublication(true);
 }
 

@@ -270,6 +270,19 @@ Y_UNIT_TEST_SUITE(TNodeStateMapTest) {
         UNIT_ASSERT(!nodes.MarkReady(2, 1));
     }
 
+    Y_UNIT_TEST(StaleOverloadedAfterReadyIsIgnored) {
+        TNodeStateMap nodes;
+        UNIT_ASSERT(nodes.MarkHot(1, 5));
+        UNIT_ASSERT(nodes.MarkReady(1, 5));
+        UNIT_ASSERT(!nodes.AnyHot());
+        // Delayed OVERLOADED from before the READY must not re-heat the node: the watermark now
+        // survives the cool edge, so generation 4 is rejected.
+        UNIT_ASSERT(!nodes.MarkHot(1, 4));
+        UNIT_ASSERT(!nodes.AnyHot());
+        UNIT_ASSERT(nodes.MarkHot(1, 6));
+        UNIT_ASSERT(nodes.AnyHot());
+    }
+
     Y_UNIT_TEST(UnknownTabletFailsOpen) {
         TNodeStateMap nodes;
         nodes.MarkHot(1, 1);

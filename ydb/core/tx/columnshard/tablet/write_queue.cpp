@@ -175,9 +175,12 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     if (compactionWait != CompactionOverloadReported) {
         auto* actorSystem = NActors::TActivationContext::ActorSystem();
         if (actorSystem) {
-            // Only advance local edge after a real send attempt; otherwise retry next Drain.
-            NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), compactionWait);
-            CompactionOverloadReported = compactionWait;
+            // Only advance local edge after a real send; otherwise retry next Drain. Reporting is
+            // a no-op while the feature flag is off, and advancing here would permanently hide the
+            // edge from a later runtime enablement.
+            if (NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), compactionWait)) {
+                CompactionOverloadReported = compactionWait;
+            }
         }
     }
 

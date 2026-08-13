@@ -40,6 +40,11 @@ double TFlowControlManager::FrontWaiterBatchSize(TInstant now) const {
         if (now >= waiter.WaitDeadline) {
             continue;
         }
+        // Same filter as ScheduleDrainEligible: a hot head is not drainable, so pinning SoftCap to
+        // it would strand a later cool waiter that could actually pay.
+        if (!NodeState.IsAdmitAllowed(waiter.TabletIds)) {
+            continue;
+        }
         return static_cast<double>(waiter.BatchSize);
     }
     return 0.0;
@@ -92,12 +97,17 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
     // Bytes still missing before the first waiter that could not pay may go; drives the pacing
     // wakeup below.
     double bytesDeficit = 0.0;
+    TVector<ui64> expiredIds;
     for (auto& waiter : WaitQueue.MutableOrder()) {
         if (waiter.DrainScheduled) {
             continue;
         }
         if (now >= waiter.WaitDeadline) {
-            continue;   // helper deadline timer owns RejectNow
+            // The helper normally owns RejectNow via CancelWait, but if it never learned the
+            // waiter id (lost Wait result, admit fail-open) the entry would sit here forever and
+            // consume queue capacity. Expire it ourselves.
+            expiredIds.push_back(waiter.WaiterId);
+            continue;
         }
         if (!NodeState.IsAdmitAllowed(waiter.TabletIds)) {
             continue;
@@ -125,6 +135,10 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
         } else {
             ctx.Schedule(jitter, new TEvDrainWaiter(waiter.WaiterId));
         }
+    }
+    for (const ui64 waiterId : expiredIds) {
+        Counters.OnWaitQueueTimedOut();
+        EraseWaiter(waiterId);
     }
 
     // While a node is hot nothing is drainable, so the pacing wakeup above never fires — keep a
@@ -186,6 +200,14 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
 
     // Read the caps live (matching GetMaxWaitQueueSize) so UT/config overrides applied after FCM
     // construction take effect.
+    // MaxWaitQueueSize == 0 means "do not wait": reject immediately. Size() >= 0 is always true,
+    // so without this branch every gated admit would fall into delayed-reject instead.
+    if (TFlowControlManagerServiceOperator::GetMaxWaitQueueSize() == 0) {
+        Counters.OnAdmitRejected();
+        Counters.OnWaitQueueRejectFull();
+        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
+        return;
+    }
     if (WaitQueue.Size() >= TFlowControlManagerServiceOperator::GetMaxWaitQueueSize()) {
         // Wait queue is full; fall back to the delayed-reject queue if it still has room.
         if (DelayedRejects.Size() >= TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize()) {
@@ -268,10 +290,8 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
 
     const TInstant now = TActivationContext::Now();
     if (now >= waiter->WaitDeadline) {
-        // Leave it for the helper deadline / cancel; clear the drain flag so we do not loop.
-        RefundDrainToken(*waiter);
-        waiter->DrainScheduled = false;
-        Drain.PublishCounters();
+        Counters.OnWaitQueueTimedOut();
+        EraseWaiter(waiterId);
         ScheduleDrainEligible(ctx);
         return;
     }

@@ -12,6 +12,8 @@
 
 #include <util/generic/hash_set.h>
 
+#include <optional>
+
 namespace NKikimr::NColumnShard::NOverload {
 
 class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {

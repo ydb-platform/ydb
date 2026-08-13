@@ -37,14 +37,20 @@ void TDrainRateController::SyncBounds(const TDrainRateParams& params) {
 }
 
 void TDrainRateController::PublishCounters() const {
-    Counters.SetDrainRefillRate(static_cast<ui64>(std::llround(Count.GetRate())));
-    Counters.SetDrainTokens(static_cast<ui64>(std::llround(Count.GetTokens())));
-    Counters.SetDrainRefillRateBytes(static_cast<ui64>(std::llround(Bytes.GetRate())));
-    Counters.SetDrainTokensBytes(static_cast<ui64>(std::llround(Bytes.GetTokens())));
-    Counters.SetObservedRateCount(static_cast<ui64>(std::llround(ObservedRateCount)));
-    Counters.SetObservedRateBytes(static_cast<ui64>(std::llround(ObservedRateBytes)));
-    Counters.SetServedRateCount(static_cast<ui64>(std::llround(ServedRateCount)));
-    Counters.SetServedRateBytes(static_cast<ui64>(std::llround(ServedRateBytes)));
+    // Clamp before the ui64 cast: a negative long long from llround would wrap to a huge gauge
+    // and look like infinite capacity. Rates/tokens should stay non-negative on the happy path;
+    // this is belt-and-braces for floating-point underflows at the publish site only.
+    const auto asUi64 = [](double value) {
+        return static_cast<ui64>(std::llround(Max(0.0, value)));
+    };
+    Counters.SetDrainRefillRate(asUi64(Count.GetRate()));
+    Counters.SetDrainTokens(asUi64(Count.GetTokens()));
+    Counters.SetDrainRefillRateBytes(asUi64(Bytes.GetRate()));
+    Counters.SetDrainTokensBytes(asUi64(Bytes.GetTokens()));
+    Counters.SetObservedRateCount(asUi64(ObservedRateCount));
+    Counters.SetObservedRateBytes(asUi64(ObservedRateBytes));
+    Counters.SetServedRateCount(asUi64(ServedRateCount));
+    Counters.SetServedRateBytes(asUi64(ServedRateBytes));
 }
 
 bool TDrainRateController::IsAtRateFloor() const {

@@ -8,6 +8,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
 
     bool More = false;
     size_t Deleted = 0;
+    ui64 SizeEvictedBuckets = 0;
 
     explicit TTxCleanupHourMetrics(TSelf* self)
         : TTxBase(self)
@@ -18,6 +19,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         More = false;
         Deleted = 0;
+        SizeEvictedBuckets = 0;
 
         NIceDb::TNiceDb db(txc.DB);
         auto rowset = db.Table<Schema::IntervalMetricsOneHour>().Range().Select();
@@ -47,13 +49,49 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
             }
         }
 
+        if (Deleted < BatchSize && Self->MetricsOneHourEvictBeforeHourEndUs) {
+            auto publicRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
+            if (!publicRowset.IsReady()) {
+                return false;
+            }
+
+            while (!publicRowset.EndOfSet()) {
+                const ui64 hourEndUs =
+                    publicRowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
+                if (hourEndUs >= Self->MetricsOneHourEvictBeforeHourEndUs) {
+                    Self->MetricsOneHourEvictBeforeHourEndUs = 0;
+                    break;
+                }
+
+                const ui32 rank = publicRowset.GetValue<Schema::MetricsOneHour::Rank>();
+                db.Table<Schema::MetricsOneHour>().Key(hourEndUs, rank).Delete();
+                SizeEvictedBuckets += rank == 1;
+
+                if (++Deleted == BatchSize) {
+                    More = true;
+                    break;
+                }
+
+                if (!publicRowset.Next()) {
+                    return false;
+                }
+            }
+            if (publicRowset.EndOfSet()) {
+                Self->MetricsOneHourEvictBeforeHourEndUs = 0;
+            }
+        }
+
         return true;
     }
 
     void Complete(const TActorContext&) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxCleanupHourMetrics::Complete: "
             << "deleted# " << Deleted
+            << ", size evicted buckets# " << SizeEvictedBuckets
             << ", more# " << More);
+
+        Self->UpdateMetricsOneHourRetentionCounters(
+            Self->MetricsOneHourRetainedBytes, SizeEvictedBuckets);
 
         if (More) {
             Self->HourMetricsCleanupInFlight = false;

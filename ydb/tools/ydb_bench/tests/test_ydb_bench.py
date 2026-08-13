@@ -1492,6 +1492,9 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"<th>Runs</th>", script)
                 self.assertIn(b"class=affinity-details><td colspan=3>", script)
                 self.assertIn(b"id=refresh-run", script)
+                self.assertIn(b"Queue position:", script)
+                self.assertIn(b"Currently running:", script)
+                self.assertIn(b"<option>queued</option>", script)
                 self.assertNotIn(b"setInterval(()=>renderRun", script)
                 self.assertIn(b"function cpuRanges", script)
                 self.assertIn(b"ranges such as 1-16", script)
@@ -1688,11 +1691,15 @@ class WebTest(unittest.TestCase):
         self.assertEqual(service.events(run_id), events)
 
     def test_run_service_shutdown_cancels_and_joins_active_workers(self):
-        """Server teardown cooperatively stops every registered web run."""
+        """Server teardown cancels the active run and every queued run."""
         started = threading.Event()
         cancellation_seen = threading.Event()
+        queued_started = threading.Event()
 
         def fake_executor(run, emit, cancelled):
+            if run["loaded"].runs[0].profile == "queued":
+                queued_started.set()
+                return
             step_id = run["store"].manifest["steps"][0]["id"]
             emit({"type": "step-started", "step_id": step_id})
             started.set()
@@ -1703,13 +1710,17 @@ class WebTest(unittest.TestCase):
         yaml_text = "ping-bench:\n  shutdown: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
         run_id = server.service.start(yaml_text)["id"]
         self.assertTrue(started.wait(2))
+        queued_yaml = "ping-bench:\n  queued: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        queued_id = server.service.start(queued_yaml)["id"]
+        dispatcher = server.service._dispatcher_thread
 
         # Both public HTTP-server teardown paths are lifecycle boundaries.  A
         # direct close is enough even when serve_forever was never entered.
         server.server_close()
         self.assertTrue(cancellation_seen.is_set())
+        self.assertFalse(queued_started.is_set())
         run = server.service._runs[run_id]
-        self.assertFalse(run["worker"].is_alive())
+        self.assertFalse(dispatcher.is_alive())
         manifest = load_manifest(run["root"] / "run.json")
         self.assertEqual(manifest["state"], "cancelled")
         self.assertEqual(manifest["status"], "cancelled")
@@ -1718,6 +1729,10 @@ class WebTest(unittest.TestCase):
         events = server.service.events(run_id)
         self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
         self.assertEqual(events[-1]["type"], "run-finished")
+        queued_manifest = load_manifest(server.service._runs[queued_id]["root"] / "run.json")
+        self.assertEqual(queued_manifest["state"], "cancelled")
+        self.assertNotIn("started_at", queued_manifest)
+        self.assertTrue(all(step["state"] == "cancelled" for step in queued_manifest["steps"]))
 
         # Repeated shutdown is a no-op, and no run can cross the closed
         # service's start-vs-shutdown publication boundary.
@@ -1741,6 +1756,7 @@ class WebTest(unittest.TestCase):
         yaml_text = "ping-bench:\n  stubborn: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
         run_id = service.start(yaml_text)["id"]
         self.assertTrue(started.wait(2))
+        dispatcher = service._dispatcher_thread
         before = time.monotonic()
         result = service.shutdown(timeout=.05)
         elapsed = time.monotonic() - before
@@ -1753,14 +1769,14 @@ class WebTest(unittest.TestCase):
             self.assertNotIn("finished_at", incomplete_manifest)
             incomplete_events = service.events(run_id)
             self.assertEqual(incomplete_events[-1]["type"], "cancel-requested")
-            self.assertTrue(service._runs[run_id]["worker"].is_alive())
+            self.assertTrue(dispatcher.is_alive())
         finally:
             release.set()
         # A later production-style shutdown must continue waiting rather than
         # returning a cached incomplete result.
         completed = service.shutdown()
         self.assertEqual(completed["timed_out"], [])
-        self.assertFalse(service._runs[run_id]["worker"].is_alive())
+        self.assertFalse(dispatcher.is_alive())
         terminal_manifest = load_manifest(manifest_path)
         self.assertEqual(terminal_manifest["state"], "cancelled")
         self.assertIn("finished_at", terminal_manifest)
@@ -1802,6 +1818,94 @@ class WebTest(unittest.TestCase):
         self.assertIn("shutting down", str(errors[0]))
         self.assertEqual(service._runs, {})
         self.assertEqual(list(self.root.glob("*-web")), [])
+
+    def test_run_service_executes_web_runs_in_fifo_order_and_cancels_queued_run(self):
+        """Only the dispatcher may promote a queued run into the executor."""
+        started = {name: threading.Event() for name in ("first", "second", "third")}
+        release = {name: threading.Event() for name in ("first", "second")}
+        execution_order = []
+
+        def fake_executor(run, emit, cancelled):
+            profile = run["loaded"].runs[0].profile
+            execution_order.append(profile)
+            started[profile].set()
+            self.assertTrue(release[profile].wait(2))
+            if cancelled.is_set():
+                return
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+
+        def config(profile):
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(profile)
+
+        service = RunService(self.root, executor=fake_executor)
+        first = service.start(config("first"))
+        self.assertEqual(first["state"], "queued")
+        self.assertTrue(started["first"].wait(2))
+        second = service.start(config("second"))
+        third = service.start(config("third"))
+
+        second_detail = service.detail(second["id"])
+        third_detail = service.detail(third["id"])
+        self.assertEqual(second_detail["state"], "queued")
+        self.assertEqual(second_detail["queue_position"], 1)
+        self.assertEqual(second_detail["current_run_id"], first["id"])
+        self.assertEqual(third_detail["queue_position"], 2)
+        self.assertTrue(all(step["state"] == "pending" for step in second_detail["steps"]))
+
+        cancelled = service.cancel(third["id"])
+        self.assertEqual(cancelled["state"], "cancelled")
+        self.assertTrue(service._runs[third["id"]]["finished"].is_set())
+        self.assertFalse(started["third"].is_set())
+        cancelled_detail = service.detail(third["id"])
+        self.assertIsNone(cancelled_detail["started_at"])
+        self.assertTrue(all(step["state"] == "cancelled" for step in cancelled_detail["steps"]))
+        self.assertEqual(
+            [event["type"] for event in service.events(third["id"])],
+            ["cancel-requested", "run-finished"],
+        )
+
+        release["first"].set()
+        self.assertTrue(started["second"].wait(2))
+        self.assertEqual(execution_order, ["first", "second"])
+        self.assertFalse(started["third"].is_set())
+        release["second"].set()
+        self.assertTrue(service._runs[second["id"]]["finished"].wait(2))
+        self.assertEqual(service.detail(first["id"])["state"], "passed")
+        self.assertEqual(service.detail(second["id"])["state"], "passed")
+        self.assertEqual(execution_order, ["first", "second"])
+
+    def test_failed_web_run_does_not_block_next_queued_run(self):
+        """A run-level failure is terminal for that run, not for the web FIFO."""
+        first_started = threading.Event()
+        release_failure = threading.Event()
+        second_finished = threading.Event()
+
+        def fake_executor(run, emit, _cancelled):
+            profile = run["loaded"].runs[0].profile
+            if profile == "fail":
+                first_started.set()
+                self.assertTrue(release_failure.wait(2))
+                raise BenchmarkError("expected failure")
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+            second_finished.set()
+
+        def config(profile):
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(profile)
+
+        service = RunService(self.root, executor=fake_executor)
+        failed = service.start(config("fail"), continue_on_error=True)
+        self.assertTrue(first_started.wait(2))
+        passed = service.start(config("pass"), continue_on_error=False)
+        self.assertEqual(service.detail(passed["id"])["state"], "queued")
+        release_failure.set()
+        self.assertTrue(second_finished.wait(2))
+        self.assertTrue(service._runs[passed["id"]]["finished"].wait(2))
+        self.assertEqual(service.detail(failed["id"])["state"], "failed")
+        self.assertEqual(service.detail(passed["id"])["state"], "passed")
 
 
 if __name__ == "__main__":

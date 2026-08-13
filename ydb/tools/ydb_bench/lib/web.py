@@ -37,6 +37,7 @@ _CSS = r"""
 :root{color-scheme:light dark;font:14px/1.45 system-ui,sans-serif;--line:#8992a2;--panel:#f4f7fb;--text:#172033;--muted:#667085;--accent:#1b62b9;--good:#087443;--bad:#b42318;--warn:#a15c00;--topology-accent:#6b5bd2}
 *{box-sizing:border-box}body{margin:0;color:var(--text);background:#fff}a{color:var(--accent);cursor:pointer;text-decoration:none}a:hover{text-decoration:underline}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid #667085;border-radius:5px;background:#fff;color:var(--text);padding:.38rem .65rem}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button.danger{color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}.shell{display:grid;grid-template-columns:14rem minmax(0,1fr);min-height:100vh}.sidebar{padding:1.4rem 1rem;background:#172033;color:#fff}.brand{font-weight:700;font-size:1.05rem;margin:0 0 1.7rem}.sidebar a{display:block;color:#d6e2f7;padding:.55rem .65rem;border-radius:5px;margin:.15rem 0}.sidebar a.active,.sidebar a:hover{color:#fff;background:#315882;text-decoration:none}.content{min-width:0}.topbar{min-height:3.7rem;border-bottom:1px solid #d0d5dd;padding:.8rem 1.6rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}.topbar .active-run{font-size:.9rem;color:var(--muted)}main{max-width:1160px;padding:1.5rem 1.6rem 3rem}.breadcrumbs{color:var(--muted);font-size:.9rem;margin:0 0 .6rem}.page-title{margin:0 0 1rem;font-size:1.5rem}.toolbar{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;margin:.8rem 0}.filters,.grid{display:grid;gap:.7rem}.filters{grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));background:var(--panel);padding:.8rem;border:1px solid #d0d5dd;border-radius:6px}.field{display:grid;gap:.25rem}.field label{font-size:.85rem;color:var(--muted)}input,select,textarea{border:1px solid #98a2b3;border-radius:4px;padding:.42rem;background:#fff;color:var(--text)}textarea.yaml{width:100%;min-height:33rem;tab-size:2;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.35}.notice{padding:.7rem .85rem;border-radius:5px;background:#eef4ff;border:1px solid #b2ccff;margin:.8rem 0}.notice.error{background:#fff0f0;border-color:#fecdca;color:var(--bad)}.notice.good{background:#ecfdf3;border-color:#abefc6;color:var(--good)}table{border-collapse:collapse;width:100%;margin:.7rem 0}th,td{border-bottom:1px solid #d0d5dd;padding:.52rem;text-align:left;vertical-align:top}th{font-size:.8rem;color:var(--muted);font-weight:600}.status{font-weight:600}.status.completed,.status.passed{color:var(--good)}.status.failed,.status.cancelled{color:var(--bad)}.status.running,.status.pending{color:var(--warn)}.muted{color:var(--muted)}.split{display:grid;grid-template-columns:minmax(13rem,22rem) minmax(0,1fr);gap:1rem}.card{border:1px solid #d0d5dd;border-radius:7px;padding:1rem;margin:.8rem 0}.profile-list button{display:block;width:100%;text-align:left;border:0;border-radius:0;margin:0;padding:.55rem;background:transparent}.profile-list button.selected{background:#dbeafe;color:#0b4a8b}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.checkboxes{display:flex;flex-wrap:wrap;gap:.4rem .8rem;padding:.5rem;border:1px solid #d0d5dd;border-radius:4px;max-height:13rem;overflow:auto}.checkboxes label{font-size:.9rem}.run-tree details{padding:.45rem 0;border-bottom:1px solid #e4e7ec}.run-tree summary{cursor:pointer}.log{white-space:pre-wrap;overflow:auto;max-height:20rem;background:#101828;color:#e4e7ec;border-radius:5px;padding:.7rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.metric{font-size:1.1rem;font-weight:650}.actions{display:flex;gap:.35rem;flex-wrap:wrap}.tabs{display:flex;gap:.2rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}.tabs a{padding:.55rem .85rem}.tabs a.active{color:var(--text);border-bottom:3px solid var(--accent);font-weight:650}.empty{padding:2rem;text-align:center;color:var(--muted);border:1px dashed #98a2b3;border-radius:7px}.topology-summary{display:grid;grid-template-columns:minmax(12rem,18rem) minmax(0,1fr);gap:1rem;align-items:center}.cpu-ranges{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.topology-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:.8rem}.numa-block{border:1px solid #c9c1ff;border-left:4px solid var(--topology-accent);border-radius:6px;background:#f8f7ff;padding:.75rem}.numa-header{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}.chiplet-list{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.65rem}.cpu-block{border:1px solid #c9c1ff;border-radius:4px;background:#fff;padding:.35rem .45rem;min-width:5.5rem}.cpu-block small{display:block;color:var(--muted);font-size:.75rem}.topology-level{margin-top:1rem}.topology-level summary{cursor:pointer;font-weight:650}.cpu-block-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.45rem;margin-top:.65rem}.cpu-block-grid .cpu-block{border-color:#d0d5dd}.affinity-mask{min-width:12rem}.affinity-mask code{white-space:normal;overflow-wrap:anywhere}.chart-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem}.series-picker{max-height:15rem;overflow:auto;border:1px solid #d0d5dd;border-radius:5px;padding:.55rem}.series-picker label{display:block;margin:.25rem 0}.series-cpus{display:block;margin-left:1.35rem;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.chart-panel{border-top:1px solid #e4e7ec;padding-top:1rem;margin-top:1rem}.chart-surface{position:relative}.chart-panel svg{display:block;width:100%;height:auto;background:#fff}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;min-width:15rem;max-width:28rem;padding:.55rem .65rem;border-radius:5px;background:#101828;color:#fff;box-shadow:0 4px 14px #10182855;font-size:.82rem}.chart-tooltip[hidden]{display:none}.chart-tooltip strong{display:block;margin-bottom:.3rem}.tooltip-row{display:grid;grid-template-columns:.65rem minmax(8rem,1fr) auto;gap:.4rem;align-items:center;margin:.16rem 0}.tooltip-dot{width:.55rem;height:.55rem;border-radius:50%}.tooltip-value{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}.chart-cursor{stroke:#475467;stroke-width:1;stroke-dasharray:4 3;pointer-events:none}.chart-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem}.legend-swatch{display:inline-block;width:.9rem;height:.2rem;vertical-align:middle;margin-right:.3rem}.chart-grid{stroke:#e4e7ec;stroke-width:1}.chart-axis{stroke:#667085;stroke-width:1}.chart-label{fill:#475467;font:12px system-ui,sans-serif}.chart-line{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.chart-point{stroke:#fff;stroke-width:1.5}.coverage{font-size:.85rem;color:var(--muted)}.chart-color-0{color:#1b62b9}.chart-color-1{color:#c2410c}.chart-color-2{color:#087443}.chart-color-3{color:#7c3aed}.chart-color-4{color:#be185d}.chart-color-5{color:#0e7490}.chart-color-6{color:#854d0e}.chart-color-7{color:#94a3b8}.chart-color-8{color:#ef4444}.chart-color-9{color:#818cf8}.chart-color-10{color:#22c55e}.chart-color-11{color:#d946ef}.chart-bg-0{background:#1b62b9}.chart-bg-1{background:#c2410c}.chart-bg-2{background:#087443}.chart-bg-3{background:#7c3aed}.chart-bg-4{background:#be185d}.chart-bg-5{background:#0e7490}.chart-bg-6{background:#854d0e}.chart-bg-7{background:#94a3b8}.chart-bg-8{background:#ef4444}.chart-bg-9{background:#818cf8}.chart-bg-10{background:#22c55e}.chart-bg-11{background:#d946ef}@media(max-width:760px){.shell{display:block}.sidebar{padding:.7rem;display:flex;gap:.3rem;overflow:auto}.brand{display:none}.sidebar a{white-space:nowrap}.topbar,main{padding-left:1rem;padding-right:1rem}.split,.topology-summary{grid-template-columns:1fr}}
 .grid,.grid>*{min-width:0}.run-tree{overflow:hidden}.run-tree details{min-width:0}.affinity-details>td>details{overflow:hidden}.affinity-details table{display:block;max-width:100%;overflow-x:auto}.modal-backdrop{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:1.5rem;background:#10182899}.modal{display:flex;flex-direction:column;width:min(68rem,100%);max-height:calc(100vh - 3rem);overflow:hidden;border-radius:8px;background:#fff;box-shadow:0 20px 40px #10182855}.modal-header,.modal-footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.2rem}.modal-header{border-bottom:1px solid #d0d5dd}.modal-header h2{margin:0}.modal-body{overflow:auto;padding:0 1.2rem 1rem}.modal-footer{justify-content:flex-end;border-top:1px solid #d0d5dd}.line-filter{min-width:0;border:1px solid #d0d5dd;border-radius:5px;padding:.5rem}.line-filter label{display:block;margin:.25rem 0}.chart-settings-summary{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin:.8rem 0}.chart-board>.card{position:relative}.query-row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.55rem;margin:.45rem 0;border:1px solid #d0d5dd;border-radius:6px;background:var(--panel)}.query-row select{max-width:15rem}.query-token{display:flex;align-items:center;gap:.3rem;padding:.2rem .35rem;border-radius:4px;background:#fff;border:1px solid #d0d5dd}.query-token b{color:#6941c6;font-weight:600}.query-actions{margin-left:auto}
+.status.queued{color:var(--warn)}
 """
 _JS = r"""
 /* Offline UI: every request goes to the loopback ydb_bench service. */
@@ -122,7 +123,7 @@ function bindProfileEditor(profile){const update=event=>{try{const name=document
 function addProfile(){const selectedBenchmark=document.querySelector('#add-benchmark')?.value;const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;editor.model.profiles.push({key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none']});editor.selected=benchmark.name+'/'+name;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}
 async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorage.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-title>New run</h1><div class=tabs><a class="'+(tab==='builder'?'active':'')+'" href="#new">Builder</a><a class="'+(tab==='yaml'?'active':'')+'" href="#new/yaml">YAML</a></div>'+editorControls();if(tab==='yaml'){content+='<textarea class=yaml id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is not overwritten by Builder.</div>';app.innerHTML=shell('new',content);document.querySelector('#yaml-editor').oninput=event=>{editor.yaml=event.target.value;saveDraft();clearTimeout(window.ydbBenchYamlTimer);window.ydbBenchYamlTimer=setTimeout(async()=>{await syncEditor();document.querySelector('#editor-message').innerHTML=editor.error?'<div class="notice error">'+esc(editor.error)+'</div>':'<div class="notice good">Builder model is synchronized.</div>'},350)};bindEditorControls();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Builder.</p>';app.innerHTML=shell('new',content);bindEditorControls();return}const selected=profileByKey(editor.selected)||editor.model.profiles[0];content+='<div class=notice>Plan: <strong>'+summary.count+'</strong> processes; requested measurement time <strong>'+Math.ceil(summary.seconds)+' s</strong>; output root is <code>'+esc(editor.model.output)+'</code>.</div><div class=split><section class="card profile-list"><div class=toolbar><strong>Profiles</strong><button id=add-profile>Add</button></div>'+editor.model.profiles.map(profile=>'<button data-profile="'+esc(profile.key)+'" class="'+(profile.key===selected?.key?'selected':'')+'">'+esc(profile.benchmark)+' / '+esc(profile.name)+'</button>').join('')+'</section><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclick=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button.dataset.profile;renderNew()};if(selected)bindProfileEditor(selected)}
 function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}
-function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value="">Any</option><option>running</option><option>completed</option><option>failed</option><option>cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-benchmark placeholder="ping-bench"></div><div class=field><label>Profile</label><input id=f-profile placeholder="baseline"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Local</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since type=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}
+function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-benchmark placeholder="ping-bench"></div><div class=field><label>Profile</label><input id=f-profile placeholder="baseline"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Local</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since type=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}
 function runHref(id,kind){return '/api/runs/'+enc(id)+'/'+kind}
 async function renderRuns(){clearRefresh();let content='<h1 class=page-title>Runs</h1><p class=muted>Local and imported benchmark results. Filters apply without leaving this page.</p>'+runFilters()+'<div class=toolbar><input id=import-file type=file accept=.zip><button id=import-run>Import results</button><button id=apply-filters>Apply filters</button></div><div id=runs-table></div>';app.innerHTML=shell('runs',content);async function load(){const query=new URLSearchParams();for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)}try{const runs=await api('/api/runs?'+query);document.querySelector('#runs-table').innerHTML=runs.length?'<table><thead><tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Actions</th></tr></thead><tbody>'+runs.map(run=>'<tr><td><a href="#run/'+enc(run.id)+'">'+esc(run.id)+'</a><br><small class=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</td><td>'+esc(run.started_at||'—')+'<br><small>'+duration(run)+'</small></td><td>'+run.profiles+' / '+run.repetitions+'</td><td>'+ (run.perf?'yes':'no')+'</td><td><div class=actions><a href="#run/'+enc(run.id)+'">Open</a><a data-repeat="'+esc(run.id)+'">Repeat</a><a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a><a href="'+runHref(run.id,'archive')+'">Archive</a></div></td></tr>').join('')+'</tbody></table>':'<div class=empty>No runs match these filters.</div>';for(const item of document.querySelectorAll('[data-repeat]'))item.onclick=event=>{event.preventDefault();reuseRun(item.dataset.repeat)}}catch(error){document.querySelector('#runs-table').innerHTML=displayError(error)}}document.querySelector('#apply-filters').onclick=load;document.querySelector('#import-run').onclick=async()=>{try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive first.');await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}catch(error){document.querySelector('#runs-table').innerHTML=displayError(error)}};await load()}
 async function reuseRun(id){try{const value=await api('/api/runs/'+enc(id)+'/config.json');editor.yaml=value.yaml;editor.perf=Boolean(value.perf);editor.continueOnError=Boolean(value.continue_on_error);saveDraft();setRoute('new')}catch(error){alert(error.message)}}
@@ -228,10 +229,11 @@ async function renderRun(id,selectedProfile=''){
   clearRefresh();
   try{
     const run=await api('/api/runs/'+enc(id));
-    activeRun=['running','recovery_required'].includes(run.state)?id:'';
+    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');
+    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.current_run_id?'<a href="#run/'+enc(run.current_run_id)+'">Currently running: '+esc(run.current_run_id)+'</a>':'Waiting for the dispatcher.')+'</div>':'';
     sessionStorage.setItem('ydb-bench-active-run',activeRun);
     const groups=profileGroups(run.steps||[]);
-    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+'<h1 class=page-title>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</button>'+(['running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>':'')+'<button id=repeat-run>Repeat with this YAML</button><a href="'+runHref(id,'config')+'">Download YAML</a><a href="'+runHref(id,'manifest')+'">run.json</a><a href="'+runHref(id,'archive')+'">Archive artifacts</a></div><div class="grid"><section class=card><div class=form-grid><div><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.started_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';
+    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+queueNotice+'<h1 class=page-title>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</button>'+(['queued','running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>':'')+'<button id=repeat-run>Repeat with this YAML</button><a href="'+runHref(id,'config')+'">Download YAML</a><a href="'+runHref(id,'manifest')+'">run.json</a><a href="'+runHref(id,'archive')+'">Archive artifacts</a></div><div class="grid"><section class=card><div class=form-grid><div><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.started_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';
     const visible=selectedProfile?Object.fromEntries(Object.entries(groups).filter(([key])=>key===selectedProfile)):groups;
     content+='<section class="card run-tree"><h2>Queue</h2>'+Object.entries(visible).map(([key,steps])=>'<details open><summary><a href="#run/'+enc(id)+'/profile/'+enc(key)+'">'+esc(key)+'</a></summary><table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details>').join('')+'</section>';
     if(selectedProfile)content+='<section class=card><h2>Results chart</h2><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';
@@ -353,6 +355,7 @@ def read_model(output):
             "status": manifest.get("status", "unknown"),
             "state": manifest.get("state", "unknown"),
             "source": "imported" if ((run_root / ".imported").is_file() or manifest.get("imported") or manifest.get("source") == "imported" or manifest.get("origin")) else "local",
+            "queued_at": manifest.get("queued_at"),
             "started_at": manifest.get("started_at"),
             "finished_at": manifest.get("finished_at"),
             "duration_seconds": _duration_seconds(manifest),
@@ -561,6 +564,9 @@ class RunService:
         self.perf_available = perf_available
         self._runs, self._lock = {}, threading.RLock()
         self._accepting_runs = True
+        self._queue = deque()
+        self._active_run_id = None
+        self._dispatcher_thread = None
         self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
 
@@ -622,11 +628,12 @@ class RunService:
             run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
             while (self.output / run_id).exists(): run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
             root = self.output / run_id; root.mkdir(); atomic_write_text(root / "config.yaml", yaml_text)
+            queued_at = _utc_now()
             manifest = {
                 "schema_version": 4,
-                "status": "running",
-                "state": "running",
-                "started_at": _utc_now(),
+                "status": "queued",
+                "state": "queued",
+                "queued_at": queued_at,
                 "config": {"snapshot": yaml_text, "sha256": plan_result["sha256"], "path": "config.yaml"},
                 "topology": topology,
                 "profiler": {"type": "perf-record", "event": "cycles:u", "frequency_hz": 99, "call_graph": "dwarf"} if perf else None,
@@ -651,11 +658,45 @@ class RunService:
                 "failed": False,
             }
             run["store"].write()
-            worker = threading.Thread(target=self._run, args=(run,), daemon=True, name="ydb-bench-" + run_id)
-            run["worker"] = worker
             self._runs[run_id] = run
-            worker.start()
-        return {"id": run_id, "state": "running"}
+            self._queue.append(run)
+            self._ensure_dispatcher_locked()
+        return {"id": run_id, "state": "queued"}
+
+    def _ensure_dispatcher_locked(self):
+        if self._dispatcher_thread is not None:
+            return
+        self._dispatcher_thread = threading.Thread(
+            target=self._dispatch,
+            daemon=True,
+            name="ydb-bench-web-queue",
+        )
+        self._dispatcher_thread.start()
+
+    def _dispatch(self):
+        while True:
+            with self._lock:
+                while self._queue:
+                    run = self._queue.popleft()
+                    with run["lock"]:
+                        if run["store"].manifest["state"] != "queued":
+                            continue
+                        self._active_run_id = run["id"]
+                        run["store"].manifest.update({
+                            "state": "running",
+                            "status": "running",
+                            "started_at": _utc_now(),
+                        })
+                        self._emit_locked(run, {"type": "run-started"})
+                    break
+                else:
+                    self._active_run_id = None
+                    self._dispatcher_thread = None
+                    return
+            self._run(run)
+            with self._lock:
+                if self._active_run_id == run["id"]:
+                    self._active_run_id = None
 
     def _emit(self, run, event):
         with run["lock"]:
@@ -734,18 +775,37 @@ class RunService:
         run["finished"].set()
 
     def cancel(self, run_id):
-        with self._lock: run = self._runs.get(run_id)
-        if not run: return {"id": run_id, "cancelled": True, "state": "not-running"}
-        with run["lock"]:
-            state = run["store"].manifest["state"]
-            if state == "running" and not run["cancel_requested"]:
-                run["cancel_requested"] = True
-                run["cancel"].set()
-                self._emit_locked(run, {"type": "cancel-requested"})
-            return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
+        with self._lock:
+            run = self._runs.get(run_id)
+            if not run:
+                return {"id": run_id, "cancelled": True, "state": "not-running"}
+            with run["lock"]:
+                state = run["store"].manifest["state"]
+                if state == "queued":
+                    run["cancel_requested"] = True
+                    run["cancel"].set()
+                    try:
+                        self._queue.remove(run)
+                    except ValueError:
+                        pass
+                    self._cancel_unfinished(run)
+                    run["store"].manifest.update({
+                        "state": "cancelled",
+                        "status": "cancelled",
+                        "finished_at": _utc_now(),
+                    })
+                    self._emit_locked(run, {"type": "cancel-requested"})
+                    self._emit_locked(run, {"type": "run-finished", "state": "cancelled"})
+                    run["finalized"] = True
+                    run["finished"].set()
+                elif state == "running" and not run["cancel_requested"]:
+                    run["cancel_requested"] = True
+                    run["cancel"].set()
+                    self._emit_locked(run, {"type": "cancel-requested"})
+                return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
 
     def shutdown(self, timeout=None):
-        """Stop accepting runs, cancel active work, and wait for its workers.
+        """Stop accepting runs, cancel the queue, and wait for the dispatcher.
 
         Production teardown uses the default unbounded wait: its executors pass
         the cancellation event into ``run_command``, which interrupts and,
@@ -759,18 +819,34 @@ class RunService:
         with self._lock:
             self._accepting_runs = False
             runs = list(self._runs.values())
+            dispatcher = self._dispatcher_thread
         for run in runs:
             self.cancel(run["id"])
-        deadline = None if timeout is None else time.monotonic() + timeout
+        if dispatcher is not None:
+            dispatcher.join(timeout)
         timed_out = []
-        for run in runs:
-            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-            run["worker"].join(remaining)
-            if run["worker"].is_alive():
-                timed_out.append(run)
-        return {"cancelled": [run["id"] for run in runs], "timed_out": [run["id"] for run in timed_out]}
+        if dispatcher is not None and dispatcher.is_alive():
+            with self._lock:
+                if self._active_run_id is not None:
+                    timed_out.append(self._active_run_id)
+        return {"cancelled": [run["id"] for run in runs], "timed_out": timed_out}
 
-    def model(self): return read_model(self.output)
+    def model(self):
+        model = read_model(self.output)
+        with self._lock:
+            positions = {
+                run["id"]: index
+                for index, run in enumerate(
+                    (queued for queued in self._queue if queued["store"].manifest["state"] == "queued"),
+                    1,
+                )
+            }
+            for run_id, item in model.items():
+                item.update({
+                    "current_run_id": self._active_run_id,
+                    "queue_position": positions.get(run_id),
+                })
+        return model
     def settings(self): return {"output": str(self.output), "perf_available": self.perf_available}
     def topology(self):
         topology = discover_topology()
@@ -830,9 +906,10 @@ class RunService:
         return self.comparisons(selected)
     def detail(self, run_id):
         item = self.model().get(run_id)
-        with self._lock: run = self._runs.get(run_id)
-        if item and run:
-            with run["lock"]: item.update({"tail": dict(run["tail"])})
+        with self._lock:
+            run = self._runs.get(run_id)
+            if item and run:
+                with run["lock"]: item.update({"tail": dict(run["tail"])})
         return item
     def events(self, run_id, after=0):
         with self._lock: run = self._runs.get(run_id)
@@ -943,7 +1020,7 @@ def _handler(service):
             if path == "/api/system-topology": return self._json(200, service.topology())
             if path == "/api/runs":
                 filters = {name: values[-1] for name, values in parse_qs(parsed.query).items() if name in ("status", "benchmark", "profile", "source", "since", "until")}
-                fields = ("id", "status", "state", "source", "started_at", "finished_at", "duration_seconds", "profiles", "repetitions", "perf", "config_path", "output_directory", "benchmarks", "profile_names")
+                fields = ("id", "status", "state", "source", "queued_at", "started_at", "finished_at", "duration_seconds", "profiles", "repetitions", "perf", "config_path", "output_directory", "benchmarks", "profile_names", "current_run_id", "queue_position")
                 return self._json(200, [{key: item[key] for key in fields} for item in service.filtered_model(filters)])
             if path == "/api/comparisons": return self._json(200, service.comparisons())
             if path == "/api/chart-data":

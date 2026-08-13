@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -223,16 +224,27 @@ public:
     {
     }
 
+<<<<<<< HEAD
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+=======
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
+        return NYql::CreateCredentialsProviderFactoryForStructuredToken(
+            SaFactory_, structuredTokenJson, addBearerToToken);
+>>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
     }
 
 private:
     TString YqlToken_;
 };
 
+<<<<<<< HEAD
 std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(const TString& token) {
     return std::make_shared<TStaticSecuredCredentialsFactory>(token);
+=======
+std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(const TString& token) {
+    return NFq::CreateKikimrStructuredTokenCredentialsFactoryOverFactory(std::make_shared<TStaticSecuredCredentialsFactory>(token));
+>>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 }
 
 std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount) {

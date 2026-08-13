@@ -18,6 +18,11 @@
         {"value": "string", "tag": "concrete_type"}
       ],
       "result_type": {"value": "uint64", "tag": "concrete_type"}
+    },
+    {
+      "name": "udf_rodata_cookie",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
     }
   ]
 }

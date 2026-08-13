@@ -440,6 +440,15 @@ def test_using_wasm_udf():
         result_value = list(rows[0].values())[0]
         assert result_value == 3, "Expected LocalUdf::udf_add(1, 2) == 3, got %r" % result_value
 
+        # After marshalling, module static data at a low address must still be intact.
+        cookie_result = _run_query(driver_config, "SELECT LocalUdf::udf_rodata_cookie();")
+        cookie_rows = cookie_result[0].rows
+        assert len(cookie_rows) == 1
+        cookie_value = list(cookie_rows[0].values())[0]
+        assert cookie_value == 0x0102030405060708, (
+            "Expected LocalUdf::udf_rodata_cookie() == 0x0102030405060708, got %r" % cookie_value
+        )
+
     finally:
         cluster.remove_database(database)
         cluster.unregister_and_stop_slots(db_nodes)

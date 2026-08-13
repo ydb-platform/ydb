@@ -60,9 +60,8 @@ Throw-only модули могут обойтись; string/result path — не
 
 ### B. Сбор `WasmUdfModules` в predictor
 
-Сейчас в `WasmUdfModules_` попадает **любой** `TCoUdf` module name, не только WASM.  
-Лишние имена → `ResolveModules` / Acquire могут упасть или no-op некорректно.  
-Имеет смысл фильтровать по типу регистрации (`wasm:` path / каталог).
+В `TKqpPhyStage.WasmUdfModules` попадает **любой** `TCoUdf` module name, не только WASM.  
+На Acquire `FilterLoadedWasmUdfModules` оставляет только модули из каталога — native (`String`, `Knn`, …) отбрасываются.
 
 ### C. Порядок и дедуп библиотек при нескольких модулях в одном запросе
 

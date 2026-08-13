@@ -203,9 +203,8 @@ public:
 
         std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
-        const auto& programSettings = protoTask.GetProgram().GetSettings();
-        if (programSettings.WasmUdfModulesSize() > 0) {
-            wasmScope.emplace(programSettings);
+        if (stage.WasmUdfModulesSize() > 0) {
+            wasmScope.emplace(NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()));
             if (wasmScope->Active()) {
                 wasmGuard.emplace(wasmScope->Activate());
             }

@@ -181,7 +181,7 @@ protected:
         }
 
         const auto& settings = alter.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
-        const ui64 maxMemoryBytes = AppData(ctx)->VectorIndexHnswCacheMemoryTracker->GetLimit();
+        const ui64 maxMemoryBytes = DataShard.GetHnswCacheMemoryLimit();
         if (!maxMemoryBytes) {
             return false;
         }

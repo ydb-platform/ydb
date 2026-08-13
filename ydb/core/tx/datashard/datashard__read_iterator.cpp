@@ -2643,7 +2643,7 @@ public:
                     Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
                     << " size=" << cached->Size());
                 topState->HnswIndex = std::move(cached);
-            } else if (AppData(ctx)->VectorIndexHnswCacheMemoryTracker->GetLimit() != 0
+            } else if (Self->GetHnswCacheMemoryLimit() != 0
                     && topK.GetSettings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && !Self->IsHnswIndexBuilding(localTid)) {
                 // Compatibility/restart path: eager construction only runs at
@@ -2662,7 +2662,7 @@ public:
                     const ui64 rowCount = vectors.size();
                     auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid, rowCount,
                         topK.GetSettings(), std::move(vectors),
-                        AppData(ctx)->VectorIndexHnswCacheMemoryTracker->GetLimit());
+                        Self->GetHnswCacheMemoryLimit());
                     const TActorId actorId = ctx.Register(
                         actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
                     Self->Actors.insert(actorId);

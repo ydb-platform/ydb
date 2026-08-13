@@ -75,6 +75,8 @@
 
 #include <util/string/join.h>
 
+#include <atomic>
+
 namespace NACLib {
     class TUserContext;
 }
@@ -164,6 +166,39 @@ class TDataShard
     : public TActor<TDataShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
+    class THnswCacheMemoryTracker {
+    public:
+        void SetLimit(ui64 limit) noexcept {
+            Limit.store(limit, std::memory_order_relaxed);
+        }
+
+        ui64 GetLimit() const noexcept {
+            return Limit.load(std::memory_order_relaxed);
+        }
+
+        bool TryAcquire(ui64 bytes) noexcept {
+            ui64 used = Used.load(std::memory_order_relaxed);
+            while (true) {
+                const ui64 limit = Limit.load(std::memory_order_relaxed);
+                if (!limit || used > limit || bytes > limit - used) {
+                    return false;
+                }
+                if (Used.compare_exchange_weak(used, used + bytes,
+                        std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                    return true;
+                }
+            }
+        }
+
+        void Release(ui64 bytes) noexcept {
+            Used.fetch_sub(bytes, std::memory_order_acq_rel);
+        }
+
+    private:
+        std::atomic<ui64> Limit = 0;
+        std::atomic<ui64> Used = 0;
+    };
+
     class TTxStopGuard;
     class TTxGetShardState;
     class TTxInit;
@@ -1836,6 +1871,10 @@ public:
         entry.NextScanAttemptAt = TInstant::Max();
     }
 
+    ui64 GetHnswCacheMemoryLimit() const {
+        return VectorIndexHnswCacheMemoryTracker->GetLimit();
+    }
+
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index, ui64 rowCountAtBuild = 0) {
         auto& entry = HnswIndexCache[localTid];
         // Drop this cache's ownership before reserving space for a replacement.
@@ -1845,7 +1884,7 @@ public:
         bool exceedsCacheLimit = false;
         if (index) {
             const ui64 indexSize = index->EstimatedMemoryBytes();
-            auto memoryTracker = AppData()->VectorIndexHnswCacheMemoryTracker;
+            auto memoryTracker = VectorIndexHnswCacheMemoryTracker;
             if (!memoryTracker->TryAcquire(indexSize)) {
                 index.reset();
                 exceedsCacheLimit = true;
@@ -3008,6 +3047,8 @@ private:
         TInstant NextScanAttemptAt;
     };
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
+    inline static std::shared_ptr<THnswCacheMemoryTracker> VectorIndexHnswCacheMemoryTracker =
+        std::make_shared<THnswCacheMemoryTracker>();
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

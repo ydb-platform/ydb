@@ -37,7 +37,7 @@ TFsPath GetDefaultSpillingRoot();
 constexpr TStringBuf SpillingDirPrefix = "spilling-tmp-";
 
 inline TString MakeSpillingNodeDirName(ui32 nodeId, TStringBuf username, TStringBuf sessionId) {
-    return TStringBuilder() << SpillingDirPrefix << nodeId << "-" << username << "-" << sessionId;
+    return TStringBuilder() << SpillingDirPrefix << nodeId << "-" << sessionId << "-" << username;
 }
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);

@@ -712,7 +712,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     }
 
-    // The service spills into <root>/spilling-tmp-<nodeId>-<user>-<sessionId>/, where <root> is the
+    // The service spills into <root>/spilling-tmp-<nodeId>-<sessionId>-<user>/, where <root> is the
     // configured Root, or $TMP when Root is empty. Both roots are covered by UseDefaultRoot.
     //
     // Directories left by the previous version of the service are named node_<nodeId>_<sessionId> and
@@ -724,9 +724,11 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
     //   <root>/
     //   ├── node_<thisNode>_<old-session>/                       delete: this node, old format
     //   ├── node_<otherNode>_<old-session>/                      keep:   other node may still be running
-    //   ├── spilling-tmp-<thisNode>-<user>-<old-session>/        delete: this node, previous run
-    //   ├── spilling-tmp-<thisNode>-<other-user>-<old-session>/  keep:   same node id, another OS user
-    //   ├── spilling-tmp-<otherNode>-<user>-<old-session>/       keep:   other node may still be running
+    //   ├── spilling-tmp-<thisNode>-<old-session>-<user>/        delete: this node, previous run
+    //   ├── spilling-tmp-<thisNode>-<old-session>-<otherUser>/   keep:   same node id, another OS user
+    //   ├── spilling-tmp-<thisNode>-<old-session>-<user>-other/  keep:   OS user named <user>-other
+    //   ├── spilling-tmp-<thisNode>-<old-session>-other-<user>/  keep:   OS user named other-<user>
+    //   ├── spilling-tmp-<otherNode>-<old-session>-<user>/       keep:   other node may still be running
     //   ├── unrelated-<old-session>/                             keep:   not a spilling directory
     //   └── spilling-tmp-<user>/                                 keep:   shared root of the old format
     //       ├── node_<thisNode>_<old-session>/                   delete: this node, old format
@@ -736,9 +738,11 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
     //
     //   <root>/
     //   ├── node_<otherNode>_<old-session>/
-    //   ├── spilling-tmp-<thisNode>-<user>-<current-session>/    created by the service for this run
-    //   ├── spilling-tmp-<thisNode>-<other-user>-<old-session>/
-    //   ├── spilling-tmp-<otherNode>-<user>-<old-session>/
+    //   ├── spilling-tmp-<thisNode>-<current-session>-<user>/    created by the service for this run
+    //   ├── spilling-tmp-<thisNode>-<old-session>-<otherUser>/
+    //   ├── spilling-tmp-<thisNode>-<old-session>-<user>-other/
+    //   ├── spilling-tmp-<thisNode>-<old-session>-other-<user>/
+    //   ├── spilling-tmp-<otherNode>-<old-session>-<user>/
     //   ├── unrelated-<old-session>/
     //   └── spilling-tmp-<user>/
     //       └── node_<otherNode>_<old-session>/
@@ -791,6 +795,8 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         const TFsPath oldFormatOtherNode = created.Add(root / oldFormatDirName(otherNodeId));
         const TFsPath thisNodePreviousRun = created.Add(root / MakeSpillingNodeDirName(thisNodeId, username, oldSessionId));
         const TFsPath otherUserSameNode = created.Add(root / MakeSpillingNodeDirName(thisNodeId, "other-user", oldSessionId));
+        const TFsPath userWithOurNameAtStart = created.Add(root / MakeSpillingNodeDirName(thisNodeId, username + "-other", oldSessionId));
+        const TFsPath userWithOurNameAtEnd = created.Add(root / MakeSpillingNodeDirName(thisNodeId, "other-" + username, oldSessionId));
         const TFsPath otherNode = created.Add(root / MakeSpillingNodeDirName(otherNodeId, username, oldSessionId));
         const TFsPath unrelated = created.Add(root / (TStringBuilder() << "unrelated-" << oldSessionId));
 
@@ -816,7 +822,8 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT_C(!removed.Exists(), TStringBuilder() << "must be removed: " << removed);
         }
 
-        for (const auto& kept : {oldFormatOtherNode, otherUserSameNode, otherNode, unrelated, oldFormatRoot, oldFormatRootOtherNode}) {
+        for (const auto& kept : {oldFormatOtherNode, otherUserSameNode, userWithOurNameAtStart, userWithOurNameAtEnd,
+                                 otherNode, unrelated, oldFormatRoot, oldFormatRootOtherNode}) {
             UNIT_ASSERT_C(kept.IsDirectory(), TStringBuilder() << "must be kept: " << kept);
         }
     }

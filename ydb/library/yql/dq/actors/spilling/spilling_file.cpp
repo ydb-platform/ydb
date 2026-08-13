@@ -797,33 +797,46 @@ private:
     void HandleWork(TEvPrivate::TEvRemoveOldTmp::TPtr& ev) {
         const auto& msg = *ev->Get();
         const auto& root = msg.TmpRoot;
-        const auto nodeIdString = ToString(msg.NodeId);
-        const auto currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username, msg.SpillingSessionId);
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        // Old format when Root was configured: spilling_root/node_<nodeId>_<sessionId>
-        const auto isOwnOldFormatDir = [&](TStringBuf dirName) {
-            TStringBuf rest = dirName;
-            return rest.SkipPrefix("node_") && rest.NextTok('_') == nodeIdString && !rest.empty();
-        };
-
-        // New format: spilling_root/spilling-tmp-<nodeId>-<username>-<sessionId>
-        const TString ownPrefix = MakeSpillingNodeDirName(msg.NodeId, msg.Username, {});
-        const auto isOwnDir = [&](TStringBuf dirName) {
-            if (dirName.StartsWith(ownPrefix)) {
-                return dirName != currentDirName;
-            }
-            return isOwnOldFormatDir(dirName);
-        };
-
         try {
-            RemoveMatchingChildren(root, isOwnDir);
-            // Old format when Root was empty: $TMP/spilling-tmp-<username>/node_<nodeId>_<sessionId>
-            RemoveMatchingChildren(root / (TStringBuilder() << SpillingDirPrefix << msg.Username), isOwnOldFormatDir);
+            // Current format.
+            RemoveOwnDirs(root, msg);
+
+            // Old format, when Root was configured.
+            RemoveOwnOldFormatDirs(root, msg.NodeId);
+
+            // Old format, when Root was empty and the default root was $TMP/spilling-tmp-<username>.
+            RemoveOwnOldFormatDirs(root / (TStringBuilder() << SpillingDirPrefix << msg.Username), msg.NodeId);
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
         }
+    }
+
+    void RemoveOwnDirs(const TFsPath& root, const TEvPrivate::TEvRemoveOldTmp& msg) {
+        const TString prefix = TStringBuilder() << SpillingDirPrefix << msg.NodeId << "-";
+        const TString suffix = TStringBuilder() << "-" << msg.Username;
+        const TString currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username, msg.SpillingSessionId);
+
+        RemoveMatchingChildren(root, [&](TStringBuf dirName) {
+            TStringBuf sessionId = dirName;
+            if (!sessionId.SkipPrefix(prefix) || !sessionId.ChopSuffix(suffix)) {
+                return false;
+            }
+
+            TGUID guid;
+            return GetGuid(sessionId, guid) && dirName != currentDirName;
+        });
+    }
+
+    void RemoveOwnOldFormatDirs(const TFsPath& dir, ui32 nodeId) {
+        const TString nodeIdString = ToString(nodeId);
+
+        RemoveMatchingChildren(dir, [&](TStringBuf dirName) {
+            TStringBuf rest = dirName;
+            return rest.SkipPrefix("node_") && rest.NextTok('_') == nodeIdString && !rest.empty();
+        });
     }
 
     template <typename TPredicate>

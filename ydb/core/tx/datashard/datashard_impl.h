@@ -459,6 +459,7 @@ class TDataShard
             ui32 LocalTid = 0;
             ui64 RowCountAtBuild = 0;
             std::shared_ptr<NDataShard::THnswIndex> Index;
+            std::shared_ptr<void> MemoryReservation;
             TString Error;
         };
 
@@ -1875,41 +1876,48 @@ public:
         return VectorIndexHnswCacheMemoryTracker->GetLimit();
     }
 
-    void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index, ui64 rowCountAtBuild = 0) {
+    std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
+        auto memoryTracker = VectorIndexHnswCacheMemoryTracker;
+        if (!memoryTracker->TryAcquire(bytes)) {
+            return nullptr;
+        }
+
+        struct TReservation {
+            std::shared_ptr<THnswCacheMemoryTracker> MemoryTracker;
+            ui64 Size = 0;
+
+            ~TReservation() {
+                MemoryTracker->Release(Size);
+            }
+        };
+
+        auto reservation = std::make_shared<TReservation>();
+        reservation->MemoryTracker = std::move(memoryTracker);
+        reservation->Size = bytes;
+        return reservation;
+    }
+
+    void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
+            std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0) {
         auto& entry = HnswIndexCache[localTid];
-        // Drop this cache's ownership before reserving space for a replacement.
         // Active reads may still own the old index and keep its reservation.
         entry.Index.reset();
 
-        bool exceedsCacheLimit = false;
         if (index) {
-            const ui64 indexSize = index->EstimatedMemoryBytes();
-            auto memoryTracker = VectorIndexHnswCacheMemoryTracker;
-            if (!memoryTracker->TryAcquire(indexSize)) {
-                index.reset();
-                exceedsCacheLimit = true;
-            } else {
-                struct TReservation {
-                    std::shared_ptr<NDataShard::THnswIndex> Index;
-                    std::shared_ptr<THnswCacheMemoryTracker> MemoryTracker;
-                    ui64 Size = 0;
-
-                    ~TReservation() {
-                        MemoryTracker->Release(Size);
-                    }
-                };
-
-                auto reservation = std::make_shared<TReservation>();
-                reservation->Index = std::move(index);
-                reservation->MemoryTracker = std::move(memoryTracker);
-                reservation->Size = indexSize;
-                index = std::shared_ptr<NDataShard::THnswIndex>(reservation, reservation->Index.get());
-            }
+            Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
+            struct TOwnedIndex {
+                std::shared_ptr<NDataShard::THnswIndex> Index;
+                std::shared_ptr<void> MemoryReservation;
+            };
+            auto owned = std::make_shared<TOwnedIndex>();
+            owned->Index = std::move(index);
+            owned->MemoryReservation = std::move(memoryReservation);
+            index = std::shared_ptr<NDataShard::THnswIndex>(owned, owned->Index.get());
         }
         entry.Index = std::move(index);
         entry.RowCountAtBuild = rowCountAtBuild;
         entry.Building = false;
-        entry.NextScanAttemptAt = exceedsCacheLimit ? TInstant::Max() : TInstant::Zero();
+        entry.NextScanAttemptAt = TInstant::Zero();
     }
 
     bool IsUserTable(const TTableId& tableId) const {

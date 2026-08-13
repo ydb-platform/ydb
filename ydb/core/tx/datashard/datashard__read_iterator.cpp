@@ -322,6 +322,9 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     TTransactionContext& txc,
     const TShortTableInfo& tableInfo,
     ui32 vectorColumn,
+    const Ydb::Table::VectorIndexSettings& settings,
+    TDataShard& dataShard,
+    std::shared_ptr<void>& memoryReservation,
     bool& hasPageFault)
 {
     hasPageFault = false;
@@ -336,6 +339,13 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
         NTable::EDirection::Forward, TRowVersion::Max());
     if (!precharge.Ready) {
         hasPageFault = true;
+        return {};
+    }
+
+    const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
+        precharge.ItemsPrecharged, settings.vector_dimension());
+    memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
+    if (!memoryReservation) {
         return {};
     }
 
@@ -2651,10 +2661,14 @@ public:
                 // lost on tablet restart must be reconstructed on demand.
                 Self->SetHnswIndexBuilding(localTid, true);
                 bool pageFault = false;
+                std::shared_ptr<void> memoryReservation;
                 auto vectors = ScanVectorColumnForHnsw(
-                    txc, TableInfo, record.GetColumns(topK.GetColumn()), pageFault);
+                    txc, TableInfo, record.GetColumns(topK.GetColumn()), topK.GetSettings(),
+                    *Self, memoryReservation, pageFault);
                 if (pageFault) {
                     Self->RegisterHnswScanPageFault(localTid);
+                } else if (!memoryReservation) {
+                    Self->DisableHnswIndexBuild(localTid);
                 } else if (vectors.empty()
                         || vectors.size() < topK.GetSettings().hnsw_min_rows()) {
                     Self->DisableHnswIndexBuild(localTid);
@@ -2662,7 +2676,7 @@ public:
                     const ui64 rowCount = vectors.size();
                     auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid, rowCount,
                         topK.GetSettings(), std::move(vectors),
-                        Self->GetHnswCacheMemoryLimit());
+                        std::move(memoryReservation));
                     const TActorId actorId = ctx.Register(
                         actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
                     Self->Actors.insert(actorId);

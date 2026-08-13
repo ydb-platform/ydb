@@ -20,6 +20,9 @@ bool ScanPostingTableVectors(
     TTransactionContext& txc,
     const TUserTable& table,
     ui32 vectorColumnTag,
+    const Ydb::Table::VectorIndexSettings& settings,
+    TDataShard& dataShard,
+    std::shared_ptr<void>& memoryReservation,
     std::vector<std::pair<TString, TString>>& keysAndVectors)
 {
     // KeyColumnIds is in key order, which is the order the read path expects
@@ -36,6 +39,13 @@ bool ScanPostingTableVectors(
         NTable::EDirection::Forward, TRowVersion::Max());
     if (!precharge.Ready) {
         return false;
+    }
+
+    const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
+        precharge.ItemsPrecharged, settings.vector_dimension());
+    memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
+    if (!memoryReservation) {
+        return true;
     }
 
     keysAndVectors.clear();
@@ -74,22 +84,28 @@ public:
             ui64 txId,
             const Ydb::Table::VectorIndexSettings& settings,
             std::vector<std::pair<TString, TString>> keysAndVectors,
-            ui64 maxMemoryBytes)
+            std::shared_ptr<void> memoryReservation)
         : TActorBootstrapped(NKikimrServices::TActivity::DATASHARD_HNSW_BUILDER)
         , ReplyTo(replyTo)
         , TxId(txId)
         , Settings(settings)
         , KeysAndVectors(std::move(keysAndVectors))
-        , MaxMemoryBytes(maxMemoryBytes)
+        , MemoryReservation(std::move(memoryReservation))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         TString error;
-        auto index = THnswIndex::Build(Settings, KeysAndVectors, MaxMemoryBytes, error);
+        auto index = THnswIndex::Build(Settings, KeysAndVectors, /* maxMemoryBytes */ 0, error);
+
+        std::shared_ptr<THnswIndex> sharedIndex;
+        std::shared_ptr<void> memoryReservation;
+        if (index) {
+            sharedIndex = std::shared_ptr<THnswIndex>(std::move(index));
+            memoryReservation = std::move(MemoryReservation);
+        }
 
         TAutoPtr<IDestructable> prod = new THnswIndexBuildProduct(
-            index ? std::shared_ptr<THnswIndex>(std::move(index)) : nullptr,
-            std::move(error));
+            std::move(sharedIndex), std::move(memoryReservation), std::move(error));
 
         ctx.Send(ReplyTo, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
         Die(ctx);
@@ -100,7 +116,7 @@ private:
     const ui64 TxId;
     const Ydb::Table::VectorIndexSettings Settings;
     const std::vector<std::pair<TString, TString>> KeysAndVectors;
-    const ui64 MaxMemoryBytes;
+    std::shared_ptr<void> MemoryReservation;
 };
 
 } // namespace
@@ -110,9 +126,10 @@ IActor* CreateHnswIndexBuildJob(
         ui64 txId,
         const Ydb::Table::VectorIndexSettings& settings,
         std::vector<std::pair<TString, TString>> keysAndVectors,
-        ui64 maxMemoryBytes)
+        std::shared_ptr<void> memoryReservation)
 {
-    return new THnswIndexBuildJob(replyTo, txId, settings, std::move(keysAndVectors), maxMemoryBytes);
+    return new THnswIndexBuildJob(replyTo, txId, settings, std::move(keysAndVectors),
+        std::move(memoryReservation));
 }
 
 // Builds the in-memory HNSW index for a vector index posting table as part of
@@ -181,8 +198,7 @@ protected:
         }
 
         const auto& settings = alter.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
-        const ui64 maxMemoryBytes = DataShard.GetHnswCacheMemoryLimit();
-        if (!maxMemoryBytes) {
+        if (!DataShard.GetHnswCacheMemoryLimit()) {
             return false;
         }
         if (settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
@@ -193,9 +209,17 @@ protected:
         }
 
         std::vector<std::pair<TString, TString>> keysAndVectors;
-        if (!ScanPostingTableVectors(txc, table, vectorColumnTag, keysAndVectors)) {
+        std::shared_ptr<void> memoryReservation;
+        if (!ScanPostingTableVectors(txc, table, vectorColumnTag, settings, DataShard,
+                memoryReservation, keysAndVectors)) {
             // Page fault: this unit is re-executed after the pages are fetched.
             PageFault = true;
+            return false;
+        }
+
+        if (!memoryReservation) {
+            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
+                << " HNSW: cache memory budget exhausted for localTid=" << table.LocalTid);
             return false;
         }
 
@@ -217,7 +241,7 @@ protected:
         LocalTid = table.LocalTid;
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
-                std::move(keysAndVectors), maxMemoryBytes),
+                std::move(keysAndVectors), std::move(memoryReservation)),
             TMailboxType::HTSwap,
             AppData(ctx)->BatchPoolId));
 
@@ -237,7 +261,8 @@ protected:
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: eager build completed for localTid=" << LocalTid
                 << " size=" << result->Index->Size());
-            DataShard.SetHnswIndex(LocalTid, result->Index);
+            DataShard.SetHnswIndex(LocalTid, result->Index,
+                std::move(result->MemoryReservation));
         } else {
             // A failed build only costs acceleration, not correctness: reads
             // fall back to brute force.

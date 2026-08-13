@@ -12,6 +12,6 @@ NActors::IActor* CreateHnswIndexBuildActor(
     ui64 rowCountAtBuild,
     const Ydb::Table::VectorIndexSettings& settings,
     std::vector<std::pair<TString, TString>> keysAndVectors,
-    ui64 maxMemoryBytes);
+    std::shared_ptr<void> memoryReservation);
 
 } // namespace NKikimr::NDataShard

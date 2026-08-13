@@ -164,7 +164,7 @@ class YdbBenchTest(unittest.TestCase):
         config = self._config(
             """
             ping-bench:
-              fails: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 1, affinity: [none]}
+              fails: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 2, affinity: [none]}
               succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
             """
         )
@@ -175,7 +175,10 @@ class YdbBenchTest(unittest.TestCase):
         fail_fast_stdout, fail_fast_stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(fail_fast_stdout), redirect_stderr(fail_fast_stderr):
             self.assertEqual(main(["run", "--config", str(config), "--output", str(fail_fast)], loader), 1)
-        self.assertEqual(len(json.loads((fail_fast / "run.json").read_text())["runs"]), 1)
+        fail_fast_manifest = json.loads((fail_fast / "run.json").read_text())
+        self.assertEqual(len(fail_fast_manifest["runs"]), 1)
+        self.assertEqual([step["state"] for step in fail_fast_manifest["steps"]], ["failed", "cancelled", "cancelled"])
+        self.assertTrue(all(step.get("reason") for step in fail_fast_manifest["steps"] if step["state"] == "cancelled"))
         self.assertEqual(fail_fast_stdout.getvalue(), "")
         self.assertIn("failed 2 benchmark profiles: {}".format(fail_fast), fail_fast_stderr.getvalue())
 
@@ -191,6 +194,8 @@ class YdbBenchTest(unittest.TestCase):
         report_stored = json.loads((continued / "run.json").read_text())
         self.assertEqual(report, json.loads((continued / "run.json").read_text()))
         self.assertEqual([run["status"] for run in report["runs"]], ["failed", "completed"])
+        self.assertEqual([step["state"] for step in report["steps"]], ["failed", "cancelled", "passed"])
+        self.assertIn("profile stopped after failure", report["steps"][1]["reason"])
         self.assertEqual(report, report_stored)
         self.assertIn("failed 2 benchmark profiles: {}".format(continued), stderr.getvalue())
         self.assertIn("succeeds/summary.csv", stderr.getvalue())
@@ -619,6 +624,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(interrupted_manifest["status"], "interrupted")
         self.assertEqual(interrupted_manifest["state"], "cancelled")
         self.assertEqual(interrupted_manifest["schema_version"], SCHEMA_VERSION)
+        self.assertTrue(interrupted_manifest["steps"])
+        self.assertTrue(all(step["state"] == "cancelled" for step in interrupted_manifest["steps"]))
+        self.assertTrue(all("benchmark stopped" in step["reason"] for step in interrupted_manifest["steps"]))
 
     def test_run_writes_manifest_raw_metrics_and_median_summary(self):
         script = self._script(

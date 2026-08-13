@@ -132,6 +132,25 @@ def _emit_progress(manifest, output_directory, planned_runs):
             print("{}/{}: {}".format(record["benchmark"], record["profile"], record["summary"]), file=sys.stderr)
 
 
+def _cancel_unfinished_steps(store, reason, benchmark=None, profile=None):
+    """Make a selected part of the immutable plan terminal after execution stops."""
+    for step in list(store.manifest["steps"]):
+        if step["state"] not in ("pending", "running"):
+            continue
+        if benchmark is not None and step["benchmark"] != benchmark:
+            continue
+        if profile is not None and step["profile"] != profile:
+            continue
+        try:
+            store.transition_step(step["id"], "cancelled", reason=reason)
+        except Exception as error:
+            # Finalization is best-effort specifically so a secondary storage
+            # failure cannot replace the benchmark error which stopped the run.
+            store.manifest.setdefault("finalization_errors", []).append(
+                "cannot cancel step {}: {}".format(step["id"], error)
+            )
+
+
 def _run(arguments, resource_loader, tool_revision):
     if resource_loader is None:
         raise BenchmarkError("the benchmark executable resource loader is not configured")
@@ -264,6 +283,12 @@ def _run(arguments, resource_loader, tool_revision):
                 except BenchmarkError as error:
                     run_record["status"] = "failed"
                     run_record["error"] = str(error)
+                    _cancel_unfinished_steps(
+                        store,
+                        "profile stopped after failure: {}".format(error),
+                        benchmark=configuration.benchmark.name,
+                        profile=configuration.profile,
+                    )
                     store.write()
                     if not arguments.continue_on_error:
                         raise
@@ -273,6 +298,7 @@ def _run(arguments, resource_loader, tool_revision):
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
                 store.write()
     except BenchmarkInterrupted as error:
+        _cancel_unfinished_steps(store, "run interrupted: {}".format(error))
         manifest["status"] = "interrupted"
         manifest["state"] = "cancelled"
         manifest["finished_at"] = _utc_now()
@@ -284,6 +310,7 @@ def _run(arguments, resource_loader, tool_revision):
         print("ydb_bench: error: {}".format(error), file=sys.stderr)
         raise
     except BenchmarkError as error:
+        _cancel_unfinished_steps(store, "run stopped after failure: {}".format(error))
         manifest["status"] = "failed"
         manifest["state"] = "failed"
         manifest["finished_at"] = _utc_now()
@@ -296,6 +323,8 @@ def _run(arguments, resource_loader, tool_revision):
         return 1
 
     failed = [record for record in manifest["runs"] if record["status"] == "failed"]
+    if failed:
+        _cancel_unfinished_steps(store, "run completed with failed benchmark profiles")
     manifest["status"] = "failed" if failed else "completed"
     manifest["state"] = "failed" if failed else "passed"
     manifest["finished_at"] = _utc_now()

@@ -617,9 +617,9 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
-void TOutputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
+void TOutputDescriptor::AbortChannelByMemoryLimit(const IMemoryQuotaManager::TPtr& quotaManager, ui64 bytes) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, quotaManager, bytes).Release());
     }
 }
 
@@ -690,8 +690,8 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (Descriptor->QuotaManager) {
-        Descriptor->QuotaManager->FreeQuota(Data.Bytes);
+    if (auto quotaManager = Descriptor->GetQuotaManager()) {
+        quotaManager->FreeQuota(Data.Bytes);
     }
 }
 
@@ -1007,8 +1007,9 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(data.Bytes)) {
-        descriptor->AbortChannelByMemoryLimit(data.Bytes);
+    auto quotaManager = descriptor->GetQuotaManager();
+    if (quotaManager && !quotaManager->AllocateQuota(data.Bytes)) {
+        descriptor->AbortChannelByMemoryLimit(quotaManager, data.Bytes);
         return;
     }
 
@@ -1805,7 +1806,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            result->QuotaManager = quotaManager;
+            result->SetQuotaManager(std::move(quotaManager));
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;

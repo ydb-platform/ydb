@@ -294,10 +294,23 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
-    void AbortChannelByMemoryLimit(ui64 bytes);
+    void AbortChannelByMemoryLimit(const IMemoryQuotaManager::TPtr& quotaManager, ui64 bytes);
     void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+
+    // QuotaManager is assigned when output side binds to already existing descriptor, concurrently with
+    // data chunks being pushed, so it must be accessed via these helpers only. QuotaManagerMutex is a leaf
+    // mutex - no other lock may be taken while holding it, so it is safe to use under any other mutex.
+    IMemoryQuotaManager::TPtr GetQuotaManager() const {
+        std::lock_guard lock(QuotaManagerMutex);
+        return QuotaManager;
+    }
+
+    void SetQuotaManager(IMemoryQuotaManager::TPtr quotaManager) {
+        std::lock_guard lock(QuotaManagerMutex);
+        QuotaManager = std::move(quotaManager);
+    }
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -342,6 +355,8 @@ public:
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     const ui64 ColdInflightBytes;
 
+private:
+    mutable std::mutex QuotaManagerMutex;
     IMemoryQuotaManager::TPtr QuotaManager;
 };
 

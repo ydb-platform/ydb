@@ -93,6 +93,7 @@ ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFi
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorKeep.test_restart_as_much_as_can
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]
+ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test

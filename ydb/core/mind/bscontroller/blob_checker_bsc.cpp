@@ -85,6 +85,10 @@ void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
         } else {
             Send(BlobCheckerOrchestratorId, new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
         }
+    } else {
+        // The group may disappear between an orchestrator request and BSC handling it.
+        // Always complete the request so that the orchestrator can retry or forget it.
+        Send(BlobCheckerOrchestratorId, new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
     }
 }
 
@@ -118,16 +122,16 @@ void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "Updating BlobChecker settings",
             (OldPeriodicity, BlobCheckerPeriodicity),
             (NewPeriodicity, periodicity));
-    if (!BlobCheckerPlanner) {
-        // if BlobCheckerPlanner is uninitialized, then TxLoadEverything hasn't finished yet
-        return;
-    }
-
     bool wasEnabled = IsBlobCheckerEnabled();
     BlobCheckerPeriodicity = periodicity;
+    if (!BlobCheckerPlanner) {
+        // TxLoadEverything will initialize the planner and orchestrator from this value.
+        return;
+    }
     if (!wasEnabled) {
         if (IsBlobCheckerEnabled()) {
             BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
+            NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
             InitializeBlobCheckerOrchestratorActor();
         } else {
             return;
@@ -139,6 +143,7 @@ void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
         } else {
             STLOG(PRI_NOTICE, BS_CONTROLLER, BSC51, "Terminating BlobCheckerOrchestrator actor");
             BlobCheckerPlanner->ResetState();
+            NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
             Send(BlobCheckerOrchestratorId, new TEvents::TEvPoisonPill);
             BlobCheckerOrchestratorId = TActorId{};
         }
@@ -146,7 +151,11 @@ void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
 }
 
 void TBlobStorageController::DequeueCheckForGroup(TGroupId groupId, bool notifyOrchestrator) {
-    bool scanWasPlanned = BlobCheckerPlanner->DequeueCheck(groupId);
+    if (!BlobCheckerPlanner) {
+        return;
+    }
+
+    const bool scanWasPlanned = BlobCheckerPlanner->DequeueCheck(groupId);
     if (scanWasPlanned) {
         if (TGroupInfo* groupInfo = FindGroup(groupId)) {
             groupInfo->IsCheckInProgress = false;

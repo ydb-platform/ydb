@@ -52,17 +52,17 @@ struct TResolvedName {
  *
  *   // Without localDc/dc (defaults): local path, no -mirrored-from- suffix
  *   ResolveName(db, "rt3.dc1--account--topic")
- *     -> Path="/Root/LbCommunal/account/topic"), NavigateDatabase(db)  // FCC
+ *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase=db  // FCC
  *   ResolveName("/Root", "account/topic")  // !FCC
- *     -> Path("/Root/LbCommunal/account/topic"), NavigateDatabase("/Root/LbCommunal/account")
+ *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase="/Root/LbCommunal/account"
  *   ResolveName("/Root/LbCommunal/account", "dir/topic")
- *     -> Path("/Root/LbCommunal/account/dir/topic"), NavigateDatabase("/Root/LbCommunal/account")
+ *     -> Path="/Root/LbCommunal/account/dir/topic", NavigateDatabase="/Root/LbCommunal/account"
  *
  *   // With localDc (mirroring / DC-aware resolve)
  *   ResolveName(db, "rt3.dc1--account--topic", "dc1")
- *     -> Path("/Root/LbCommunal/account/topic"), NavigateDatabase(db)
+ *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase=db
  *   ResolveName("/Root", "account/topic", "dc1", "dc2")
- *     -> Path("/Root/LbCommunal/account/topic-mirrored-from-dc2"), NavigateDatabase("/Root/LbCommunal/account")
+ *     -> Path="/Root/LbCommunal/account/topic-mirrored-from-dc2", NavigateDatabase="/Root/LbCommunal/account"
  */
 std::expected<TResolvedName, TString> ResolveName(
     TStringBuf database,

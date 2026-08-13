@@ -49,9 +49,10 @@ Y_UNIT_TEST(CreateTopicLegacyName) {
     runtime.Register(NDescriber::CreateDescriberActor(edge, "/Root", {legacyName}));
     auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
-    const auto& topic = response->Topics[legacyName];
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(topic.RealPath, "/Root/account/topic");
+    const auto it = response->Topics.find(legacyName);
+    UNIT_ASSERT(it != response->Topics.end());
+    UNIT_ASSERT_VALUES_EQUAL(it->second.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(it->second.RealPath, "/Root/account/topic");
 }
 
 Y_UNIT_TEST(CreateSharedConsumer) {

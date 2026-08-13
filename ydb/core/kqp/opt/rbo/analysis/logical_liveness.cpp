@@ -314,6 +314,10 @@ void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
                 AddInfoUnit(inputLive, iu);
             }
         }
+        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+            Y_UNUSED(rightKey);
+            AddInfoUnit(inputLive, leftKey);
+        }
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }

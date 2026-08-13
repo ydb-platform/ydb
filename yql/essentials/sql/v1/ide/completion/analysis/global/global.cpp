@@ -5,7 +5,6 @@
 #include "input.h"
 #include "named_node_resolution.h"
 #include "named_node_visibility.h"
-#include "parse_tree.h"
 #include "parser.h"
 #include "use.h"
 
@@ -26,7 +25,7 @@ void Move(TColumnContext& lhs, TColumnContext& rhs, C TColumnContext::*member) {
 
     lhsM.reserve(lhsM.size() + rhsM.size());
     std::move(rhsM.begin(), rhsM.end(), std::back_inserter(lhsM));
-    SortUnique(lhsM);
+    Sort(lhsM);
 }
 
 } // namespace
@@ -124,7 +123,7 @@ public:
     {
     }
 
-    TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
+    TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const override {
         TParsedInput parsed = Parser_->Parse(input);
 
         INamedNodes::TPtr nodes = ResolveNamedNodes(parsed, env);
@@ -143,7 +142,7 @@ public:
     }
 
 private:
-    void EnrichTableClusters(TColumnContext& column, const TClusterContext& use) {
+    void EnrichTableClusters(TColumnContext& column, const TClusterContext& use) const {
         for (auto& table : column.Tables) {
             if (table.Cluster.empty()) {
                 table.Cluster = use.Name;
@@ -162,13 +161,13 @@ public:
     {
     }
 
-    TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
+    TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const override {
         const bool isAnsiLexer = IsAnsiQuery(TString(input.Text));
         return GetSpecialized(isAnsiLexer).Analyze(input, std::move(env));
     }
 
 private:
-    IGlobalAnalysis& GetSpecialized(bool isAnsiLexer) {
+    const IGlobalAnalysis& GetSpecialized(bool isAnsiLexer) const {
         if (isAnsiLexer) {
             return AnsiAnalysis_;
         }

@@ -232,13 +232,13 @@ struct IInternalClient
     virtual TFuture<void> RegisterShuffleChunks(
         const TShuffleHandlePtr& handle,
         const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
-        std::optional<int> writerIndex,
+        std::optional<int> logicalWriterIndex,
         const TRegisterShuffleChunksOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
         const TShuffleHandlePtr& handle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
+        std::optional<std::pair<int, int>> logicalWriterIndexRange,
         const TFetchShuffleChunksOptions& options = {}) = 0;
 
     virtual TFuture<void> ForsakeChaosCoordinator(

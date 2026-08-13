@@ -117,6 +117,8 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
 
+    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
+
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
     if (FastPathService) {

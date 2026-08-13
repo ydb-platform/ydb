@@ -2,7 +2,6 @@
 #include "common.h"
 #include "config.h"
 
-#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -14,11 +13,11 @@ class TServiceOperator {
 private:
     using TSelf = TServiceOperator;
     std::atomic<bool> IsEnabledFlag = false;
+
+public:
     static void Register(const NConfig::TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
     }
-
-public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
@@ -35,10 +34,6 @@ public:
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcConvCmps");
-    }
-    static NActors::IActor* CreateService(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
-        Register(config);
-        return new TDistributor(config, conveyorSignals);
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {

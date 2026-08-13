@@ -2071,7 +2071,7 @@ namespace NTypeAnnImpl {
                 flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
                 allFieldOptional = false;
             } else if (mode == "optional" || (mode == "auto" && fieldOptional)) {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::FlattenOptionalByNonOptional.MinLangVer, ctx.Types.BackportMode) && !fieldOptional) {
+                if (!IsAvailable(NFeature::FlattenOptionalByNonOptional, ctx.Types) && !fieldOptional) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                         "Expected optional type in field of struct: '" << fieldName <<
                         "', but got: " << *field->GetItemType()));
@@ -3875,8 +3875,7 @@ namespace NTypeAnnImpl {
     template<bool IsScore>
     IGraphTransformer::TStatus FullTextBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         YQL_ENSURE(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::FullTextFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << input->Content() << " function is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::FullTextFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3946,8 +3945,7 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus HybridRankBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         YQL_ENSURE(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::HybridRankFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "HybridRank function is not available before version 2026.02"));
+        if (!EnsureAvailable(input->Pos(), NFeature::HybridRankFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4039,8 +4037,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::ConcatFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::ConcatFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4088,8 +4085,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus NullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::NullIfFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "NullIf function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::NullIfFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -9999,7 +9995,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (cachedType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10235,7 +10231,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10680,9 +10676,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus BuildSimplePgCall(TPositionHandle pos, TStringBuf name,
-        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::SimplePgFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "SimplePg functions are not available before version 2025.04"));
+        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx)
+    {
+        if (!EnsureAvailable(pos, NFeature::SimplePgFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -11126,7 +11122,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -13795,8 +13791,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::SideEffects.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "SideEffects is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::SideEffects, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -15835,8 +15830,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus LinearDestroyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsAvailableLangVersion(NFeature::LinearDestroy.MinLangVer, ctx.Types.LangVer)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "LinearDestroy is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearDestroy, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -16617,6 +16611,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockWay"] = &BlockWayWrapper;
         Functions["BlockVariant"] = &BlockVariantWrapper;
         Functions["BlockVariantItem"] = &BlockVariantItemWrapper;
+        Functions["BlockDynamicVariant"] = &BlockDynamicVariantWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;

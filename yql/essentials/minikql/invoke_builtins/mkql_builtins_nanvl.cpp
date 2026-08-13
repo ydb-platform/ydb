@@ -2,8 +2,7 @@
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -34,7 +33,7 @@ struct TNanvl {
         auto& context = ctx.Codegen.GetContext();
         auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TLeft>(left, context, block);
-        const auto fnType = FunctionType::get(Type::getInt1Ty(context), {val->getType()}, false);
+        const auto fnType = FunctionType::get(Type::getInt1Ty(context), {val->getType()}, /*isVarArg=*/false);
         const auto name = std::is_same<TLeft, float>() ? "MyFloatIsNan" : "MyDoubleIsNan";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool (*)(TLeft)>(&std::isnan)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -103,5 +102,4 @@ void RegisterNanvl(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNavlDecimal(registry, "Nanvl");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

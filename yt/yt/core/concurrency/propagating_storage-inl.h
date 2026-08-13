@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
@@ -64,7 +64,7 @@ private:
     { }
 };
 
-YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
+YT_DEFINE_LEAKY_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
 
 class TPropagatingStorageManager
 {

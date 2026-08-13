@@ -22,7 +22,7 @@ Y_UNIT_TEST_LLVM(TestEmptyIterable) {
     };
     const auto root = pb.SqueezeToHashedDict(
         pb.ToFlow(pb.Iterable(lambda), {}),
-        /* isMany = */ true,
+        /*all=*/true,
         [&pb](TRuntimeNode node) { return pb.Member(node, "a"); },
         [](TRuntimeNode node) { return node; },
         /* isCompact = */ true);

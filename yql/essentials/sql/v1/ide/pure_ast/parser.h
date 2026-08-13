@@ -11,7 +11,7 @@ public:
     using TPtr = THolder<IParser>;
 
     virtual ~IParser() = default;
-    virtual TParseTree Parse(TStringBuf text Y_LIFETIME_BOUND) = 0;
+    virtual IParseTree::TPtr Parse(TStringBuf text Y_LIFETIME_BOUND) const = 0;
 };
 
 IParser::TPtr MakeParser(bool isAnsiLexer);

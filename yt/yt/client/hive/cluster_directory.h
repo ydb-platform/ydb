@@ -91,6 +91,8 @@ public:
     //! Returns true if there is a cluster with corresponding TVM id in the directory.
     bool HasTvmId(NAuth::TTvmId tvmId) const;
 
+    // NB: subscribers to these signals have to be executed synchronously
+    // because old connection can be terminated after this signal is fired.
     DEFINE_SIGNAL(void(const std::string&, NYTree::INodePtr), OnClusterUpdated);
     DEFINE_SIGNAL(void(const std::string&), OnClusterUnregistered);
 

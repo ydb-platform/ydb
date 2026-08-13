@@ -1,6 +1,6 @@
 #pragma once
 
-#include "meta.h"
+#include <yql/essentials/utils/meta/maybe.h>
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
@@ -44,7 +44,7 @@ struct TToJson<TVector<T>> {
 
 template <typename T>
 void SaveTo(TJsonValue& json, TStringBuf key, T value) {
-    if constexpr (NDetail::IsMaybeV<T>) {
+    if constexpr (IsMaybeV<T>) {
         if (value) {
             json.InsertValue(key, ToJson(std::move(*value)));
         }

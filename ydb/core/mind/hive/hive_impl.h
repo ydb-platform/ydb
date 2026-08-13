@@ -245,6 +245,10 @@ protected:
     friend class TTxUpdateLastReassign;
     friend class TTxShrinkPoolReply;
     friend class TTxShrinkPool;
+    friend class TTxUpdateDomain;
+    friend class TTxConfigureScaleRecommender;
+    friend class TTxProcessBootQueue;
+    friend class TTxUnlockTabletExecution;
 
     friend class TDeleteTabletActor;
 
@@ -489,6 +493,7 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    TRequests Requests;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -634,6 +639,7 @@ protected:
     void Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev);
     void Handle(TEvPrivate::TEvMoveDataComplete::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev);
+    void Handle(TEvPrivate::TEvLogHangingRequests::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -650,9 +656,9 @@ protected:
     STATEFN(StateInit);
     STATEFN(StateWork);
 
-    void SendToBSControllerPipe(IEventBase* payload);
-    void SendToRootHivePipe(IEventBase* payload);
-    void SendToConsolePipe(IEventBase* payload);
+    void SendToBSControllerPipe(IEventBase* payload, bool track);
+    void SendToRootHivePipe(IEventBase* payload, bool track);
+    void SendToConsolePipe(IEventBase* payload, bool track);
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 

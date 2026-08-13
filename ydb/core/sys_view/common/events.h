@@ -103,6 +103,11 @@ struct TEvSysView {
         TEvFailNextIntervalMetricsRequest,
         EvFailNextIntervalMetricsRequest>
     {
+        bool DuplicateFailure = false;
+
+        explicit TEvFailNextIntervalMetricsRequest(bool duplicateFailure = false)
+            : DuplicateFailure(duplicateFailure)
+        {}
     };
 
     struct TEvSendPartitionStats : public TEventLocal<

@@ -1599,10 +1599,10 @@ Y_UNIT_TEST(TruncateTableEmptySettingsStillParse) {
 // the ALT resolution is noticed here rather than in production.
 Y_UNIT_TEST(TruncateTableHintsAreStillSwallowed) {
     for (const auto& sql : {
-        "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;",
-        "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = \"true\");",
-        "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe);",
-    }) {
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;",
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = \"true\");",
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe);",
+         }) {
         NYql::TAstParseResult res = SqlToYql(sql);
         UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << sql << ": " << Err2Str(res));
 
@@ -1610,7 +1610,7 @@ Y_UNIT_TEST(TruncateTableHintsAreStillSwallowed) {
             if (word == "Write!") {
                 UNIT_ASSERT_STRING_CONTAINS(line, "'('mode 'truncateTable)");
                 UNIT_ASSERT_C(line.find("UNSAFE") == TString::npos,
-                    TStringBuilder() << "hint unexpectedly reached truncate settings: " << line);
+                              TStringBuilder() << "hint unexpectedly reached truncate settings: " << line);
             }
         };
 

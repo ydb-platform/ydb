@@ -116,14 +116,16 @@ struct TKiExploreTxResults {
         return syncSet;
     }
 
-    void GetTableOperations(bool& hasScheme, bool& hasData) {
+    void GetTableOperations(bool& hasScheme, bool& hasData, bool& hasUnsafeTruncate) {
         hasScheme = false;
         hasData = false;
+        hasUnsafeTruncate = false;
         for (auto& queryBlock : QueryBlocks) {
             for (auto& node : queryBlock.TableOperations) {
                 auto op = FromString<TYdbOperation>(TString(node.Operation()));
                 hasScheme = hasScheme || (op & KikimrSchemeOps());
                 hasData = hasData || (op & KikimrDataOps());
+                hasUnsafeTruncate = hasUnsafeTruncate || (op == TYdbOperation::UnsafeTruncateTable);
             }
         }
     }
@@ -760,11 +762,19 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         txRes.Ops.insert(node.Raw());
-        // Both forms stay a scheme operation here: this bitmask also routes the whole statement to
-        // MakeSchemeTx below, and the unsafe form needs that routing to reach the gateway proxy
-        // that builds its physical transaction. What makes it legal inside a data transaction is
-        // the dedicated case in ExecutePhyTx, not this classification.
-        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+
+        // The settings themselves are validated in HandleTruncateTable; here the two forms only
+        // need telling apart, because only the plain one is a scheme operation.
+        bool unsafe = false;
+        for (const auto& setting : truncateTable.Settings()) {
+            if (setting.Name().Value() == "UNSAFE") {
+                unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+            }
+        }
+
+        txRes.AddTableOperation(BuildYdbOpNode(cluster,
+            unsafe ? TYdbOperation::UnsafeTruncateTable : TYdbOperation::TruncateTable,
+            truncateTable.Pos(), ctx));
         return true;
     }
 
@@ -1167,9 +1177,10 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     bool hasScheme;
     bool hasData;
-    txExplore.GetTableOperations(hasScheme, hasData);
+    bool hasUnsafeTruncate;
+    txExplore.GetTableOperations(hasScheme, hasData, hasUnsafeTruncate);
 
-    if (hasData && hasScheme) {
+    if (hasData && (hasScheme || hasUnsafeTruncate)) {
         TString message = TStringBuilder() << "Queries with mixed data and scheme operations "
             << "are not supported. Use separate queries for different types of operations.";
 
@@ -1177,7 +1188,11 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         return nullptr;
     }
 
-    if (hasScheme) {
+    // The unsafe truncate is not a scheme operation, but it is still compiled along the scheme
+    // path: that is where the gateway proxy turns it into its own physical transaction. Keeping it
+    // out of KikimrSchemeOps() is what stops the "scheme operations can't be performed inside
+    // transaction" checks from rejecting it.
+    if (hasScheme || hasUnsafeTruncate) {
         return MakeSchemeTx(commit, ctx);
     }
 

@@ -88,8 +88,6 @@ private:
         // A fresh TxId per attempt: the previous one may be prepared on some shards and must not
         // be reused once we decided to abandon that attempt.
         TxManager = CreateKqpTransactionManager();
-        PreparedShards = 0;
-        CompletedShards = 0;
         Immediate = false;
 
         // Start over from the main table so that a repartitioning or re-indexing between attempts
@@ -336,9 +334,13 @@ private:
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetOrigin();
 
-        if (!TxId || record.GetTxId() != *TxId) {
+        // While a restart is under way TxId still names the abandoned attempt, so its remaining
+        // shards would pass the check below and reach a transaction manager that has already been
+        // replaced by a fresh one.
+        if (Restarting || !TxId || record.GetTxId() != *TxId) {
             YDB_LOG_INFO("Ignoring a write result of an abandoned unsafe truncate attempt",
-                {"txId", TxId ? *TxId : 0}, {"resultTxId", record.GetTxId()}, {"shardId", shardId});
+                {"txId", TxId ? *TxId : 0}, {"resultTxId", record.GetTxId()},
+                {"shardId", shardId}, {"restarting", Restarting});
             return;
         }
 
@@ -414,13 +416,32 @@ private:
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        const auto status =
-            static_cast<TEvTxProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
-        if (status == TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned) {
-            return;
+        const auto status = ev->Get()->GetStatus();
+
+        switch (status) {
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+                // Progress on the way to the plan, not an outcome: the shards report that.
+                return;
+
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
+                // An explicit refusal is definitive: the transaction was never planned, so no shard
+                // applied anything and the attempt can be retried from scratch.
+                Planned = false;
+                RestartOrFail(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+                return;
+
+            default:
+                ReplyError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder() << "Coordinator answered the unsafe truncate with an unknown status "
+                                     << (int)status);
+                return;
         }
-        ReplyError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Coordinator declined the unsafe truncate, status " << (int)status);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -448,6 +469,10 @@ private:
         Restarting = true;
         YDB_LOG_INFO("Restarting unsafe truncate after a shard set change",
             {"txId", TxId ? *TxId : 0}, {"status", (int)status}, {"attempt", ResolveAttempt});
+
+        // A coordinator refusal restarts us from ExecuteState, which does not expect the events of
+        // a fresh attempt.
+        Become(&TKqpUnsafeTruncateExecuter::PrepareState);
         AllocateTxIdAndResolve();
     }
 
@@ -562,8 +587,6 @@ private:
     IKqpTransactionManagerPtr TxManager;
     std::optional<ui64> TxId;
     ui32 ResolveAttempt = 0;
-    ui32 PreparedShards = 0;
-    ui32 CompletedShards = 0;
     bool Planned = false;
     bool Restarting = false;
     bool Replied = false;

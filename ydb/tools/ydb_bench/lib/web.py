@@ -607,13 +607,30 @@ class RunService:
             "steps": [dict(item, state="pending", artifacts=[]) for item in plan_result["plan"]],
             "events": 0,
         }
-        run = {"id": run_id, "root": root, "loaded": self._load(yaml_text, perf), "store": ResultStore(root / "run.json", manifest), "events": deque(maxlen=self.event_limit), "tail": {"stdout": "", "stderr": ""}, "cancel": threading.Event(), "continue_on_error": bool(continue_on_error), "failed": False}
+        run = {
+            "id": run_id,
+            "root": root,
+            "loaded": self._load(yaml_text, perf),
+            "store": ResultStore(root / "run.json", manifest),
+            "events": deque(maxlen=self.event_limit),
+            "tail": {"stdout": "", "stderr": ""},
+            "cancel": threading.Event(),
+            "cancel_requested": False,
+            "finished": threading.Event(),
+            "lock": threading.RLock(),
+            "continue_on_error": bool(continue_on_error),
+            "failed": False,
+        }
         run["store"].write()
         with self._lock: self._runs[run_id] = run
         threading.Thread(target=self._run, args=(run,), daemon=True, name="ydb-bench-" + run_id).start()
         return {"id": run_id, "state": "running"}
 
     def _emit(self, run, event):
+        with run["lock"]:
+            self._emit_locked(run, event)
+
+    def _emit_locked(self, run, event):
         event = dict(event); event["sequence"] = run["store"].manifest.get("events", 0) + 1; event["at"] = _utc_now()
         if event.get("type") in ("stdout", "stderr"):
             key = event["type"]; run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit:]
@@ -643,34 +660,50 @@ class RunService:
                 run["store"].transition_step(step["id"], "cancelled")
 
     def _run(self, run):
+        error = None
         try:
             self.executor(run, lambda event: self._emit(run, event), run["cancel"])
-            if run["cancel"].is_set():
-                self._cancel_unfinished(run)
-                state, status = "cancelled", "cancelled"
-            elif run["failed"]:
-                self._cancel_unfinished(run)
-                state, status = "failed", "failed"
-            else:
-                # An executor is not allowed to report a completed run with a
-                # hidden pending step.  Keep the durable queue terminal even
-                # for a faulty adapter, then make the invariant visible.
-                pending = [step for step in run["store"].manifest["steps"] if step["state"] in ("pending", "running")]
-                if pending:
+        except Exception as caught:
+            error = caught
+        try:
+            with run["lock"]:
+                if run["cancel"].is_set():
                     self._cancel_unfinished(run)
-                    raise BenchmarkError("executor returned with unfinished run steps")
-                state, status = "passed", "completed"
-        except Exception as error:
-            state, status = ("cancelled", "cancelled") if run["cancel"].is_set() else ("failed", "failed")
-            self._cancel_unfinished(run)
-            run["store"].manifest["error"] = str(error)
-        run["store"].manifest.update({"state": state, "status": status, "finished_at": _utc_now()}); self._emit(run, {"type": "run-finished", "state": state})
+                    state, status = "cancelled", "cancelled"
+                elif error is not None:
+                    self._cancel_unfinished(run)
+                    state, status = "failed", "failed"
+                elif run["failed"]:
+                    self._cancel_unfinished(run)
+                    state, status = "failed", "failed"
+                else:
+                    # An executor is not allowed to report a completed run with a
+                    # hidden pending step.  Keep the durable queue terminal even
+                    # for a faulty adapter, then make the invariant visible.
+                    pending = [step for step in run["store"].manifest["steps"] if step["state"] in ("pending", "running")]
+                    if pending:
+                        self._cancel_unfinished(run)
+                        state, status = "failed", "failed"
+                        run["store"].manifest["error"] = "executor returned with unfinished run steps"
+                    else:
+                        state, status = "passed", "completed"
+                if error is not None:
+                    run["store"].manifest["error"] = str(error)
+                run["store"].manifest.update({"state": state, "status": status, "finished_at": _utc_now()})
+                self._emit_locked(run, {"type": "run-finished", "state": state})
+        finally:
+            run["finished"].set()
 
     def cancel(self, run_id):
         with self._lock: run = self._runs.get(run_id)
         if not run: return {"id": run_id, "cancelled": True, "state": "not-running"}
-        run["cancel"].set(); self._emit(run, {"type": "cancel-requested"})
-        return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
+        with run["lock"]:
+            state = run["store"].manifest["state"]
+            if state == "running" and not run["cancel_requested"]:
+                run["cancel_requested"] = True
+                run["cancel"].set()
+                self._emit_locked(run, {"type": "cancel-requested"})
+            return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
 
     def model(self): return read_model(self.output)
     def settings(self): return {"output": str(self.output), "perf_available": self.perf_available}
@@ -732,11 +765,14 @@ class RunService:
         return self.comparisons(selected)
     def detail(self, run_id):
         item = self.model().get(run_id)
-        if item and run_id in self._runs: item.update({"tail": self._runs[run_id]["tail"]})
+        with self._lock: run = self._runs.get(run_id)
+        if item and run:
+            with run["lock"]: item.update({"tail": dict(run["tail"])})
         return item
     def events(self, run_id, after=0):
-        run = self._runs.get(run_id)
-        if run: return [e for e in run["events"] if e["sequence"] > after]
+        with self._lock: run = self._runs.get(run_id)
+        if run:
+            with run["lock"]: return [dict(e) for e in run["events"] if e["sequence"] > after]
         path = self.output / run_id / "events.jsonl"
         if not path.is_file(): return []
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if json.loads(line)["sequence"] > after]
@@ -757,36 +793,41 @@ def production_executor(resource_loader, tool_revision):
                 if cancelled.is_set(): return
                 relative = Path(configuration.benchmark.name) / configuration.profile
                 directory = run["root"] / relative; directory.mkdir(parents=True, exist_ok=True)
-                run["store"].manifest["runs"].append({"benchmark": configuration.benchmark.name, "profile": configuration.profile, "status": "running", "directory": str(relative)})
-                run["store"].write()
+                with run["lock"]:
+                    run["store"].manifest["runs"].append({"benchmark": configuration.benchmark.name, "profile": configuration.profile, "status": "running", "directory": str(relative)})
+                    run["store"].write()
                 def event(event):
                     item = dict(event)
-                    if "affinity" in item:
-                        item["step_id"] = next(step["id"] for step in run["store"].manifest["steps"] if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["affinity"] == item["affinity"] and step["threads"] == item["threads"] and step["case"] == item["case"] and step["repeat"] == item["repeat"])
-                    if item.get("type") == "step-artifacts":
-                        item["artifacts"] = [str(relative / artifact) for artifact in item["artifacts"]]
-                    emit(item)
+                    with run["lock"]:
+                        if "affinity" in item:
+                            item["step_id"] = next(step["id"] for step in run["store"].manifest["steps"] if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["affinity"] == item["affinity"] and step["threads"] == item["threads"] and step["case"] == item["case"] and step["repeat"] == item["repeat"])
+                        if item.get("type") == "step-artifacts":
+                            item["artifacts"] = [str(relative / artifact) for artifact in item["artifacts"]]
+                        emit(item)
                 try:
                     profile = run_benchmark(binary, configuration, directory, tool_revision, work_dir_hint=work, event_sink=event, cancel_event=cancelled)
                 except BenchmarkInterrupted:
-                    run["store"].manifest["runs"][-1].update({"status": "cancelled"})
-                    run["store"].write()
+                    with run["lock"]:
+                        run["store"].manifest["runs"][-1].update({"status": "cancelled"})
+                        run["store"].write()
                     raise
                 except BenchmarkError as error:
-                    run["store"].manifest["runs"][-1].update({"status": "failed", "error": str(error), "manifest": str(relative / "run.json")})
-                    # The actor benchmark stops after its first failed process.
-                    # The durable queue still records every remaining member of
-                    # this profile as terminal before the next profile starts.
-                    for step in run["store"].manifest["steps"]:
-                        if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["state"] == "pending":
-                            emit({"type": "step-finished", "step_id": step["id"], "state": "cancelled", "fields": {"reason": "profile stopped after failure"}})
-                    run["store"].write()
+                    with run["lock"]:
+                        run["store"].manifest["runs"][-1].update({"status": "failed", "error": str(error), "manifest": str(relative / "run.json")})
+                        # The actor benchmark stops after its first failed process.
+                        # The durable queue still records every remaining member of
+                        # this profile as terminal before the next profile starts.
+                        for step in list(run["store"].manifest["steps"]):
+                            if step["benchmark"] == configuration.benchmark.name and step["profile"] == configuration.profile and step["state"] == "pending":
+                                emit({"type": "step-finished", "step_id": step["id"], "state": "cancelled", "fields": {"reason": "profile stopped after failure"}})
+                        run["store"].write()
                     if not run["continue_on_error"]:
                         raise
-                    run["failed"] = True
+                    with run["lock"]: run["failed"] = True
                     continue
-                run["store"].manifest["runs"][-1].update({"status": "completed", "manifest": str(relative / "run.json"), "summary": str(relative / profile["summary"])})
-                run["store"].write()
+                with run["lock"]:
+                    run["store"].manifest["runs"][-1].update({"status": "completed", "manifest": str(relative / "run.json"), "summary": str(relative / profile["summary"])})
+                    run["store"].write()
     return execute
 
 

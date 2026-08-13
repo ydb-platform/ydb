@@ -40,7 +40,7 @@ from ydb.tools.ydb_bench.lib.topology import (
     topology_record,
 )
 from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
-from ydb.tools.ydb_bench.lib.web import chart_data, comparison_keys, make_server, read_model
+from ydb.tools.ydb_bench.lib.web import RunService, chart_data, comparison_keys, make_server, read_model
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -1471,6 +1471,53 @@ class WebTest(unittest.TestCase):
             release.set()
             server.shutdown()
             server.server_close()
+
+    def test_run_service_serializes_emission_and_idempotent_cancellation(self):
+        """Executor progress and duplicate cancel requests share one ordered publication boundary."""
+        race = threading.Barrier(3)
+        release_executor = threading.Event()
+
+        def fake_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            race.wait()
+            emit({"type": "stdout", "data": "executor progress\n"})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+            self.assertTrue(release_executor.wait(2))
+
+        service = RunService(self.root, executor=fake_executor)
+        yaml_text = "ping-bench:\n  race: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = service.start(yaml_text)["id"]
+        responses = []
+
+        def cancel():
+            race.wait()
+            responses.append(service.cancel(run_id))
+
+        cancellers = [threading.Thread(target=cancel) for _ in range(2)]
+        for thread in cancellers:
+            thread.start()
+        for thread in cancellers:
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+        release_executor.set()
+
+        run = service._runs[run_id]
+        self.assertTrue(run["finished"].wait(2))
+        events = service.events(run_id)
+        self.assertEqual([event["sequence"] for event in events], list(range(1, len(events) + 1)))
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
+        self.assertEqual(events[-1]["type"], "run-finished")
+        self.assertEqual(events[-1]["state"], "cancelled")
+        self.assertEqual(len(responses), 2)
+        self.assertTrue(all(response["cancelled"] for response in responses))
+        self.assertEqual(run["store"].manifest["events"], len(events))
+        persisted = [json.loads(line) for line in (run["root"] / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(persisted, events)
+
+        # Cancelling a terminal run is also idempotent and must not append an event.
+        self.assertEqual(service.cancel(run_id)["state"], "cancelled")
+        self.assertEqual(service.events(run_id), events)
 
 
 if __name__ == "__main__":

@@ -388,8 +388,13 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     }
 
     if (Encryption) {
-        TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
-        Buffer = std::move(encryptedBlock);
+        try {
+            TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+            Buffer = std::move(encryptedBlock);
+        } catch (const std::exception& ex) {
+            ErrorString = ex.what();
+            return Nothing();
+        }
     }
 
     return std::exchange(Buffer, TBuffer());

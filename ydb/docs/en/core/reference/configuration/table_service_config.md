@@ -132,28 +132,30 @@ table_service_config:
 
 For each `ydbd` process, a separate directory is created inside `root`:
 
-`spilling-tmp-<node_id>-<username>-<spilling_service_id>`
+`spilling-tmp-<node_id>-<spilling_service_id>-<username>`
 
 Where:
 
 - `node_id`: [node](../../concepts/glossary.md#node) identifier
-- `<username>`: OS username under which the `ydbd` process runs
-- `spilling_service_id`: unique instance identifier created once during [Spilling Service](../../contributor/spilling-service.md) initialization when the ydbd process starts
+- `spilling_service_id`: unique instance identifier (a GUID) created once during [Spilling Service](../../contributor/spilling-service.md) initialization when the ydbd process starts
+- `username`: OS username under which the `ydbd` process runs
+
+The username comes last because it may contain `-`: the other parts have a fixed shape, so the username is unambiguously read as the whole remainder of the name.
 
 Spilling files are stored inside each such directory.
 
 Example of a full path to a spilling directory:
 
 ```bash
-/tmp/spilling-tmp-1-kikimr-32860791-037c-42b4-b201-82a0a337ac80
+/tmp/spilling-tmp-1-1144b692-f1e5d361-f3960fe8-f607582e-kikimr
 ```
 
 Where:
 
 - `/tmp`: value of the `root` parameter (or the system temporary directory if `root` is not set)
 - `1`: node identifier
+- `1144b692-f1e5d361-f3960fe8-f607582e`: Spilling Service instance identifier
 - `kikimr`: OS username
-- `32860791-037c-42b4-b201-82a0a337ac80`: Spilling Service instance identifier
 
 {% note info %}
 
@@ -177,7 +179,7 @@ If spilling is enabled but the `root` directory is missing or not writable, the 
 
 Each process start writes to its own directory with a new `spilling_service_id`, and spilling files are only needed while the process is running, so directories of previous runs are deleted. The cleanup runs when the Spilling Service starts, asynchronously and only inside `root`.
 
-Directories named `spilling-tmp-<node_id>-<username>-*`, where `node_id` and `username` match the current process, are deleted, except for the directory of the current run. This way, disk space is reclaimed on the next node start after an abnormal process termination, such as `SIGKILL` or a power outage.
+Directories whose `node_id` and `username` match the current process and whose `spilling_service_id` differs from the one of the current run are deleted. This way, disk space is reclaimed on the next node start after an abnormal process termination, such as `SIGKILL` or a power outage.
 
 The following are not deleted:
 

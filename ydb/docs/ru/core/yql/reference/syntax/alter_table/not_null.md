@@ -26,6 +26,7 @@ ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
   Can't set NULL or optional value to column: <column>.
   SET NOT NULL operation is currently in progress for this column
   ```
+
 * Если валидация не пройдена, операция `SET NOT NULL` завершится с ошибкой `Validation failed for SET NOT NULL on table ...: one or more columns contain NULL values`.
 
 ## Сброс `NOT NULL`

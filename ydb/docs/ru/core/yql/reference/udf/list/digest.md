@@ -86,7 +86,7 @@ SELECT Digest::Blake2B("Who set this ancient quarrel new abroach?"); -- Binary S
 SELECT Digest::SipHash(0,0,"Who set this ancient quarrel new abroach?"); -- 14605466535756698285
 ```
 
-* 
+*
 
   ```text
   Digest::HighwayHash(key0:Uint64,key1:Uint64,key2:Uint64,key3:Uint64,

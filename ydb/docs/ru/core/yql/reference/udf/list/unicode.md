@@ -55,7 +55,7 @@ SELECT Unicode::Translit("Тот уголок земли, где я провел
 
   Вычисляет расстояние Левенштейна для переданных строк.
 
-* 
+*
 
   ```text
   Unicode::Fold(Utf8{Flags:AutoMap},
@@ -117,7 +117,7 @@ SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
 
   Привести регистр строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-* 
+*
 
   ```text
   Unicode::SplitToList( string:Utf8?, separator:Utf8,

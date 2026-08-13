@@ -71,7 +71,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-* 
+*
 
   ```text
   String::SplitToList(string:String?, delimeter:String,
@@ -128,7 +128,7 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 
   Проверяют, отвечает ли ascii строка указанному условию.
 
-* 
+*
 
   ```text
   String::LevensteinDistance(stringOne:String{Flags:AutoMap},

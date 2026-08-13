@@ -700,6 +700,7 @@
   DeserializeValuePickleV1(): requirement data.GetTransportVersion() ==
   (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
   ```
+
 * Реализованы автоинкрементные колонки.
 * Использовать статус `UNAVAILABLE` вместо `GENERIC_ERROR` при ошибке идентификации шарда.
 * Добавлена поддержка `rope payload` в `TEvVGet`.
@@ -711,6 +712,7 @@
   CheckExpected(): requirement newConstr failed, message: Rewrite error,
   missing Distinct((id)) constraint in node FlatMap
   ```
+
 * Включён `safe heal` по умолчанию.
 
 ## Версия 23.2 {#23-2}

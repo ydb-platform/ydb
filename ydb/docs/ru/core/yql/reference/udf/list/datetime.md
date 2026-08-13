@@ -41,13 +41,14 @@
 
 ### Список функций
 
-* 
+*
 
   ```text
   DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap})
   -> Resource<TM>;
   ```
-* 
+
+*
 
   ```text
   DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap})
@@ -172,33 +173,37 @@ SELECT
 ### Список функций
 
 * `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`;
-* 
+*
 
   ```text
   DateTime::ToSeconds(
   Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
   -> Int64;
   ```
-* 
+
+*
 
   ```text
   DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
   -> Uint64;
   ```
-* 
+
+*
 
   ```text
   DateTime::ToMilliseconds(
   Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
   -> Int64;
   ```
-* 
+
+*
 
   ```text
   DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
   -> Uint64;
   ```
-* 
+
+*
 
   ```text
   DateTime::ToMicroseconds(
@@ -370,7 +375,7 @@ SELECT
 
 ### Список функций
 
-* 
+*
 
   ```text
   DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?)

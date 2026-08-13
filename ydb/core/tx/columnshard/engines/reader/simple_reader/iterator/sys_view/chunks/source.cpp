@@ -77,7 +77,9 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
         return *ChunksPKOrder;
     }
     ChunksPKOrder.emplace();
-    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
+    // only sorted scans consume the PK order; skip the permutation work otherwise
+    if (!GetContext()->GetReadMetadata()->IsSorted() || !HasAppData() ||
+        !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
         return *ChunksPKOrder;
     }
     const auto& records = GetPortionAccessor().GetRecordsVerified();

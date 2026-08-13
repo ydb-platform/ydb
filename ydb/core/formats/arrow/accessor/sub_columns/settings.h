@@ -13,9 +13,7 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-// The transforms a given DenseEncodingVersion turns on. This mapping is the ONLY place a new
-// on-disk encoding is introduced: add a version, never a new setting. Versions are permanent -
-// the reader must keep decoding every version ever written.
+// Versions are mapped to a set of encoding parameters.
 //   0 - legacy: arrow IPC, no re-encoding (the default)
 //   1 - present-only length/index streams, each buffer framed separately
 struct TEncodingParams {

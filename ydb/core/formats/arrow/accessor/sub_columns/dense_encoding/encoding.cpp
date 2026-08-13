@@ -152,7 +152,7 @@ TVector<ui32> DecodeLengthsImpl(const TStringBuf data, const ui32 count) {
     return values;
 }
 
-// A independently-compressed section: [total-size][FrameCompress(raw)]. Compressing each buffer on
+// An independently-compressed section: [total-size][FrameCompress(raw)]. Compressing each buffer on
 // its own (as arrow IPC does) gives it its own zstd entropy tables, instead of having its statistics
 // swamped by a much larger neighbouring buffer.
 void AppendSection(TString& out, const TStringBuf raw, const std::shared_ptr<arrow::util::Codec>& codec) {

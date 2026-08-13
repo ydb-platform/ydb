@@ -1573,6 +1573,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     }
 
     Y_UNIT_TEST(DenseEncoding) {
+        // An empty object has no stored values for that row and is read back as an absent document.
         const TString script = R"(
         STOP_COMPACTION
         ------
@@ -1599,7 +1600,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         ONE_COMPACTION
         ------
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-        EXPECTED: [[1u;["{\"a\":\"one\"}"]];[2u;["{}"]];[3u;["{\"a\":\"two\"}"]];[4u;["{\"a\":\"one\"}"]]]
+        EXPECTED: [[1u;["{\"a\":\"one\"}"]];[2u;#];[3u;["{\"a\":\"two\"}"]];[4u;["{\"a\":\"one\"}"]]]
         )";
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }

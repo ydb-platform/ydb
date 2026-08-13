@@ -490,8 +490,8 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
             UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
         }
-        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername(), runtime.GetSpillingSessionId()));
-        (runtime.GetSpillingRoot() / nodePath / "1_test_0").ForceDelete();
+        const TFsPath blobFile = runtime.GetSpillingNodeDir() / "1_test_0";
+        blobFile.ForceDelete();
 
         {
             auto ev = new TEvDqSpilling::TEvRead(0, true);
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
             auto err = resp->Get()->Message;
-            auto expected = "can't open \"" + runtime.GetSpillingRoot().GetPath() + "/" + nodePath.GetPath() +"/1_test_0\" with mode RdOnly";
+            auto expected = "can't open \"" + blobFile.GetPath() + "\" with mode RdOnly";
             UNIT_ASSERT_C(err.Contains("No such file or directory"), err);
             UNIT_ASSERT_C(err.Contains(expected), err);
         }
@@ -547,8 +547,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername(), runtime.GetSpillingSessionId()));
-        const TFsPath spillingDir = runtime.GetSpillingRoot() / nodePath;
+        const TFsPath spillingDir = runtime.GetSpillingNodeDir();
         const TFsPath firstFile = spillingDir / "1_test_0";
         const TFsPath secondFile = spillingDir / "1_test_1";
 
@@ -680,12 +679,11 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
         }
 
-        // Unblock the root: remove the file and create a real directory.
-        // The service does not create Root itself, only spilling-tmp-<nodeId>-<username>-<sessionId> inside it.
+        // Unblock the root: the service creates only its own directory inside an existing root.
         root.ForceDelete();
         root.MkDir();
 
-        const TFsPath nodeDir = root / MakeSpillingNodeDirName(runtime.GetNodeId(), GetUsername(), runtime.GetSpillingSessionId());
+        const TFsPath nodeDir = runtime.GetSpillingNodeDir();
 
         TDispatchOptions retryOptions;
         retryOptions.CustomFinalCondition = [&nodeDir]() { return nodeDir.IsDirectory(); };

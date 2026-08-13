@@ -288,7 +288,7 @@ public:
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
-                spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
+                spillingRoot = NYql::NDq::GetDefaultSpillingRoot();
             }
 
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(

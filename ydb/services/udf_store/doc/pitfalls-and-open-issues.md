@@ -30,7 +30,8 @@ Acquire падает до `SetTaskRunner` → `FillStats` без Tasks →
 
 `IWebAssemblyCompartment::AllocateBytes` зовёт `malloc` на `RuntimeLibraryInstance_` (после AddSdk).  
 Пустой `(module)` как sdk → SIGSEGV на AllocateBytes.  
-Тестовый stub обязан экспортировать bump-`malloc`/`free` (`data/wasm/sdk_stub.wat`).
+Тестовый stub обязан экспортировать bump-`malloc`/`free` (`data/wasm/sdk_stub.wat`).  
+Bump-heap base — **65536** (и в `DefaultRegistrySdkWast`): ниже — зона для data segments UDF; иначе первый `AllocateBytes` для result затирает `.rodata` (см. `udf_rodata_cookie` / `0x30000`).
 
 ### 6. `TSdkImageCache` static dtor
 

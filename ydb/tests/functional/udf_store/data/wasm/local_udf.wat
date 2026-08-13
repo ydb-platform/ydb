@@ -1,8 +1,8 @@
 (module
     (import "env" "memory" (memory i64 8 2097152))
 
-    ;; Pin static data at a low address so a runtime heap that starts too low
-    ;; cannot silently clobber .rodata during argument marshalling.
+    ;; Static data lives below the default bump-heap base (65536 in
+    ;; DefaultRegistrySdkWast / sdk_stub). Marshalling malloc must not land here.
     (data (i64.const 1024) "\08\07\06\05\04\03\02\01")
 
     (type $t_add (func (param i64 i64 i64 i64)))

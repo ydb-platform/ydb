@@ -153,17 +153,4 @@ EDelegationCleanup SelectCleanupAfterSchemeRequest(
     return EDelegationCleanup::None;
 }
 
-EDelegationCleanup SelectCleanupAfterIamSchemeRequest(
-    bool schemeSuccess,
-    bool schemeAlreadyExists,
-    const TIamDelegation& previous,
-    const TIamDelegation& staged)
-{
-    return schemeAlreadyExists
-        ? (IsManagedIamDelegation(staged)
-            ? EDelegationCleanup::Staged
-            : EDelegationCleanup::None)
-        : SelectCleanupAfterSchemeRequest(schemeSuccess, previous, staged);
-}
-
 } // namespace NKikimr::NKqp::NExternalDataSource

@@ -294,14 +294,6 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT(!ShouldSkipIamDelegationSetup(schemeTx, false));
     }
 
-    Y_UNIT_TEST(ConcurrentIfNotExistsLoserCleansStagedDelegation) {
-        const auto staged = Delegation();
-        UNIT_ASSERT(SelectCleanupAfterIamSchemeRequest(
-            true, true, {}, staged) == EDelegationCleanup::Staged);
-        UNIT_ASSERT(SelectCleanupAfterIamSchemeRequest(
-            true, true, {}, {}) == EDelegationCleanup::None);
-    }
-
     Y_UNIT_TEST(ReplacementCarriesSnapshotCompareAndSwap) {
         NKikimrSchemeOp::TModifyScheme schemeTx;
         AddIamPathVersionPrecondition(schemeTx, 42, 17);

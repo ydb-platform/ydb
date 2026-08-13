@@ -3,19 +3,14 @@
 #include "iam_object_lookup.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
-
-#include <atomic>
 
 namespace NKikimr::NKqp::NExternalDataSource {
 namespace {
@@ -67,11 +62,11 @@ struct TEvIamDelegationDdlBridge {
     struct TEvIamSchemeRequest
         : NActors::TEventLocal<TEvIamSchemeRequest, EvIamSchemeRequest>
     {
-        explicit TEvIamSchemeRequest(TIamSchemeRequestResult result)
-            : Result(std::move(result))
+        explicit TEvIamSchemeRequest(TStatus status)
+            : Status(std::move(status))
         {}
 
-        TIamSchemeRequestResult Result;
+        TStatus Status;
     };
 
     struct TEvSystemIamToken
@@ -228,50 +223,6 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
     return future;
 }
 
-NThreading::TFuture<TIamSchemeRequestResult> StartIamSchemeRequest(
-    const NKikimrSchemeOp::TModifyScheme& schemeTx,
-    const TContext& context)
-{
-    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetDatabaseName(context.GetDatabase());
-    if (context.GetUserToken()) {
-        request->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
-    }
-    *request->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
-
-    auto alreadyExists = std::make_shared<std::atomic_bool>(false);
-    auto promise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    auto future = promise.GetFuture().Apply(
-        [operationType = schemeTx.GetOperationType(), alreadyExists](const auto& resultFuture) {
-            TIamSchemeRequestResult result;
-            result.AlreadyExists = alreadyExists->load(std::memory_order_relaxed);
-            try {
-                auto response = resultFuture.GetValue();
-                if (!response.Success()) {
-                    result.Status = TStatus::Fail(
-                        response.Status(),
-                        TStringBuilder() << "Failed to execute "
-                            << NKikimrSchemeOp::EOperationType_Name(operationType)
-                            << ": " << response.Issues().ToString());
-                }
-            } catch (...) {
-                result.Status = TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    TStringBuilder() << "Failed to execute "
-                        << NKikimrSchemeOp::EOperationType_Name(operationType)
-                        << ", got scheme error: " << CurrentExceptionMessage());
-            }
-            return result;
-        });
-    context.GetActorSystem()->Register(new TSchemeOpRequestHandler(
-        request.release(),
-        promise,
-        schemeTx.GetFailedOnAlreadyExists(),
-        schemeTx.GetSuccessOnNotExist(),
-        alreadyExists));
-    return future;
-}
-
 } // anonymous namespace
 
 NActors::async<TIamTokenResult> AcquireSystemIamToken(
@@ -372,12 +323,12 @@ NActors::async<TStatus> AwaitLegacyDdl(
     co_return std::move(event->Get()->Status);
 }
 
-NActors::async<TIamSchemeRequestResult> ExecuteIamSchemeRequest(
+NActors::async<TStatus> ExecuteIamSchemeRequest(
     const NKikimrSchemeOp::TModifyScheme& schemeTx,
     const TContext& context,
     const NActors::TActorId& replyTo)
 {
-    StartIamSchemeRequest(schemeTx, context).Subscribe(
+    SendSchemeRequest(schemeTx, context).Subscribe(
         [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
             actorSystem->Send(
                 replyTo,
@@ -387,7 +338,7 @@ NActors::async<TIamSchemeRequestResult> ExecuteIamSchemeRequest(
         });
     const auto event = co_await NActors::ActorWaitForEvent<
         TEvIamDelegationDdlBridge::TEvIamSchemeRequest>(IamSchemeRequestCookie);
-    co_return std::move(event->Get()->Result);
+    co_return std::move(event->Get()->Status);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

@@ -84,10 +84,4 @@ EDelegationCleanup SelectCleanupAfterSchemeRequest(
     bool schemeSuccess,
     const TIamDelegation& previous,
     const TIamDelegation& staged);
-EDelegationCleanup SelectCleanupAfterIamSchemeRequest(
-    bool schemeSuccess,
-    bool schemeAlreadyExists,
-    const TIamDelegation& previous,
-    const TIamDelegation& staged);
-
 } // namespace NKikimr::NKqp::NExternalDataSource

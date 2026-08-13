@@ -475,11 +475,10 @@ private:
             co_return;
         }
 
-        auto schemeResult = co_await ExecuteIamSchemeRequest(
+        auto schemeStatus = co_await ExecuteIamSchemeRequest(
             SchemeTx, Context, SelfId());
-        const auto cleanup = SelectCleanupAfterIamSchemeRequest(
-            !schemeResult.Status.IsFail(),
-            schemeResult.AlreadyExists,
+        const auto cleanup = SelectCleanupAfterSchemeRequest(
+            !schemeStatus.IsFail(),
             previous.Delegation,
             staged);
         if (cleanup == EDelegationCleanup::Staged) {
@@ -487,7 +486,7 @@ private:
         } else if (cleanup == EDelegationCleanup::Previous) {
             co_await RevokeDelegation(previous.Delegation);
         }
-        Finish(std::move(schemeResult.Status));
+        Finish(std::move(schemeStatus));
     }
 
     STRICT_STFUNC(StateWork,

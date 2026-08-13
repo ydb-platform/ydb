@@ -25,12 +25,6 @@ struct TCloudIdDescription {
     TString CloudId;
 };
 
-struct TIamSchemeRequestResult {
-    TExternalDataSourceManager::TYqlConclusionStatus Status =
-        TExternalDataSourceManager::TYqlConclusionStatus::Success();
-    bool AlreadyExists = false;
-};
-
 // Acquire the YDB system service-account token through the configured VM
 // metadata endpoint. The future-based SDK adapter is kept behind this actor
 // coroutine boundary so lifecycle policy remains a linear co_await sequence.
@@ -47,7 +41,7 @@ NActors::async<TIamObjectDescription> DescribeIamObject(
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);
 
-NActors::async<TIamSchemeRequestResult> ExecuteIamSchemeRequest(
+NActors::async<TExternalDataSourceManager::TYqlConclusionStatus> ExecuteIamSchemeRequest(
     const NKikimrSchemeOp::TModifyScheme& schemeTx,
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);

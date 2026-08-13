@@ -7,8 +7,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
-#include <atomic>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -29,16 +27,10 @@ public:
         , FailedOnAlreadyExists(failedOnAlreadyExists)
         {}
 
-    TSchemeOpRequestHandler(
-        TRequest* request,
-        NThreading::TPromise<TResult> promise,
-        bool failedOnAlreadyExists,
-        bool successOnNotExist,
-        std::shared_ptr<std::atomic_bool> alreadyExists = {})
+    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists, bool successOnNotExist)
         : TBase(request, promise, {})
         , FailedOnAlreadyExists(failedOnAlreadyExists)
         , SuccessOnNotExist(successOnNotExist)
-        , AlreadyExists(std::move(alreadyExists))
         {}
 
 
@@ -59,12 +51,6 @@ public:
             {"txId", response.GetTxId()},
             {"status", status},
             {"shardStatus", response.GetSchemeShardStatus()});
-
-        if (AlreadyExists &&
-            response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
-        {
-            AlreadyExists->store(true, std::memory_order_relaxed);
-        }
 
         switch (status) {
             case TEvTxUserProxy::TResultStatus::ExecInProgress: {
@@ -273,7 +259,6 @@ private:
     TString OperationId;
     bool FailedOnAlreadyExists = false;
     bool SuccessOnNotExist = false;
-    std::shared_ptr<std::atomic_bool> AlreadyExists;
 };
 
 } // namespace NKqp

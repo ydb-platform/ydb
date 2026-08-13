@@ -88,10 +88,10 @@ namespace {
         return resultTypeBuilder.Build();
     }
 
-    class TKikimrLookupActor
+    class TDqSourceKikimrLookupActor
         : public NYql::NDq::IDqAsyncLookupSource,
-          public NActors::TActorBootstrapped<TKikimrLookupActor> {
-        using TBase = NActors::TActorBootstrapped<TKikimrLookupActor>;
+          public NActors::TActorBootstrapped<TDqSourceKikimrLookupActor> {
+        using TBase = NActors::TActorBootstrapped<TDqSourceKikimrLookupActor>;
 
         struct TSessionState;
 
@@ -176,12 +176,12 @@ namespace {
         };
 
     public:
-        TKikimrLookupActor(
+        TDqSourceKikimrLookupActor(
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            NKqpProto::TKikimrLookupSource&& lookupSource,
+            NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -208,7 +208,7 @@ namespace {
             InitMonCounters(taskCounters);
         }
 
-        ~TKikimrLookupActor() {
+        ~TDqSourceKikimrLookupActor() {
             Free();
         }
 
@@ -248,7 +248,7 @@ namespace {
             YDB_LOG_INFO("New kikimr provider lookup actor",
                     COMMON_LOG,
                     {"parentId", ParentId});
-            Become(&TKikimrLookupActor::StateFunc);
+            Become(&TDqSourceKikimrLookupActor::StateFunc);
         }
 
         static constexpr char ActorName[] = "KIKIMR_PROVIDER_LOOKUP_ACTOR";
@@ -905,7 +905,7 @@ namespace {
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        NKqpProto::TKikimrLookupSource LookupSource;
+        NKqpProto::TDqSourceKikimrLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
@@ -936,12 +936,12 @@ namespace {
 
     } // namespace
 
-    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-        NKqpProto::TKikimrLookupSource&& lookupSource,
+        NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -951,7 +951,7 @@ namespace {
     )
     {
         auto guard = Guard(*alloc);
-        const auto actor = new TKikimrLookupActor(
+        const auto actor = new TDqSourceKikimrLookupActor(
             std::move(parentId),
             taskCounters,
             alloc,

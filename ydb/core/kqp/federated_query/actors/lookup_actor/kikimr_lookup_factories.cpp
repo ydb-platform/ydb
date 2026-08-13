@@ -6,9 +6,9 @@
 
 namespace NYql::NDq {
 
-    void RegisterKikimrLookupProviderFactories(TDqAsyncIoFactory& factory) {
-        auto lookupActorFactory = [](NKqpProto::TKikimrLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
-            return CreateKikimrLookupActor(
+    void RegisterDqSourceKikimrLookupProviderFactories(TDqAsyncIoFactory& factory) {
+        auto lookupActorFactory = [](NKqpProto::TDqSourceKikimrLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+            return CreateDqSourceKikimrLookupActor(
                 std::move(args.ParentId),
                 std::move(args.TaskCounters),
                 std::move(args.Alloc),
@@ -23,7 +23,7 @@ namespace NYql::NDq {
             );
         };
 
-        factory.RegisterLookupSource<NKqpProto::TKikimrLookupSource>("kikimr", lookupActorFactory);
+        factory.RegisterLookupSource<NKqpProto::TDqSourceKikimrLookupSource>("kikimr", lookupActorFactory);
     }
 
 } // namespace NYql::NDq

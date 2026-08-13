@@ -584,7 +584,7 @@ private:
         const auto settings = wrap.Settings().Cast<TCoAtomList>();
         const auto& path = settings.Item(0).StringValue();
 
-        NKqpProto::TKikimrLookupSource source;
+        NKqpProto::TDqSourceKikimrLookupSource source;
         source.SetPath(path);
         source.SetToken(Token);
 

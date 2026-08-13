@@ -65,7 +65,6 @@ RECURSE(
     finalize_script_service
     gateway
     host
-    lookup_actor
     node_service
     opt
     provider

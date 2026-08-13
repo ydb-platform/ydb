@@ -50,6 +50,8 @@ namespace NKikimr::NBsController {
         std::optional<bool> GroupLayoutSanitizerEnabled;
         std::optional<bool> AllowMultipleRealmsOccupation;
         std::optional<bool> DonorMode;
+        std::optional<bool> UseSelfHealLocalPolicy;
+        std::optional<bool> TryToRelocateBrokenDisksLocallyFirst;
 
         ui64 ConfigTxSeqNo = 0;
 

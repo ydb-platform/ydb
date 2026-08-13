@@ -286,14 +286,9 @@ public:
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
-            TString spillingRoot = cfg.GetRoot();
-            if (spillingRoot.empty()) {
-                spillingRoot = NYql::NDq::GetDefaultSpillingRoot();
-            }
-
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(
                 NYql::NDq::TFileSpillingServiceConfig{
-                    .Root = spillingRoot,
+                    .Root = cfg.GetRoot(),
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
                     .IoThreadPoolWorkersCount = cfg.GetIoThreadPool().GetWorkersCount(),
                     .IoThreadPoolQueueSize = cfg.GetIoThreadPool().GetQueueSize(),

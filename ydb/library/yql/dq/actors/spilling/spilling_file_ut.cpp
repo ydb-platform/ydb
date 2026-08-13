@@ -4,7 +4,6 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <util/system/fs.h>
@@ -713,40 +712,44 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
     }
 
     // The service spills into <root>/spilling-tmp-<nodeId>-<sessionId>-<user>/, where <root> is the
-    // configured Root, or $TMP when Root is empty. Both roots are covered by UseDefaultRoot.
+    // configured Root, or $TMP when Root is empty.
     //
-    // Directories left by the previous version of the service are named node_<nodeId>_<sessionId> and
-    // live either directly in <root> (Root was configured) or in <root>/spilling-tmp-<user>/ (Root was
-    // empty, so the service spilled into $TMP/spilling-tmp-<user>/). Both places are cleaned up here.
+    // Directories left by the previous version of the service are named node_<nodeId>_<sessionId> and live
+    // either directly in <root>, or in $TMP/spilling-tmp-<user>/, which was the root of the old default
+    // layout. Both places are cleaned up, no matter where the service spills now.
     //
     // Before the service starts:
     //
     //   <root>/
     //   ├── node_<thisNode>_<old-session>/                       delete: this node, old format
+    //   ├── node_<thisNode>_backup/                              keep:   old format has a session id here
     //   ├── node_<otherNode>_<old-session>/                      keep:   other node may still be running
     //   ├── spilling-tmp-<thisNode>-<old-session>-<user>/        delete: this node, previous run
     //   ├── spilling-tmp-<thisNode>-<old-session>-<otherUser>/   keep:   same node id, another OS user
     //   ├── spilling-tmp-<thisNode>-<old-session>-<user>-other/  keep:   OS user named <user>-other
     //   ├── spilling-tmp-<thisNode>-<old-session>-other-<user>/  keep:   OS user named other-<user>
     //   ├── spilling-tmp-<otherNode>-<old-session>-<user>/       keep:   other node may still be running
-    //   ├── unrelated-<old-session>/                             keep:   not a spilling directory
-    //   └── spilling-tmp-<user>/                                 keep:   shared root of the old format
-    //       ├── node_<thisNode>_<old-session>/                   delete: this node, old format
-    //       └── node_<otherNode>_<old-session>/                  keep:   other node may still be running
+    //   └── unrelated-<old-session>/                             keep:   not a spilling directory
+    //
+    //   $TMP/spilling-tmp-<user>/                                keep:   root of the old default layout
+    //   ├── node_<thisNode>_<old-session>/                       delete: this node, old format
+    //   └── node_<otherNode>_<old-session>/                      keep:   other node may still be running
     //
     // After the service starts:
     //
     //   <root>/
+    //   ├── node_<thisNode>_backup/
     //   ├── node_<otherNode>_<old-session>/
     //   ├── spilling-tmp-<thisNode>-<current-session>-<user>/    created by the service for this run
     //   ├── spilling-tmp-<thisNode>-<old-session>-<otherUser>/
     //   ├── spilling-tmp-<thisNode>-<old-session>-<user>-other/
     //   ├── spilling-tmp-<thisNode>-<old-session>-other-<user>/
     //   ├── spilling-tmp-<otherNode>-<old-session>-<user>/
-    //   ├── unrelated-<old-session>/
-    //   └── spilling-tmp-<user>/
-    //       └── node_<otherNode>_<old-session>/
-    Y_UNIT_TEST_TWIN(RemoveOldTmpDirectories, UseDefaultRoot) {
+    //   └── unrelated-<old-session>/
+    //
+    //   $TMP/spilling-tmp-<user>/
+    //   └── node_<otherNode>_<old-session>/
+    Y_UNIT_TEST(RemoveOldTmpDirectories) {
         TTestActorRuntime runtime;
         runtime.Initialize();
 
@@ -755,16 +758,12 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         const TString username = GetUsername();
         const TString oldSessionId = CreateGuidAsString();
 
-        const TFsPath root = UseDefaultRoot
-            ? GetDefaultSpillingRoot()
-            : TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_cleanup");
-        if (!UseDefaultRoot) {
-            root.ForceDelete();
-        }
+        const TFsPath root = TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_cleanup");
+        root.ForceDelete();
         root.MkDir();
 
-        // $TMP is shared with the rest of the system, so the test removes what it created instead of
-        // deleting the whole root.
+        // The old default layout lives in $TMP, which is shared with the rest of the system, so the test
+        // removes what it created instead of deleting whole directories.
         struct TCreatedPaths {
             TVector<TFsPath> Paths;
 
@@ -792,6 +791,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         };
 
         const TFsPath oldFormatThisNode = created.Add(root / oldFormatDirName(thisNodeId));
+        const TFsPath oldFormatNoSession = created.Add(root / (TStringBuilder() << "node_" << thisNodeId << "_backup"));
         const TFsPath oldFormatOtherNode = created.Add(root / oldFormatDirName(otherNodeId));
         const TFsPath thisNodePreviousRun = created.Add(root / MakeSpillingNodeDirName(thisNodeId, username, oldSessionId));
         const TFsPath otherUserSameNode = created.Add(root / MakeSpillingNodeDirName(thisNodeId, "other-user", oldSessionId));
@@ -800,7 +800,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         const TFsPath otherNode = created.Add(root / MakeSpillingNodeDirName(otherNodeId, username, oldSessionId));
         const TFsPath unrelated = created.Add(root / (TStringBuilder() << "unrelated-" << oldSessionId));
 
-        const TFsPath oldFormatRoot = root / (TStringBuilder() << SpillingDirPrefix << username);
+        const TFsPath oldFormatRoot = created.Track(GetDefaultSpillingRoot() / (TStringBuilder() << SpillingDirPrefix << username));
         const TFsPath oldFormatRootThisNode = created.Add(oldFormatRoot / oldFormatDirName(thisNodeId));
         const TFsPath oldFormatRootOtherNode = created.Add(oldFormatRoot / oldFormatDirName(otherNodeId));
 
@@ -818,13 +818,13 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         const TFsPath currentDir = created.Track(runtime.GetSpillingNodeDir());
         UNIT_ASSERT_C(currentDir.IsDirectory(), currentDir);
 
-        for (const auto& removed : {oldFormatThisNode, thisNodePreviousRun, oldFormatRootThisNode}) {
-            UNIT_ASSERT_C(!removed.Exists(), TStringBuilder() << "must be removed: " << removed);
+        for (const auto& path : {oldFormatThisNode, thisNodePreviousRun, oldFormatRootThisNode}) {
+            UNIT_ASSERT_C(!path.Exists(), TStringBuilder() << "must be removed: " << path);
         }
 
-        for (const auto& kept : {oldFormatOtherNode, otherUserSameNode, userWithOurNameAtStart, userWithOurNameAtEnd,
-                                 otherNode, unrelated, oldFormatRoot, oldFormatRootOtherNode}) {
-            UNIT_ASSERT_C(kept.IsDirectory(), TStringBuilder() << "must be kept: " << kept);
+        for (const auto& path : {oldFormatNoSession, oldFormatOtherNode, otherUserSameNode, userWithOurNameAtStart,
+                                 userWithOurNameAtEnd, otherNode, unrelated, oldFormatRoot, oldFormatRootOtherNode}) {
+            UNIT_ASSERT_C(path.IsDirectory(), TStringBuilder() << "must be kept: " << path);
         }
     }
 

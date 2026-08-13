@@ -237,8 +237,8 @@ public:
     }
 
     void Bootstrap() {
-        Root_ = Config_.Root;
-        Root_ /= MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
+        SpillingRoot_ = Config_.Root ? TFsPath(Config_.Root) : GetDefaultSpillingRoot();
+        Root_ = SpillingRoot_ / MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         CreateRoot(MaxStartupRetries);
@@ -278,7 +278,7 @@ private:
         }
 
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
-            Config_.Root, SelfId().NodeId(), Username_, Config_.SpillingSessionId));
+            SpillingRoot_, SelfId().NodeId(), Username_, Config_.SpillingSessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
@@ -801,14 +801,15 @@ private:
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
         try {
-            // Current format.
+            // Current format: <root>/spilling-tmp-<nodeId>-<sessionId>-<username>.
             RemoveOwnDirs(root, msg);
 
-            // Old format, when Root was configured.
+            // Old format with a configured Root: <root>/node_<nodeId>_<sessionId>.
             RemoveOwnOldFormatDirs(root, msg.NodeId);
 
-            // Old format, when Root was empty and the default root was $TMP/spilling-tmp-<username>.
-            RemoveOwnOldFormatDirs(root / (TStringBuilder() << SpillingDirPrefix << msg.Username), msg.NodeId);
+            // Old format with an empty Root: $TMP/spilling-tmp-<username>/node_<nodeId>_<sessionId>.
+            RemoveOwnOldFormatDirs(
+                GetDefaultSpillingRoot() / (TStringBuilder() << SpillingDirPrefix << msg.Username), msg.NodeId);
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
         }
@@ -831,11 +832,16 @@ private:
     }
 
     void RemoveOwnOldFormatDirs(const TFsPath& dir, ui32 nodeId) {
-        const TString nodeIdString = ToString(nodeId);
+        const TString prefix = TStringBuilder() << "node_" << nodeId << "_";
 
         RemoveMatchingChildren(dir, [&](TStringBuf dirName) {
-            TStringBuf rest = dirName;
-            return rest.SkipPrefix("node_") && rest.NextTok('_') == nodeIdString && !rest.empty();
+            TStringBuf sessionId = dirName;
+            if (!sessionId.SkipPrefix(prefix)) {
+                return false;
+            }
+
+            TGUID guid;
+            return GetGuid(sessionId, guid);
         });
     }
 
@@ -1106,6 +1112,7 @@ private:
 
     const TFileSpillingServiceConfig Config_;
     const TString Username_ = GetUsername();
+    TFsPath SpillingRoot_;
     TFsPath Root_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 

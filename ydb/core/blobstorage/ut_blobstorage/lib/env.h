@@ -602,6 +602,9 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyMaxSsts, 8, 0, 64, 8);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyChunkReserve, 1, 0, 64, 1);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyEnableAtColor, 15, 0, 60, 15);
 #undef ADD_ICB_CONTROL
 
                 {

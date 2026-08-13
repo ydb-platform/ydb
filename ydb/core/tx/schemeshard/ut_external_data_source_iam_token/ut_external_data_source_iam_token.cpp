@@ -18,6 +18,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
@@ -37,8 +38,67 @@
 
 using namespace NKikimr;
 using namespace NKikimr::Tests;
+using namespace NKikimr::NSchemeShard;
+using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
+
+    Y_UNIT_TEST(StaleExternalDataSourceSnapshotCannotReplaceOrDrop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableReplaceIfExistsForExternalEntities(true)
+            .RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        const TString initial = R"(
+            Name: "MyExternalDataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/initial"
+            Auth { None {} }
+        )";
+        TestCreateExternalDataSource(
+            runtime, ++txId, "/MyRoot", initial,
+            {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        const auto snapshot = DescribePath(
+            runtime, "/MyRoot/MyExternalDataSource").GetPathDescription().GetSelf();
+        TApplyIf staleSnapshot{TPathVersion{
+            TPathId(snapshot.GetSchemeshardId(), snapshot.GetPathId()),
+            snapshot.GetPathVersion(),
+        }};
+
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot", R"(
+            Name: "MyExternalDataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/winner"
+            Auth { None {} }
+        )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        auto* staleReplace = CreateExternalDataSourceRequest(
+            TTestTxConfig::SchemeShard, ++txId, "/MyRoot", R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/stale"
+                Auth { None {} }
+            )", staleSnapshot);
+        staleReplace->Record.MutableTransaction(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, staleReplace);
+        TestModificationResult(
+            runtime, txId, NKikimrScheme::StatusPreconditionFailed);
+
+        TestDropExternalDataSource(
+            runtime, ++txId, "/MyRoot", "MyExternalDataSource",
+            {NKikimrScheme::StatusPreconditionFailed}, staleSnapshot);
+
+        const auto current = DescribePath(
+            runtime, "/MyRoot/MyExternalDataSource");
+        TestDescribeResult(current, {NLs::PathExist});
+        UNIT_ASSERT_VALUES_EQUAL(
+            current.GetPathDescription().GetExternalDataSourceDescription().GetLocation(),
+            "https://s3.cloud.net/winner");
+    }
 
     Y_UNIT_TEST(UserIamTokenReachesSchemeShardOnCreate) {
         // ---- ports ----

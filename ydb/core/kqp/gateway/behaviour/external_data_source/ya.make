@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/grpc_services/local_rpc
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/provider
@@ -17,6 +18,7 @@ PEERDIR(
 
     ydb/library/conclusion
     ydb/library/actors/async
+    ydb/library/yql/dq/actors
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/ycloud/impl
     ydb/public/sdk/cpp/src/client/iam

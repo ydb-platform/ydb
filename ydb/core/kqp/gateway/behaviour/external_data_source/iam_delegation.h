@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/servicecontrol/service_control_service.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/api/client/yc_private/iam/service_control_service.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
@@ -34,25 +35,46 @@ enum class EDelegationCleanup {
     Staged,
 };
 
-yandex::cloud::priv::servicecontrol::v1::EnsureEnabledRequest MakeEnsureEnabledRequest(
-    const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation);
+enum class EIamOperationState {
+    InProgress,
+    Succeeded,
+    Failed,
+};
 
-yandex::cloud::priv::servicecontrol::v1::SetupDelegationRequest MakeSetupDelegationRequest(
+yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation,
     const TString& subjectId);
 
-yandex::cloud::priv::servicecontrol::v1::RevokeDelegationRequest MakeRevokeDelegationRequest(
+yandex::cloud::priv::iam::v1::SetupDelegationRequest MakeSetupDelegationRequest(
+    const TIamDelegationSettings& settings,
+    const TIamDelegation& delegation,
+    const TString& subjectId);
+
+yandex::cloud::priv::iam::v1::RevokeDelegationRequest MakeRevokeDelegationRequest(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation);
 
 TString NormalizeIamSubject(TString subjectId);
 TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBuf uniqueId);
+EIamOperationState ClassifyIamOperation(
+    const ydb::yc::priv::operation::Operation& operation);
+void AddIamPathVersionPrecondition(
+    NKikimrSchemeOp::TModifyScheme& schemeTx,
+    ui64 pathId,
+    ui64 pathVersion);
+bool ShouldSkipIamDelegationSetup(
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    bool objectNotFound);
 bool IsManagedIamDelegation(const TIamDelegation& delegation);
 bool IsSameIamDelegation(const TIamDelegation& lhs, const TIamDelegation& rhs);
 EDelegationCleanup SelectCleanupAfterSchemeRequest(
     bool schemeSuccess,
+    const TIamDelegation& previous,
+    const TIamDelegation& staged);
+EDelegationCleanup SelectCleanupAfterIamSchemeRequest(
+    bool schemeSuccess,
+    bool schemeAlreadyExists,
     const TIamDelegation& previous,
     const TIamDelegation& staged);
 

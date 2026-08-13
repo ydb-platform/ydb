@@ -4,12 +4,16 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
+
+#include <atomic>
 
 namespace NKikimr::NKqp::NExternalDataSource {
 namespace {
@@ -30,6 +34,7 @@ struct TEvIamDelegationDdlBridge {
         EvIamObject = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCloudId,
         EvSchemeRequest,
+        EvIamSchemeRequest,
     };
 
     struct TEvIamObject : NActors::TEventLocal<TEvIamObject, EvIamObject> {
@@ -55,11 +60,22 @@ struct TEvIamDelegationDdlBridge {
 
         TStatus Status;
     };
+
+    struct TEvIamSchemeRequest
+        : NActors::TEventLocal<TEvIamSchemeRequest, EvIamSchemeRequest>
+    {
+        explicit TEvIamSchemeRequest(TIamSchemeRequestResult result)
+            : Result(std::move(result))
+        {}
+
+        TIamSchemeRequestResult Result;
+    };
 };
 
 constexpr ui64 IamObjectCookie = 101;
 constexpr ui64 CloudIdCookie = 102;
 constexpr ui64 SchemeRequestCookie = 103;
+constexpr ui64 IamSchemeRequestCookie = 104;
 
 NThreading::TFuture<TCloudIdDescription> StartDatabaseCloudIdLookup(const TContext& context) {
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
@@ -116,10 +132,14 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
     using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    auto& entry = navigate->ResultSet.emplace_back();
-    entry.Path = NKikimr::SplitPath(path);
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
-    entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
+    auto& target = navigate->ResultSet.emplace_back();
+    target.Path = NKikimr::SplitPath(path);
+    target.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
+    target.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
+    auto& parent = navigate->ResultSet.emplace_back();
+    parent.Path = target.Path;
+    parent.Path.pop_back();
+    parent.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     navigate->DatabaseName = context.GetDatabase();
     if (context.GetUserToken()) {
         navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
@@ -141,21 +161,7 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
                 TBridgeIamObjectDescription result;
                 result.SetSuccess();
                 const auto& request = *response.Request;
-                if (request.ResultSet.size() == 1) {
-                    const auto& entry = request.ResultSet.front();
-                    if (ClassifyIamObjectLookup(
-                            entry.Status, static_cast<bool>(entry.ExternalDataSourceInfo)) ==
-                        EIamObjectLookupResult::NotFound)
-                    {
-                        result.Description.NotFound = true;
-                        promise.SetValue(std::move(result));
-                        return;
-                    }
-                }
-                if (request.ErrorCount || request.ResultSet.size() != 1 ||
-                    request.ResultSet.front().Status !=
-                        NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ||
-                    !request.ResultSet.front().ExternalDataSourceInfo)
+                if (request.ResultSet.size() != 2)
                 {
                     result.Description.Status = TStatus::Fail(
                         NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
@@ -163,8 +169,34 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
                     promise.SetValue(std::move(result));
                     return;
                 }
+
+                const auto& target = request.ResultSet[0];
+                const auto lookup = ClassifyIamObjectLookup(
+                    target.Status, static_cast<bool>(target.ExternalDataSourceInfo));
+                const auto& snapshot = lookup == EIamObjectLookupResult::NotFound
+                    ? request.ResultSet[1]
+                    : target;
+                if (lookup == EIamObjectLookupResult::Error ||
+                    snapshot.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ||
+                    !snapshot.Self)
+                {
+                    result.Description.Status = TStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                        "Cannot describe external data source for IAM delegation");
+                    promise.SetValue(std::move(result));
+                    return;
+                }
+
+                result.Description.SnapshotPathId = snapshot.Self->Info.GetPathId();
+                result.Description.SnapshotPathVersion = snapshot.Self->Info.GetPathVersion();
+                if (lookup == EIamObjectLookupResult::NotFound) {
+                    result.Description.NotFound = true;
+                    promise.SetValue(std::move(result));
+                    return;
+                }
+
                 const auto& description =
-                    request.ResultSet.front().ExternalDataSourceInfo->Description;
+                    target.ExternalDataSourceInfo->Description;
                 if (!description.GetAuth().HasIam()) {
                     promise.SetValue(std::move(result));
                     return;
@@ -179,6 +211,50 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
                 result.Description.Delegation.ReferrerId = iam.GetDelegationReferrerId();
                 promise.SetValue(std::move(result));
             }));
+    return future;
+}
+
+NThreading::TFuture<TIamSchemeRequestResult> StartIamSchemeRequest(
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    const TContext& context)
+{
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetDatabaseName(context.GetDatabase());
+    if (context.GetUserToken()) {
+        request->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
+    }
+    *request->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
+
+    auto alreadyExists = std::make_shared<std::atomic_bool>(false);
+    auto promise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
+    auto future = promise.GetFuture().Apply(
+        [operationType = schemeTx.GetOperationType(), alreadyExists](const auto& resultFuture) {
+            TIamSchemeRequestResult result;
+            result.AlreadyExists = alreadyExists->load(std::memory_order_relaxed);
+            try {
+                auto response = resultFuture.GetValue();
+                if (!response.Success()) {
+                    result.Status = TStatus::Fail(
+                        response.Status(),
+                        TStringBuilder() << "Failed to execute "
+                            << NKikimrSchemeOp::EOperationType_Name(operationType)
+                            << ": " << response.Issues().ToString());
+                }
+            } catch (...) {
+                result.Status = TStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    TStringBuilder() << "Failed to execute "
+                        << NKikimrSchemeOp::EOperationType_Name(operationType)
+                        << ", got scheme error: " << CurrentExceptionMessage());
+            }
+            return result;
+        });
+    context.GetActorSystem()->Register(new TSchemeOpRequestHandler(
+        request.release(),
+        promise,
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist(),
+        alreadyExists));
     return future;
 }
 
@@ -236,12 +312,22 @@ NActors::async<TStatus> AwaitLegacyDdl(
     co_return std::move(event->Get()->Status);
 }
 
-NActors::async<TStatus> ExecuteIamSchemeRequest(
+NActors::async<TIamSchemeRequestResult> ExecuteIamSchemeRequest(
     const NKikimrSchemeOp::TModifyScheme& schemeTx,
     const TContext& context,
     const NActors::TActorId& replyTo)
 {
-    co_return co_await AwaitLegacyDdl(SendSchemeRequest(schemeTx, context), replyTo);
+    StartIamSchemeRequest(schemeTx, context).Subscribe(
+        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
+            actorSystem->Send(
+                replyTo,
+                new TEvIamDelegationDdlBridge::TEvIamSchemeRequest(result.GetValue()),
+                0,
+                IamSchemeRequestCookie);
+        });
+    const auto event = co_await NActors::ActorWaitForEvent<
+        TEvIamDelegationDdlBridge::TEvIamSchemeRequest>(IamSchemeRequestCookie);
+    co_return std::move(event->Get()->Result);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

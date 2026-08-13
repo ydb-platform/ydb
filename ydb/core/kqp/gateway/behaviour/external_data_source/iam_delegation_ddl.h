@@ -13,6 +13,7 @@ enum class EIamDelegationDdlRoute {
 };
 
 using TLegacyDdlExecutor = std::function<TExternalDataSourceManager::TAsyncStatus(
+    const NKikimrSchemeOp::TModifyScheme&,
     const TExternalDataSourceManager::TExternalModificationContext&)>;
 
 bool IsIamDelegationEnabled(NActors::TActorSystem* actorSystem);

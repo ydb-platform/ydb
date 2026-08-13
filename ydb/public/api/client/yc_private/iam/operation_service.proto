@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+
+// IAM operations are read through the IAM-specific operation service on the
+// same private API endpoint as ServiceControl.
+service OperationService {
+  rpc Get(GetOperationRequest) returns (.ydb.yc.priv.operation.Operation);
+}
+
+message GetOperationRequest {
+  string operation_id = 1;
+}

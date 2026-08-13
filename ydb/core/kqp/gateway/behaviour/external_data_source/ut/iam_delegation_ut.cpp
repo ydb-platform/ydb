@@ -27,15 +27,18 @@ TIamDelegation Delegation() {
 
 Y_UNIT_TEST_SUITE(IamDelegation) {
     Y_UNIT_TEST(EnsureEnabledRequest) {
-        const auto request = MakeEnsureEnabledRequest(Settings(), Delegation());
+        const auto request = MakeEnsureEnabledRequest(
+            Settings(), Delegation(), "user-id");
         UNIT_ASSERT_VALUES_EQUAL(request.service_ids_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(request.service_ids(0), "ydb");
         UNIT_ASSERT_VALUES_EQUAL(request.resource().id(), "cloud-id");
         UNIT_ASSERT_VALUES_EQUAL(request.resource().type(), "resource-manager.cloud");
+        UNIT_ASSERT_VALUES_EQUAL(request.on_behalf_of_subject_id(), "user-id");
     }
 
     Y_UNIT_TEST(EnsureEnabledRequestDoesNotLeakDelegationFields) {
-        const auto request = MakeEnsureEnabledRequest(Settings(), Delegation());
+        const auto request = MakeEnsureEnabledRequest(
+            Settings(), Delegation(), "user-id");
         UNIT_ASSERT_VALUES_EQUAL(request.service_ids_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(request.ShortDebugString().find("target-sa-id"), TString::npos);
         UNIT_ASSERT_VALUES_EQUAL(request.ShortDebugString().find("72075186224037889:42"), TString::npos);
@@ -81,6 +84,21 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(NormalizeIamSubject("user@aside"), "user@aside");
         UNIT_ASSERT_VALUES_EQUAL(NormalizeIamSubject("@as"), "");
         UNIT_ASSERT_VALUES_EQUAL(NormalizeIamSubject("user-id@as@as"), "user-id@as");
+    }
+
+    Y_UNIT_TEST(UnfinishedIamOperationMustBePolled) {
+        ydb::yc::priv::operation::Operation operation;
+        operation.set_id("operation-id");
+        UNIT_ASSERT(ClassifyIamOperation(operation) ==
+            EIamOperationState::InProgress);
+
+        operation.set_done(true);
+        UNIT_ASSERT(ClassifyIamOperation(operation) ==
+            EIamOperationState::Succeeded);
+
+        operation.mutable_error()->set_message("failed");
+        UNIT_ASSERT(ClassifyIamOperation(operation) ==
+            EIamOperationState::Failed);
     }
 
     Y_UNIT_TEST(HumanReadableReferrerFitsIamLimit) {
@@ -174,6 +192,38 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         staged.ReferrerId = "eds:orders:new-id";
         UNIT_ASSERT(SelectCleanupAfterSchemeRequest(false, previous, staged) ==
             EDelegationCleanup::Staged);
+    }
+
+    Y_UNIT_TEST(CreateIfNotExistsSkipsSetupForExistingObject) {
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetFailedOnAlreadyExists(false);
+
+        UNIT_ASSERT(ShouldSkipIamDelegationSetup(schemeTx, false));
+        UNIT_ASSERT(!ShouldSkipIamDelegationSetup(schemeTx, true));
+
+        schemeTx.SetReplaceIfExists(true);
+        UNIT_ASSERT(!ShouldSkipIamDelegationSetup(schemeTx, false));
+
+        schemeTx.SetReplaceIfExists(false);
+        schemeTx.SetFailedOnAlreadyExists(true);
+        UNIT_ASSERT(!ShouldSkipIamDelegationSetup(schemeTx, false));
+    }
+
+    Y_UNIT_TEST(ConcurrentIfNotExistsLoserCleansStagedDelegation) {
+        const auto staged = Delegation();
+        UNIT_ASSERT(SelectCleanupAfterIamSchemeRequest(
+            true, true, {}, staged) == EDelegationCleanup::Staged);
+        UNIT_ASSERT(SelectCleanupAfterIamSchemeRequest(
+            true, true, {}, {}) == EDelegationCleanup::None);
+    }
+
+    Y_UNIT_TEST(ReplacementCarriesSnapshotCompareAndSwap) {
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        AddIamPathVersionPrecondition(schemeTx, 42, 17);
+
+        UNIT_ASSERT_VALUES_EQUAL(schemeTx.ApplyIfSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(schemeTx.GetApplyIf(0).GetPathId(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(schemeTx.GetApplyIf(0).GetPathVersion(), 17);
     }
 
     Y_UNIT_TEST(SuccessfulAlterCleansPreviousDelegation) {

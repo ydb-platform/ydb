@@ -14,6 +14,8 @@ struct TIamObjectDescription {
     TExternalDataSourceManager::TYqlConclusionStatus Status =
         TExternalDataSourceManager::TYqlConclusionStatus::Success();
     bool NotFound = false;
+    ui64 SnapshotPathId = 0;
+    ui64 SnapshotPathVersion = 0;
     TIamDelegation Delegation;
 };
 
@@ -21,6 +23,12 @@ struct TCloudIdDescription {
     TExternalDataSourceManager::TYqlConclusionStatus Status =
         TExternalDataSourceManager::TYqlConclusionStatus::Success();
     TString CloudId;
+};
+
+struct TIamSchemeRequestResult {
+    TExternalDataSourceManager::TYqlConclusionStatus Status =
+        TExternalDataSourceManager::TYqlConclusionStatus::Success();
+    bool AlreadyExists = false;
 };
 
 NActors::async<TCloudIdDescription> DescribeDatabaseCloudId(
@@ -32,7 +40,7 @@ NActors::async<TIamObjectDescription> DescribeIamObject(
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);
 
-NActors::async<TExternalDataSourceManager::TYqlConclusionStatus> ExecuteIamSchemeRequest(
+NActors::async<TIamSchemeRequestResult> ExecuteIamSchemeRequest(
     const NKikimrSchemeOp::TModifyScheme& schemeTx,
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);

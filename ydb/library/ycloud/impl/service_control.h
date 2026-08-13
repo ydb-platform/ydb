@@ -8,5 +8,6 @@ namespace NCloud {
 struct TServiceControlSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 NActors::IActor* CreateServiceControl(const TServiceControlSettings& settings);
+NActors::IActor* CreateIamOperationService(const TServiceControlSettings& settings);
 
 } // namespace NCloud

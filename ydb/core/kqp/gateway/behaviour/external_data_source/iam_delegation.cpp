@@ -5,23 +5,25 @@
 
 namespace NKikimr::NKqp::NExternalDataSource {
 
-yandex::cloud::priv::servicecontrol::v1::EnsureEnabledRequest MakeEnsureEnabledRequest(
-    const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation)
-{
-    yandex::cloud::priv::servicecontrol::v1::EnsureEnabledRequest request;
-    request.add_service_ids(settings.ServiceId);
-    request.mutable_resource()->set_id(delegation.ResourceId);
-    request.mutable_resource()->set_type(settings.ResourceType);
-    return request;
-}
-
-yandex::cloud::priv::servicecontrol::v1::SetupDelegationRequest MakeSetupDelegationRequest(
+yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation,
     const TString& subjectId)
 {
-    yandex::cloud::priv::servicecontrol::v1::SetupDelegationRequest request;
+    yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest request;
+    request.add_service_ids(settings.ServiceId);
+    request.mutable_resource()->set_id(delegation.ResourceId);
+    request.mutable_resource()->set_type(settings.ResourceType);
+    request.set_on_behalf_of_subject_id(subjectId);
+    return request;
+}
+
+yandex::cloud::priv::iam::v1::SetupDelegationRequest MakeSetupDelegationRequest(
+    const TIamDelegationSettings& settings,
+    const TIamDelegation& delegation,
+    const TString& subjectId)
+{
+    yandex::cloud::priv::iam::v1::SetupDelegationRequest request;
     request.set_service_id(settings.ServiceId);
     request.set_microservice_id(settings.MicroserviceId);
     request.mutable_resource()->set_id(delegation.ResourceId);
@@ -34,11 +36,11 @@ yandex::cloud::priv::servicecontrol::v1::SetupDelegationRequest MakeSetupDelegat
     return request;
 }
 
-yandex::cloud::priv::servicecontrol::v1::RevokeDelegationRequest MakeRevokeDelegationRequest(
+yandex::cloud::priv::iam::v1::RevokeDelegationRequest MakeRevokeDelegationRequest(
     const TIamDelegationSettings& settings,
     const TIamDelegation& delegation)
 {
-    yandex::cloud::priv::servicecontrol::v1::RevokeDelegationRequest request;
+    yandex::cloud::priv::iam::v1::RevokeDelegationRequest request;
     request.set_service_id(settings.ServiceId);
     request.set_microservice_id(settings.MicroserviceId);
     request.mutable_resource()->set_id(delegation.ResourceId);
@@ -79,6 +81,36 @@ TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBu
     return result;
 }
 
+EIamOperationState ClassifyIamOperation(
+    const ydb::yc::priv::operation::Operation& operation)
+{
+    if (!operation.done()) {
+        return EIamOperationState::InProgress;
+    }
+    return operation.has_error()
+        ? EIamOperationState::Failed
+        : EIamOperationState::Succeeded;
+}
+
+void AddIamPathVersionPrecondition(
+    NKikimrSchemeOp::TModifyScheme& schemeTx,
+    ui64 pathId,
+    ui64 pathVersion)
+{
+    auto* applyIf = schemeTx.AddApplyIf();
+    applyIf->SetPathId(pathId);
+    applyIf->SetPathVersion(pathVersion);
+}
+
+bool ShouldSkipIamDelegationSetup(
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    bool objectNotFound)
+{
+    return !schemeTx.GetReplaceIfExists() &&
+        !schemeTx.GetFailedOnAlreadyExists() &&
+        !objectNotFound;
+}
+
 bool IsManagedIamDelegation(const TIamDelegation& delegation) {
     return !delegation.ServiceAccountId.empty() && !delegation.ResourceId.empty() &&
         !delegation.ReferrerId.empty();
@@ -105,6 +137,19 @@ EDelegationCleanup SelectCleanupAfterSchemeRequest(
         return EDelegationCleanup::Previous;
     }
     return EDelegationCleanup::None;
+}
+
+EDelegationCleanup SelectCleanupAfterIamSchemeRequest(
+    bool schemeSuccess,
+    bool schemeAlreadyExists,
+    const TIamDelegation& previous,
+    const TIamDelegation& staged)
+{
+    return schemeAlreadyExists
+        ? (IsManagedIamDelegation(staged)
+            ? EDelegationCleanup::Staged
+            : EDelegationCleanup::None)
+        : SelectCleanupAfterSchemeRequest(schemeSuccess, previous, staged);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

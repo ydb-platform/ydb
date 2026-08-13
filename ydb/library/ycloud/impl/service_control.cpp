@@ -6,7 +6,7 @@
 namespace NCloud {
 namespace {
 
-using TGrpcService = yandex::cloud::priv::servicecontrol::v1::ServiceControlService;
+using TGrpcService = yandex::cloud::priv::iam::v1::ServiceControlService;
 
 class TServiceControl final
     : public NActors::TActor<TServiceControl>
@@ -65,6 +65,47 @@ private:
 
 NActors::IActor* CreateServiceControl(const TServiceControlSettings& settings) {
     return new TServiceControl(settings);
+}
+
+namespace {
+
+using TIamOperationGrpcService = yandex::cloud::priv::iam::v1::OperationService;
+
+class TIamOperationService final
+    : public NActors::TActor<TIamOperationService>
+    , private NGrpcActorClient::TGrpcServiceClient<TIamOperationGrpcService>
+{
+    using TThis = TIamOperationService;
+    using TActorBase = NActors::TActor<TThis>;
+    using TGrpcBase = NGrpcActorClient::TGrpcServiceClient<TIamOperationGrpcService>;
+
+    struct TGetOperationCall : TGrpcBase::TGrpcRequest {
+        static constexpr auto Request = &TIamOperationGrpcService::Stub::AsyncGet;
+        using TRequestEventType = TEvServiceControl::TEvGetOperationRequest;
+        using TResponseEventType = TEvServiceControl::TEvGetOperationResponse;
+    };
+
+public:
+    explicit TIamOperationService(const TServiceControlSettings& settings)
+        : TActorBase(&TThis::StateWork)
+        , TGrpcBase(settings)
+    {}
+
+private:
+    void Handle(TEvServiceControl::TEvGetOperationRequest::TPtr& ev) {
+        MakeCall<TGetOperationCall>(std::move(ev));
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvServiceControl::TEvGetOperationRequest, Handle);
+        cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway);
+    )
+};
+
+} // anonymous namespace
+
+NActors::IActor* CreateIamOperationService(const TServiceControlSettings& settings) {
+    return new TIamOperationService(settings);
 }
 
 } // namespace NCloud

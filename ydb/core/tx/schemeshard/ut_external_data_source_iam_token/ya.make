@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/testlib/default
+    ydb/core/tx/schemeshard/ut_helpers
     ydb/library/aclib
     ydb/library/testlib/service_mocks
     ydb/public/sdk/cpp/src/client/driver

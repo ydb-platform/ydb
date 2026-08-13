@@ -85,6 +85,36 @@ Y_UNIT_TEST_F(FederationRootDbAccountTopic, TNameResolverFixture) {
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
 }
 
+Y_UNIT_TEST_F(FederationNavigateDatabaseWithoutLbRoot, TNameResolverFixture) {
+    // Describe account1/topic under /Root with empty LbRoot → tenant NavigateDatabase.
+    SetFcc(false);
+    SetLbRoot("");
+    const auto resolved = OkFull(ResolveName("/Root", "account1/topic", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/account1/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
+}
+
+Y_UNIT_TEST_F(FccAbsolutePathNotStrippedByPqRoot, TNameResolverFixture) {
+    // PQ Root == /Root must not rewrite /Root/topic → /topic in FCC.
+    ActorSystemStub.AppData.PQConfig.SetRoot("/Root");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "/Root/topic1")),
+        "/Root/topic1");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "/Root/table1/feed")),
+        "/Root/table1/feed");
+}
+
+Y_UNIT_TEST_F(FederationUserDbAbsolutePathWithPqRootEqDomain, TNameResolverFixture) {
+    // !FCC + PQ Root=/Root + tenant DB: keep /Root/test_db/topic1 (do not double DB).
+    SetFcc(false);
+    SetLbRoot("");
+    ActorSystemStub.AppData.PQConfig.SetRoot("/Root");
+    const auto resolved = OkFull(ResolveName("/Root/test_db", "/Root/test_db/topic1", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/test_db/topic1");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/test_db");
+}
+
 Y_UNIT_TEST_F(FccLegacyKeepsRequestNavigateDatabase, TNameResolverFixture) {
     // FCC: path may be under LbRoot, but SchemeCache DatabaseName stays the request DB.
     const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1"));

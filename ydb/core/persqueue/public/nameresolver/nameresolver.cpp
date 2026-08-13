@@ -286,14 +286,19 @@ TString NavigateDatabaseFor(
     bool fcc
 ) {
     // Federation account topics live in the account tenant; FCC keeps the request database.
-    if (!fcc && !lbRoot.empty()) {
-        TStringBuf rest = StripLeadingSlash(path);
-        if (IsPathPrefix(rest, lbRoot)) {
-            SkipPathPrefix(rest, lbRoot);
-            TStringBuf account;
-            TStringBuf topicRest;
-            if (rest.TrySplit("/", account, topicRest) && !account.empty() && !topicRest.empty()) {
-                return TStringBuilder() << '/' << lbRoot << '/' << account;
+    if (!fcc) {
+        // Prefer LbRoot; if unset, request database can be the federation/domain root
+        // (e.g. describe account1/topic with Database=/Root and empty LbUserDatabaseRoot).
+        const TStringBuf federationRoot = !lbRoot.empty() ? lbRoot : databaseNorm;
+        if (!federationRoot.empty()) {
+            TStringBuf rest = StripLeadingSlash(path);
+            if (IsPathPrefix(rest, federationRoot)) {
+                SkipPathPrefix(rest, federationRoot);
+                TStringBuf account;
+                TStringBuf topicRest;
+                if (rest.TrySplit("/", account, topicRest) && !account.empty() && !topicRest.empty()) {
+                    return TStringBuilder() << '/' << federationRoot << '/' << account;
+                }
             }
         }
     }
@@ -343,9 +348,16 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     // Absolute under PQ root first (more specific than request database).
-    // Otherwise "/Root" + "/Root/PQ/rt3..." becomes "PQ/rt3..." and is misclassified.
+    // Only in !FCC for classic PQ leaves (e.g. /Root/PQ/rt3.*). Never strip when the
+    // request database is a proper child of the PQ/domain root — otherwise
+    // /Root/test_db/topic with PQ Root=/Root becomes test_db/topic and rejoins as
+    // /Root/test_db/test_db/topic.
     bool strippedPqPrefix = false;
-    if (!pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix)) {
+    const bool underPq = !fcc && !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
+    const bool databaseUnderPq = !databaseNorm.empty()
+        && databaseNorm != pqPrefix
+        && IsPathPrefix(databaseNorm, pqPrefix);
+    if (underPq && !databaseUnderPq) {
         SkipPathPrefix(topicName, pqPrefix);
         strippedPqPrefix = true;
     } else if (!databaseNorm.empty()) {

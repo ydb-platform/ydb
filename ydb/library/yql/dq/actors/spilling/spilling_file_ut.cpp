@@ -7,6 +7,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <util/system/fs.h>
+#include <util/system/user.h>
 #include <util/generic/string.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
@@ -96,6 +97,10 @@ public:
 
     const TFsPath& GetSpillingRoot() const {
         return SpillingRoot_;
+    }
+
+    TFsPath GetSpillingNodeDir() const {
+        return SpillingRoot_ / MakeSpillingNodeDirName(GetNodeId(), GetUsername());
     }
 
 private:
@@ -313,7 +318,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         auto spillingActor = runtime.StartSpillingActor(tester);
 
         runtime.WaitBootstrap();
-        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingNodeDir().GetPath() << "/1_test_";
 
         for (ui32 i = 0; i < 5; ++i) {
             // Cerr << "---- store blob #" << i << Endl;
@@ -355,7 +360,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingNodeDir().GetPath() << "/1_test_";
 
         for (ui32 i = 0; i < 5; ++i) {
             // Cerr << "---- store blob #" << i << Endl;
@@ -397,7 +402,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingNodeDir().GetPath() << "/1_test_";
 
         constexpr const size_t numBlobs = 5;
         constexpr const size_t numFiles = MultiPart ? numBlobs : 1;
@@ -485,7 +490,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
             UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
         }
-        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()) + "_" + runtime.GetSpillingSessionId());
+        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername()));
         (runtime.GetSpillingRoot() / nodePath / "1_test_0").ForceDelete();
 
         {
@@ -542,7 +547,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()) + "_" + runtime.GetSpillingSessionId());
+        auto nodePath = TFsPath(MakeSpillingNodeDirName(spillingSvc.NodeId(), GetUsername()));
         const TFsPath spillingDir = runtime.GetSpillingRoot() / nodePath;
         const TFsPath firstFile = spillingDir / "1_test_0";
         const TFsPath secondFile = spillingDir / "1_test_1";
@@ -675,11 +680,15 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
         }
 
-        // Unblock the root and let the scheduled retry start the service.
+        // Unblock the root: remove the file and create a real directory.
+        // The service does not create Root itself, only spilling-tmp-<nodeId>-<username> inside it.
         root.ForceDelete();
+        root.MkDir();
+
+        const TFsPath nodeDir = root / MakeSpillingNodeDirName(runtime.GetNodeId(), GetUsername());
 
         TDispatchOptions retryOptions;
-        retryOptions.CustomFinalCondition = [&root]() { return root.IsDirectory(); };
+        retryOptions.CustomFinalCondition = [&nodeDir]() { return nodeDir.IsDirectory(); };
         UNIT_ASSERT(runtime.DispatchEvents(retryOptions, TDuration::Seconds(5)));
 
         {

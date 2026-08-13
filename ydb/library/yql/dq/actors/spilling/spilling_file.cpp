@@ -204,10 +204,10 @@ private:
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
             TFsPath TmpRoot;
             ui32 NodeId;
-            TString SpillingSessionId;
+            TString Username;
 
-            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString spillingSessionId)
-                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), SpillingSessionId(std::move(spillingSessionId)) {}
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString username)
+                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), Username(std::move(username)) {}
         };
 
         struct TEvRetryStart : public TEventLocal<TEvRetryStart, EvRetryStart> {
@@ -232,8 +232,9 @@ public:
     }
 
     void Bootstrap() {
+        Username_ = GetUsername();
         Root_ = Config_.Root;
-        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << SelfId().NodeId() << "_" << Config_.SpillingSessionId);
+        Root_ /= MakeSpillingNodeDirName(SelfId().NodeId(), Username_);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         CreateRoot(MaxStartupRetries);
@@ -257,9 +258,8 @@ private:
                 throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
             }
             Root_.ForceDelete();
-            // root must already exist
-            // create only the per-node subdirectory inside it
-            // dont create the directories recursively to avoid multiuser errors
+            // Config_.Root must already exist
+            // create only spilling-tmp-<nodeId>-<username> inside it
             Root_.MkDir(DIR_MODE);
         } catch (const yexception& e) {
             const TString root = Root_.GetPath();
@@ -274,7 +274,7 @@ private:
             Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
         }
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Config_.SpillingSessionId));
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Username_));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
@@ -794,20 +794,19 @@ private:
         const auto& msg = *ev->Get();
         const auto& root = msg.TmpRoot;
         const auto nodeIdString = ToString(msg.NodeId);
-        const auto& sessionId = msg.SpillingSessionId;
-        const auto& nodePrefix = this->NodePrefix_;
+        const auto currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username);
+        const auto newPrefix = TStringBuilder() << "spilling-tmp-" << nodeIdString << "-";
+        const auto oldPrefix = TStringBuilder() << "node_" << nodeIdString << "_";
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        const auto isDirOldTmp = [&nodePrefix, &nodeIdString, &sessionId](const TString& dirName) -> bool {
-            // dirName: node_<nodeId>_<sessionId>
-            TVector<TString> parts;
-            StringSplitter(dirName).Split('_').Limit(3).Collect(&parts);
-
-            if (parts.size() < 3) {
-                return false;
+        const auto isDirOldTmp = [&](const TString& dirName) -> bool {
+            // New format: spilling-tmp-<nodeId>-<username>
+            if (dirName.StartsWith(newPrefix)) {
+                return dirName != currentDirName;
             }
-            return parts[0] == nodePrefix && parts[1] == nodeIdString && parts[2] != sessionId;
+            // Old format: node_<nodeId>_<sessionId>
+            return dirName.StartsWith(oldPrefix);
         };
 
         try {
@@ -1070,7 +1069,7 @@ private:
     static constexpr TDuration StartupRetryDelay = TDuration::Seconds(1);
 
     const TFileSpillingServiceConfig Config_;
-    const TString NodePrefix_ = "node";
+    TString Username_;
     TFsPath Root_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
@@ -1083,9 +1082,7 @@ private:
 } // anonymous namespace
 
 TFsPath GetTmpSpillingRootForCurrentUser() {
-    auto root = TFsPath{GetSystemTempDir()};
-    root /= "spilling-tmp-" + GetUsername();
-    return root;
+    return TFsPath{GetSystemTempDir()};
 }
 
 IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client,

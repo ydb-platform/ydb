@@ -9,6 +9,7 @@
 #include <util/generic/strbuf.h>
 #include <util/folder/path.h>
 #include <util/generic/guid.h>
+#include <util/string/builder.h>
 
 #include <limits>
 
@@ -32,6 +33,10 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
 }
 
 TFsPath GetTmpSpillingRootForCurrentUser();
+
+inline TString MakeSpillingNodeDirName(ui32 nodeId, TStringBuf username) {
+    return TStringBuilder() << "spilling-tmp-" << nodeId << "-" << username;
+}
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);
 

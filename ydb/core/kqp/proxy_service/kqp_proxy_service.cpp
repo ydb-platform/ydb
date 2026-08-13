@@ -70,8 +70,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
 
-#include <util/folder/dirut.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
 namespace NKikimr::NKqp {
@@ -291,7 +289,6 @@ public:
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
                 spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
-                MakeDirIfNotExist(spillingRoot);
             }
 
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(

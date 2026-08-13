@@ -1065,9 +1065,9 @@ public:
     }
 
     static TString GetEnumValueCommonPrefix(const google::protobuf::EnumDescriptor* enumField) {
-        TString base = enumField->FindValueByNumber(0)->name();
+        TString base = enumField->value(0)->name();
         for (int n = 1; n < enumField->value_count(); ++n) {
-            TString name = enumField->FindValueByNumber(n)->name();
+            TString name = enumField->value(n)->name();
             if (base.size() > name.size()) {
                 base.resize(name.size());
             }
@@ -1086,15 +1086,17 @@ public:
         }
         if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_ENUM) {
             const google::protobuf::EnumDescriptor* enumField = field->enum_type();
-            TString base = GetEnumValueCommonPrefix(enumField);
-            for (int n = 0; n < enumField->value_count(); ++n) {
-                const google::protobuf::EnumValueDescriptor* enumDescr = enumField->FindValueByNumber(n);
-                const TString& valueDescription = enumDescr->options().GetExtension(NKikimrConfig::THiveConfig::EnumDescription);
-                if (!valueDescription.empty()) {
-                    if (!tooltip.empty()) {
-                        tooltip << "<br>";
+            if (int valuesCount = enumField->value_count()) {
+                TString base = GetEnumValueCommonPrefix(enumField);
+                for (int n = 0; n < valuesCount; ++n) {
+                    const google::protobuf::EnumValueDescriptor* enumDescr = enumField->value(n);
+                    const TString& valueDescription = enumDescr->options().GetExtension(NKikimrConfig::THiveConfig::EnumDescription);
+                    if (!valueDescription.empty()) {
+                        if (!tooltip.empty()) {
+                            tooltip << "<br>";
+                        }
+                        tooltip << "<b>" << enumDescr->name().substr(base.size()) << "</b> - " << EncodeHtmlPcdata(valueDescription);
                     }
-                    tooltip << "<b>" << enumDescr->name().substr(base.size()) << "</b> - " << EncodeHtmlPcdata(valueDescription);
                 }
             }
         }

@@ -14,7 +14,11 @@
 #include <algorithm>
 #include <iomanip>
 
+#include "options.h"
+
 namespace {
+using NMemoryBenchmark::TOptions;
+
 struct alignas(64) TStats {
     uint64_t Operations = 0;
     uint64_t PayloadBytes = 0;
@@ -54,40 +58,6 @@ void PrintValues(const TValues& value, double elapsed) {
     std::cout << value.Operations << ',' << value.PayloadBytes << ',' << value.ReadBytes << ',' << value.WrittenBytes << ','
               << value.Operations / elapsed << ',' << value.PayloadBytes / elapsed / mb << ',' << value.ReadBytes / elapsed / mb << ','
               << value.WrittenBytes / elapsed / mb << ',' << (value.ReadBytes + value.WrittenBytes) / elapsed / mb;
-}
-
-struct TOptions {
-    uint32_t Threads = 0;
-    uint32_t RandomPercent = 0;
-    std::string RandomMode = "copy";
-    uint64_t BufferSize = 256ull << 20;
-    uint64_t PartSize = 2ull << 20;
-    uint32_t DurationMs = 3000;
-};
-
-uint64_t Parse(const char* value, const char* name) {
-    try { return std::stoull(value); }
-    catch (...) { throw std::runtime_error(std::string("invalid value for ") + name); }
-}
-
-TOptions ParseOptions(int argc, char** argv) {
-    TOptions result;
-    for (int i = 1; i < argc; i += 2) {
-        if (i + 1 == argc) throw std::runtime_error("option without a value");
-        const std::string name = argv[i]; const char* value = argv[i + 1];
-        if (name == "--threads") result.Threads = Parse(value, "threads");
-        else if (name == "--random-percent") result.RandomPercent = Parse(value, "random-percent");
-        else if (name == "--random-mode") result.RandomMode = value;
-        else if (name == "--buffer-size-mb") result.BufferSize = Parse(value, "buffer-size-mb") << 20;
-        else if (name == "--part-size-kb") result.PartSize = Parse(value, "part-size-kb") << 10;
-        else if (name == "--duration-ms") result.DurationMs = Parse(value, "duration-ms");
-        else throw std::runtime_error("unknown option: " + name);
-    }
-    if (!result.Threads) throw std::runtime_error("threads must be positive");
-    if (result.RandomPercent > 100) throw std::runtime_error("random-percent must be between 0 and 100");
-    if (result.RandomMode != "copy" && result.RandomMode != "write") throw std::runtime_error("random-mode must be copy or write");
-    if (result.BufferSize < 2 || result.PartSize == 0 || result.PartSize > result.BufferSize / 2) throw std::runtime_error("invalid buffer/part size");
-    return result;
 }
 
 uint64_t AvailableMemoryBytes() {
@@ -141,7 +111,7 @@ void Worker(uint32_t index, bool random, const TOptions& options, std::barrier<>
 
 int main(int argc, char** argv) {
     try {
-        const TOptions options = ParseOptions(argc, argv);
+        const NMemoryBenchmark::TOptions options = NMemoryBenchmark::ParseOptions(argc, argv);
         if (options.BufferSize > std::numeric_limits<uint64_t>::max() / options.Threads) throw std::runtime_error("requested buffer footprint overflows uint64");
         const uint64_t requiredMemory = options.BufferSize * options.Threads;
         const uint64_t availableMemory = AvailableMemoryBytes();

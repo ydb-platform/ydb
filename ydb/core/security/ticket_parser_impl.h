@@ -2346,7 +2346,6 @@ protected:
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {
-        settings.Endpoint = Config.GetAccessServiceEndpoint();
         if (Config.GetUseAccessServiceTLS()) {
             settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
             settings.SslTargetNameOverride = Config.GetAccessServiceSslTargetNameOverride();
@@ -2362,7 +2361,7 @@ protected:
 
         if (Config.GetUseAccessService()) {
             if (Config.GetAccessServiceType() == "Yandex_v2") {
-                NCloud::TAccessServiceSettings settings;
+                NCloud::TAccessServiceSettings settings(Config.GetAccessServiceEndpoint(), "ydb-ticket_parser");
                 FillAccessServiceSettings(settings);
 
                 AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -2398,6 +2397,7 @@ protected:
                 }
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
                 NNebiusCloud::TAccessServiceSettings settings;
+                settings.Endpoint = Config.GetAccessServiceEndpoint();
                 FillAccessServiceSettings(settings);
                 NebiusAccessServiceValidator = Register(NNebiusCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             } else {
@@ -2406,8 +2406,7 @@ protected:
         }
 
         if (Config.GetUseUserAccountService()) {
-            NCloud::TUserAccountServiceSettings settings;
-            settings.Endpoint = Config.GetUserAccountServiceEndpoint();
+            NCloud::TUserAccountServiceSettings settings(Config.GetUserAccountServiceEndpoint(), "ydb-ticket_parser");
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
                 settings.SslTargetNameOverride = Config.GetUserAccountServiceSslTargetNameOverride();
@@ -2423,8 +2422,7 @@ protected:
         }
 
         if (Config.GetUseServiceAccountService()) {
-            NCloud::TServiceAccountServiceSettings settings;
-            settings.Endpoint = Config.GetServiceAccountServiceEndpoint();
+            NCloud::TServiceAccountServiceSettings settings(Config.GetServiceAccountServiceEndpoint(), "ydb-ticket_parser");
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
                 settings.SslTargetNameOverride = Config.GetServiceAccountServiceSslTargetNameOverride();

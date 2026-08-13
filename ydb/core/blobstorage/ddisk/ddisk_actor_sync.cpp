@@ -75,7 +75,8 @@ namespace NKikimr::NDDisk {
             sourceInfo->Creds = TQueryCredentials::ForInternal(
                 creds.TabletId,
                 creds.Generation,
-                std::make_optional(source.GetDDiskInstanceGuid()));
+                std::make_optional(source.GetDDiskInstanceGuid()),
+                creds.DirectBlockGroupIndex);
             return true;
         };
 

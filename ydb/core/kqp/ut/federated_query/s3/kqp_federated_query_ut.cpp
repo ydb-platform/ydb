@@ -3885,6 +3885,49 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
         UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
     }
+
+    Y_UNIT_TEST(MultipleWriteIntoExternalTableDisabled) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_disabled";
+        const TString bucket = "testBucketMultipleWriteIntoExternalTableDisabled";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto client = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "{external_source}",
+                    LOCATION = "/write-path/",
+                    FORMAT = "json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            );
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+            INSERT INTO `{external_table}` SELECT 1 as key, "X" as value;
+            INSERT INTO `{external_table}` SELECT 2 as key, "Y" as value;
+        )", "external_table"_a=externalTableName);
+
+        auto result = client.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for external table: db.[/Root/test_binding_disabled" << externalTableName);
+    }
 }
 
 } // namespace NKikimr::NKqp

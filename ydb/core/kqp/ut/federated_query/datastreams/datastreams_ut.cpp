@@ -1026,6 +1026,40 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
+    Y_UNIT_TEST_F(MultipleWriteIntoTopicsDisabled, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+
+        constexpr char inputTopic[] = "multipleWriteIntoTopicsDisabledInputTopicName";
+        constexpr char outputTopic[] = "multipleWriteIntoTopicsDisabledOutputTopicName";
+        CreateTopic(inputTopic, std::nullopt, /* local */ true);
+        CreateTopic(outputTopic, std::nullopt, /* local */ true);
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic);
+
+        constexpr char pqSource[] = "pqSourceName";
+        CreatePqSource(pqSource);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: db.[/Root/" << outputTopic);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: /Root/" << pqSource << ".[" << outputTopic);
+    }
+
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
@@ -2173,6 +2207,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             }
         }
     }
+
     Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInStreamingMode, TStreamingTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);

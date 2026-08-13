@@ -150,7 +150,7 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HoldRegisterDirectRead{0};
     std::atomic<ui64> HeldRegisterDirectRead{0};
     TVector<THolder<IEventHandle>> HeldRegisterDirectReadEvents;
-    // Stage/Publish toward cache while Register is held (cache drops them as unregistered).
+    // Stage/Publish toward cache while Register is held (buffered until Register).
     std::atomic<ui64> StageOrPublishWhileRegisterHeld{0};
 
     // Any TEvCloseSession with ErrorCode != OK (ENSURE, empty-queue CloseSessionAndDie, bad ack, …).
@@ -315,8 +315,8 @@ struct TDirectReadRestoreEnv {
             if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadAck>()) {
                 ++DirectReadAckCount;
             }
-            // While Register is delayed, Stage/Publish still reach the cache and are dropped
-            // ("unregistered session") — tablet DirectRead state may already have advanced.
+            // While Register is delayed, Stage/Publish still reach the cache and are buffered
+            // until Register — tablet DirectRead state may already have advanced.
             if (HoldRegisterDirectRead.load()
                     && !HeldRegisterDirectReadEvents.empty()
                     && (ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()
@@ -490,7 +490,7 @@ struct TGrpcDirectReadClient {
             auto& start = *req.mutable_start_direct_read_partition_session_request();
             start.set_partition_session_id(AssignId);
             start.set_generation(generation);
-            // Client already consumed DirectReadId=1; ask cache to resume from id=1.
+            // last_direct_read_id=0 → client has not advanced; cache should start from direct_read_id=1.
             start.set_last_direct_read_id(0);
             DR_ENSURE(DirectStream->Write(req));
 
@@ -578,7 +578,9 @@ struct TGrpcDirectReadClient {
     }
 
     // Non-blocking-ish: pump until DirectReadResponse or deadline. Returns false on timeout.
-    // Cancels the DirectRead stream on timeout so the blocked Read does not leak a pool thread.
+    // On timeout cancels the DirectRead stream and waits for the async Read to finish so it
+    // does not leak a pool thread or touch DirectStream during fixture teardown.
+    // Async errors are rethrown (not masked as timeout).
     bool TryReadNextDataNoAck(NActors::TTestActorRuntime& runtime, TDuration timeout) {
         auto future = NThreading::Async([&] {
             StreamDirectReadMessage::FromServer resp;
@@ -592,23 +594,20 @@ struct TGrpcDirectReadClient {
         }, DispatchPool());
 
         const TInstant deadline = TInstant::Now() + timeout;
-        while (TInstant::Now() < deadline) {
-            if (future.HasValue() || future.HasException()) {
-                break;
-            }
+        while (TInstant::Now() < deadline && !future.HasValue() && !future.HasException()) {
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         }
-        if (!future.HasValue() && !future.HasException()) {
+        const bool timedOut = !future.HasValue() && !future.HasException();
+        if (timedOut) {
             if (DirectContext) {
                 DirectContext->TryCancel();
             }
-            const TInstant cancelDeadline = TInstant::Now() + TDuration::Seconds(2);
-            while (TInstant::Now() < cancelDeadline && !future.HasValue() && !future.HasException()) {
+            while (!future.HasValue() && !future.HasException()) {
                 runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
             }
-            return false;
         }
-        if (future.HasException()) {
+        future.TryRethrow();
+        if (timedOut) {
             return false;
         }
         return future.GetValueSync();
@@ -1111,10 +1110,10 @@ Y_UNIT_TEST(StopDirectReadOnGenerationBumpWhileRestoreStuck) {
 // ProcessBalancerDead force-stops partitions and re-locks; CreateSession fires
 // RegisterDirectReadSession to dread cache before Start reaches the client.
 // If Register is delayed, partition still Prepare/Publish (tablet path) and advances Offset /
-// inFlight DirectRead while cache rejects Stage/Publish ("unregistered session").
+// inFlight DirectRead while cache buffers Stage/Publish until Register.
 // Client StartDirectRead → Unknown session; SDK would retry forever. After Register is
 // delivered and DirectRead is re-inited, inFlight without a client-visible DirectRead
-// still blocks further reads — durable hang with control alive.
+// still blocks further reads — durable hang with control alive (pre-buffering fix).
 Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
     WriteOneMessage();
     OpenDirectReadSession(/*readDataNoAck=*/true);
@@ -1167,9 +1166,9 @@ Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
 
 // Same durable hang as UnknownSessionAfterPqrbRestartWhileRegisterHeld, via Topic SDK
 // (UseRealThreads=false): no Commit on first DataReceived; hold Register after PQRB reboot until
-// Stage/Publish hit the cache unregistered; write a second message while Register is still held
+// Stage/Publish are buffered in cache; write a second message while Register is still held
 // (unread data in topic); then release Register so SDK Start succeeds, but tablet inFlight
-// DirectRead the client never saw blocks further DataReceived.
+// DirectRead the client never saw blocks further DataReceived (pre-buffering fix).
 // Expectation when the bug exists: FAIL — session open, no further DataReceived after release.
 Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     Runtime().SetScheduledLimit(10'000'000);
@@ -1233,14 +1232,14 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     UNIT_ASSERT_C(!sessionClosed.load(),
         "SDK read session closed during PQRB restart; expected control to stay alive");
 
-    // Wait until PQ Stage/Publish reaches cache while Register is still held (buffered as
-    // unregistered until Register) — durable-hang precondition.
+    // Wait until PQ Stage/Publish reaches cache while Register is still held (buffered
+    // until Register) — durable-hang precondition.
     WaitStageOrPublishWhileRegisterHeldAtLeast(1);
-    AssertRegisterStillHeld("Register must still be held after unregistered Stage/Publish");
+    AssertRegisterStillHeld("Register must still be held after buffered Stage/Publish");
 
     // Second message while Register is still held — topic has unread data after release, so a
     // silent wait cannot be explained by an empty partition. Stage/Publish for the new data
-    // also hits unregistered cache (do not write after release: that can deliver a later
+    // is also buffered until Register (do not write after release: that can deliver a later
     // DirectReadId and trip SDK VERIFY on NextDirectReadId gap).
     const ui64 stageBeforeSecondWrite = Env.StageOrPublishWhileRegisterHeld.load();
     WriteOneMessageSparse();
@@ -1261,7 +1260,7 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
         "SDK read session closed after PQRB restart; expected control/session to stay alive");
     UNIT_ASSERT_C(gotAfter,
         "SDK DirectRead durable hang after PQRB restart: Register was delayed, Stage/Publish "
-        "hit unregistered cache (including second write while Register held), then Register "
+        "buffered until Register (including second write while Register held), then Register "
         "was released and Start could succeed, but inFlight DirectRead never reached the "
         "client; session stayed open and topic had unread data, no further DataReceived");
 }

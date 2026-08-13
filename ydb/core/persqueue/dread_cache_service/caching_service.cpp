@@ -316,7 +316,7 @@ private:
             return;
         }
         if (sessionIter->second.Generation != tabletGeneration) {
-            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
+            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: Stage generation mismatch, data ignored",
                 {"sessionId", sessionIter->first.SessionId},
                 {"TabletGeneration", tabletGeneration},
                 {"generation", sessionIter->second.Generation});

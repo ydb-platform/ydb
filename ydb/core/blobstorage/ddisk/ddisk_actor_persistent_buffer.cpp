@@ -1324,12 +1324,11 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        TQueryCredentials creds(record.GetCredentials());
+        const TQueryCredentials creds(record.GetCredentials());
         if ((!creds.IsInternal() || record.HasSelector()) &&
             !CheckQuery(*ev, &Counters.Interface.ReadPersistentBuffer)) {
             return;
         }
-        creds = TQueryCredentials(record.GetCredentials());
 
         if (!PersistentBufferReady) {
             if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {

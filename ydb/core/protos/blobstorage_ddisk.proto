@@ -82,23 +82,8 @@ message TDDiskId {
     uint32 DDiskSlotId = 3;
 }
 
-// Opaque connection handle issued by DDisk:
-// - Low[0..31]   — connection-vector index
-// - Low[32..63]  — low 32 bits of TabletId
-// - High[0..7]   — sequence number of this vector slot
-// - High[8..15]  — random restart sanity check
-// - High[16..31] — low 16 bits of NodeId
-// - High[32..47] — low 16 bits of PDiskId
-// - High[48..63] — low 16 bits of VSlotId
-// Callers must return both parts unchanged.
-message TConnectionToken {
-    fixed64 Low = 1;
-    fixed64 High = 2;
-}
-
-// DDisk query credentials define who asks for an operation: tablet identifier, direct block group index, tablet
-// generation and session sequence number (to prevent races with obsolete instances), and DDiskInstanceGuid to identify
-// cases when DDisk data was lost.
+// DDisk query credentials define who asks for an operation: tablet identifier, tablet generation and session sequence
+// number (to prevent races with obsolete instances), and DDiskInstanceGuid to identify cases when DDisk data was lost.
 
 message TQueryCredentials {
     enum ERequestKind {
@@ -112,17 +97,6 @@ message TQueryCredentials {
     optional fixed64 DDiskInstanceGuid = 3;
     ERequestKind RequestKind = 4;
     uint64 DDiskSessionSeqNo = 5;
-    uint32 DirectBlockGroupIndex = 6;
-}
-
-message TRequestCredentials {
-    oneof Credentials {
-        TConnectionToken ConnectionToken = 1;
-
-        // DDisk-to-DDisk/PBuffer forwarding carries server-side context instead
-        // of a client connection token.
-        TQueryCredentials Internal = 2;
-    }
 }
 
 // DDisk block selector defines the range of blocks we are operating at; it includes through-numbered vChunk index and
@@ -172,14 +146,13 @@ message TEvConnectResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     fixed64 DDiskInstanceGuid = 3; // instance guid gets changed every time DDisk loses its data
-    TConnectionToken ConnectionToken = 4;
 }
 
 // DDisk disconnect query is issued when tablet is going to be stopped gracefully and don't need DDisk to keep any
 // context about that tablet anymore.
 
 message TEvDisconnect {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
 }
 
 message TEvDisconnectResult {
@@ -188,7 +161,7 @@ message TEvDisconnectResult {
 }
 
 message TEvWrite {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     TWriteInstruction Instruction = 3;
 
@@ -205,7 +178,7 @@ message TEvWriteResult {
 }
 
 message TEvRead {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     TReadInstruction Instruction = 3;
 }
@@ -220,7 +193,7 @@ message TEvReadResult {
 }
 
 message TEvDeleteTabletChunks {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
 }
 
 message TEvDeleteTabletChunksResult {
@@ -230,7 +203,7 @@ message TEvDeleteTabletChunksResult {
 }
 
 message TEvWritePersistentBuffer {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
@@ -250,7 +223,7 @@ message TEvWritePersistentBufferResult {
 }
 
 message TEvReadThenWritePersistentBuffers {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     uint64 Lsn = 2;
     uint32 Generation = 3;
     repeated TDDiskId PersistentBufferIds = 4;
@@ -258,7 +231,7 @@ message TEvReadThenWritePersistentBuffers {
 }
 
 message TEvWritePersistentBuffers {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
@@ -283,7 +256,7 @@ message TEvWritePersistentBuffersResult {
 }
 
 message TEvReadPersistentBuffer {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TReadInstruction Instruction = 4;
@@ -333,7 +306,7 @@ message TEvSync {
         repeated TSegment Segments = 3;
     }
 
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     repeated TSource Sources = 2;
 }
 
@@ -345,7 +318,7 @@ message TEvSyncResult {
 }
 
 message TEvErasePersistentBuffer {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     reserved 2;
     uint64 Lsn = 3; // Erase all lsns for tablet less than or equal to
     reserved 4;
@@ -359,7 +332,7 @@ message TEvBatchErasePersistentBuffer {
         uint32 Generation = 3;
     }
 
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
     repeated TEraseInfo Erases = 2;
 }
 
@@ -371,7 +344,7 @@ message TEvErasePersistentBufferResult {
 }
 
 message TEvListPersistentBuffer {
-    TRequestCredentials Credentials = 1;
+    TQueryCredentials Credentials = 1;
 }
 
 message TEvListPersistentBufferResult {

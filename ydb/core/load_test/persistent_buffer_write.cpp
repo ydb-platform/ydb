@@ -72,7 +72,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     ui32 DDiskNodeId = 0;
     ui32 DDiskPDiskId = 0;
     ui32 DDiskSlotId = 0;
-    TActorId PersistentBufferServiceId;
+    TActorId DDiskServiceId;
     NDDisk::TQueryCredentials Credentials;
     bool Finished = false;
     bool Connected = false;
@@ -154,9 +154,9 @@ public:
         DDiskNodeId = ddiskId.GetNodeId();
         DDiskPDiskId = ddiskId.GetPDiskId();
         DDiskSlotId = ddiskId.GetDDiskSlotId();
-        PersistentBufferServiceId = MakeBlobStoragePersistentBufferId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
+        DDiskServiceId = MakeBlobStoragePersistentBufferId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
 
-        Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(Tag ? Tag : 1, 1, std::nullopt, 0);
+        Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(Tag ? Tag : 1, 1, std::nullopt);
 
         FillRatio = cmd.GetFillRatio();
         Y_ABORT_UNLESS(FillRatio <= 100, "FillRatio percentage should be less than or equal to 100");
@@ -201,7 +201,7 @@ public:
         Become(&TPersistentBufferWriterLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PersistentBufferWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
-        ctx.Send(PersistentBufferServiceId, new NDDisk::TEvConnect(Credentials));
+        SendRequest(ctx, std::make_unique<NDDisk::TEvConnect>(Credentials));
     }
 
     void Handle(NDDisk::TEvConnectResult::TPtr& ev, const TActorContext& ctx) {
@@ -216,7 +216,6 @@ public:
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
-        Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
 
         PrepareDataAndStart(ctx);
     }
@@ -284,8 +283,8 @@ public:
         } else if (!DisconnectSent) {
             DisconnectSent = true;
             auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-            Credentials.SerializeForRequest(ev->Record.MutableCredentials());
-            ctx.Send(PersistentBufferServiceId, ev.release());
+            Credentials.Serialize(ev->Record.MutableCredentials());
+            SendRequest(ctx, std::move(ev));
         }
     }
 
@@ -353,9 +352,8 @@ public:
                 auto creds = NDDisk::TQueryCredentials::ForInternal(
                     Credentials.TabletId,
                     Credentials.Generation,
-                    Credentials.DDiskInstanceGuid,
-                    Credentials.DirectBlockGroupIndex);
-                creds.SerializeForRequest(msg->Record.MutableCredentials());
+                    Credentials.DDiskInstanceGuid);
+                creds.Serialize(msg->Record.MutableCredentials());
                 msg->Record.SetLsn(it.first);
                 msg->Record.SetGeneration(Credentials.Generation);
                 SendRequest(ctx, std::move(msg), requestIdx);
@@ -547,7 +545,7 @@ public:
 
     template<typename TRequest>
     void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request, ui64 cookie = 0) {
-        ctx.Send(PersistentBufferServiceId, request.release(), 0, cookie);
+        ctx.Send(DDiskServiceId, request.release(), 0, cookie);
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {

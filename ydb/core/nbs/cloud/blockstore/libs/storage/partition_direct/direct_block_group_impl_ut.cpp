@@ -1397,7 +1397,6 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
 
     Y_UNIT_TEST_F(ShouldSeqNoOnInitialConnects, TDBGFixture)
     {
-        constexpr ui64 DirectBlockGroupIndex = 42;
         auto executor = MakeExecutor();
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
@@ -1405,10 +1404,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         const auto& ddisks = transportPtr->GetDDiskIds();
         const auto& pbuffers = transportPtr->GetPBufferIds();
 
-        auto dbg = MakeDirectBlockGroup(
-            executor,
-            std::move(transport),
-            DirectBlockGroupIndex);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
         auto initialReady = RunAndGetInitialReady(dbg);
 
         WaitReady(initialReady);
@@ -1420,9 +1416,6 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
                 ddiskId);
             UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
             UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
-            UNIT_ASSERT_VALUES_EQUAL(
-                DirectBlockGroupIndex,
-                credentials[0].DirectBlockGroupIndex);
         }
 
         // PBuffers
@@ -1432,41 +1425,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
                 pbufferId);
             UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
             UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
-            UNIT_ASSERT_VALUES_EQUAL(
-                DirectBlockGroupIndex,
-                credentials[0].DirectBlockGroupIndex);
         }
-    }
-
-    Y_UNIT_TEST_F(ShouldStoreConnectionTokenFromConnectResult, TDBGFixture)
-    {
-        auto executor = MakeExecutor();
-        auto transport = std::make_unique<TStorageTransportMock>();
-        const auto& ddisks = transport->GetDDiskIds();
-        auto pendingConnect =
-            transport->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
-
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-        RunAndGetInitialReady(dbg);
-        DrainExecutor(executor);
-
-        const NDDisk::TConnectionToken expectedToken{
-            0x0123'4567'89ab'cdef,
-            0xfedc'ba98'7654'3210};
-        auto result = TStorageTransportMock::MakeConnectResult();
-        expectedToken.Serialize(result.MutableConnectionToken());
-        pendingConnect.SetValue(std::move(result));
-        DrainExecutor(executor);
-
-        const auto actualToken = GetConnectionToken(
-            executor,
-            dbg,
-            EConnectionType::DDisk,
-            0,
-            WaitTimeout);
-        UNIT_ASSERT(actualToken);
-        UNIT_ASSERT_VALUES_EQUAL(expectedToken.Low, actualToken->Low);
-        UNIT_ASSERT_VALUES_EQUAL(expectedToken.High, actualToken->High);
     }
 
     // After the first Connect every DDisk has seq_no=1 and credentials carry
@@ -1520,7 +1479,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
     }
 
     // A stale connect response (seq_no <= ConfirmedSessionSeqNo) is ignored and
-    // does not roll back the confirmed seq_no or connection token.
+    // does not roll back the confirmed seq_no.
     Y_UNIT_TEST_F(ShouldIgnoreStaleConnectResponse, TDBGFixture)
     {
         auto executor = MakeExecutor();
@@ -1546,44 +1505,19 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
             ddisks[0].NodeId);
         DrainExecutor(executor);
 
-        const NDDisk::TConnectionToken firstToken{1, 11};
-        const NDDisk::TConnectionToken secondToken{2, 22};
-
         // Resolve the new (seq_no=2) connect first.
-        auto secondResult = TStorageTransportMock::MakeConnectResult();
-        secondToken.Serialize(secondResult.MutableConnectionToken());
-        secondConnect.SetValue(std::move(secondResult));
+        secondConnect.SetValue(TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
 
         auto afterNew = GetDDiskSessionSeqNo(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(2, afterNew);
-        auto tokenAfterNew = GetConnectionToken(
-            executor,
-            dbg,
-            EConnectionType::DDisk,
-            0,
-            WaitTimeout);
-        UNIT_ASSERT(tokenAfterNew);
-        UNIT_ASSERT_VALUES_EQUAL(secondToken.Low, tokenAfterNew->Low);
-        UNIT_ASSERT_VALUES_EQUAL(secondToken.High, tokenAfterNew->High);
 
         // resolve the stale connect. It must be ignored.
-        auto firstResult = TStorageTransportMock::MakeConnectResult();
-        firstToken.Serialize(firstResult.MutableConnectionToken());
-        firstConnect.SetValue(std::move(firstResult));
+        firstConnect.SetValue(TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
 
         auto afterStale = GetDDiskSessionSeqNo(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(2, afterStale);
-        auto tokenAfterStale = GetConnectionToken(
-            executor,
-            dbg,
-            EConnectionType::DDisk,
-            0,
-            WaitTimeout);
-        UNIT_ASSERT(tokenAfterStale);
-        UNIT_ASSERT_VALUES_EQUAL(secondToken.Low, tokenAfterStale->Low);
-        UNIT_ASSERT_VALUES_EQUAL(secondToken.High, tokenAfterStale->High);
     }
 }
 

@@ -99,10 +99,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestEmptyRestart({.ForcePDiskFallback = true});
     }
 
-    Y_UNIT_TEST(ConnectionTokenAcrossRestart) {
-        TestConnectionTokenAcrossRestart();
-    }
-
     Y_UNIT_TEST(RestartAfterCutLog_Uring) {
         TestRestartAfterCutLog({});
     }

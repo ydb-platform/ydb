@@ -258,21 +258,32 @@ namespace NKikimr::NBlobDepot {
         }
 
         void CreatePipe() {
+            Y_ABORT_UNLESS(!PipeId);
             PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId,
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
         }
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-            if (ev->Get()->Status == NKikimrProto::OK) {
+            auto& msg = *ev->Get();
+            if (msg.ClientId != PipeId) {
+                return;
+            }
+            if (msg.Status == NKikimrProto::OK) {
                 PipeConnected = true;
             } else {
                 PipeConnected = false;
+                PipeId = {};
                 CreatePipe();
             }
         }
 
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr /*ev*/) {
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
+            if (ev->Get()->ClientId != PipeId) {
+                return;
+            }
+
             PipeConnected = false;
+            PipeId = {};
             CreatePipe();
         }
 

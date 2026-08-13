@@ -287,7 +287,7 @@ TAsyncStatus TExternalDataSourceManager::CreateExternalDataSource(const NYql::TC
     if (auto status = PrepareCreateExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
+    return ExecuteSchemeRequestWithIamDelegation(schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
 }
 
 TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
@@ -295,7 +295,7 @@ TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(const NYql::TDro
     if (auto status = PrepareDropExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kDropExternalDataSource);
+    return ExecuteSchemeRequestWithIamDelegation(schemeOperation.GetDropExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kDropExternalDataSource);
 }
 
 //// Deferred modification
@@ -367,9 +367,9 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
     try {
         switch (schemeOperation.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource:
-                return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context, schemeOperation.GetOperationCase());
+                return ExecuteSchemeRequestWithIamDelegation(schemeOperation.GetCreateExternalDataSource(), context, schemeOperation.GetOperationCase());
             case NKqpProto::TKqpSchemeOperation::kDropExternalDataSource:
-                return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context, schemeOperation.GetOperationCase());
+                return ExecuteSchemeRequestWithIamDelegation(schemeOperation.GetDropExternalDataSource(), context, schemeOperation.GetOperationCase());
             default:
                 return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Execution of prepared operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
         }
@@ -428,11 +428,28 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
 }
 } // namespace {
 
-TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
-    if (NExternalDataSource::IsIamDelegationEnabled(context.GetActorSystem())) {
-        return NExternalDataSource::ExecuteIamDelegationDdl(schemeTx, context, operationCase);
+TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequestWithIamDelegation(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+    const auto route = NExternalDataSource::SelectIamDelegationDdlRoute(
+        NExternalDataSource::IsIamDelegationEnabled(context.GetActorSystem()),
+        schemeTx,
+        operationCase);
+    if (route == NExternalDataSource::EIamDelegationDdlRoute::IamOperation) {
+        return NExternalDataSource::ExecuteIamDelegationDdl(
+            schemeTx, context, operationCase);
     }
+    if (route == NExternalDataSource::EIamDelegationDdlRoute::LegacyWithIamCleanup) {
+        return NExternalDataSource::ExecuteLegacyDdlWithIamCleanup(
+            schemeTx,
+            context,
+            operationCase,
+            [schemeTx, operationCase](const TExternalModificationContext& effectiveContext) {
+                return ExecuteSchemeRequest(schemeTx, effectiveContext, operationCase);
+            });
+    }
+    return ExecuteSchemeRequest(schemeTx, context, operationCase);
+}
 
+TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {

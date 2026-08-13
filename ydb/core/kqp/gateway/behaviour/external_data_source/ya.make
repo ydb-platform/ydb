@@ -14,7 +14,6 @@ PEERDIR(
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/provider
     ydb/core/kqp/gateway/utils
-    ydb/core/kqp/provider
 
     ydb/library/conclusion
     ydb/library/actors/async

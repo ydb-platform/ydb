@@ -218,6 +218,50 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT(!flags.GetEnableExternalDataSourceIamDelegation());
     }
 
+    Y_UNIT_TEST(DelegationRouteLeavesNonIamCreateOnLegacyPath) {
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.MutableCreateExternalDataSource()->MutableAuth()->MutableNone();
+
+        UNIT_ASSERT(SelectIamDelegationDdlRoute(
+            true,
+            schemeTx,
+            NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) ==
+            EIamDelegationDdlRoute::Legacy);
+    }
+
+    Y_UNIT_TEST(DelegationRouteSelectsOnlyIamCreate) {
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.MutableCreateExternalDataSource()->MutableAuth()->MutableIam();
+
+        UNIT_ASSERT(SelectIamDelegationDdlRoute(
+            true,
+            schemeTx,
+            NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) ==
+            EIamDelegationDdlRoute::IamOperation);
+        UNIT_ASSERT(SelectIamDelegationDdlRoute(
+            false,
+            schemeTx,
+            NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) ==
+            EIamDelegationDdlRoute::Legacy);
+    }
+
+    Y_UNIT_TEST(DelegationRouteGuardsOperationsThatMayRemoveIam) {
+        NKikimrSchemeOp::TModifyScheme replacement;
+        replacement.SetReplaceIfExists(true);
+        replacement.MutableCreateExternalDataSource()->MutableAuth()->MutableBasic();
+        UNIT_ASSERT(SelectIamDelegationDdlRoute(
+            true,
+            replacement,
+            NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) ==
+            EIamDelegationDdlRoute::LegacyWithIamCleanup);
+
+        NKikimrSchemeOp::TModifyScheme drop;
+        UNIT_ASSERT(SelectIamDelegationDdlRoute(
+            true,
+            drop,
+            NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) ==
+            EIamDelegationDdlRoute::LegacyWithIamCleanup);
+    }
     Y_UNIT_TEST(OnlyConfirmedMissingObjectCanBeIgnored) {
         using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
         UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::RootUnknown, false) ==

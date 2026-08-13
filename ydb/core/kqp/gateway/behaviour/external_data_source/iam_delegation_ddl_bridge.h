@@ -32,15 +32,13 @@ NActors::async<TIamObjectDescription> DescribeIamObject(
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);
 
-NActors::async<TExternalDataSourceManager::TYqlConclusionStatus>
-ValidateExternalDatasourceSecrets(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-    const TExternalDataSourceManager::TExternalModificationContext& context,
-    const NActors::TActorId& replyTo);
-
 NActors::async<TExternalDataSourceManager::TYqlConclusionStatus> ExecuteIamSchemeRequest(
     const NKikimrSchemeOp::TModifyScheme& schemeTx,
     const TExternalDataSourceManager::TExternalModificationContext& context,
+    const NActors::TActorId& replyTo);
+
+NActors::async<TExternalDataSourceManager::TYqlConclusionStatus> AwaitLegacyDdl(
+    TExternalDataSourceManager::TAsyncStatus legacyDdl,
     const NActors::TActorId& replyTo);
 
 } // namespace NKikimr::NKqp::NExternalDataSource

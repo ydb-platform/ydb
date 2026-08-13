@@ -29,7 +29,6 @@ struct TEvIamDelegationDdlBridge {
     enum EEv {
         EvIamObject = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCloudId,
-        EvSecrets,
         EvSchemeRequest,
     };
 
@@ -49,14 +48,6 @@ struct TEvIamDelegationDdlBridge {
         TCloudIdDescription Description;
     };
 
-    struct TEvSecrets : NActors::TEventLocal<TEvSecrets, EvSecrets> {
-        explicit TEvSecrets(TStatus status)
-            : Status(std::move(status))
-        {}
-
-        TStatus Status;
-    };
-
     struct TEvSchemeRequest : NActors::TEventLocal<TEvSchemeRequest, EvSchemeRequest> {
         explicit TEvSchemeRequest(TStatus status)
             : Status(std::move(status))
@@ -68,8 +59,7 @@ struct TEvIamDelegationDdlBridge {
 
 constexpr ui64 IamObjectCookie = 101;
 constexpr ui64 CloudIdCookie = 102;
-constexpr ui64 SecretsCookie = 103;
-constexpr ui64 SchemeRequestCookie = 104;
+constexpr ui64 SchemeRequestCookie = 103;
 
 NThreading::TFuture<TCloudIdDescription> StartDatabaseCloudIdLookup(const TContext& context) {
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
@@ -229,40 +219,11 @@ NActors::async<TIamObjectDescription> DescribeIamObject(
     co_return std::move(event->Get()->Description);
 }
 
-NActors::async<TStatus> ValidateExternalDatasourceSecrets(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-    const TContext& context,
+NActors::async<TStatus> AwaitLegacyDdl(
+    TExternalDataSourceManager::TAsyncStatus legacyDdl,
     const NActors::TActorId& replyTo)
 {
-    const auto& userToken = context.GetUserToken();
-    DescribeExternalDataSourceSecrets(
-        description.GetAuth(),
-        userToken ? new NACLib::TUserToken(*userToken) : nullptr,
-        context.GetDatabase(),
-        context.GetActorSystem()).Subscribe(
-            [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
-                const auto& value = result.GetValue();
-                TStatus status = value.Status == Ydb::StatusIds::SUCCESS
-                    ? TStatus::Success()
-                    : TStatus::Fail(
-                        NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());
-                actorSystem->Send(
-                    replyTo,
-                    new TEvIamDelegationDdlBridge::TEvSecrets(std::move(status)),
-                    0,
-                    SecretsCookie);
-            });
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvSecrets>(SecretsCookie);
-    co_return std::move(event->Get()->Status);
-}
-
-NActors::async<TStatus> ExecuteIamSchemeRequest(
-    const NKikimrSchemeOp::TModifyScheme& schemeTx,
-    const TContext& context,
-    const NActors::TActorId& replyTo)
-{
-    SendSchemeRequest(schemeTx, context).Subscribe(
+    legacyDdl.Subscribe(
         [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
             actorSystem->Send(
                 replyTo,
@@ -273,6 +234,14 @@ NActors::async<TStatus> ExecuteIamSchemeRequest(
     const auto event = co_await NActors::ActorWaitForEvent<
         TEvIamDelegationDdlBridge::TEvSchemeRequest>(SchemeRequestCookie);
     co_return std::move(event->Get()->Status);
+}
+
+NActors::async<TStatus> ExecuteIamSchemeRequest(
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    const TContext& context,
+    const NActors::TActorId& replyTo)
+{
+    co_return co_await AwaitLegacyDdl(SendSchemeRequest(schemeTx, context), replyTo);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

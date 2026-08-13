@@ -208,8 +208,10 @@ public:
     TDropIamDelegationDdlActor(
         NKikimrSchemeOp::TModifyScheme schemeTx,
         TContext context,
+        TLegacyDdlExecutor executeLegacyDdl,
         NThreading::TPromise<TStatus> promise)
         : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+        , ExecuteLegacyDdl(std::move(executeLegacyDdl))
     {}
 
     void Bootstrap() {
@@ -239,8 +241,8 @@ private:
             }
         }
 
-        const auto schemeStatus = co_await ExecuteIamSchemeRequest(
-            SchemeTx, Context, SelfId());
+        const auto schemeStatus = co_await AwaitLegacyDdl(
+            ExecuteLegacyDdl(Context), SelfId());
         if (!schemeStatus.IsFail() && !described.NotFound &&
             IsManagedIamDelegation(described.Delegation))
         {
@@ -252,23 +254,27 @@ private:
     STRICT_STFUNC(StateWork,
         hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
     )
+
+    TLegacyDdlExecutor ExecuteLegacyDdl;
 };
 
-class TCreateOrAlterIamDelegationDdlActor final
-    : public TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>
+class TReplaceIamWithNonIamDdlActor final
+    : public TIamDelegationDdlActorBase<TReplaceIamWithNonIamDdlActor>
 {
-    using TBase = TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>;
+    using TBase = TIamDelegationDdlActorBase<TReplaceIamWithNonIamDdlActor>;
 
 public:
-    TCreateOrAlterIamDelegationDdlActor(
+    TReplaceIamWithNonIamDdlActor(
         NKikimrSchemeOp::TModifyScheme schemeTx,
         TContext context,
+        TLegacyDdlExecutor executeLegacyDdl,
         NThreading::TPromise<TStatus> promise)
         : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+        , ExecuteLegacyDdl(std::move(executeLegacyDdl))
     {}
 
     void Bootstrap() {
-        Become(&TCreateOrAlterIamDelegationDdlActor::StateWork);
+        Become(&TReplaceIamWithNonIamDdlActor::StateWork);
         Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
     }
 
@@ -278,48 +284,100 @@ private:
     }
 
     NActors::async<void> Execute() {
-        TIamObjectDescription previous;
-        const bool hasIam = SchemeTx.GetCreateExternalDataSource().GetAuth().HasIam();
-        if (hasIam) {
-            if (!AppData(Context.GetActorSystem())
-                    ->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam())
-            {
-                Finish(TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
-                    "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
-                co_return;
-            }
+        const TString path = TStringBuilder()
+            << SchemeTx.GetWorkingDir() << '/'
+            << SchemeTx.GetCreateExternalDataSource().GetName();
+        auto previous = co_await DescribeIamObject(path, Context, SelfId());
+        if (previous.Status.IsFail()) {
+            Finish(std::move(previous.Status));
+            co_return;
+        }
+
+        if (IsManagedIamDelegation(previous.Delegation)) {
             auto status = ValidateIamOperationUser(Context);
             if (status.IsFail()) {
                 Finish(std::move(status));
                 co_return;
             }
-            if (SchemeTx.GetCreateExternalDataSource().GetSourceType() !=
-                ToString(NYql::EDatabaseType::Ydb))
-            {
-                Finish(TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                    "AUTH_METHOD=IAM is supported only for SOURCE_TYPE=Ydb"));
-                co_return;
-            }
-            if (IsResolveResourceIdNeeded(SchemeTx)) {
-                auto cloud = co_await DescribeDatabaseCloudId(Context, SelfId());
-                if (cloud.Status.IsFail()) {
-                    Finish(std::move(cloud.Status));
-                    co_return;
-                }
-                SchemeTx.MutableCreateExternalDataSource()
-                    ->MutableAuth()->MutableIam()->SetResourceId(cloud.CloudId);
-            }
-        } else {
-            const auto status = co_await ValidateExternalDatasourceSecrets(
-                SchemeTx.GetCreateExternalDataSource(), Context, SelfId());
-            if (status.IsFail()) {
-                Finish(status);
-                co_return;
-            }
         }
 
+        const auto schemeStatus = co_await AwaitLegacyDdl(
+            ExecuteLegacyDdl(Context), SelfId());
+        if (!schemeStatus.IsFail() && IsManagedIamDelegation(previous.Delegation)) {
+            co_await RevokeDelegation(previous.Delegation);
+        }
+        Finish(schemeStatus);
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
+    )
+
+    TLegacyDdlExecutor ExecuteLegacyDdl;
+};
+
+class TCreateOrReplaceIamDelegationDdlActor final
+    : public TIamDelegationDdlActorBase<TCreateOrReplaceIamDelegationDdlActor>
+{
+    using TBase = TIamDelegationDdlActorBase<TCreateOrReplaceIamDelegationDdlActor>;
+
+public:
+    TCreateOrReplaceIamDelegationDdlActor(
+        NKikimrSchemeOp::TModifyScheme schemeTx,
+        TContext context,
+        NThreading::TPromise<TStatus> promise)
+        : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+    {}
+
+    void Bootstrap() {
+        Become(&TCreateOrReplaceIamDelegationDdlActor::StateWork);
+        Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
+    }
+
+private:
+    void HandleStart(TEvIamDelegationDdl::TEvStart::TPtr) {
+        co_await Execute();
+    }
+
+    NActors::async<void> Execute() {
+        if (!SchemeTx.GetCreateExternalDataSource().GetAuth().HasIam()) {
+            Finish(TStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                "IAM delegation actor received a non-IAM external data source"));
+            co_return;
+        }
+        if (!AppData(Context.GetActorSystem())
+                ->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam())
+        {
+            Finish(TStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
+                "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+            co_return;
+        }
+        auto status = ValidateIamOperationUser(Context);
+        if (status.IsFail()) {
+            Finish(std::move(status));
+            co_return;
+        }
+        if (SchemeTx.GetCreateExternalDataSource().GetSourceType() !=
+            ToString(NYql::EDatabaseType::Ydb))
+        {
+            Finish(TStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                "AUTH_METHOD=IAM is supported only for SOURCE_TYPE=Ydb"));
+            co_return;
+        }
+        if (IsResolveResourceIdNeeded(SchemeTx)) {
+            auto cloud = co_await DescribeDatabaseCloudId(Context, SelfId());
+            if (cloud.Status.IsFail()) {
+                Finish(std::move(cloud.Status));
+                co_return;
+            }
+            SchemeTx.MutableCreateExternalDataSource()
+                ->MutableAuth()->MutableIam()->SetResourceId(cloud.CloudId);
+        }
+
+        TIamObjectDescription previous;
         if (SchemeTx.GetReplaceIfExists()) {
             const TString path = TStringBuilder()
                 << SchemeTx.GetWorkingDir() << '/'
@@ -329,23 +387,6 @@ private:
                 Finish(std::move(previous.Status));
                 co_return;
             }
-        }
-
-        if (!hasIam) {
-            if (IsManagedIamDelegation(previous.Delegation)) {
-                auto status = ValidateIamOperationUser(Context);
-                if (status.IsFail()) {
-                    Finish(std::move(status));
-                    co_return;
-                }
-            }
-            const auto schemeStatus = co_await ExecuteIamSchemeRequest(
-                SchemeTx, Context, SelfId());
-            if (!schemeStatus.IsFail() && IsManagedIamDelegation(previous.Delegation)) {
-                co_await RevokeDelegation(previous.Delegation);
-            }
-            Finish(schemeStatus);
-            co_return;
         }
 
         const auto& iam = SchemeTx.GetCreateExternalDataSource().GetAuth().GetIam();
@@ -384,6 +425,28 @@ bool IsIamDelegationEnabled(NActors::TActorSystem* actorSystem) {
         AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceIamDelegation();
 }
 
+EIamDelegationDdlRoute SelectIamDelegationDdlRoute(
+    bool delegationEnabled,
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    NKqpProto::TKqpSchemeOperation::OperationCase operationCase)
+{
+    if (!delegationEnabled) {
+        return EIamDelegationDdlRoute::Legacy;
+    }
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        if (schemeTx.GetCreateExternalDataSource().GetAuth().HasIam()) {
+            return EIamDelegationDdlRoute::IamOperation;
+        }
+        return schemeTx.GetReplaceIfExists()
+            ? EIamDelegationDdlRoute::LegacyWithIamCleanup
+            : EIamDelegationDdlRoute::Legacy;
+    }
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+        return EIamDelegationDdlRoute::LegacyWithIamCleanup;
+    }
+    return EIamDelegationDdlRoute::Legacy;
+}
+
 TStatus PrepareIamDelegation(
     NKikimrSchemeOp::TExternalDataSourceDescription& description,
     TStringBuf name)
@@ -404,13 +467,36 @@ NActors::IActor* CreateIamDelegationDdlActor(
     NKqpProto::TKqpSchemeOperation::OperationCase operationCase,
     NThreading::TPromise<TStatus> promise)
 {
-    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
-        return new TDropIamDelegationDdlActor(
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        return new TCreateOrReplaceIamDelegationDdlActor(
             std::move(schemeTx), std::move(context), std::move(promise));
     }
-    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        return new TCreateOrAlterIamDelegationDdlActor(
-            std::move(schemeTx), std::move(context), std::move(promise));
+    return nullptr;
+}
+
+NActors::IActor* CreateLegacyDdlWithIamCleanupActor(
+    NKikimrSchemeOp::TModifyScheme schemeTx,
+    TContext context,
+    NKqpProto::TKqpSchemeOperation::OperationCase operationCase,
+    TLegacyDdlExecutor executeLegacyDdl,
+    NThreading::TPromise<TStatus> promise)
+{
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+        return new TDropIamDelegationDdlActor(
+            std::move(schemeTx),
+            std::move(context),
+            std::move(executeLegacyDdl),
+            std::move(promise));
+    }
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource &&
+        schemeTx.GetReplaceIfExists() &&
+        !schemeTx.GetCreateExternalDataSource().GetAuth().HasIam())
+    {
+        return new TReplaceIamWithNonIamDdlActor(
+            std::move(schemeTx),
+            std::move(context),
+            std::move(executeLegacyDdl),
+            std::move(promise));
     }
     return nullptr;
 }

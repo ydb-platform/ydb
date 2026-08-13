@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     iam_delegation.cpp
     iam_delegation_ddl.cpp
+    iam_delegation_ddl_bridge.cpp
+    iam_delegation_ddl_runner.cpp
     manager.cpp
     GLOBAL behaviour.cpp
 )
@@ -10,6 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors
+    ydb/core/kqp/provider
     ydb/core/kqp/gateway/utils
     ydb/core/kqp/provider
 

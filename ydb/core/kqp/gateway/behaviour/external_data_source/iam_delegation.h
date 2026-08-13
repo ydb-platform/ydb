@@ -1,8 +1,9 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/service_control_service.pb.h>
-#include <library/cpp/threading/future/future.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NKqp::NExternalDataSource {
 
@@ -54,18 +55,5 @@ EDelegationCleanup SelectCleanupAfterSchemeRequest(
     bool schemeSuccess,
     const TIamDelegation& previous,
     const TIamDelegation& staged);
-
-NThreading::TFuture<TIamDelegationResult> SetupIamDelegation(
-    const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation,
-    const TString& subjectId,
-    const TString& operationToken,
-    NActors::TActorSystem* actorSystem);
-
-NThreading::TFuture<TIamDelegationResult> RevokeIamDelegation(
-    const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation,
-    const TString& operationToken,
-    NActors::TActorSystem* actorSystem);
 
 } // namespace NKikimr::NKqp::NExternalDataSource

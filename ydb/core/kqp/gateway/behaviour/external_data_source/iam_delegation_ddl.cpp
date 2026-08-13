@@ -1,23 +1,19 @@
 #include "iam_delegation_ddl.h"
 
 #include "iam_delegation.h"
-#include "iam_object_lookup.h"
+#include "iam_delegation_ddl_actor.h"
+#include "iam_delegation_ddl_bridge.h"
 
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
-#include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/async/async.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/ycloud/api/service_control.h>
+#include <ydb/library/ycloud/impl/service_control.h>
 
 #include <util/generic/guid.h>
 
@@ -26,138 +22,6 @@ namespace {
 
 using TContext = TExternalDataSourceManager::TExternalModificationContext;
 using TStatus = TExternalDataSourceManager::TYqlConclusionStatus;
-using TAsyncStatus = TExternalDataSourceManager::TAsyncStatus;
-
-struct TIamObjectDescription : NYql::IKikimrGateway::TGenericResult {
-    TStatus Status = TStatus::Success();
-    bool NotFound = false;
-    TIamDelegation Delegation;
-};
-
-struct TCloudIdDescription : NYql::IKikimrGateway::TGenericResult {
-    TStatus Status = TStatus::Success();
-    TString CloudId;
-};
-
-NThreading::TFuture<TCloudIdDescription> DescribeDatabaseCloudId(const TContext& context) {
-    using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
-    using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
-
-    auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    auto& entry = navigate->ResultSet.emplace_back();
-    entry.Path = NKikimr::SplitPath(context.GetDatabase());
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-    navigate->DatabaseName = context.GetDatabase();
-    if (context.GetUserToken()) {
-        navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
-    }
-
-    auto promise = NThreading::NewPromise<TCloudIdDescription>();
-    auto future = promise.GetFuture();
-    context.GetActorSystem()->Register(new TActorRequestHandler<TRequest, TResponse, TCloudIdDescription>(
-        MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
-        [](NThreading::TPromise<TCloudIdDescription> promise, TResponse&& response) {
-            TCloudIdDescription result;
-            const auto& request = *response.Request;
-            if (request.ErrorCount || request.ResultSet.size() != 1) {
-                result.Status = TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    "Cannot describe database for IAM delegation");
-            } else if (const auto it = request.ResultSet.front().Attributes.find("cloud_id");
-                       it != request.ResultSet.front().Attributes.end() && !it->second.empty())
-            {
-                result.CloudId = it->second;
-            } else {
-                result.Status = TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    "Database has no cloud_id attribute required by AUTH_METHOD=IAM");
-            }
-            promise.SetValue(std::move(result));
-        }));
-    return future;
-}
-
-NThreading::TFuture<TIamObjectDescription> DescribeIamObject(
-    const TString& path,
-    const TContext& context)
-{
-    using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
-    using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
-
-    auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    auto& entry = navigate->ResultSet.emplace_back();
-    entry.Path = NKikimr::SplitPath(path);
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
-    entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
-    navigate->DatabaseName = context.GetDatabase();
-    if (context.GetUserToken()) {
-        navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
-    }
-
-    auto promise = NThreading::NewPromise<TIamObjectDescription>();
-    auto future = promise.GetFuture();
-    context.GetActorSystem()->Register(new TActorRequestHandler<TRequest, TResponse, TIamObjectDescription>(
-        MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
-        [](NThreading::TPromise<TIamObjectDescription> promise, TResponse&& response) {
-            TIamObjectDescription result;
-            const auto& request = *response.Request;
-            if (request.ResultSet.size() == 1) {
-                const auto& entry = request.ResultSet.front();
-                if (ClassifyIamObjectLookup(
-                        entry.Status, static_cast<bool>(entry.ExternalDataSourceInfo)) ==
-                    EIamObjectLookupResult::NotFound)
-                {
-                    result.NotFound = true;
-                    promise.SetValue(std::move(result));
-                    return;
-                }
-            }
-            if (request.ErrorCount || request.ResultSet.size() != 1 ||
-                request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ||
-                !request.ResultSet.front().ExternalDataSourceInfo)
-            {
-                result.Status = TStatus::Fail(
-                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    "Cannot describe external data source for IAM delegation");
-                promise.SetValue(std::move(result));
-                return;
-            }
-            const auto& description = request.ResultSet.front().ExternalDataSourceInfo->Description;
-            if (!description.GetAuth().HasIam()) {
-                promise.SetValue(std::move(result));
-                return;
-            }
-            const auto& iam = description.GetAuth().GetIam();
-            if (!iam.HasDelegationReferrerId()) {
-                promise.SetValue(std::move(result));
-                return;
-            }
-            result.Delegation.ResourceId = iam.GetResourceId();
-            result.Delegation.ServiceAccountId = iam.GetServiceAccountId();
-            result.Delegation.ReferrerId = iam.GetDelegationReferrerId();
-            promise.SetValue(std::move(result));
-        }));
-    return future;
-}
-
-TAsyncStatus ValidateExternalDatasourceSecrets(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-    const TContext& context)
-{
-    const auto& userToken = context.GetUserToken();
-    return DescribeExternalDataSourceSecrets(
-        description.GetAuth(),
-        userToken ? new NACLib::TUserToken(*userToken) : nullptr,
-        context.GetDatabase(),
-        context.GetActorSystem()).Apply([](const auto& future) {
-            const auto& value = future.GetValue();
-            if (value.Status != Ydb::StatusIds::SUCCESS) {
-                return TStatus::Fail(
-                    NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());
-            }
-            return TStatus::Success();
-        });
-}
 
 bool IsResolveResourceIdNeeded(const NKikimrSchemeOp::TModifyScheme& schemeTx) {
     return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() ==
@@ -182,13 +46,14 @@ TString GetIamSubject(const NACLib::TUserToken& token) {
 
 TString GetIamOperationToken(const TContext& context) {
     const auto& userToken = context.GetUserToken();
-    return userToken ? userToken->GetSerializedToken() : TString{};
+    return userToken ? userToken->GetOriginalUserToken() : TString{};
 }
 
 TStatus ValidateIamOperationUser(const TContext& context) {
     const auto& userToken = context.GetUserToken();
     if (!userToken || !userToken->HasAuthType() ||
         userToken->GetAuthType() != "AccessService" ||
+        userToken->GetOriginalUserToken().empty() ||
         userToken->GetSerializedToken().empty())
     {
         return TStatus::Fail(
@@ -201,41 +66,9 @@ TStatus ValidateIamOperationUser(const TContext& context) {
 struct TEvIamDelegationDdl {
     enum EEv {
         EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvStatus,
-        EvIamObject,
-        EvCloudId,
-        EvDelegation,
     };
 
     struct TEvStart : NActors::TEventLocal<TEvStart, EvStart> {};
-
-    struct TEvStatus : NActors::TEventLocal<TEvStatus, EvStatus> {
-        explicit TEvStatus(TStatus status)
-            : Status(std::move(status))
-        {}
-        TStatus Status;
-    };
-
-    struct TEvIamObject : NActors::TEventLocal<TEvIamObject, EvIamObject> {
-        explicit TEvIamObject(TIamObjectDescription description)
-            : Description(std::move(description))
-        {}
-        TIamObjectDescription Description;
-    };
-
-    struct TEvCloudId : NActors::TEventLocal<TEvCloudId, EvCloudId> {
-        explicit TEvCloudId(TCloudIdDescription description)
-            : Description(std::move(description))
-        {}
-        TCloudIdDescription Description;
-    };
-
-    struct TEvDelegation : NActors::TEventLocal<TEvDelegation, EvDelegation> {
-        explicit TEvDelegation(TIamDelegationResult result)
-            : Result(std::move(result))
-        {}
-        TIamDelegationResult Result;
-    };
 };
 
 template <typename TDerived>
@@ -250,61 +83,56 @@ protected:
         , Promise(std::move(promise))
     {}
 
-    NActors::async<TStatus> AwaitStatus(TAsyncStatus future) {
-        future.Subscribe([
-            actorSystem = TActivationContext::ActorSystem(),
-            self = this->SelfId()](const auto& result) {
-            actorSystem->Send(
-                self, new TEvIamDelegationDdl::TEvStatus(result.GetValue()), 0, StatusCookie);
-        });
-        const auto event = co_await NActors::ActorWaitForEvent<
-            TEvIamDelegationDdl::TEvStatus>(StatusCookie);
-        co_return std::move(event->Get()->Status);
+    NActors::async<TIamDelegationResult> SetupDelegation(
+        const TIamDelegation& delegation)
+    {
+        const TString token = GetIamOperationToken(Context);
+        if (token.empty()) {
+            co_return TIamDelegationResult{false, "user IAM token is empty"};
+        }
+        EnsureServiceControl();
+
+        auto ensure = MakeHolder<NCloud::TEvServiceControl::TEvEnsureEnabledRequest>();
+        ensure->Token = token;
+        ensure->Request = MakeEnsureEnabledRequest(DelegationSettings, delegation);
+        this->Send(ServiceControl, ensure.Release(), 0, EnsureCookie);
+
+        const auto ensureResponse = co_await NActors::ActorWaitForEvent<
+            NCloud::TEvServiceControl::TEvEnsureEnabledResponse>(EnsureCookie);
+        if (auto result = CheckResponse(*ensureResponse->Get(), "EnsureEnabled");
+            !result.Success)
+        {
+            co_return result;
+        }
+
+        auto setup = MakeHolder<NCloud::TEvServiceControl::TEvSetupDelegationRequest>();
+        setup->Token = token;
+        setup->Request = MakeSetupDelegationRequest(
+            DelegationSettings, delegation, GetIamSubject(*Context.GetUserToken()));
+        this->Send(ServiceControl, setup.Release(), 0, DelegationCookie);
+
+        const auto setupResponse = co_await NActors::ActorWaitForEvent<
+            NCloud::TEvServiceControl::TEvSetupDelegationResponse>(DelegationCookie);
+        co_return CheckResponse(*setupResponse->Get(), "SetupDelegation");
     }
 
-    NActors::async<TIamObjectDescription> AwaitIamObject(
-        NThreading::TFuture<TIamObjectDescription> future)
+    NActors::async<TIamDelegationResult> RevokeDelegation(
+        const TIamDelegation& delegation)
     {
-        future.Subscribe([
-            actorSystem = TActivationContext::ActorSystem(),
-            self = this->SelfId()](const auto& result) {
-            actorSystem->Send(
-                self, new TEvIamDelegationDdl::TEvIamObject(result.GetValue()), 0,
-                IamObjectCookie);
-        });
-        const auto event = co_await NActors::ActorWaitForEvent<
-            TEvIamDelegationDdl::TEvIamObject>(IamObjectCookie);
-        co_return std::move(event->Get()->Description);
-    }
+        const TString token = GetIamOperationToken(Context);
+        if (token.empty()) {
+            co_return TIamDelegationResult{false, "user IAM token is empty"};
+        }
+        EnsureServiceControl();
 
-    NActors::async<TCloudIdDescription> AwaitCloudId(
-        NThreading::TFuture<TCloudIdDescription> future)
-    {
-        future.Subscribe([
-            actorSystem = TActivationContext::ActorSystem(),
-            self = this->SelfId()](const auto& result) {
-            actorSystem->Send(
-                self, new TEvIamDelegationDdl::TEvCloudId(result.GetValue()), 0,
-                CloudIdCookie);
-        });
-        const auto event = co_await NActors::ActorWaitForEvent<
-            TEvIamDelegationDdl::TEvCloudId>(CloudIdCookie);
-        co_return std::move(event->Get()->Description);
-    }
+        auto revoke = MakeHolder<NCloud::TEvServiceControl::TEvRevokeDelegationRequest>();
+        revoke->Token = token;
+        revoke->Request = MakeRevokeDelegationRequest(DelegationSettings, delegation);
+        this->Send(ServiceControl, revoke.Release(), 0, DelegationCookie);
 
-    NActors::async<TIamDelegationResult> AwaitDelegation(
-        NThreading::TFuture<TIamDelegationResult> future)
-    {
-        future.Subscribe([
-            actorSystem = TActivationContext::ActorSystem(),
-            self = this->SelfId()](const auto& result) {
-            actorSystem->Send(
-                self, new TEvIamDelegationDdl::TEvDelegation(result.GetValue()), 0,
-                DelegationCookie);
-        });
-        const auto event = co_await NActors::ActorWaitForEvent<
-            TEvIamDelegationDdl::TEvDelegation>(DelegationCookie);
-        co_return std::move(event->Get()->Result);
+        const auto response = co_await NActors::ActorWaitForEvent<
+            NCloud::TEvServiceControl::TEvRevokeDelegationResponse>(DelegationCookie);
+        co_return CheckResponse(*response->Get(), "RevokeDelegation");
     }
 
     TStatus DelegationStatus(const TIamDelegationResult& result) const {
@@ -316,6 +144,9 @@ protected:
 
     void Finish(TStatus status) {
         Promise.SetValue(std::move(status));
+        if (ServiceControl) {
+            this->Send(ServiceControl, new NActors::TEvents::TEvPoisonPill());
+        }
         this->PassAway();
     }
 
@@ -323,12 +154,49 @@ protected:
     const TContext Context;
 
 private:
-    static constexpr ui64 StatusCookie = 1;
-    static constexpr ui64 IamObjectCookie = 2;
-    static constexpr ui64 CloudIdCookie = 3;
-    static constexpr ui64 DelegationCookie = 4;
+    void EnsureServiceControl() {
+        if (ServiceControl) {
+            return;
+        }
+        NCloud::TServiceControlSettings settings;
+        settings.Endpoint = DelegationSettings.Endpoint;
+        settings.EnableSsl = DelegationSettings.EnableSsl;
+        settings.RequestTimeoutMs = DelegationSettings.Timeout.MilliSeconds();
+        ServiceControl = this->Register(NCloud::CreateServiceControl(settings));
+    }
+
+    template <typename TResponse>
+    TIamDelegationResult CheckResponse(const TResponse& response, TStringBuf method) const {
+        if (!response.Status.Ok()) {
+            return {
+                false,
+                TStringBuilder() << method << " failed: " << response.Status.Msg,
+            };
+        }
+        if (!response.Response.done()) {
+            return {
+                false,
+                TStringBuilder() << method
+                    << " returned an unfinished operation; operation polling is unavailable",
+            };
+        }
+        if (response.Response.has_error()) {
+            return {
+                false,
+                TStringBuilder() << method << " failed: "
+                    << response.Response.error().message(),
+            };
+        }
+        return {true, {}};
+    }
+
+    static constexpr ui64 EnsureCookie = 1;
+    static constexpr ui64 DelegationCookie = 2;
 
     NThreading::TPromise<TStatus> Promise;
+    const TIamDelegationSettings DelegationSettings =
+        GetIamDelegationSettings(Context.GetActorSystem());
+    NActors::TActorId ServiceControl;
 };
 
 class TDropIamDelegationDdlActor final
@@ -342,8 +210,7 @@ public:
         TContext context,
         NThreading::TPromise<TStatus> promise)
         : TBase(std::move(schemeTx), std::move(context), std::move(promise))
-    {
-    }
+    {}
 
     void Bootstrap() {
         Become(&TDropIamDelegationDdlActor::StateWork);
@@ -358,7 +225,7 @@ private:
     NActors::async<void> Execute() {
         const TString path = TStringBuilder()
             << SchemeTx.GetWorkingDir() << '/' << SchemeTx.GetDrop().GetName();
-        auto described = co_await AwaitIamObject(DescribeIamObject(path, Context));
+        auto described = co_await DescribeIamObject(path, Context, SelfId());
         if (described.Status.IsFail()) {
             Finish(std::move(described.Status));
             co_return;
@@ -372,15 +239,12 @@ private:
             }
         }
 
-        const auto schemeStatus = co_await AwaitStatus(SendSchemeRequest(SchemeTx, Context));
+        const auto schemeStatus = co_await ExecuteIamSchemeRequest(
+            SchemeTx, Context, SelfId());
         if (!schemeStatus.IsFail() && !described.NotFound &&
             IsManagedIamDelegation(described.Delegation))
         {
-            co_await AwaitDelegation(RevokeIamDelegation(
-                GetIamDelegationSettings(Context.GetActorSystem()),
-                described.Delegation,
-                GetIamOperationToken(Context),
-                Context.GetActorSystem()));
+            co_await RevokeDelegation(described.Delegation);
         }
         Finish(schemeStatus);
     }
@@ -401,8 +265,7 @@ public:
         TContext context,
         NThreading::TPromise<TStatus> promise)
         : TBase(std::move(schemeTx), std::move(context), std::move(promise))
-    {
-    }
+    {}
 
     void Bootstrap() {
         Become(&TCreateOrAlterIamDelegationDdlActor::StateWork);
@@ -440,7 +303,7 @@ private:
                 co_return;
             }
             if (IsResolveResourceIdNeeded(SchemeTx)) {
-                auto cloud = co_await AwaitCloudId(DescribeDatabaseCloudId(Context));
+                auto cloud = co_await DescribeDatabaseCloudId(Context, SelfId());
                 if (cloud.Status.IsFail()) {
                     Finish(std::move(cloud.Status));
                     co_return;
@@ -449,8 +312,8 @@ private:
                     ->MutableAuth()->MutableIam()->SetResourceId(cloud.CloudId);
             }
         } else {
-            const auto status = co_await AwaitStatus(ValidateExternalDatasourceSecrets(
-                SchemeTx.GetCreateExternalDataSource(), Context));
+            const auto status = co_await ValidateExternalDatasourceSecrets(
+                SchemeTx.GetCreateExternalDataSource(), Context, SelfId());
             if (status.IsFail()) {
                 Finish(status);
                 co_return;
@@ -461,7 +324,7 @@ private:
             const TString path = TStringBuilder()
                 << SchemeTx.GetWorkingDir() << '/'
                 << SchemeTx.GetCreateExternalDataSource().GetName();
-            previous = co_await AwaitIamObject(DescribeIamObject(path, Context));
+            previous = co_await DescribeIamObject(path, Context, SelfId());
             if (previous.Status.IsFail()) {
                 Finish(std::move(previous.Status));
                 co_return;
@@ -476,13 +339,10 @@ private:
                     co_return;
                 }
             }
-            const auto schemeStatus = co_await AwaitStatus(SendSchemeRequest(SchemeTx, Context));
+            const auto schemeStatus = co_await ExecuteIamSchemeRequest(
+                SchemeTx, Context, SelfId());
             if (!schemeStatus.IsFail() && IsManagedIamDelegation(previous.Delegation)) {
-                co_await AwaitDelegation(RevokeIamDelegation(
-                    GetIamDelegationSettings(Context.GetActorSystem()),
-                    previous.Delegation,
-                    GetIamOperationToken(Context),
-                    Context.GetActorSystem()));
+                co_await RevokeDelegation(previous.Delegation);
             }
             Finish(schemeStatus);
             co_return;
@@ -494,32 +354,20 @@ private:
             .ServiceAccountId = iam.GetServiceAccountId(),
             .ReferrerId = iam.GetDelegationReferrerId(),
         };
-        const auto setup = co_await AwaitDelegation(SetupIamDelegation(
-            GetIamDelegationSettings(Context.GetActorSystem()),
-            staged,
-            GetIamSubject(*Context.GetUserToken()),
-            GetIamOperationToken(Context),
-            Context.GetActorSystem()));
+        const auto setup = co_await SetupDelegation(staged);
         if (!setup.Success) {
             Finish(DelegationStatus(setup));
             co_return;
         }
 
-        const auto schemeStatus = co_await AwaitStatus(SendSchemeRequest(SchemeTx, Context));
+        const auto schemeStatus = co_await ExecuteIamSchemeRequest(
+            SchemeTx, Context, SelfId());
         const auto cleanup = SelectCleanupAfterSchemeRequest(
             !schemeStatus.IsFail(), previous.Delegation, staged);
         if (cleanup == EDelegationCleanup::Staged) {
-            co_await AwaitDelegation(RevokeIamDelegation(
-                GetIamDelegationSettings(Context.GetActorSystem()),
-                staged,
-                GetIamOperationToken(Context),
-                Context.GetActorSystem()));
+            co_await RevokeDelegation(staged);
         } else if (cleanup == EDelegationCleanup::Previous) {
-            co_await AwaitDelegation(RevokeIamDelegation(
-                GetIamDelegationSettings(Context.GetActorSystem()),
-                previous.Delegation,
-                GetIamOperationToken(Context),
-                Context.GetActorSystem()));
+            co_await RevokeDelegation(previous.Delegation);
         }
         Finish(schemeStatus);
     }
@@ -550,25 +398,21 @@ TStatus PrepareIamDelegation(
     return TStatus::Success();
 }
 
-TAsyncStatus ExecuteIamDelegationDdl(
-    const NKikimrSchemeOp::TModifyScheme& schemeTx,
-    const TContext& context,
-    NKqpProto::TKqpSchemeOperation::OperationCase operationCase)
+NActors::IActor* CreateIamDelegationDdlActor(
+    NKikimrSchemeOp::TModifyScheme schemeTx,
+    TContext context,
+    NKqpProto::TKqpSchemeOperation::OperationCase operationCase,
+    NThreading::TPromise<TStatus> promise)
 {
-    auto promise = NThreading::NewPromise<TStatus>();
-    auto future = promise.GetFuture();
     if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
-        context.GetActorSystem()->Register(new TDropIamDelegationDdlActor(
-            schemeTx, context, std::move(promise)));
-    } else if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        context.GetActorSystem()->Register(new TCreateOrAlterIamDelegationDdlActor(
-            schemeTx, context, std::move(promise)));
-    } else {
-        promise.SetValue(TStatus::Fail(
-            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-            "Unsupported EXTERNAL_DATA_SOURCE operation"));
+        return new TDropIamDelegationDdlActor(
+            std::move(schemeTx), std::move(context), std::move(promise));
     }
-    return future;
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        return new TCreateOrAlterIamDelegationDdlActor(
+            std::move(schemeTx), std::move(context), std::move(promise));
+    }
+    return nullptr;
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

@@ -85,6 +85,7 @@ jobs:
         PLATFORM_SUFFIX="${{ matrix.target_platform != '' && format('/{0}', matrix.target_platform) || '' }}"
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 --force "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/ydbd" -d
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/config-meta.json" -d
-          echo 'Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
+          upload_path="ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/config-meta.json"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://$upload_path" -d
+          echo "Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}${upload_path}).' >> $GITHUB_STEP_SUMMARY
         fi

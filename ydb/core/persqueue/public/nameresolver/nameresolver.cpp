@@ -283,10 +283,10 @@ TString NavigateDatabaseFor(
     TStringBuf database,
     TStringBuf databaseNorm,
     TStringBuf lbRoot,
-    bool fcc
+    bool isFederation
 ) {
     // Federation account topics live in the account tenant; FCC keeps the request database.
-    if (!fcc) {
+    if (isFederation) {
         // Prefer LbRoot; if unset, request database can be the federation/domain root
         // (e.g. describe account1/topic with Database=/Root and empty LbUserDatabaseRoot).
         const TStringBuf federationRoot = !lbRoot.empty() ? lbRoot : databaseNorm;
@@ -310,10 +310,10 @@ std::expected<TResolvedName, TString> MakeResolved(
     TStringBuf database,
     TStringBuf databaseNorm,
     TStringBuf lbRoot,
-    bool fcc
+    bool isFederation
 ) {
     TResolvedName resolved;
-    resolved.NavigateDatabase = NavigateDatabaseFor(path, database, databaseNorm, lbRoot, fcc);
+    resolved.NavigateDatabase = NavigateDatabaseFor(path, database, databaseNorm, lbRoot, isFederation);
     resolved.Path = std::move(path);
     return resolved;
 }
@@ -327,7 +327,7 @@ std::expected<TResolvedName, TString> ResolveName(
     TStringBuf dc
 ) {
     const auto& pqConfig = AppData()->PQConfig;
-    const bool fcc = pqConfig.GetTopicsAreFirstClassCitizen();
+    const bool isFederation = !pqConfig.GetTopicsAreFirstClassCitizen();
 
     // Absolute paths may contain accidental '//' (e.g. JoinPath({"/Root/PQ/", name})).
     // Canonize those before BasicNameChecks; keep relative '//' rejected as before.
@@ -343,17 +343,17 @@ std::expected<TResolvedName, TString> ResolveName(
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
 
     // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
-    if (!fcc && topicName.EndsWith("/")) {
+    if (isFederation && topicName.EndsWith("/")) {
         return Fail("Invalid topic path or trailing '/'");
     }
 
     // Absolute under PQ root first (more specific than request database).
-    // Only in !FCC for classic PQ leaves (e.g. /Root/PQ/rt3.*). Never strip when the
+    // Only in federation for classic PQ leaves (e.g. /Root/PQ/rt3.*). Never strip when the
     // request database is a proper child of the PQ/domain root — otherwise
     // /Root/test_db/topic with PQ Root=/Root becomes test_db/topic and rejoins as
     // /Root/test_db/test_db/topic.
     bool strippedPqPrefix = false;
-    const bool underPq = !fcc && !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
+    const bool underPq = isFederation && !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
     const bool databaseUnderPq = !databaseNorm.empty()
         && databaseNorm != pqPrefix
         && IsPathPrefix(databaseNorm, pqPrefix);
@@ -367,10 +367,10 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     auto wrap = [&](TString path) {
-        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, fcc);
+        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
 
-    if (fcc) {
+    if (!isFederation) {
         if (!IsLegacyStyleName(topicName)) {
             return wrap(JoinWithDatabase(database, databaseNorm, topicName));
         }

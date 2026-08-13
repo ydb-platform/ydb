@@ -20,17 +20,17 @@ struct TResolvedName {
  * Returns resolved path + navigate database on success, or error reason on failure.
  *
  * NavigateDatabase:
- *   - FCC: request database (absolute)
+ *   - FCC (non-federation): request database (absolute)
  *   - Federation + path under LbRoot/account/...: LbRoot/account
  *   - Otherwise: request database (absolute), or empty if request database is empty
  *
- * First-class citizen (FCC) mode:
+ * First-class citizen (FCC / non-federation) mode:
  *   Converts legacy-style names (rt3.*, short legacy with --/@, or bare name without '/').
  *   Modern paths with '/' are joined with database (full topic path).
  *   Bare names inside a user database under LbRoot stay under that database
  *   (not remapped to LbRoot); explicit legacy still joins via LbRoot.
  *
- * Federation mode (!FCC):
+ * Federation mode (!TopicsAreFirstClassCitizen):
  *   - Root-like database (empty, prefixes PQ Root, or prefixes LbUserDatabaseRoot):
  *     path with '/' is federation account/topic under LbRoot; explicit legacy (rt3/--/@)
  *     also under LbRoot; bare names stay under the request database.
@@ -53,7 +53,7 @@ struct TResolvedName {
  *   // Without localDc/dc (defaults): local path, no -mirrored-from- suffix
  *   ResolveName(db, "rt3.dc1--account--topic")
  *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase=db  // FCC
- *   ResolveName("/Root", "account/topic")  // !FCC
+ *   ResolveName("/Root", "account/topic")  // federation
  *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase="/Root/LbCommunal/account"
  *   ResolveName("/Root/LbCommunal/account", "dir/topic")
  *     -> Path="/Root/LbCommunal/account/dir/topic", NavigateDatabase="/Root/LbCommunal/account"

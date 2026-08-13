@@ -79,7 +79,7 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        // !FCC create still expects the original legacy name so ForFederation can
+        // Federation create still expects the original legacy name so ForFederation can
         // extract DC/producer metadata. ResolveName is only for FCC (modern + legacy → path).
         TString path;
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

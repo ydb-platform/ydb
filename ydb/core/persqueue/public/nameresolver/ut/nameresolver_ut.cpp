@@ -106,7 +106,7 @@ Y_UNIT_TEST_F(FccAbsolutePathNotStrippedByPqRoot, TNameResolverFixture) {
 }
 
 Y_UNIT_TEST_F(FederationUserDbAbsolutePathWithPqRootEqDomain, TNameResolverFixture) {
-    // !FCC + PQ Root=/Root + tenant DB: keep /Root/test_db/topic1 (do not double DB).
+    // Federation + PQ Root=/Root + tenant DB: keep /Root/test_db/topic1 (do not double DB).
     SetFcc(false);
     SetLbRoot("");
     ActorSystemStub.AppData.PQConfig.SetRoot("/Root");

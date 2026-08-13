@@ -105,6 +105,24 @@ Y_UNIT_TEST_F(FederationUserDatabaseRelativePath, TNameResolverFixture) {
         "/Root/LbCommunal/account/topic");
 }
 
+Y_UNIT_TEST_F(FederationUserDatabaseExplicitLegacy, TNameResolverFixture) {
+    SetFcc(false);
+    // Explicit legacy inside a user account DB still resolves via LbRoot.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/LbCommunal/account", "rt3.dc1--other--topic", "dc1")),
+        "/Root/LbCommunal/other/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/LbCommunal/account", "other--topic", "dc1")),
+        "/Root/LbCommunal/other/topic");
+}
+
+Y_UNIT_TEST_F(FederationMirroredFromEmptyClusterRejected, TNameResolverFixture) {
+    SetFcc(false);
+    ExpectError(
+        ResolveName("/Root/LbCommunal/account", "dir/topic-mirrored-from-", "dc1"),
+        "Malformed mirrored topic path - expected to end with valid cluster name. ");
+}
+
 Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account/topic", "dc1", "")),

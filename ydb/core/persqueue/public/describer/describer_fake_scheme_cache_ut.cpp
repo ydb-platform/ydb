@@ -654,6 +654,54 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         }
     }
 
+    Y_UNIT_TEST(MixedBadRequestAndSuccess) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.ResultSet.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/19);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.bad", "rt3.dc1--account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(OnlyBadRequestSkipsSchemeCache) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& /*entry*/) {
+            UNIT_FAIL("scheme cache must not be called when all names fail ResolveName");
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.bad", "rt3.also-bad"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.also-bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+        UNIT_ASSERT(!ev->UsedSyncVersion);
+    }
+
+    Y_UNIT_TEST(ModernPathUnderDatabase) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/dir/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/20);
+        });
+        auto& appData = env.Runtime.GetAppData();
+        appData.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        env.StartDescribe({"dir/topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["dir/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["dir/topic"].RealPath, "/Root/dir/topic");
+    }
+
 }
 
 } // namespace NKikimr::NPQ

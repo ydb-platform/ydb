@@ -75,24 +75,14 @@ bool IsExplicitLegacyName(TStringBuf topic) {
 }
 
 // Prefer LbRoot, else database; empty root leaves modernPath unchanged (no leading '/').
-TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TStringBuf modernPath) {
+TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TString modernPath) {
     if (!lbRoot.empty()) {
         return NormalizePath(lbRoot, modernPath);
     }
     if (!database.empty()) {
         return NormalizePath(database, modernPath);
     }
-    return TString{modernPath};
-}
-
-TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TString&& modernPath) {
-    if (!lbRoot.empty()) {
-        return NormalizePath(lbRoot, modernPath);
-    }
-    if (!database.empty()) {
-        return NormalizePath(database, modernPath);
-    }
-    return std::move(modernPath);
+    return modernPath;
 }
 
 // Append -mirrored-from-<dc> to the leaf topic name when dc != localDc.
@@ -183,11 +173,7 @@ std::expected<bool, TString> IsAlreadyMirroredModernPath(TStringBuf path, TStrin
 
 // Modern path that is not already mirrored: apply mirror suffix when needed.
 // Empty dc and localDc means "local" — no -mirrored-from- suffix (describe without DC).
-std::expected<TString, TString> BuildModernTopicPath(
-    TStringBuf topic,
-    TStringBuf localDc,
-    TStringBuf dc
-) {
+TString BuildModernTopicPath(TStringBuf topic, TStringBuf localDc, TStringBuf dc) {
     TString modernPath{topic};
     const TStringBuf topicDc = !dc.empty() ? dc : localDc;
     if (!topicDc.empty()) {
@@ -298,11 +284,7 @@ std::expected<TString, TString> ResolveName(
             // Keep topic as TStringBuf until the final join — no intermediate copy.
             return NormalizePath(database, ctx.Topic);
         }
-        auto parsed = BuildModernTopicPath(ctx.Topic, localDc, dc);
-        if (!parsed) {
-            return std::unexpected(parsed.error());
-        }
-        return NormalizePath(database, *parsed);
+        return NormalizePath(database, BuildModernTopicPath(ctx.Topic, localDc, dc));
     }
 
     // Root-like database: path with '/' is federation account/topic; otherwise legacy name.
@@ -319,13 +301,9 @@ std::expected<TString, TString> ResolveName(
             return std::unexpected(mirrored.error());
         }
         if (*mirrored) {
-            return JoinWithRoot(lbRootRaw, database, ctx.Topic);
+            return JoinWithRoot(lbRootRaw, database, TString{ctx.Topic});
         }
-        auto parsed = BuildModernTopicPath(ctx.Topic, localDc, dc);
-        if (!parsed) {
-            return std::unexpected(parsed.error());
-        }
-        return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+        return JoinWithRoot(lbRootRaw, database, BuildModernTopicPath(ctx.Topic, localDc, dc));
     }
 
     auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);

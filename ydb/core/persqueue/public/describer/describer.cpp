@@ -7,7 +7,7 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
-#include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 #include <optional>
 
@@ -92,26 +92,14 @@ public:
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = RequestDatabaseName;
 
-        auto addEntry = [&](const TString& topic) {
+        for (const auto& topic : topicPath) {
             auto split = NKikimr::SplitPath(topic);
-
             schemeRequest->ResultSet.emplace_back();
             auto& entry = schemeRequest->ResultSet.back();
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
             entry.Operation = TSchemeCacheNavigate::OpList;
             entry.SyncVersion = RetryWithSyncVersion;
             entry.ShowPrivatePath = true;
-        };
-
-        for (const auto& topic : topicPath) {
-            // Paths from ResolveName / federation / CDC are already absolute & canonized.
-            auto& originals = PathToOriginalPaths[topic];
-            if (originals.empty()) {
-                // Retries (sync / Federation / CDC) map navigated path → itself here;
-                // client originals are restored via CDCPaths / FederationPaths.
-                originals.push_back(topic);
-            }
-            addEntry(topic);
         }
 
         Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
@@ -149,7 +137,7 @@ public:
                                 {"realPath", realPath});
 
                             SetErrorResults(originals, EStatus::UNAUTHORIZED);
-                        } else if (TryScheduleFederationRetry(originals, realPath)) {
+                        } else if (TryScheduleFederationRetry(realPath)) {
                             YDB_LOG_DEBUG("Path not found, will try FederationRoot",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath},
@@ -179,8 +167,11 @@ public:
                             {"logPrefix", LOG_PREFIX},
                             {"realPath", realPath});
 
-                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
-                            .OriginalPaths = originals,
+                        // Copy before mutating PathToOriginalPaths (rehash must not invalidate originals).
+                        TVector<TString> originalsCopy = originals;
+                        const TString streamImplPath = TStringBuilder() << realPath << "/streamImpl";
+                        PathToOriginalPaths[streamImplPath] = std::move(originalsCopy);
+                        CDCPaths[streamImplPath] = {
                             .CdcStreamName = entry.Self->Info.GetName(),
                             .AccountDatabase = RequestDatabaseName
                         };
@@ -188,7 +179,7 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                if (TryScheduleFederationRetry(originals, realPath)) {
+                                if (TryScheduleFederationRetry(realPath)) {
                                     YDB_LOG_DEBUG("Path not found, will try FederationRoot",
                                         {"logPrefix", LOG_PREFIX},
                                         {"realPath", realPath},
@@ -289,18 +280,12 @@ public:
 
 private:
     const TVector<TString>& OriginalsFor(const TString& realPath) const {
-        if (auto it = CDCPaths.find(realPath); it != CDCPaths.end()) {
-            return it->second.OriginalPaths;
-        }
-        if (auto it = FederationPaths.find(realPath); it != FederationPaths.end()) {
-            return it->second.OriginalPaths;
-        }
         auto it = PathToOriginalPaths.find(realPath);
         AFL_ENSURE(it != PathToOriginalPaths.end());
         return it->second;
     }
 
-    bool TryScheduleFederationRetry(const TVector<TString>& originals, const TString& realPath) {
+    bool TryScheduleFederationRetry(const TString& realPath) {
         if (FederationRoot.empty()) {
             return false;
         }
@@ -326,13 +311,10 @@ private:
             return false;
         }
 
-        if (auto it = FederationPaths.find(target->Path); it != FederationPaths.end()) {
-            // Already scheduled for this navigate path.
-            return true;
+        if (target->Path != realPath) {
+            PathToOriginalPaths[target->Path] = PathToOriginalPaths[realPath];
         }
-
         FederationPaths[target->Path] = TFederationTopicInfo{
-            .OriginalPaths = originals,
             .AccountDatabase = target->AccountDatabase
         };
         return true;
@@ -382,7 +364,6 @@ private:
             return false;
         }
 
-        RetryWithCDC = true;
         RetryWithSyncVersion = false;
         RequestDatabaseName = *nextDatabase;
         RequestedCdcDatabases.insert(*nextDatabase);
@@ -426,28 +407,25 @@ private:
     const TString DatabasePath;
     const absl::flat_hash_set<TString> TopicPaths;
     const TDescribeSettings Settings;
-    // normalized navigate path -> originally requested client path(s)
+    // navigate path -> originally requested client path(s)
     absl::flat_hash_map<TString, TVector<TString>> PathToOriginalPaths;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
-    bool RetryWithCDC = false;
     bool RetryWithFederation = false;
     TString FederationRoot;
     // DatabaseName for the current SchemeCache request (account DB on Federation retry).
     TString RequestDatabaseName;
     absl::flat_hash_set<TString> RequestedFederationDatabases;
     absl::flat_hash_set<TString> RequestedCdcDatabases;
-    // CDC streamImpl path -> original changefeed path(s)
+    // CDC streamImpl path metadata (originals live in PathToOriginalPaths)
     struct TCDCTopicInfo {
-        TVector<TString> OriginalPaths;
         TString CdcStreamName;
         TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
-    // FederationRoot-prefixed path -> original topic path(s)
+    // FederationRoot-prefixed path -> account database for SchemeCache retry
     struct TFederationTopicInfo {
-        TVector<TString> OriginalPaths;
         TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TFederationTopicInfo> FederationPaths;

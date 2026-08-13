@@ -15,6 +15,7 @@ SRCS(
     bridge.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_data_kind.h
     blobstorage_grouptype.cpp
     blobstorage_relevance.cpp
     boot_type.h

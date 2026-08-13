@@ -1090,6 +1090,7 @@ namespace NTabletFlatExecutor {
                 .HandleClass = flag,
                 .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
                 .WriteSource = TWriteSource::FlatCompactionPut,
+                .DataKind = Conf->DataKind,
                 .ExternalRelevanceWatcher = RelevanceTracker,
             });
             auto ctx = ActorContext();

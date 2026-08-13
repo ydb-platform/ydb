@@ -741,6 +741,7 @@ struct TEvBlobStorage {
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
         const TWriteSource WriteSource;
+        const NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
         const bool AlreadyEncrypted = false; // when set to true, no encryption is required
@@ -758,6 +759,7 @@ struct TEvBlobStorage {
             NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
             ETactic Tactic = TacticDefault;
             TWriteSource WriteSource = UnknownWriteSource();
+            NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
             bool AlreadyEncrypted = false;
@@ -774,6 +776,7 @@ struct TEvBlobStorage {
             , HandleClass(origin.HandleClass)
             , Tactic(origin.Tactic)
             , WriteSource(origin.WriteSource)
+            , DataKind(origin.DataKind)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
@@ -791,6 +794,7 @@ struct TEvBlobStorage {
             , HandleClass(parameters.HandleClass)
             , Tactic(parameters.Tactic)
             , WriteSource(parameters.WriteSource)
+            , DataKind(parameters.DataKind)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
             , AlreadyEncrypted(parameters.AlreadyEncrypted)
@@ -852,6 +856,9 @@ struct TEvBlobStorage {
             str << " Deadline# " << Deadline.MilliSeconds();
             str << " HandleClass# " << HandleClass;
             str << " Tactic# " << TacticName(Tactic);
+            if (DataKind != NKikimrBlobStorage::TDataKind::USER) {
+                str << " DataKind# " << NKikimrBlobStorage::TDataKind::E_Name(DataKind);
+            }
             if (IssueKeepFlag) {
                 str << " IssueKeepFlag# " << IssueKeepFlag;
             }

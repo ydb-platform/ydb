@@ -166,6 +166,12 @@ namespace {
     TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
         TTruncateTableSettings truncateTableSettings;
         truncateTableSettings.TablePath = truncateTable.TablePath().Value();
+        for (const auto& setting : truncateTable.Settings()) {
+            if (setting.Name().Value() == "UNSAFE") {
+                truncateTableSettings.Unsafe =
+                    setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+            }
+        }
         return truncateTableSettings;
     }
 

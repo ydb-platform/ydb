@@ -1427,6 +1427,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .TablePath().Build(key.GetTablePath())
+                        .Settings(settings.Other)
                         .Done();
 
                     return truncateTable.Ptr();

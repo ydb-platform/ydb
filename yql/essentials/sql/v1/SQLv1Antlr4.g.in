@@ -790,7 +790,12 @@ database_setting_value:
 ;
 
 truncate_table_stmt: TRUNCATE TABLE simple_table_ref with_truncate_table_settings?;
-with_truncate_table_settings: WITH LPAREN RPAREN;
+with_truncate_table_settings: WITH LPAREN truncate_table_settings? RPAREN;
+truncate_table_settings: truncate_table_setting (COMMA truncate_table_setting)*;
+truncate_table_setting: an_id EQUALS truncate_table_setting_value;
+// Deliberately restricted to bool_value: an id or STRING_VALUE here would also match
+// table_hints of simple_table_ref, and the hints alternative wins.
+truncate_table_setting_value: bool_value;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;

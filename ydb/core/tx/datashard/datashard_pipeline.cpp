@@ -1715,6 +1715,10 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             break;
         case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+            if (writeTx->HasUnsafeTruncate()) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Unsupported volatile unsafe truncate");
+                return writeOp;
+            }
             writeOp->SetVolatilePrepareFlag();
             break;
         case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
@@ -1723,6 +1727,30 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         default:
             badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Unknown txmode: " << rec.txmode());
             return writeOp;
+    }
+
+    if (writeTx->HasUnsafeTruncate()) {
+        // NTable::TDatabase::TruncateTable asserts both !Truncated and !DataModified for the
+        // table, so mixing an unsafe truncate with anything else touching the same table would abort
+        // the tablet rather than fail the request. Keep unsafe truncates in their own write transaction.
+        THashSet<ui64> unsafeTruncatedTables;
+        for (const auto& operation : writeTx->GetOperations()) {
+            if (operation.GetOperationType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                    "Unsafe truncate cannot be mixed with other operations in the same write transaction");
+                return writeOp;
+            }
+            if (!unsafeTruncatedTables.insert(operation.GetTableId().PathId.LocalPathId).second) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                    "Duplicate unsafe truncate of the same table in one write transaction");
+                return writeOp;
+            }
+        }
+
+        // An unsafe truncate registers no key ranges, so the dependency tracker has nothing to intersect.
+        // GlobalWriter makes it conflict with everything on the shard in both directions, which
+        // serialises competing transactions behind it instead of rejecting them.
+        writeOp->SetGlobalWriterFlag();
     }
 
     // Make config checks for immediate op.

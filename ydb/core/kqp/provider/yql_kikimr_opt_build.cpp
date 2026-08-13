@@ -760,6 +760,10 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         txRes.Ops.insert(node.Raw());
+        // Both forms stay a scheme operation here: this bitmask also routes the whole statement to
+        // MakeSchemeTx below, and the unsafe form needs that routing to reach the gateway proxy
+        // that builds its physical transaction. What makes it legal inside a data transaction is
+        // the dedicated case in ExecutePhyTx, not this classification.
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
         return true;
     }

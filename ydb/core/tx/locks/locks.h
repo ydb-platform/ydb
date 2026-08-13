@@ -1144,6 +1144,14 @@ public:
     void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void AddVolatileDependency(ui64 txId);
     void BreakAllLocks(const TTableId& tableId);
+
+    struct TBreakLocksStats {
+        ui64 Broken = 0;
+        ui64 Preserved = 0;
+    };
+    // Same as BreakAllLocks, but the listed locks survive. Used by the unsafe truncate to spare
+    // the locks of the user transaction that issued it.
+    TBreakLocksStats BreakAllLocksExcept(const TTableId& tableId, TConstArrayRef<ui64> preserveLockIds);
     void BreakSetLocks();
     bool IsMyKey(const TArrayRef<const TCell>& key) const;
     bool HasCurrentWriteLock(const TTableId& tableId) const;

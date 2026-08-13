@@ -101,6 +101,8 @@ message TEvWrite {
             OPERATION_REPLACE = 5;
             OPERATION_INCREMENT = 6;
             OPERATION_UPSERT_INCREMENT = 7;
+            // Wipes the whole table on this shard. Carries no payload and no columns.
+            OPERATION_UNSAFE_TRUNCATE = 8;
         }
 
         optional EOperationType Type = 1;
@@ -135,6 +137,12 @@ message TEvWrite {
     optional ELockMode LockMode = 10;
     optional uint64 TimeoutSeconds = 11;
     optional string UserSID = 12;
+
+    // Locks of these transactions survive an OPERATION_UNSAFE_TRUNCATE; every other lock of the
+    // shard is broken by it. Holds the lock id of the user transaction that issued the unsafe
+    // truncate, so that transaction is not aborted by its own statement. Note this is unrelated
+    // to LockTxId above, which would instead make the operation's own effects uncommitted.
+    repeated uint64 PreserveLockTxIds = 13;
 }
 
 message TEvWriteResult {

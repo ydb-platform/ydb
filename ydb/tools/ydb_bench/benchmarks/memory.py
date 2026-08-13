@@ -15,14 +15,12 @@ DIMENSIONS = (
     DimensionDefinition("threads"), DimensionDefinition("random_percent"),
     DimensionDefinition("random_mode", "string"), DimensionDefinition("buffer_size_mb"),
     DimensionDefinition("part_size_kb"), DimensionDefinition("sequential_threads", series=False),
-    DimensionDefinition("random_threads", series=False),
+    DimensionDefinition("random_threads", series=False), DimensionDefinition("scope", "string"),
+    DimensionDefinition("worker_aggregation", "string"),
 )
 METRICS = tuple(MetricDefinition(name, unit) for name, unit in (
-    ("sequential_operations", "operations"), ("random_operations", "operations"),
-    ("sequential_payload_bytes", "bytes"), ("random_payload_bytes", "bytes"),
-    ("read_bytes", "bytes"), ("written_bytes", "bytes"),
-    ("sequential_ops_per_sec", "ops/s"), ("random_ops_per_sec", "ops/s"),
-    ("sequential_payload_mb_per_sec", "MB/s"), ("random_payload_mb_per_sec", "MB/s"),
+    ("operations", "operations"), ("payload_bytes", "bytes"), ("read_bytes", "bytes"), ("written_bytes", "bytes"),
+    ("ops_per_sec", "ops/s"), ("payload_mb_per_sec", "MB/s"),
     ("read_mb_per_sec", "MB/s"), ("write_mb_per_sec", "MB/s"),
     ("memory_traffic_mb_per_sec", "MB/s"), ("elapsed_seconds", "s"),
 ))
@@ -39,7 +37,7 @@ def parse_metrics(stdout, benchmark):
             for item in benchmark.dimensions:
                 parsed[item.name] = row[item.name] if item.value_type == "string" else int(row[item.name])
             for item in benchmark.metrics:
-                parsed[item.name] = float(row[item.name]) if item.name.endswith(("_per_sec", "seconds")) else int(row[item.name])
+                parsed[item.name] = float(row[item.name])
             rows.append(parsed)
         except (KeyError, TypeError, ValueError): continue
     if not rows: raise BenchmarkError("memory benchmark produced no valid metric rows")
@@ -52,10 +50,28 @@ def render_metrics(rows, benchmark):
 
 
 def validate_metrics(rows, configuration, case=None):
-    if len(rows) != 1: raise BenchmarkError("memory benchmark must produce exactly one metric row")
-    row = rows[0]; expected = {"threads": case["threads"], **{name.replace("-", "_"): value for name, value in case["parameters"].items()}}
-    unexpected = {name: (row.get(name), value) for name, value in expected.items() if row.get(name) != value}
-    if unexpected: raise BenchmarkError("memory benchmark dimensions do not match the process case: {}".format(unexpected))
+    expected = {"threads": case["threads"], **{name.replace("-", "_"): value for name, value in case["parameters"].items()}}
+    unexpected = [{name: (row.get(name), value) for name, value in expected.items() if row.get(name) != value} for row in rows]
+    if not rows or any(unexpected): raise BenchmarkError("memory benchmark dimensions do not match the process case: {}".format(unexpected))
+    expected_rows = 5 * (1 + bool(rows[0]["sequential_threads"]) + bool(rows[0]["random_threads"]))
+    if len(rows) != expected_rows: raise BenchmarkError("memory benchmark produced {} aggregate rows instead of {}".format(len(rows), expected_rows))
+
+
+def parse_worker_metrics(stdout, benchmark):
+    lines = stdout.splitlines()
+    try: index = lines.index("workers.csv") + 1
+    except ValueError as error: raise BenchmarkError("memory benchmark output does not contain workers.csv") from error
+    result = []
+    for row in csv.DictReader(lines[index:]):
+        try: result.append({name: (value if name == "scope" else int(value) if name == "worker" else float(value)) for name, value in row.items()})
+        except (TypeError, ValueError): continue
+    if not result: raise BenchmarkError("memory benchmark produced no worker metrics")
+    return result
+
+
+def render_worker_metrics(rows, benchmark):
+    output = io.StringIO(); writer = csv.DictWriter(output, fieldnames=tuple(rows[0]), lineterminator="\n")
+    writer.writeheader(); writer.writerows(rows); return output.getvalue()
 
 
 def summarize_metrics(repetition_rows, benchmark):
@@ -70,14 +86,14 @@ def summarize_metrics(repetition_rows, benchmark):
         record.update({item.name: value for item, value in zip(benchmark.dimensions, key[1:])})
         for metric in benchmark.metrics:
             values = [row[metric.name] for row in rows]
-            record.update({"median_"+metric.name: statistics.median(values), "min_"+metric.name: min(values), "max_"+metric.name: max(values)})
+            record.update({"median_"+metric.name: statistics.median(values), "mean_"+metric.name: statistics.mean(values), "min_"+metric.name: min(values), "max_"+metric.name: max(values)})
         result.append(record)
     return result
 
 
 def render_summary(rows, benchmark):
     columns = ["affinity_mode"] + [item.name for item in benchmark.dimensions] + ["repetitions"]
-    for metric in benchmark.metrics: columns += ["median_"+metric.name, "min_"+metric.name, "max_"+metric.name]
+    for metric in benchmark.metrics: columns += ["median_"+metric.name, "mean_"+metric.name, "min_"+metric.name, "max_"+metric.name]
     output = io.StringIO(); writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
     writer.writeheader(); writer.writerows(rows); return output.getvalue()
 
@@ -107,4 +123,4 @@ MEMORY_BENCHMARK = BENCHMARKS.register(BenchmarkDefinition(
         ParameterDefinition("buffer-size-mb", "Private buffer size per worker", default=(256,), matrix=True),
         ParameterDefinition("part-size-kb", "Sequential memcpy block size", default=(2048,), matrix=True),
     ), DIMENSIONS, METRICS, parse_metrics, render_metrics, validate_metrics, summarize_metrics, render_summary,
-    command, environment, process_cases))
+    command, environment, process_cases, parse_worker_metrics, render_worker_metrics))

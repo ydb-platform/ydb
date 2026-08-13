@@ -51,6 +51,8 @@ class BenchmarkDefinition:
     command: object
     environment: object
     process_cases: object
+    parse_worker_metrics: object = None
+    render_worker_metrics: object = None
 
     @property
     def csv_columns(self):

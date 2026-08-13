@@ -24,6 +24,7 @@ from ydb.tools.ydb_bench.lib.actors_core import (
     run_actors_core,
 )
 from ydb.tools.ydb_bench.benchmarks import MEMORY_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks.memory import parse_worker_metrics
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry, DimensionDefinition, ParameterDefinition
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
@@ -345,6 +346,17 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(plan.steps[-1].parameters["random-mode"], "write")
         self.assertEqual({step.threads for step in plan.steps}, {1, 2})
         self.assertEqual({step.affinity for step in plan.steps}, {"none", "pack-numa"})
+
+    def test_memory_worker_metrics_keep_raw_workers(self):
+        stdout = "\n".join((
+            "workers.csv",
+            "worker,scope,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec",
+            "0,sequential,10,20,20,20,100,200,200,200,400",
+            "1,random,30,30,30,30,300,300,300,300,600",
+        ))
+        rows = parse_worker_metrics(stdout, MEMORY_BENCHMARK)
+        self.assertEqual([(row["worker"], row["scope"]) for row in rows], [(0, "sequential"), (1, "random")])
+        self.assertEqual(rows[1]["ops_per_sec"], 300.0)
 
     def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
         pending = {"id": "step-1", "state": "pending", "artifacts": []}

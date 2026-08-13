@@ -11,6 +11,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <algorithm>
+#include <iomanip>
 
 namespace {
 struct alignas(64) TStats {
@@ -20,6 +22,39 @@ struct alignas(64) TStats {
     uint64_t WrittenBytes = 0;
     uint64_t Checksum = 0;
 };
+
+struct TValues {
+    double Operations = 0, PayloadBytes = 0, ReadBytes = 0, WrittenBytes = 0;
+};
+
+TValues Values(const TStats& stats) {
+    return {double(stats.Operations), double(stats.PayloadBytes), double(stats.ReadBytes), double(stats.WrittenBytes)};
+}
+
+TValues Aggregate(const std::vector<TValues>& values, const std::string& aggregation) {
+    TValues result;
+    auto field = [&](auto getter) {
+        std::vector<double> items; for (const auto& value : values) items.push_back(getter(value));
+        std::sort(items.begin(), items.end());
+        if (aggregation == "sum") { double total = 0; for (double value : items) total += value; return total; }
+        if (aggregation == "min") return items.front();
+        if (aggregation == "max") return items.back();
+        if (aggregation == "mean") { double total = 0; for (double value : items) total += value; return total / items.size(); }
+        const size_t middle = items.size() / 2; return items.size() % 2 ? items[middle] : (items[middle - 1] + items[middle]) / 2;
+    };
+    result.Operations = field([](const TValues& value) { return value.Operations; });
+    result.PayloadBytes = field([](const TValues& value) { return value.PayloadBytes; });
+    result.ReadBytes = field([](const TValues& value) { return value.ReadBytes; });
+    result.WrittenBytes = field([](const TValues& value) { return value.WrittenBytes; });
+    return result;
+}
+
+void PrintValues(const TValues& value, double elapsed) {
+    const double mb = 1000000.0;
+    std::cout << value.Operations << ',' << value.PayloadBytes << ',' << value.ReadBytes << ',' << value.WrittenBytes << ','
+              << value.Operations / elapsed << ',' << value.PayloadBytes / elapsed / mb << ',' << value.ReadBytes / elapsed / mb << ','
+              << value.WrittenBytes / elapsed / mb << ',' << (value.ReadBytes + value.WrittenBytes) / elapsed / mb;
+}
 
 struct TOptions {
     uint32_t Threads = 0;
@@ -127,21 +162,25 @@ int main(int argc, char** argv) {
         stop.store(true, std::memory_order_relaxed);
         for (auto& worker : workers) worker.join();
         const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        TStats sequential, random;
+        std::vector<TValues> sequential, random, all;
         for (uint32_t i = 0; i < options.Threads; ++i) {
             const bool isRandom = ((uint64_t(i + 1) * randomThreads) / options.Threads != (uint64_t(i) * randomThreads) / options.Threads);
-            TStats& total = isRandom ? random : sequential; const TStats& item = stats[i];
-            total.Operations += item.Operations; total.PayloadBytes += item.PayloadBytes;
-            total.ReadBytes += item.ReadBytes; total.WrittenBytes += item.WrittenBytes; total.Checksum ^= item.Checksum;
+            const TValues item = Values(stats[i]); (isRandom ? random : sequential).push_back(item); all.push_back(item);
         }
-        const double mb = 1000000.0;
-        std::cout << "threads,random_percent,random_mode,buffer_size_mb,part_size_kb,sequential_threads,random_threads,sequential_operations,random_operations,sequential_payload_bytes,random_payload_bytes,read_bytes,written_bytes,sequential_ops_per_sec,random_ops_per_sec,sequential_payload_mb_per_sec,random_payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec,elapsed_seconds\n";
-        std::cout << options.Threads << ',' << options.RandomPercent << ',' << options.RandomMode << ',' << options.BufferSize / (1 << 20) << ',' << options.PartSize / (1 << 10) << ',' << sequentialThreads << ',' << randomThreads << ','
-                  << sequential.Operations << ',' << random.Operations << ',' << sequential.PayloadBytes << ',' << random.PayloadBytes << ','
-                  << sequential.ReadBytes + random.ReadBytes << ',' << sequential.WrittenBytes + random.WrittenBytes << ','
-                  << sequential.Operations / elapsed << ',' << random.Operations / elapsed << ',' << sequential.PayloadBytes / elapsed / mb << ',' << random.PayloadBytes / elapsed / mb << ','
-                  << (sequential.ReadBytes + random.ReadBytes) / elapsed / mb << ',' << (sequential.WrittenBytes + random.WrittenBytes) / elapsed / mb << ','
-                  << (sequential.ReadBytes + random.ReadBytes + sequential.WrittenBytes + random.WrittenBytes) / elapsed / mb << ',' << elapsed << '\n';
+        std::cout << std::setprecision(17);
+        std::cout << "threads,random_percent,random_mode,buffer_size_mb,part_size_kb,sequential_threads,random_threads,scope,worker_aggregation,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec,elapsed_seconds\n";
+        for (const auto& group : std::vector<std::pair<std::string, const std::vector<TValues>*>>{{"sequential", &sequential}, {"random", &random}, {"all", &all}}) {
+            if (group.second->empty()) continue;
+            for (const std::string aggregation : {"sum", "min", "max", "median", "mean"}) {
+                std::cout << options.Threads << ',' << options.RandomPercent << ',' << options.RandomMode << ',' << options.BufferSize / (1 << 20) << ',' << options.PartSize / (1 << 10) << ',' << sequentialThreads << ',' << randomThreads << ',' << group.first << ',' << aggregation << ',';
+                PrintValues(Aggregate(*group.second, aggregation), elapsed); std::cout << ',' << elapsed << '\n';
+            }
+        }
+        std::cout << "workers.csv\nworker,scope,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec\n";
+        for (uint32_t i = 0; i < options.Threads; ++i) {
+            const bool isRandom = ((uint64_t(i + 1) * randomThreads) / options.Threads != (uint64_t(i) * randomThreads) / options.Threads);
+            std::cout << i << ',' << (isRandom ? "random" : "sequential") << ','; PrintValues(Values(stats[i]), elapsed); std::cout << '\n';
+        }
         return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
 }

@@ -465,7 +465,11 @@ def chart_data(output, run_ids):
                 fields = [name for name in (reader.fieldnames or []) if isinstance(name, str) and name]
                 if "affinity_mode" not in fields:
                     continue
-                metric_fields = [name for name in fields if name.startswith(("median_", "min_", "max_"))]
+                benchmark_name = path.relative_to(root).parts[0]
+                benchmark_definition = BENCHMARKS.get(benchmark_name) if benchmark_name in BENCHMARKS else None
+                normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
+                prefixes = ("median_", "mean_", "min_", "max_")
+                metric_fields = [name for name in fields if name.startswith(prefixes)]
                 dimension_fields = [name for name in fields if name not in metric_fields and name not in ("affinity_mode", "repetitions")]
                 grouped = {}
                 for index, row in enumerate(reader):
@@ -474,16 +478,32 @@ def chart_data(output, run_ids):
                     affinity = row.get("affinity_mode")
                     if not affinity:
                         continue
-                    grouped.setdefault(affinity, []).append({name: _summary_value(row.get(name)) for name in fields})
+                    if normalized_repetitions:
+                        base = {name: _summary_value(row.get(name)) for name in dimension_fields}
+                        for aggregation in ("median", "mean", "min", "max"):
+                            values = {metric.name: _summary_value(row.get(aggregation + "_" + metric.name)) for metric in benchmark_definition.metrics}
+                            grouped.setdefault(affinity, []).append({**base, "repeat_aggregation": aggregation, "repeat": "*", **values})
+                    else:
+                        grouped.setdefault(affinity, []).append({name: _summary_value(row.get(name)) for name in fields})
+                if normalized_repetitions:
+                    repetitions_path = path.with_name("repetitions.csv")
+                    if repetitions_path.is_file():
+                        with repetitions_path.open(newline="", encoding="utf-8") as repetitions_stream:
+                            for row in csv.DictReader(repetitions_stream):
+                                affinity = row.get("affinity_mode")
+                                if affinity: grouped.setdefault(affinity, []).append({name: _summary_value(row.get(name)) for name in dimension_fields + ["repeat"] + [metric.name for metric in benchmark_definition.metrics]} | {"repeat_aggregation": "raw"})
+                    dimension_fields += ["repeat_aggregation", "repeat"]
+                    metric_fields = [metric.name for metric in benchmark_definition.metrics]
                 dimensions.update(dimension_fields)
                 metrics.update(metric_fields)
-                benchmark_definition = BENCHMARKS.get(path.relative_to(root).parts[0]) if path.relative_to(root).parts[0] in BENCHMARKS else None
                 if benchmark_definition is not None:
                     for dimension in benchmark_definition.dimensions:
                         dimension_metadata[dimension.name] = {"series": dimension.series}
                     for metric in benchmark_definition.metrics:
-                        for prefix in ("median_", "min_", "max_"):
-                            metric_metadata[prefix + metric.name] = {"unit": metric.unit, "description": metric.description}
+                        if normalized_repetitions: metric_metadata[metric.name] = {"unit": metric.unit, "description": metric.description}
+                        else:
+                            for prefix in ("median_", "min_", "max_"):
+                                metric_metadata[prefix + metric.name] = {"unit": metric.unit, "description": metric.description}
                 for affinity, rows in grouped.items():
                     benchmark, profile = path.relative_to(root).parts[:2]
                     series = {

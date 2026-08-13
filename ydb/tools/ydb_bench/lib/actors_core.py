@@ -1,4 +1,6 @@
 import os
+import csv
+import io
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -230,6 +232,7 @@ def run_benchmark(
         raise BenchmarkError(failure)
 
     repetition_rows = []
+    measurement_rows = []
 
     for placement_index, (case_index, case, placement) in enumerate(placements):
         threads = case["threads"]
@@ -360,6 +363,11 @@ def run_benchmark(
                     )
                     run_record["metrics"] = str(relative_directory / "metrics.csv")
                     run_record["metric_rows"] = len(metrics)
+                    if benchmark.parse_worker_metrics is not None:
+                        worker_metrics = benchmark.parse_worker_metrics(result.stdout, benchmark)
+                        atomic_write_text(repetition_directory / "workers.csv", benchmark.render_worker_metrics(worker_metrics, benchmark))
+                        run_record["worker_metrics"] = str(relative_directory / "workers.csv")
+                        run_record["worker_metric_rows"] = len(worker_metrics)
                     if configuration.perf_enabled:
                         try:
                             postprocessing = _run_perf_postprocessing(
@@ -377,6 +385,8 @@ def run_benchmark(
                             run_record["perf_postprocessing"] = postprocessing
                     if failure is None:
                         repetition_rows.append((placement.mode, metrics))
+                        for metric_row in metrics:
+                            measurement_rows.append({"affinity_mode": placement.mode, "repeat": index, **metric_row})
 
             if failure is not None:
                 run_record["error"] = failure
@@ -406,6 +416,8 @@ def run_benchmark(
                 artifacts = [run_record["stdout"], run_record["stderr"]]
                 if "metrics" in run_record:
                     artifacts.append(run_record["metrics"])
+                if "worker_metrics" in run_record:
+                    artifacts.append(run_record["worker_metrics"])
                 if "perf_data" in run_record:
                     artifacts.append(run_record["perf_data"])
                 for record in run_record.get("perf_postprocessing", []):
@@ -427,10 +439,16 @@ def run_benchmark(
 
     summary = benchmark.summarize_metrics(repetition_rows, benchmark)
     atomic_write_text(output_directory / "summary.csv", benchmark.render_summary(summary, benchmark))
+    measurement_output = io.StringIO()
+    measurement_columns = ["affinity_mode", "repeat"] + list(benchmark.csv_columns)
+    measurement_writer = csv.DictWriter(measurement_output, fieldnames=measurement_columns, lineterminator="\n")
+    measurement_writer.writeheader(); measurement_writer.writerows(measurement_rows)
+    atomic_write_text(output_directory / "repetitions.csv", measurement_output.getvalue())
     manifest["status"] = "completed"
     manifest["state"] = "passed"
     manifest["finished_at"] = _utc_now()
     manifest["summary"] = "summary.csv"
+    manifest["repetitions"] = "repetitions.csv"
     manifest["summary_rows"] = len(summary)
     write_manifest(manifest_path, manifest)
     return manifest

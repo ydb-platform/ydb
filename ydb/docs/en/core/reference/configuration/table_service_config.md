@@ -177,7 +177,7 @@ If spilling is enabled but the `root` directory is missing or not writable, the 
 
 ##### Directory cleanup at startup {#cleanup}
 
-Each process start writes to its own directory with a new `spilling_service_id`, and spilling files are only needed while the process is running, so directories of previous runs are deleted. The cleanup runs when the Spilling Service starts, asynchronously and only inside `root`.
+Each process start writes to its own directory with a new `spilling_service_id`, and spilling files are only needed while the process is running, so directories of previous runs are deleted. The cleanup runs asynchronously when the Spilling Service starts.
 
 Directories whose `node_id` and `username` match the current process and whose `spilling_service_id` differs from the one of the current run are deleted. This way, disk space is reclaimed on the next node start after an abnormal process termination, such as `SIGKILL` or a power outage.
 
@@ -186,11 +186,11 @@ The following are not deleted:
 - `root` itself: {{ ydb-short-name }} neither creates nor deletes it, it only writes inside
 - other nodes' directories (`spilling-tmp-<other_node_id>-...`): those nodes might be running right now
 - directories with the same `node_id` but a different `username`: another `ydbd` process might be running under that OS user
-- any foreign files and directories inside `root`
+- any foreign files and directories inside `root`: the name has to match the format completely, including a `spilling_service_id` that is a GUID
 
 {% note info %}
 
-In previous {{ ydb-short-name }} versions, the directories were named `node_<node_id>_<spilling_service_id>` and were created either inside `<root>/spilling-tmp-<username>/` (if `root` was not set) or directly in `root` (if `root` was set). Such directories of this node are also deleted at startup, in both locations. The shared `spilling-tmp-<username>` directory and other nodes' `node_<other_node_id>_*` directories are preserved: during a cluster upgrade, neighboring nodes may still write there in the old format.
+In previous {{ ydb-short-name }} versions, the directories were named `node_<node_id>_<spilling_service_id>` and were created either directly in `root` (if it was set) or in `spilling-tmp-<username>` inside the system temporary directory (if `root` was not set). Such directories of this node are also deleted at startup, and both locations are inspected regardless of the current `root` value: directories left in the temporary directory are deleted even if `root` is now set explicitly. The shared `spilling-tmp-<username>` directory and other nodes' `node_<other_node_id>_*` directories are preserved: during a cluster upgrade, neighboring nodes may still write there in the old format.
 
 {% endnote %}
 

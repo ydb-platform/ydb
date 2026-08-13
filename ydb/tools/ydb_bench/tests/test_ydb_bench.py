@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import signal
 import socket
 import stat
@@ -870,6 +871,42 @@ class YdbBenchTest(unittest.TestCase):
         path.chmod(0o644)
         with self.assertRaisesRegex(BenchmarkError, "noexec.*--work-dir"):
             run_command([path], {}, timeout_seconds=1, work_dir_hint=self.root)
+
+    def test_affinity_uses_taskset_without_preexec_fn(self):
+        process = mock.Mock()
+        process.communicate.return_value = ("output", "")
+        process.returncode = 0
+        command = ("benchmark", "--flag", "value with spaces")
+
+        with mock.patch.object(os, "sched_setaffinity", create=True), mock.patch(
+            "ydb.tools.ydb_bench.lib.runner.shutil.which", return_value="/usr/bin/taskset"
+        ), mock.patch("ydb.tools.ydb_bench.lib.runner.subprocess.Popen", return_value=process) as popen:
+            result = run_command(command, {}, timeout_seconds=1, cpu_affinity=(4, 2, 4))
+
+        self.assertEqual(
+            popen.call_args.args[0],
+            ("/usr/bin/taskset", "--cpu-list", "2,4", "benchmark", "--flag", "value with spaces"),
+        )
+        self.assertNotIn("preexec_fn", popen.call_args.kwargs)
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        self.assertEqual(result.command, command)
+
+    @unittest.skipUnless(
+        hasattr(os, "sched_getaffinity") and shutil.which("taskset"),
+        "requires Linux taskset",
+    )
+    def test_taskset_applies_requested_affinity(self):
+        cpu = min(os.sched_getaffinity(0))
+        script = self._script('taskset --pid --cpu-list "$$"')
+        result = run_command(
+            [script],
+            {},
+            timeout_seconds=5,
+            cpu_affinity=(cpu,),
+        )
+
+        self.assertEqual(result.exit_code, 0, result.stderr)
+        self.assertEqual(result.stdout.rsplit(":", 1)[-1].strip(), str(cpu))
 
     def test_cpu_list_parser(self):
         self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))

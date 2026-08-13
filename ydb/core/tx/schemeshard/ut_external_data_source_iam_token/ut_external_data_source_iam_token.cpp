@@ -3,9 +3,9 @@
 //
 // Goal: prove that when a user authenticated with a *cloud IAM token* runs
 // CREATE EXTERNAL DATA SOURCE, SchemeShard receives the same serialized user
-// identity used for normal DDL authorization. The gateway derives
-// SetupDelegation.on_behalf_of_subject_id from this verified identity, while
-// ServiceControl itself is authenticated separately with the YDB System SA.
+// identity used for normal DDL authorization. The gateway uses the preserved
+// original bearer for ServiceControl and derives
+// SetupDelegation.on_behalf_of_subject_id from the same verified identity.
 //
 // It exercises the *real* path (no hand-built token):
 //   NYdb driver (auth token) -> gRPC -> TicketParser -> fake AccessService

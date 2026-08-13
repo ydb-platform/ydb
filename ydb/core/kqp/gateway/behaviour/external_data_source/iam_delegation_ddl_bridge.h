@@ -25,13 +25,6 @@ struct TCloudIdDescription {
     TString CloudId;
 };
 
-// Acquire the YDB system service-account token through the configured VM
-// metadata endpoint. The future-based SDK adapter is kept behind this actor
-// coroutine boundary so lifecycle policy remains a linear co_await sequence.
-NActors::async<TIamTokenResult> AcquireSystemIamToken(
-    const TIamDelegationSettings& settings,
-    const NActors::TActorId& replyTo);
-
 NActors::async<TCloudIdDescription> DescribeDatabaseCloudId(
     const TExternalDataSourceManager::TExternalModificationContext& context,
     const NActors::TActorId& replyTo);

@@ -9,8 +9,6 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 namespace NKikimr::NKqp::NExternalDataSource {
 namespace {
@@ -32,7 +30,6 @@ struct TEvIamDelegationDdlBridge {
         EvCloudId,
         EvSchemeRequest,
         EvIamSchemeRequest,
-        EvSystemIamToken,
     };
 
     struct TEvIamObject : NActors::TEventLocal<TEvIamObject, EvIamObject> {
@@ -69,22 +66,12 @@ struct TEvIamDelegationDdlBridge {
         TStatus Status;
     };
 
-    struct TEvSystemIamToken
-        : NActors::TEventLocal<TEvSystemIamToken, EvSystemIamToken>
-    {
-        explicit TEvSystemIamToken(TIamTokenResult result)
-            : Result(std::move(result))
-        {}
-
-        TIamTokenResult Result;
-    };
 };
 
 constexpr ui64 IamObjectCookie = 101;
 constexpr ui64 CloudIdCookie = 102;
 constexpr ui64 SchemeRequestCookie = 103;
 constexpr ui64 IamSchemeRequestCookie = 104;
-constexpr ui64 SystemIamTokenCookie = 105;
 
 NThreading::TFuture<TCloudIdDescription> StartDatabaseCloudIdLookup(const TContext& context) {
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
@@ -224,52 +211,6 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
 }
 
 } // anonymous namespace
-
-NActors::async<TIamTokenResult> AcquireSystemIamToken(
-    const TIamDelegationSettings& settings,
-    const NActors::TActorId& replyTo)
-{
-    try {
-        auto facility = NYdb::CreateSimpleCoreFacility();
-        auto credentials = NYdb::CreateIamCredentialsProviderFactory(
-            MakeMetadataServiceHost(settings))->CreateProvider(facility);
-        credentials->GetAuthInfoAsync().Subscribe(
-            [credentials = std::move(credentials),
-             facility = std::move(facility),
-             actorSystem = NActors::TActivationContext::ActorSystem(),
-             replyTo](const auto& future) {
-                // Keep the asynchronous provider and its callback facility
-                // alive until token acquisition completes.
-                Y_UNUSED(credentials);
-                Y_UNUSED(facility);
-                TIamTokenResult result;
-                try {
-                    result.Token = future.GetValue();
-                    if (result.Token.empty()) {
-                        result.Error = "metadata service returned an empty IAM token";
-                    } else {
-                        result.Success = true;
-                    }
-                } catch (...) {
-                    result.Error = CurrentExceptionMessage();
-                }
-                actorSystem->Send(
-                    replyTo,
-                    new TEvIamDelegationDdlBridge::TEvSystemIamToken(
-                        std::move(result)),
-                    0,
-                    SystemIamTokenCookie);
-            });
-    } catch (...) {
-        co_return TIamTokenResult{
-            .Error = CurrentExceptionMessage(),
-        };
-    }
-
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvSystemIamToken>(SystemIamTokenCookie);
-    co_return std::move(event->Get()->Result);
-}
 
 NActors::async<TCloudIdDescription> DescribeDatabaseCloudId(
     const TContext& context,

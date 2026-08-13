@@ -44,22 +44,6 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(request.ShortDebugString().find("72075186224037889:42"), TString::npos);
     }
 
-    Y_UNIT_TEST(MetadataServiceHostPreservesConfiguredEndpoint) {
-        auto settings = Settings();
-        settings.MetadataServiceHost = "localhost";
-        settings.MetadataServicePort = 17832;
-
-        const auto host = MakeMetadataServiceHost(settings);
-        UNIT_ASSERT_VALUES_EQUAL(host.Host, "localhost");
-        UNIT_ASSERT_VALUES_EQUAL(host.Port, 17832);
-    }
-
-    Y_UNIT_TEST(MetadataServiceHostUsesSdkDefaultsWhenUnconfigured) {
-        const auto host = MakeMetadataServiceHost(Settings());
-        UNIT_ASSERT_VALUES_EQUAL(host.Host, NYdb::NIam::DEFAULT_HOST);
-        UNIT_ASSERT_VALUES_EQUAL(host.Port, NYdb::NIam::DEFAULT_PORT);
-    }
-
     Y_UNIT_TEST(SetupRequestContainsTrustedSubjectAndReference) {
         const auto request = MakeSetupDelegationRequest(Settings(), Delegation(), "user-id");
         UNIT_ASSERT_VALUES_EQUAL(request.service_id(), "ydb");
@@ -102,21 +86,32 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
         UNIT_ASSERT_VALUES_EQUAL(NormalizeIamSubject("user-id@as@as"), "user-id@as");
     }
 
-    Y_UNIT_TEST(VerifiedSubjectDoesNotRequireUserBearerToken) {
+    Y_UNIT_TEST(VerifiedSubjectRequiresAndReturnsUserBearerToken) {
         const NACLib::TUserToken accessServiceUser({
+            .OriginalUserToken = "user-iam-token",
             .UserSID = "user-id@as",
             .AuthType = "AccessService",
         });
-        UNIT_ASSERT(accessServiceUser.GetOriginalUserToken().empty());
         UNIT_ASSERT(IsVerifiedIamDelegationSubject(accessServiceUser));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetIamDelegationBearerToken(accessServiceUser), "user-iam-token");
+
+        const NACLib::TUserToken missingBearer({
+            .UserSID = "user-id@as",
+            .AuthType = "AccessService",
+        });
+        UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingBearer));
+        UNIT_ASSERT(GetIamDelegationBearerToken(missingBearer).empty());
 
         const NACLib::TUserToken loginUser({
+            .OriginalUserToken = "user-iam-token",
             .UserSID = "user-id@as",
             .AuthType = "Login",
         });
         UNIT_ASSERT(!IsVerifiedIamDelegationSubject(loginUser));
 
         const NACLib::TUserToken missingSubject({
+            .OriginalUserToken = "user-iam-token",
             .AuthType = "AccessService",
         });
         UNIT_ASSERT(!IsVerifiedIamDelegationSubject(missingSubject));

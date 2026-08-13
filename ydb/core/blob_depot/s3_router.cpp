@@ -44,7 +44,6 @@ namespace NKikimr::NBlobDepot {
         std::atomic<ui64> FiveXxRefreshTriggers{0};
         std::atomic<bool> IsUsingProxy{false};
 
-        TAdaptiveLock BalancerResolveLatencyLock;
         TVector<ui64> BalancerResolveLatencyMs;
     };
 
@@ -324,10 +323,7 @@ namespace NKikimr::NBlobDepot {
                     record.AddNonBalancerLatencyMs(latencyMs);
                 }
 
-                with_lock (Stats.BalancerResolveLatencyLock) {
-                    latencies.swap(Stats.BalancerResolveLatencyMs);
-                }
-
+                latencies.swap(Stats.BalancerResolveLatencyMs);
                 for (auto&& latencyMs : latencies) {
                     record.AddBalancerResolveLatencyMs(latencyMs);
                 }
@@ -391,9 +387,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
             RefreshInFlight = false;
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
-            with_lock (Stats.BalancerResolveLatencyLock) {
-                Stats.BalancerResolveLatencyMs.push_back(latency.MilliSeconds());
-            }
+            Stats.BalancerResolveLatencyMs.push_back(latency.MilliSeconds());
 
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {

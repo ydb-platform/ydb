@@ -251,7 +251,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 
     // Splits the source chunks into consecutive groups of at most maxRecordsPerChunk records and emits one
     // index chunk per group, so every produced blob fits the storage limit. The scan applies each chunk to its
-    // own record range (TIndexColumnChunked), so per-range filters are equivalent to the single one.
+    // own record range (TIndexColumnChunked), so per-range filters are equivalent to the single one. A single
+    // source chunk above maxRecordsPerChunk cannot be split further: it forms one clamped batch (higher FPR).
     const auto buildBatched = [&](const ui32 maxRecordsPerChunk, const auto& buildChunkData) {
         std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
         const auto chunks = CollectChunks(reader);

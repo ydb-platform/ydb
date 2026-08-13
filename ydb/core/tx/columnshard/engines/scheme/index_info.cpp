@@ -502,9 +502,9 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
             // The index does not fit the target storage: an inplace (_LOCAL) index cannot be split at all, and
-            // with EnableIndexBlobSplit off no index is split anywhere. Drop it — the portion stays correct
-            // without it, like a portion older than the index itself, only the skip optimization is lost. With
-            // the flag on, a blob-storage chunk was already split to fit, so an oversize one here is a real bug.
+            // with EnableIndexBlobSplit off no index is split anywhere. Drop it (Success here means "handled",
+            // not "index stored") — the portion stays correct without it, only the skip optimization is lost.
+            // With the flag on a blob-storage chunk was already split to fit, so an oversize one here is a bug.
             if (indexStorageId == IStoragesManager::LocalMetadataStorageId || !splitEnabled) {
                 auto indexMeta = GetIndexOptional(indexId);
                 YDB_LOG_WARN("",

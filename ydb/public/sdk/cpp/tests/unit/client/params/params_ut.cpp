@@ -181,18 +181,19 @@ TEST(ParamsBuilder, IncompleteParam) {
     ASSERT_THROW(paramsBuilder.Build(), TExpectedErrorException);
 }
 
-TEST(ParamsBuilder, EmptyListWithoutType) {
+TEST(ParamsBuilder, EmptyListWithoutTypeIsRejectedAtBuild) {
+    auto paramsBuilder = TParamsBuilder();
+    paramsBuilder.AddParam("$key_list0")
+        .BeginList()
+        .EndList()
+        .Build();
+
     try {
-        auto params = TParamsBuilder()
-            .AddParam("$key_list0")
-                .BeginList()
-                .EndList()
-                .Build()
-            .Build();
-        FAIL() << "Expected an untyped empty list to be rejected";
+        paramsBuilder.Build();
+        FAIL() << "Expected an incomplete parameter type to be rejected";
     } catch (const TExpectedErrorException& e) {
-        EXPECT_STREQ(e.what(), "TTypeBuilder: EndList(): list item type is not set; "
-            "add a typed item or build the list with an explicit item type");
+        EXPECT_STREQ(e.what(), "TParamsBuilder: Parameter '$key_list0' has an invalid type: protobuf type is not "
+            "set; check how the parameter value was built");
     }
 }
 

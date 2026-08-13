@@ -643,13 +643,6 @@ public:
     }
 
     void EndList() {
-        if (Path_.size() > 1 && GetKind(1) == ETypeKind::List &&
-            GetProto().type_case() == Ydb::Type::TYPE_NOT_SET) {
-            FatalError("EndList(): list item type is not set; "
-                "add a typed item or build the list with an explicit item type");
-            return;
-        }
-
         CloseContainer<ETypeKind::List>();
     }
 

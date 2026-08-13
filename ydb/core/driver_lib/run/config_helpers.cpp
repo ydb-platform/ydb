@@ -60,7 +60,6 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             NActors::TBasicExecutorPoolConfig basic;
             basic.PoolId = poolId;
             basic.PoolName = poolConfig.GetName();
-            basic.UseRingQueue = systemConfig.GetUseRingQueue();
             if (poolConfig.HasMaxAvgPingDeviation() && counters) {
                 auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
                 auto &poolInfo = cpuManager.PingInfoByPool[poolId];
@@ -122,7 +121,6 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             io.Threads = poolConfig.GetThreads();
             io.Affinity = ParseAffinity(poolConfig.GetAffinity());
             cpuManager.IO.emplace_back(std::move(io));
-            io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
             break;
         }
 

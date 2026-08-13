@@ -269,24 +269,18 @@ private:
 
     // One SchemeCache request per NavigateDatabase from ResolveName.
     bool StartNextDatabaseRequest() {
-        std::optional<TString> nextDatabase;
-        absl::flat_hash_set<TString>* nextPaths = nullptr;
         for (auto& [database, paths] : PendingByDatabase) {
-            if (!RequestedDatabases.contains(database)) {
-                nextDatabase = database;
-                nextPaths = &paths;
-                break;
+            if (RequestedDatabases.contains(database)) {
+                continue;
             }
+            // PendingByDatabase only stores non-empty path sets.
+            RetryWithSyncVersion = Settings.ForceSyncVersion;
+            RequestDatabaseName = database;
+            RequestedDatabases.insert(database);
+            DoRequest(paths);
+            return true;
         }
-        if (!nextDatabase || !nextPaths || nextPaths->empty()) {
-            return false;
-        }
-
-        RetryWithSyncVersion = Settings.ForceSyncVersion;
-        RequestDatabaseName = *nextDatabase;
-        RequestedDatabases.insert(*nextDatabase);
-        DoRequest(*nextPaths);
-        return true;
+        return false;
     }
 
     // One SchemeCache request per account database for CDC streamImpl paths.
@@ -319,10 +313,6 @@ private:
     }
 
     void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
-        auto it = Result.find(originalPath);
-        if (it != Result.end() && it->second.Status == EStatus::SUCCESS) {
-            return;
-        }
         Result[originalPath] = TTopicInfo{
             .Status = status,
             .RealPath = realPath

@@ -498,4 +498,111 @@ Y_UNIT_TEST_F(FederationMirroredFromLocalDcRejected, TNameResolverFixture) {
         "Local topic cannot contain '-mirrored-from' part. ");
 }
 
+Y_UNIT_TEST_F(FccModernWithEmptyDatabase, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "account/topic")),
+        "/account/topic");
+}
+
+Y_UNIT_TEST_F(FccModernUncleanWithEmptyDatabase, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "account//topic")),
+        "/account/topic");
+}
+
+Y_UNIT_TEST_F(FccModernUncleanRelativeNormalized, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "account//topic")),
+        "/Root/Db/account/topic");
+}
+
+Y_UNIT_TEST_F(FccEmptyNameInUserDatabaseUnderLbRoot, TNameResolverFixture) {
+    // Empty legacy bare name under account DB → database path itself.
+    SetLbRoot("/Root");
+    const auto resolved = OkFull(ResolveName("/Root/account1", ""));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/account1");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
+}
+
+Y_UNIT_TEST_F(FccEmptyNameUncleanDatabaseUnderLbRoot, TNameResolverFixture) {
+    // Unclean request database + empty relative → '/' + databaseNorm.
+    SetLbRoot("/Root");
+    const auto resolved = OkFull(ResolveName("/Root/account1/", ""));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/account1");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
+}
+
+Y_UNIT_TEST_F(JoinWithRootEmptyLbRootUncleanPath, TNameResolverFixture) {
+    SetLbRoot("");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "account--a//b", "dc1", "")),
+        "/Root/Db/account/a/b");
+}
+
+Y_UNIT_TEST_F(AbsoluteDatabaseUncleanRequestDatabase, TNameResolverFixture) {
+    // Trailing slash on request database still yields a clean NavigateDatabase.
+    const auto resolved = OkFull(ResolveName("/Root/Db/", "account/topic"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/Db/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
+}
+
+Y_UNIT_TEST_F(FederationLbRootExactIsRootLike, TNameResolverFixture) {
+    SetFcc(false);
+    // database == LbRoot → root-like (not a user account DB).
+    const auto resolved = OkFull(ResolveName("/Root/LbCommunal", "account/topic", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/LbCommunal/account");
+}
+
+Y_UNIT_TEST_F(FederationRootAlreadyMirrored, TNameResolverFixture) {
+    SetFcc(false);
+    const auto resolved = OkFull(
+        ResolveName("/Root", "account/topic-mirrored-from-dc2", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/LbCommunal/account");
+}
+
+Y_UNIT_TEST_F(FederationUserDatabaseLegacyParseFailure, TNameResolverFixture) {
+    SetFcc(false);
+    ExpectError(
+        ResolveName("/Root/LbCommunal/account", "rt3.bad", "dc1"),
+        "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
+}
+
+Y_UNIT_TEST_F(FederationBareWithEmptyDatabase, TNameResolverFixture) {
+    SetFcc(false);
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "topic", "dc1")),
+        "/Root/LbCommunal/topic");
+}
+
+Y_UNIT_TEST_F(FederationRootMirroredMalformedRejected, TNameResolverFixture) {
+    SetFcc(false);
+    ExpectError(
+        ResolveName("/Root", "account/mirrored-from-dc2", "dc1"),
+        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic. ");
+}
+
+Y_UNIT_TEST_F(NavigateDatabaseEmptyWhenNoAccountTopicShape, TNameResolverFixture) {
+    // Path under LbRoot without account/topic shape → keep request database.
+    const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
+}
+
+Y_UNIT_TEST_F(TryFederationAccountTargetCanonizesUncleanPath, TNameResolverFixture) {
+    const auto target = TryFederationAccountTarget(
+        "/Root/Federation/account//topic", "/Root/Federation");
+    UNIT_ASSERT(target.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(target->Path, "/Root/Federation/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(target->AccountDatabase, "/Root/Federation/account");
+}
+
+Y_UNIT_TEST_F(CorrectNameFalseUsesConvertOldTopicName, TNameResolverFixture) {
+    // CorrectName rejects empty producer between '--'; shortLegacy still converts.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "rt3.dc1----topic", "dc1", "")),
+        "/Root/LbCommunal/topic");
+}
+
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

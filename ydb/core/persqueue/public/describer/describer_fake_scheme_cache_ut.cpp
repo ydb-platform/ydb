@@ -408,23 +408,22 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         TDescribeEnv env([&](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
             ++requests;
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
-            // Bare name stays under DatabasePath (not rewritten to FederationRoot).
+            // Bare name stays under DatabasePath (NavigateDatabase = request DB).
             UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/topic1");
             entry.Status = TNavigate::EStatus::PathErrorUnknown;
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        // No account/topic shape → TryFederationAccountTarget fails → no Federation retry.
         env.StartDescribe({"topic1"});
         auto ev = env.WaitResponse();
 
-        UNIT_ASSERT_VALUES_EQUAL(requests, 2u); // local + sync only
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2u); // miss + sync only
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["topic1"].Status, NDescriber::EStatus::NOT_FOUND);
     }
 
     Y_UNIT_TEST(SetErrorResultPreservesSuccess) {
-        // One topic succeeds locally; another misses in its account DB.
-        // Failure for the second must not erase the first SUCCESS.
+        // Two topics in different NavigateDatabases: success for one and miss for
+        // the other must not interfere.
         TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
             const auto path = EntryPath(entry);
             if (request.DatabaseName == "/Root") {
@@ -674,6 +673,113 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["dir/topic"].Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["dir/topic"].RealPath, "/Root/dir/topic");
+    }
+
+    Y_UNIT_TEST(PathErrorUnknownUnauthorizedWithSecurityObject) {
+        // Sync miss with SecurityObject and no access → UNAUTHORIZED (not NOT_FOUND).
+        auto token = MakeIntrusiveConst<NACLib::TUserToken>("user@staff", TVector<TString>{});
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            entry.Status = TNavigate::EStatus::PathErrorUnknown;
+            entry.SecurityObject = MakeIntrusive<TSecurityObject>("root@builtin", TString{}, false);
+        });
+
+        env.StartDescribe(
+            {"/Root/topic1"},
+            NDescriber::TDescribeSettings{
+                .UserToken = token,
+                .AccessRights = NACLib::SelectRow,
+                .ForceSyncVersion = true,
+            });
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT(ev->UsedSyncVersion);
+    }
+
+    Y_UNIT_TEST(NotTopicUnauthorizedWithoutDescribe) {
+        auto token = MakeIntrusiveConst<NACLib::TUserToken>("user@staff", TVector<TString>{});
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            entry.Status = TNavigate::EStatus::Ok;
+            entry.Kind = TNavigate::EKind::KindPath;
+            entry.SecurityObject = MakeIntrusive<TSecurityObject>("root@builtin", TString{}, false);
+        });
+
+        env.StartDescribe(
+            {"/Root/dir"},
+            NDescriber::TDescribeSettings{
+                .UserToken = token,
+                .AccessRights = NACLib::SelectRow,
+            });
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/dir"].Status, NDescriber::EStatus::UNAUTHORIZED);
+    }
+
+    Y_UNIT_TEST(TopicUnauthorizedWithDescribeAccess) {
+        auto token = MakeIntrusiveConst<NACLib::TUserToken>("user@staff", TVector<TString>{});
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            FillOkTopic(entry, /*balancerTabletId=*/5);
+            NACLib::TSecurityObject aclObj("root@builtin", false);
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user@staff");
+            aclObj.ApplyDiff(acl);
+            entry.SecurityObject = MakeIntrusive<TSecurityObject>(
+                "root@builtin", aclObj.GetACL().SerializeAsString(), false);
+        });
+
+        env.StartDescribe(
+            {"/Root/topic1"},
+            NDescriber::TDescribeSettings{
+                .UserToken = token,
+                .AccessRights = NACLib::SelectRow,
+            });
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            ev->Topics["/Root/topic1"].Status,
+            NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS);
+    }
+
+    Y_UNIT_TEST(AccessOrAllowsViaFakeSchemeCache) {
+        auto token = MakeIntrusiveConst<NACLib::TUserToken>("user@staff", TVector<TString>{});
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            FillOkTopic(entry, /*balancerTabletId=*/6);
+            NACLib::TSecurityObject aclObj("root@builtin", false);
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user@staff");
+            aclObj.ApplyDiff(acl);
+            entry.SecurityObject = MakeIntrusive<TSecurityObject>(
+                "root@builtin", aclObj.GetACL().SerializeAsString(), false);
+        });
+
+        env.StartDescribe(
+            {"/Root/topic1"},
+            NDescriber::TDescribeSettings{
+                .UserToken = token,
+                .AccessRights = NDescriber::TAccessRights(NACLib::SelectRow, NACLib::DescribeSchema),
+            });
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST(MultipleNavigateDatabasesBatched) {
+        absl::flat_hash_set<TString> seenDatabases;
+        TDescribeEnv env([&](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            seenDatabases.insert(request.DatabaseName);
+            FillOkTopic(entry, /*balancerTabletId=*/7);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"account1/topic", "account2/topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT(seenDatabases.contains("/Root/Federation/account1"));
+        UNIT_ASSERT(seenDatabases.contains("/Root/Federation/account2"));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account1/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account2/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account1/topic"].RealPath, "/Root/Federation/account1/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account2/topic"].RealPath, "/Root/Federation/account2/topic");
     }
 
 }

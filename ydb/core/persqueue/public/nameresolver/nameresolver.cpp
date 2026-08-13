@@ -88,12 +88,10 @@ bool IsCleanRelativePath(TStringBuf path) {
         && !path.Contains("//");
 }
 
-// Join slash-stripped absolute root with a relative modern path.
-// Avoids CanonizePath when both sides are already clean.
+// Join non-empty slash-stripped absolute root with a relative modern path.
+// Caller (JoinWithRoot) only invokes this when rootStripped is non-empty.
 TString JoinStrippedRoot(TStringBuf rootStripped, TString modernPath) {
-    if (rootStripped.empty()) {
-        return modernPath;
-    }
+    Y_ABORT_UNLESS(!rootStripped.empty());
     if (modernPath.empty()) {
         return TStringBuilder() << '/' << rootStripped;
     }
@@ -121,9 +119,8 @@ TString JoinWithRoot(TStringBuf lbRootStripped, TStringBuf database, TString mod
 // Join request database with a relative topic path (user-DB / FCC modern paths).
 TString JoinWithDatabase(TStringBuf database, TStringBuf databaseNorm, TStringBuf relative) {
     if (databaseNorm.empty()) {
-        if (relative.empty()) {
-            return {};
-        }
+        // Empty request database: relative is never empty here (legacy bare "" goes via
+        // JoinWithRoot; modern paths always contain '/').
         if (IsCleanRelativePath(relative)) {
             return TStringBuilder() << '/' << relative;
         }

@@ -22,6 +22,12 @@ const TString RELATIVE_TABLE_PATH = "dir/table";
 
 const TPathId TABLE_ID(72057594046644480ull, 42);
 
+// Another table of the very same database
+const TString OTHER_TABLE_PATH = "/Root/db/dir/other_table";
+const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
+
+const TPathId OTHER_TABLE_ID(72057594046644480ull, 43);
+
 constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,11 +123,13 @@ struct TFakeTablet {
     void Report(
         const TNodeDatabaseMetricsAggregatorPtr& aggregator,
         EDetailedMetricsLevel level,
-        TInstant now
+        TInstant now,
+        const TPathId& tableId = TABLE_ID,
+        const TString& tablePath = TABLE_PATH
     ) {
         TDetailedMetricsTableInfo table;
-        table.TableId = TABLE_ID;
-        table.TablePath = TABLE_PATH;
+        table.TableId = tableId;
+        table.TablePath = tablePath;
         table.SchemaVersion = 1;
         table.MetricsLevel = level;
 
@@ -159,13 +167,16 @@ struct TFakeTablet {
 /**
  * @return The counter group of the table (or nullptr if there is none)
  */
-NMonitoring::TDynamicCounterPtr FindTableGroup(NMonitoring::TDynamicCounterPtr rootGroup) {
+NMonitoring::TDynamicCounterPtr FindTableGroup(
+    NMonitoring::TDynamicCounterPtr rootGroup,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
+) {
     auto databaseGroup = rootGroup->FindSubgroup("database", DATABASE_PATH);
     if (!databaseGroup) {
         return nullptr;
     }
 
-    return databaseGroup->FindSubgroup("table", RELATIVE_TABLE_PATH);
+    return databaseGroup->FindSubgroup("table", relativeTablePath);
 }
 
 /**
@@ -194,8 +205,11 @@ NMonitoring::TDynamicCounterPtr FindAppCountersGroup(NMonitoring::TDynamicCounte
  * @note At the table level the collapsed counters live directly in the table group:
  *       the role is the caller's partition of the tree, not a label within it.
  */
-NMonitoring::TDynamicCounterPtr FindTableBucketCounters(NMonitoring::TDynamicCounterPtr rootGroup) {
-    return FindAppCountersGroup(FindTableGroup(rootGroup));
+NMonitoring::TDynamicCounterPtr FindTableBucketCounters(
+    NMonitoring::TDynamicCounterPtr rootGroup,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
+) {
+    return FindAppCountersGroup(FindTableGroup(rootGroup, relativeTablePath));
 }
 
 /**
@@ -208,9 +222,10 @@ NMonitoring::TDynamicCounterPtr FindTableBucketCounters(NMonitoring::TDynamicCou
 NMonitoring::TDynamicCounterPtr FindLeafCounters(
     NMonitoring::TDynamicCounterPtr rootGroup,
     ui64 tabletId,
-    ui32 followerId
+    ui32 followerId,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
 ) {
-    auto tableGroup = FindTableGroup(rootGroup);
+    auto tableGroup = FindTableGroup(rootGroup, relativeTablePath);
     if (!tableGroup) {
         return nullptr;
     }
@@ -1047,6 +1062,195 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 databaseGroup->FindSubgroup("table", testCase.ExpectedLabel),
                 "no table group " << testCase.ExpectedLabel << " for " << testCase.TablePath
             );
+        }
+    }
+
+    /**
+     * Verify that a tablet, which is re-reported under another table, is MOVED rather than
+     * copied: its contribution to the previous table is dropped together with the counter
+     * groups, which become empty.
+     *
+     * @note The reverse map holds one table per tablet, because the forget event carries no
+     *       table identity. Overwriting the entry without cleaning up would leave the old
+     *       table's contribution in the tree with nothing left able to reach it: neither
+     *       ForgetTablet, which now routes to the new table, nor the next report.
+     */
+    Y_UNIT_TEST(TabletReportedUnderAnotherTableIsMoved) {
+        const TInstant now = TInstant::Seconds(100);
+
+        // TEST 1: The table level, where the tablet contributes to a shared bucket
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader(1000, 0);
+
+            leader.SetSimple(UNIQUE_ROWS, 5);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+            aggregator->RecalculateAllCounters();
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(UniqueRows)"),
+                5
+            );
+
+            // The very same tablet now reports another table of the same database
+            leader.SetSimple(UNIQUE_ROWS, 7);
+            leader.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelTable,
+                now,
+                OTHER_TABLE_ID,
+                OTHER_TABLE_PATH
+            );
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Counters after the tablet moved to another table", rootGroup);
+
+            // Nothing of the old table is left behind, and the new one holds the counters
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(
+                    FindTableBucketCounters(rootGroup, OTHER_RELATIVE_TABLE_PATH),
+                    "SUM(UniqueRows)"
+                ),
+                7
+            );
+
+            // The reverse map points at the new table, so forgetting the tablet empties
+            // the whole tree rather than the table it no longer belongs to
+            aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
+
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        }
+
+        // TEST 2: The partition level, where the tablet owns a leaf of its own
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader(1000, 0);
+
+            leader.SetSimple(UNIQUE_ROWS, 5);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+            aggregator->RecalculateAllCounters();
+
+            UNIT_ASSERT(FindLeafCounters(rootGroup, leader.TabletId, leader.FollowerId));
+
+            leader.SetSimple(UNIQUE_ROWS, 7);
+            leader.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelPartition,
+                now,
+                OTHER_TABLE_ID,
+                OTHER_TABLE_PATH
+            );
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Leaves after the tablet moved to another table", rootGroup);
+
+            // The old leaf and its whole table are gone, the new leaf holds the counters
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+
+            auto leafCounters = FindLeafCounters(
+                rootGroup,
+                leader.TabletId,
+                leader.FollowerId,
+                OTHER_RELATIVE_TABLE_PATH
+            );
+            UNIT_ASSERT(leafCounters);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafCounters, "SUM(UniqueRows)"), 7);
+
+            aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
+
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        }
+    }
+
+    /**
+     * Pin the CURRENT behaviour of a metrics level change: the level of a table is frozen
+     * at its very first report, so a changed level does not re-route the counters.
+     *
+     * @note This is a deliberate deferral, not the target behaviour: reconciling a table
+     *       entry on a schema version or a metrics level change is the scope of the level
+     *       and rename step, which is expected to REPLACE the assertions below with
+     *       the transition ones (drop the leaves on PARTITION -> TABLE, drop the bucket on
+     *       TABLE -> PARTITION, drop the table on -> DISABLED). The test exists so that
+     *       the step has to flip an explicit assertion instead of silently changing
+     *       behaviour, which nothing pins.
+     */
+    Y_UNIT_TEST(MetricsLevelChangeIsIgnoredUntilReconciliation) {
+        const TInstant now = TInstant::Seconds(100);
+
+        // TEST 1: A table, which was first seen at the table level, keeps collapsing
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader(1000, 0);
+
+            leader.SetSimple(UNIQUE_ROWS, 5);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+            leader.SetSimple(UNIQUE_ROWS, 7);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Counters after the level changed to the partition one", rootGroup);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(UniqueRows)"),
+                7
+            );
+            UNIT_ASSERT(!FindTableGroup(rootGroup)->FindSubgroup("detailed_metrics", "per_partition"));
+        }
+
+        // TEST 2: A table, which was first seen at the partition level, keeps its leaves
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader(1000, 0);
+
+            leader.SetSimple(UNIQUE_ROWS, 5);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+            leader.SetSimple(UNIQUE_ROWS, 7);
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Counters after the level changed to the table one", rootGroup);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(
+                    FindLeafCounters(rootGroup, leader.TabletId, leader.FollowerId),
+                    "SUM(UniqueRows)"
+                ),
+                7
+            );
+            UNIT_ASSERT(!FindAppCountersGroup(FindTableGroup(rootGroup)));
         }
     }
 }

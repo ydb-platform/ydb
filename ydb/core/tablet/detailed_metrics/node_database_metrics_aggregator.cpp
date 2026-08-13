@@ -195,25 +195,39 @@ public:
     ) override {
         CheckSingleRole(followerId);
 
+        const TTabletKey tablet(tabletId, followerId);
+
+        // A tablet reports exactly one table, so a tablet, which is re-reported under
+        // another one, leaves behind a contribution to the old table, which ForgetTablet
+        // can no longer reach. Drop it here, BEFORE the group of the new table is created,
+        // because dropping the last table of the database removes the database group too
+        auto mapIt = TabletToTableMap.find(tablet);
+        if (mapIt != TabletToTableMap.end() && mapIt->second != table.TableId) {
+            RemoveTabletFromTable(mapIt->second, tablet);
+            TabletToTableMap.erase(mapIt);
+        }
+
         auto* entry = GetOrCreateTable(table);
         if (!entry) {
             return;
         }
 
-        const TTabletKey tablet(tabletId, followerId);
-
         // Reject tablet type drift: all tablets of the same table must report the same type
         if (entry->RegisteredTabletType == TTabletTypes::TypeInvalid) {
             entry->RegisteredTabletType = tabletType;
-        } else {
+        } else if (entry->RegisteredTabletType != tabletType) {
             Y_DEBUG_ABORT_UNLESS(
-                entry->RegisteredTabletType == tabletType,
+                false,
                 "tablet %" PRIu64 " of table %s reports type %s but the table expects %s",
                 tabletId,
                 entry->Info.TablePath.c_str(),
                 TTabletTypes::TypeToStr(tabletType),
                 TTabletTypes::TypeToStr(entry->RegisteredTabletType)
             );
+
+            // The aggregates of the bucket are built for the counter set of the registered
+            // type, so feeding another layout into them aborts in TAggregatedTabletCounters
+            return;
         }
 
         // Record the reverse mapping from tablet key to table for ForgetTablet
@@ -251,30 +265,7 @@ public:
         const TPathId tableId = mapIt->second;
         TabletToTableMap.erase(mapIt);
 
-        auto it = Tables.find(tableId);
-        if (it == Tables.end()) {
-            // The table entry is already gone (should not happen, but safe)
-            return;
-        }
-
-        auto& entry = it->second;
-
-        if (IsTableLevel(entry.Info)) {
-            ForgetTableBucketTablet(entry, tablet);
-        } else {
-            ForgetLeaf(entry, tablet);
-        }
-
-        if (entry.IsEmpty()) {
-            DatabaseGroup->RemoveSubgroup(TABLE_LABEL, entry.RelativePath);
-            Tables.erase(it);
-        }
-
-        // The database node is not kept around after its last table is gone: a node
-        // stops hosting a database far more often than the process is restarted
-        if (Tables.empty()) {
-            RemoveDatabaseGroup();
-        }
+        RemoveTabletFromTable(tableId, tablet);
     }
 
     void RecalculateAllCounters() override {
@@ -366,7 +357,10 @@ private:
         }
 
         // NOTE: Reconciling an existing entry on a schema version or a metrics level
-        //       change is implemented in a separate step
+        //       change is implemented in a separate step (the level and rename step of
+        //       the detailed metrics plan). Until then the level of a table is frozen at
+        //       the very first report, which MetricsLevelChangeIsIgnoredUntilReconciliation
+        //       pins, so that the step has to flip an explicit assertion
 
         auto& entry = Tables[table.TableId];
         entry.Info = table;
@@ -374,6 +368,39 @@ private:
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, entry.RelativePath);
 
         return &entry;
+    }
+
+    /**
+     * Drop the contribution of a single tablet to the given table, removing the groups,
+     * which are left empty.
+     *
+     * @note The caller owns the reverse map entry: this function does not touch it.
+     */
+    void RemoveTabletFromTable(const TPathId& tableId, const TTabletKey& tablet) {
+        auto it = Tables.find(tableId);
+        if (it == Tables.end()) {
+            // The table collects no detailed metrics, or its entry is already gone
+            return;
+        }
+
+        auto& entry = it->second;
+
+        if (IsTableLevel(entry.Info)) {
+            ForgetTableBucketTablet(entry, tablet);
+        } else {
+            ForgetLeaf(entry, tablet);
+        }
+
+        if (entry.IsEmpty()) {
+            DatabaseGroup->RemoveSubgroup(TABLE_LABEL, entry.RelativePath);
+            Tables.erase(it);
+        }
+
+        // The database node is not kept around after its last table is gone: a node
+        // stops hosting a database far more often than the process is restarted
+        if (Tables.empty()) {
+            RemoveDatabaseGroup();
+        }
     }
 
     void ForgetTableBucketTablet(TTableEntry& entry, const TTabletKey& tablet) {

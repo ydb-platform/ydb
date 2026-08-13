@@ -91,6 +91,11 @@ public:
      *
      * @note A tablet of an unknown table is silently ignored, and forgetting a tablet
      *       twice is not an error.
+     *
+     * @note A tablet reports exactly one table, so the reverse map holds one table per
+     *       tablet. A tablet, which is re-reported under another table, is moved: its
+     *       contribution to the previous table is dropped by AddCounters, because
+     *       nothing but the reverse map could reach it afterwards.
      */
     virtual void ForgetTablet(ui64 tabletId, ui32 followerId) = 0;
 

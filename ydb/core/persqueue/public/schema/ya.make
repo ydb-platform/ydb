@@ -9,6 +9,7 @@ SRCS(
     create_topic.cpp
     create_topic_internal.cpp
     create_topic_operation.cpp
+    describe_operation.cpp
     drop_topic.cpp
     drop_topic_operation.cpp
     remove_consumer.cpp
@@ -19,10 +20,13 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/persqueue/common
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/describer
+    ydb/core/util
+    ydb/core/ydb_convert
 )
 
 END()

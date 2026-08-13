@@ -2,13 +2,14 @@
 
 PY3_LIBRARY()
 
-VERSION(1.12.1)
+VERSION(1.24.5)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/idna
     contrib/python/multidict
+    contrib/python/propcache
 )
 
 NO_COMPILER_WARNINGS()
@@ -18,15 +19,14 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     yarl/__init__.py
-    yarl/_helpers.py
-    yarl/_helpers_c.pyi
-    yarl/_helpers_py.py
+    yarl/_parse.py
+    yarl/_path.py
+    yarl/_query.py
+    yarl/_quoters.py
     yarl/_quoting.py
-    yarl/_quoting_c.pyi
     yarl/_quoting_py.py
     yarl/_url.py
     CYTHON_C
-    yarl/_helpers_c.pyx
     yarl/_quoting_c.pyx
 )
 

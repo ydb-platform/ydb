@@ -1688,7 +1688,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     // Secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
-        return {CreateNewSecret(op.NextPartId(), tx)};
+        return {CreateNewSecret(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
         return {CreateAlterSecret(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:

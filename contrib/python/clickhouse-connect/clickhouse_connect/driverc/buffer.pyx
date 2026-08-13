@@ -185,7 +185,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -231,7 +231,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -278,7 +278,7 @@ cdef class ResponseBuffer:
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            sz += ((b & 0x7f) << shift)
+            sz += (<unsigned long long>(b & 0x7f)) << shift
             if (b & 0x80) == 0:
                 return sz
             shift += 7

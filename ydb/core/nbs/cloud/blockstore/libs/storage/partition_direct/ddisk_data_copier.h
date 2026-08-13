@@ -3,8 +3,13 @@
 #include "direct_block_group.h"
 #include "read_request_executor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -35,9 +40,10 @@ public:
         NActors::TActorSystem* actorSystem,
         ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
+        const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlocksDirtyMap* dirtyMap,
+        TBlocksDirtyMapPtr dirtyMap,
         THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
@@ -58,6 +64,7 @@ private:
     void OnRangeWritten(
         TCopyRangeRequestStatePtr copyRangeState,
         const TDBGWriteBlocksResponse& response);
+    void ScheduleStartCopyRange(TDuration delay);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     ITraceService* const TraceService = nullptr;
@@ -65,11 +72,12 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
-    TBlocksDirtyMap* const DirtyMap;
+    const TBlocksDirtyMapPtr DirtyMap;
 
     TLogTitle LogTitle;
     EState State = EState::Stopped;
     size_t FreshWatermark = 0;
+    TBackoffDelayProvider BackoffDelayProvider;
     NThreading::TPromise<EResult> Complete;
 };
 

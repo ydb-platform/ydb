@@ -535,6 +535,77 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    // Verifies that a read-only SELECT via a secondary index under ReadCommittedRW
+    // issues TEvRead requests carrying a non-zero LockTxId and LockMode == PESSIMISTIC_NONE,
+    class TReadCommittedSelectTakesLocks : public TTableDataModificationTester {
+    public:
+        TReadCommittedSelectTakesLocks(TString selectQuery)
+            : SelectQuery(std::move(selectQuery)) {
+        }
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evReadCounter = 0;
+            size_t evLockCounter = 0;
+            size_t evLockResultCounter = 0;
+            size_t evWriteCounter = 0;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRowsResult::EventType) {
+                    ++evLockResultCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* readEv = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT(readEv->Record.GetLockMode() == NKikimrDataEvents::PESSIMISTIC_NONE);
+                    UNIT_ASSERT(readEv->Record.GetLockTxId() != 0);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(SelectQuery, TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evReadCounter >= 2; // index table + main table
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+            }
+
+            auto result = runtime.WaitFuture(future);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(evLockCounter, 0);
+            UNIT_ASSERT_VALUES_EQUAL(evLockResultCounter, 0);
+            UNIT_ASSERT_VALUES_EQUAL(evWriteCounter, 0);
+        }
+
+        const TString SelectQuery;
+    };
+
+    Y_UNIT_TEST(TSelectBySecondaryIndexTakesLocks) {
+        // /Root/Test2 (from kqp_sink_common.h) has INDEX idx_comment GLOBAL UNIQUE ON (Comment).
+        // SELECT via VIEW idx_comment forces the secondary-index scan -> stream-lookup plan.
+        TReadCommittedSelectTakesLocks tester(
+            R"(SELECT Group, Name, Amount, Comment FROM `/Root/Test2` VIEW idx_comment WHERE Comment IN ("1", "2"))");
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TpccPaymentReturningConflict : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {

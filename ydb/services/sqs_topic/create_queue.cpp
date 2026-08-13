@@ -40,8 +40,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -116,7 +117,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {
@@ -169,9 +170,9 @@ namespace NKikimr::NSqsTopic::V1 {
             topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
             topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
-            if (QueueAttributes.ContentBasedDeduplication.GetOrElse(false)) {
-                topicRequest.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                topicRequest.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
+            if (QueueAttributes.FifoQueue) {
+                topicRequest.set_partition_write_speed_messages_per_second(NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                topicRequest.set_partition_write_burst_messages(NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES);
             }
 
             AddConsumerToRequest(topicRequest.add_consumers());

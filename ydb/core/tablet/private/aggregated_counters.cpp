@@ -164,28 +164,26 @@ void TAggregatedSimpleCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedSimpleCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedSimpleCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*
@@ -307,28 +305,26 @@ void TAggregatedCumulativeCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedCumulativeCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedCumulativeCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*

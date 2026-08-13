@@ -155,7 +155,7 @@ private:
 
         if (++TreeSize_ > TreeSizeLimit_) {
             THROW_ERROR_EXCEPTION("Tree size limit exceeded")
-                << TErrorAttribute("tree_size_limit", TreeSizeLimit_);
+                .With("tree_size_limit", TreeSizeLimit_);
         }
 
         if (NodeStack_.empty()) {

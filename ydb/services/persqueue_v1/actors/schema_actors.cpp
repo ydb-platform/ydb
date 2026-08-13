@@ -4,11 +4,13 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
@@ -82,6 +84,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
+        settings->set_content_based_deduplication(config.GetContentBasedDeduplication());
         const auto &partConfig = config.GetPartitionConfig();
         i64 msip = partConfig.GetMaxSizeInPartition();
         if (msip != Max<i64>())
@@ -98,6 +101,24 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
             settings->set_max_partition_write_burst(partConfig.GetBurstSize());
             settings->set_max_partition_write_messages_speed(partConfig.GetWriteSpeedInMessagesPerSecond());
             settings->set_max_partition_write_messages_burst(partConfig.GetBurstSizeInMessages());
+        }
+
+        if (partConfig.HasReadSpeedInBytesPerSecond()) {
+            settings->set_partition_total_read_speed_bytes_per_second(partConfig.GetReadSpeedInBytesPerSecond());
+        }
+        if (partConfig.HasReadSpeedInMessagesPerSecond()) {
+            settings->set_partition_total_read_speed_messages_per_second(partConfig.GetReadSpeedInMessagesPerSecond());
+        }
+
+        // Read speed for reading a single partition without a consumer is stored in
+        // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
+        if (const auto* readQuota = NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER)) {
+            if (readQuota->HasSpeedInBytesPerSecond()) {
+                settings->set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+            }
+            if (readQuota->HasSpeedInMessagesPerSecond()) {
+                settings->set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+            }
         }
 
         settings->set_supported_format(
@@ -180,6 +201,16 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                         }
                     }
                     break;
+                }
+            }
+
+            // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+            if (const auto* readQuota = NPQ::GetReadQuota(config, consumer.GetName())) {
+                if (readQuota->HasSpeedInBytesPerSecond()) {
+                    rr->set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+                }
+                if (readQuota->HasSpeedInMessagesPerSecond()) {
+                    rr->set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
                 }
             }
 
@@ -641,7 +672,7 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
     Y_UNUSED(ev);
-    Y_ABORT("");
+    AFL_ENSURE(false)("reason", "TDescribeTopicActor: unexpected TEvReadSessionsInfoResponse");
 }
 
 
@@ -856,105 +887,6 @@ void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TDescribeTopicActor::StateWork);
     YDB_LOG_DEBUG_CTX(ctx, "Describe topic actor for path",
         {"path", GetProtoRequest()->path()});
-}
-
-using namespace NIcNodeCache;
-
-TPartitionsLocationActor::TPartitionsLocationActor(const TGetPartitionsLocationRequest& request, const TActorId& requester)
-    : TBase(request, requester)
-    , TDescribeTopicActorImpl(TDescribeTopicActorSettings::GetPartitionsLocation(request.PartitionIds))
-{
-}
-
-
-void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
-{
-    SendDescribeProposeRequest();
-    UnsafeBecome(&TPartitionsLocationActor::StateWork);
-}
-
-void TPartitionsLocationActor::StateWork(TAutoPtr<IEventHandle>& ev) {
-    switch (ev->GetTypeRewrite()) {
-        default:
-            if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
-                TBase::StateWork(ev);
-            };
-    }
-}
-
-void TPartitionsLocationActor::HandleCacheNavigateResponse(
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev
-) {
-    if (!TBase::HandleCacheNavigateResponseBase(ev)) {
-        return;
-    }
-
-    if (ProcessTablets(PQGroupInfo->Description, this->ActorContext())) {
-        Response->PathId = Self->Info.GetPathId();
-        Response->SchemeShardId = Self->Info.GetSchemeshardId();
-    }
-}
-
-bool TPartitionsLocationActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
-) {
-    const auto& record = ev->Get()->Record;
-    if (!record.GetStatus()) {
-        this->RaiseError("Partition locations are not available", Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-            Ydb::StatusIds::UNAVAILABLE, ActorContext());
-        return false;
-    }
-    for (auto i = 0u; i < record.LocationsSize(); i++) {
-        const auto& part = record.GetLocations(i);
-        TEvPQProxy::TPartitionLocationInfo partLocation;
-        ui64 nodeId = part.GetNodeId();
-
-        partLocation.PartitionId = part.GetPartitionId();
-        partLocation.Generation = part.GetGeneration();
-        partLocation.NodeId = nodeId;
-        if (TopicPartitionsIds.contains(partLocation.PartitionId)) {
-            Response->Partitions.emplace_back(std::move(partLocation));
-        }
-    }
-    Finalize();
-    return true;
-}
-
-void TPartitionsLocationActor::PassAway() {
-    TDescribeTopicActorImpl::PassAway(ActorContext());
-    TBase::PassAway();
-}
-
-void TPartitionsLocationActor::Finalize() {
-    if (Settings.Partitions) {
-        AFL_ENSURE(Response->Partitions.size() == Settings.Partitions.size())
-            ("l", Response->Partitions.size())
-            ("r", Settings.Partitions.size());
-    } else {
-        AFL_ENSURE(Response->Partitions.size() >= PQGroupInfo->Description.PartitionsSize())
-            ("l", Response->Partitions.size())
-            ("r", PQGroupInfo->Description.PartitionsSize());
-    }
-    TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
-}
-
-void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
-    if (TBase::IsDead) {
-        return;
-    }
-    this->AddIssue(FillIssue(error, errorCode));
-    this->RespondWithCode(status);
-}
-
-bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
-    YDB_LOG_ERROR("Unhandled exception",
-        {"typeName", TypeName(exc)},
-        {"exception", exc.what()},
-        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
-
-    this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
-
-    return true;
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

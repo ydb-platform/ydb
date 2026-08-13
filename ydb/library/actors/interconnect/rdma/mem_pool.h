@@ -68,6 +68,7 @@ namespace NInterconnect::NRdma {
         }
         void*    GetAddr() const;
         uint32_t GetSize() const;
+        const TMemRegion* GetMemRegion() const noexcept;
 
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
@@ -108,6 +109,6 @@ namespace NInterconnect::NRdma {
         virtual void Tick(NMonotonic::TMonotonic time) noexcept = 0;
     };
 
-    std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateDummyMemPool(bool emulateRegistration = false) noexcept;
     std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept;
 }

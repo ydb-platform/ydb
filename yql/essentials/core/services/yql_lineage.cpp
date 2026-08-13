@@ -12,10 +12,15 @@
 #include <util/system/env.h>
 
 static constexpr TStringBuf YqlSysPrefix = "_yql_sys_";
+static constexpr TStringBuf YqlTimeColumn = "_yql_time";
 
 namespace NYql {
 
 namespace {
+
+bool IsYqlSystemField(TStringBuf name) {
+    return name.StartsWith(YqlSysPrefix) || name == YqlTimeColumn;
+}
 
 enum class ETransformsType {
     Copy,
@@ -55,7 +60,7 @@ struct TSchemaHash {
         ui64 hash = NYql::TypeHashMagic | (ui64)NYql::ETypeAnnotationKind::Struct;
         size_t count = 0;
         for (const auto* item : type->GetItems()) {
-            if (item->GetName().StartsWith(YqlSysPrefix)) {
+            if (IsYqlSystemField(item->GetName())) {
                 continue;
             }
             hash = NYql::StreamHash(item->GetHash(), hash);
@@ -77,11 +82,11 @@ struct TSchemaEqualTo {
         const auto& lItems = lhs->GetItems();
         const auto& rItems = rhs->GetItems();
         for (auto li = lItems.begin(), ri = rItems.begin(); li != lItems.end() || ri != rItems.end();) {
-            if (li != lItems.end() && (*li)->GetName().StartsWith(YqlSysPrefix)) {
+            if (li != lItems.end() && IsYqlSystemField((*li)->GetName())) {
                 ++li;
                 continue;
             }
-            if (ri != rItems.end() && (*ri)->GetName().StartsWith(YqlSysPrefix)) {
+            if (ri != rItems.end() && IsYqlSystemField((*ri)->GetName())) {
                 ++ri;
                 continue;
             }
@@ -636,7 +641,7 @@ private:
     void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType, IPlanFormatter* formatter) {
         writer.OnBeginMap();
         for (const auto& i : structType.GetItems()) {
-            if (i->GetName().StartsWith("_yql_sys_")) {
+            if (IsYqlSystemField(i->GetName())) {
                 continue;
             }
 
@@ -720,7 +725,7 @@ private:
             lineage.Fields.ConstructInPlace(Allocator_.get());
             auto type = node.GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType();
             ProcessReadItem(type, [&](const TItemExprType& i) {
-                if (i.GetName().StartsWith("_yql_sys_")) {
+                if (IsYqlSystemField(i.GetName())) {
                     return;
                 }
 
@@ -741,7 +746,7 @@ private:
                     auto structType = itemType->Cast<TStructExprType>();
                     lineage.Fields.ConstructInPlace(Allocator_.get());
                     for (const auto& i : structType->GetItems()) {
-                        if (i->GetName().StartsWith("_yql_sys_")) {
+                        if (IsYqlSystemField(i->GetName())) {
                             continue;
                         }
 
@@ -763,11 +768,15 @@ private:
                              "TopSort",
                              "Top",
                              "Nth",
+                             "Demux",
                              "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeUniqueHint", "AssumeDistinctHint",
                              "AssumeChopped", "AssumeConstraints", "AssumeStrict", "AssumeNonStrict",
                              "SkipNullMembers", "FilterNullMembers",
-                             "Iterator", "ToFlow", "FromFlow", "ToStream", "ForwardList"})) {
+                             "Iterator", "ToFlow", "FromFlow", "ToStream", "ForwardList", "Just", "WithWorld"})) {
             lineage = *CollectLineage(node.Head());
+            return &lineage;
+        } else if (node.IsCallable("YtMaterialize!")) {
+            lineage = *CollectLineage(*node.Child(2));
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
             HandleExtractMembers(lineage, node);
@@ -791,8 +800,12 @@ private:
             HandleChopper(lineage, node);
         } else if (node.IsCallable("Condense1")) {
             HandleCondense1(lineage, node);
+        } else if (node.IsCallable("CombineByKey")) {
+            HandleCombineByKey(lineage, node);
         } else if (node.IsCallable({"AsList", "List", "ListIf"})) {
             HandleListLiteral(lineage, node);
+        } else if (node.IsCallable("AsStruct")) {
+            HandleAsStruct(lineage, node);
         } else {
             Warning(node);
         }
@@ -845,7 +858,7 @@ private:
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
-                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                if (IsYqlSystemField(node.Tail().Content())) {
                     return it->second = TFieldsLineage(Allocator_.get());
                 }
                 return it->second = (*src->Fields).at(node.Tail().Content());
@@ -869,7 +882,7 @@ private:
             }
 
             if (inner->StructItems) {
-                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                if (IsYqlSystemField(node.Tail().Content())) {
                     return it->second = TFieldsLineage(Allocator_.get());
                 }
                 TFieldsLineage result(Allocator_.get());
@@ -976,7 +989,7 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                if (!fieldName.StartsWith(YqlSysPrefix)) {
+                if (!IsYqlSystemField(fieldName)) {
                     dst.StructItems = (*src.Fields).at(fieldName).StructItems;
                 }
             }
@@ -987,10 +1000,19 @@ private:
 
     void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage,
                            const TTypeAnnotationNode* extType, const TFieldsLineageMap& flattenColumns) {
+        while (value && value->IsCallable("Variant")) {
+            value = &value->Head();
+        }
+
+        if (value == &arg) {
+            lineage.Fields = *innerLineage.Fields;
+            return;
+        }
+
         TMaybe<TStringBuf> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             const auto fieldName = value->Tail().Content();
-            if (!fieldName.StartsWith(YqlSysPrefix)) {
+            if (!IsYqlSystemField(fieldName)) {
                 auto& f = innerLineage.Fields->at(fieldName);
                 if (f.StructItems) {
                     for (const auto& x : *f.StructItems) {
@@ -1047,8 +1069,7 @@ private:
             return;
         }
 
-        if (extType && extType->GetKind() == ETypeAnnotationKind::Struct) {
-            auto structType = extType->Cast<TStructExprType>();
+        if (extType && (extType->GetKind() == ETypeAnnotationKind::Struct || extType->GetKind() == ETypeAnnotationKind::Variant)) {
             TFieldLineageSet allLineage(Allocator_.get());
             for (const auto& f : *innerLineage.Fields) {
                 if (oneField && oneField != f.first) {
@@ -1058,11 +1079,14 @@ private:
                 allLineage.insert(f.second.Items.begin(), f.second.Items.end());
             }
 
-            for (const auto& i : structType->GetItems()) {
-                auto& res = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
-                TFieldLineageSet items(allLineage);
+            ProcessReadItem(extType, [&](const TItemExprType& i) {
+                if (IsYqlSystemField(i.GetName())) {
+                    return;
+                }
+
+                auto& res = (*lineage.Fields).try_emplace(i.GetName(), TFieldsLineage(Allocator_.get())).first->second;
                 res.Items = allLineage;
-            }
+            });
         }
     }
 
@@ -1071,8 +1095,10 @@ private:
         if (!innerLineage.Fields.Defined()) {
             return;
         }
+        ProcessFlatMapLambda(lineage, node.Tail(), innerLineage, /*strict=*/true);
+    }
 
-        const auto& lambda = node.Tail();
+    void ProcessFlatMapLambda(TLineage& lineage, const TExprNode& lambda, const TLineage& innerLineage, bool strict) {
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
         TFieldsLineageMap flattenColumns(Allocator_.get());
@@ -1105,6 +1131,13 @@ private:
             } else {
                 value = &body.Head();
             }
+        } else if (body.IsCallable("GroupByKey")) {
+            value = &body;
+        } else if (!strict) {
+            lineage.Fields.ConstructInPlace(Allocator_.get());
+            FillStructLineage(lineage, /*value=*/nullptr, arg, innerLineage, GetSeqItemType(lambda.GetTypeAnn()),
+                              TFieldsLineageMap(Allocator_.get()));
+            return;
         } else {
             Warning(body);
             return;
@@ -1189,6 +1222,7 @@ private:
                 (*lineage.Fields).insert_or_assign(field, source);
             }
         }
+
         if (const TExprNode::TPtr outputColumnsSetting = GetSetting(*node.Child(3), "output_columns")) {
             TSetLimited<TStringBuf> outMembers(Allocator_.get());
             const auto& settingsList = outputColumnsSetting->ChildPtr(1)->ChildrenList();
@@ -1211,6 +1245,11 @@ private:
         const auto& body = node.Tail().Tail();
         if (&body == &arg) {
             lineage.Fields = *innerLineage.Fields;
+            return;
+        }
+
+        if (body.IsCallable({"FlatMap", "OrderedFlatMap"}) && &body.Head() == &arg) {
+            ProcessFlatMapLambda(lineage, body.Tail(), innerLineage, /*strict=*/false);
             return;
         }
 
@@ -1259,6 +1298,55 @@ private:
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
         for (const auto& i : stateType->Cast<TStructExprType>()->GetItems()) {
+            (*lineage.Fields).insert_or_assign(i->GetName(), source);
+        }
+    }
+
+    void HandleCombineByKey(TLineage& lineage, const TExprNode& node) {
+        auto innerLineage = *CollectLineage(node.Head());
+        if (!innerLineage.Fields.Defined()) {
+            return;
+        }
+
+        auto itemType = GetSeqItemType(node.GetTypeAnn());
+        if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            return;
+        }
+
+        const auto& preMapHandler = *node.Child(1);
+        const auto& preMapArg = preMapHandler.Head().Head();
+        const TExprNode* preMapValue = &preMapHandler.Tail();
+        while (preMapValue->IsCallable({"Just", "ToStream"})) {
+            preMapValue = &preMapValue->Head();
+        }
+
+        TLineage mappedLineage;
+        if (preMapValue == &preMapArg) {
+            mappedLineage.Fields = innerLineage.Fields;
+        } else {
+            mappedLineage.Fields.ConstructInPlace(Allocator_.get());
+            FillStructLineage(mappedLineage, preMapValue, preMapArg, innerLineage,
+                              GetSeqItemType(preMapHandler.GetTypeAnn()), TFieldsLineageMap(Allocator_.get()));
+        }
+
+        if (!mappedLineage.Fields.Defined()) {
+            return;
+        }
+
+        const auto& keyExtractor = *node.Child(2);
+        const auto& initHandler = *node.Child(3);
+        const auto& updateHandler = *node.Child(4);
+
+        TFieldsLineage source(Allocator_.get());
+        MergeLineageFromUsedFields(keyExtractor.Tail(), keyExtractor.Head().Head(), mappedLineage, source,
+                                   /*produceStruct=*/false, TFieldsLineageMap(Allocator_.get()));
+        MergeLineageFromUsedFields(initHandler.Tail(), *initHandler.Head().Child(1), mappedLineage, source,
+                                   /*produceStruct=*/false, TFieldsLineageMap(Allocator_.get()));
+        MergeLineageFromUsedFields(updateHandler.Tail(), *updateHandler.Head().Child(1), mappedLineage, source,
+                                   /*produceStruct=*/false, TFieldsLineageMap(Allocator_.get()));
+
+        lineage.Fields.ConstructInPlace(Allocator_.get());
+        for (const auto& i : itemType->Cast<TStructExprType>()->GetItems()) {
             (*lineage.Fields).insert_or_assign(i->GetName(), source);
         }
     }
@@ -1525,6 +1613,22 @@ private:
         }
     }
 
+    void HandleAsStruct(TLineage& lineage, const TExprNode& node) {
+        lineage.Fields.ConstructInPlace(Allocator_.get());
+        for (const auto& f : node.Children()) {
+            TNodeMap<TMaybe<TFieldsLineage>> visited;
+            auto res = ScanExprLineage(f->Tail(),
+                                       /*arg=*/nullptr,
+                                       /*src=*/nullptr,
+                                       visited,
+                                       TFieldsLineageMap(Allocator_.get()));
+            if (res) {
+                auto name = f->Head().Content();
+                (*lineage.Fields).try_emplace(name, TFieldsLineage(Allocator_.get())).first->second.MergeFrom(*res);
+            }
+        }
+    }
+
     void HandleListLiteral(TLineage& lineage, const TExprNode& node) {
         auto itemType = node.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
@@ -1541,17 +1645,10 @@ private:
         for (ui32 i = startIndex; i < node.ChildrenSize(); ++i) {
             auto child = node.Child(i);
             if (child->IsCallable("AsStruct")) {
-                for (const auto& f : child->Children()) {
-                    TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    auto res = ScanExprLineage(f->Tail(),
-                                               /*arg=*/nullptr,
-                                               /*src=*/nullptr,
-                                               visited,
-                                               TFieldsLineageMap(Allocator_.get()));
-                    if (res) {
-                        auto name = f->Head().Content();
-                        (*lineage.Fields).try_emplace(name, TFieldsLineage(Allocator_.get())).first->second.MergeFrom(*res);
-                    }
+                TLineage asStructLineage;
+                HandleAsStruct(asStructLineage, *child);
+                for (const auto& f : *asStructLineage.Fields) {
+                    (*lineage.Fields).try_emplace(f.first, TFieldsLineage(Allocator_.get())).first->second.MergeFrom(f.second);
                 }
             } else {
                 TNodeMap<TMaybe<TFieldsLineage>> visited;
@@ -1562,7 +1659,7 @@ private:
                                            TFieldsLineageMap(Allocator_.get()));
                 if (res) {
                     for (const auto& i : structType->GetItems()) {
-                        if (i->GetName().StartsWith("_yql_sys_")) {
+                        if (IsYqlSystemField(i->GetName())) {
                             continue;
                         }
 

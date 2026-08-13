@@ -5,7 +5,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <yql/essentials/sql/v1/node.h>
+#include <yql/essentials/sql/v1/translation/node.h>
 
 namespace NKikimr::NKqp {
 

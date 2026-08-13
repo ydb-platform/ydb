@@ -806,6 +806,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (columnDesc.HasDefaultFromLiteral()) {
                     column.SetDefaultFromLiteral();
                     column.DefaultFromLiteral = columnDesc.GetDefaultFromLiteral();
+                } else if (columnDesc.HasDefaultFromExpression()) {
+                    column.SetDefaultFromExpression();
+                    const auto& generated = columnDesc.GetDefaultFromExpression();
+                    column.DefaultExpression.ConstructInPlace();
+                    column.DefaultExpression->ExprText = generated.GetExprText();
+                    column.DefaultExpression->Context = generated.GetContext();
+                    column.DefaultExpression->Stored = generated.GetStored();
+                    column.DefaultExpression->Dependencies.assign(
+                        generated.GetDependencyColumnNames().begin(),
+                        generated.GetDependencyColumnNames().end());
                 }
 
                 if (columnDesc.GetNotNull()) {

@@ -37,15 +37,15 @@ TDictStats TDictStats::SelectSeparatedColumns(const TSettings& settings, const u
     return columnsBuilder.Finish();
 }
 
-TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount) {
+TDictStats TDictStats::Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount) {
     std::map<std::string_view, TRTStats> resultMap;
     for (auto&& i : stats) {
-        for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
-            auto it = resultMap.find(i->GetColumnName(idx));
+        for (ui32 idx = 0; idx < i.GetColumnsCount(); ++idx) {
+            auto it = resultMap.find(i.GetColumnName(idx));
             if (it == resultMap.end()) {
-                it = resultMap.emplace(i->GetColumnName(idx), TRTStats(i->GetColumnName(idx))).first;
+                it = resultMap.emplace(i.GetColumnName(idx), TRTStats(i.GetColumnName(idx))).first;
             }
-            it->second.Add(*i, idx);
+            it->second.Add(i, idx);
         }
     }
     auto builder = MakeBuilder();

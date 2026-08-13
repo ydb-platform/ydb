@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/property.h>
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NYson {
 

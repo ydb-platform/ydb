@@ -14,6 +14,10 @@ PY_SRCS(
     bench/__init__.py
     bench/run.py
 
+    buildbench/__init__.py
+    buildbench/parse.py
+    buildbench/run.py
+
     analyze/__init__.py
     analyze/cache.py
     analyze/clang_runner.py

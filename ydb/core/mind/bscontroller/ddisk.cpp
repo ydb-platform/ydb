@@ -1,6 +1,8 @@
 #include "impl.h"
 #include "group_layout_checker.h"
 
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
+
 #include <util/generic/yexception.h>
 
 namespace NKikimr::NBsController {

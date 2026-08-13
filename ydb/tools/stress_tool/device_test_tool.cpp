@@ -179,9 +179,6 @@ int main(int argc, char **argv) {
         .RequiredArgument("PORT").StoreResult(&icPort).Hidden();
     opts.AddLongOption("num-server-devices", "number of devices per server (default 1); ignored in interconnect server/client mode")
         .RequiredArgument("N").DefaultValue("1").Hidden();
-    bool useUring = false;
-    opts.AddLongOption("use-uring", "use io_uring transport for interconnect instead of epoll (Linux 5.19+)")
-        .StoreTrue(&useUring).NoArgument().Hidden();
 
     {
         const size_t kCol = 26;
@@ -207,9 +204,7 @@ int main(int argc, char **argv) {
             << row("ic-port PORT",
                    "interconnect port for server to listen on (server only)")
             << row("num-server-devices N",
-                   "number of devices per server (default 1); ignored for InterconnectTestList")
-            << row("use-uring",
-                   "use io_uring transport for interconnect instead of epoll (Linux 5.19+)");
+                   "number of devices per server (default 1); ignored for InterconnectTestList");
 
         opts.AddSection("DDisk / Interconnect client/server options", ddiskHelp);
     }
@@ -329,7 +324,7 @@ int main(int argc, char **argv) {
             if (serverMode) {
                 InstallInterconnectServerSignalHandler();
                 auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort, useUring));
+                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort));
                 test->SetPrinter(printer);
                 test->RunTest();
                 return 0;
@@ -362,7 +357,7 @@ int main(int argc, char **argv) {
                 auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(
-                        new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers, useUring));
+                        new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
@@ -381,7 +376,7 @@ int main(int argc, char **argv) {
         if (serverMode) {
             InstallServerSignalHandler();
             auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort, useUring));
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort));
             test->SetPrinter(printer);
             test->RunTest();
             return 0;
@@ -426,7 +421,7 @@ int main(int argc, char **argv) {
                     overrideDDiskInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
                         THolder<NKikimr::TPerfTest> test(
-                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
+                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                         test->SetPrinter(printer);
                         test->RunTest();
                     }
@@ -434,7 +429,7 @@ int main(int argc, char **argv) {
             } else {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(
-                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
+                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }

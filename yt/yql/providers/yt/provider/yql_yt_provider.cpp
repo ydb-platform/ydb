@@ -309,7 +309,9 @@ void TYtState::Reset() {
     LoadEpochMetadata.Clear();
     EpochDependencies.clear();
     Configuration->ClearVersions();
-    TablesData = MakeIntrusive<TYtTablesData>();
+    if (TablesData) {
+        *TablesData = {};
+    }
     AnonymousLabels.clear();
     NodeHash.clear();
     Checkpoints.clear();

@@ -24,6 +24,9 @@ namespace NKikimr::NKqp {
             o << ", WatermarkLateEventsPolicy: " << WatermarkLateEventsPolicy;
         }
         o << ", IsStreamingQuery: " << IsStreamingQuery;
+        if (UseBatchPool) {
+            o << ", UseBatchPool: " << UseBatchPool;
+        }
         o << "}";
     }
 

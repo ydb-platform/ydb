@@ -61,7 +61,7 @@ void TTxSetDown::Complete(const TActorContext& ctx) {
         {"nodeId", NodeId},
         {"down", Down},
         {"SideEffects", SideEffects});
-    SideEffects.Complete(ctx);
+    SideEffects.Complete(ctx, Self->Requests);
 }
 
 ITransaction* THive::CreateSetDown(TEvHive::TEvSetDown::TPtr& ev) {

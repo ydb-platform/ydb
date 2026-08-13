@@ -9,7 +9,8 @@ IActor* CreateKeyValueCopyBlobActor(
     const TActorId& keyValueActorId,
     TTabletStorageInfo* tabletInfo,
     const TLogoBlobID& blobId,
-    const TLogoBlobID& newBlobId);
+    const TLogoBlobID& newBlobId,
+    ui64 requestUid);
 
 } // NKeyValue
 } // NKikimr

@@ -5,7 +5,7 @@
 
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>

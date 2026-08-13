@@ -4,9 +4,9 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-#include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <optional>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -182,50 +182,6 @@ public:
 
 private:
     Ydb::Topic::DescribeTopicResult Result;
-};
-
-class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,
-                                                               TGetPartitionsLocationRequest,
-                                                               TEvPQProxy::TEvPartitionLocationResponse>
-                               , public TDescribeTopicActorImpl
-                               , public TCdcStreamCompatible
-                               , public NActors::IActorExceptionHandler {
-
-using TBase = TPQInternalSchemaActor<TPartitionsLocationActor, TGetPartitionsLocationRequest,
-                                     TEvPQProxy::TEvPartitionLocationResponse>;
-
-public:
-    TPartitionsLocationActor(const TGetPartitionsLocationRequest& request, const TActorId& requester);
-
-    ~TPartitionsLocationActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx) override;
-
-    void StateWork(TAutoPtr<IEventHandle>& ev);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo&,
-                      NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
-                      const TActorContext&) override {
-        Y_ABORT();
-    }
-    virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
-                               const TActorContext&) override {
-        Y_ABORT();
-    }
-
-    void Finalize();
-
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
-    void Reply(const TActorContext&) override {};
-
-    void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;
-    bool OnUnhandledException(const std::exception& exc) override;
-
-    void PassAway() override;
-
-private:
-    THashSet<ui64> PartitionIds;
 };
 
 } // namespace NKikimr::NGRpcProxy::V1

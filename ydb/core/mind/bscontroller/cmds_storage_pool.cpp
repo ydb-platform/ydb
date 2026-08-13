@@ -724,6 +724,7 @@ namespace NKikimr::NBsController {
                     node.SetLastDisconnectTimestamp(it->second.LastDisconnectTimestamp.GetValue());
                     node.SetLastSeenTimestamp(it->second.LastConnectTimestamp <= it->second.LastDisconnectTimestamp ?
                         it->second.LastDisconnectTimestamp.GetValue() : Timestamp.GetValue());
+                    node.SetConnected(bool(it->second.ConnectedServerId));
                 }
                 auto *key = node.MutableHostKey();
                 key->SetFqdn(std::get<0>(hostId));

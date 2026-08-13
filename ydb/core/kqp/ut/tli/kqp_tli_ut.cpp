@@ -1523,9 +1523,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TStringStream ss;
 
         // Configure tracing: always sample all requests at max verbosity
-        TKikimrSettings settings;
-        settings.LogStream = &ss;
-        settings.SetWithSampleTables(false);
+        TKikimrSettings settings = MakeKikimrSettings(ss);
 
         auto* tracingConfig = settings.AppConfig.MutableTracingConfig();
         auto* samplingRule = tracingConfig->AddSampling();
@@ -1534,30 +1532,36 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         samplingRule->SetMaxTracesPerMinute(1000000);
         samplingRule->SetMaxTracesBurst(1000000);
 
-        TKikimrRunner kikimr(settings);
-        auto* runtime = kikimr.GetTestServer().GetRuntime();
-
-        // Register fake Wilson uploader so spans are collected
-        auto* uploader = new NWilson::TFakeWilsonUploader();
-        TActorId uploaderId = runtime->Register(uploader, 0);
-        runtime->RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
-
-        ConfigureKikimrForTli(kikimr);
-
-        TQueryClient client(kikimr.GetQueryClient());
-        TSession session = client.GetSession().GetValueSync().GetSession();
-        TSession victimSession = client.GetSession().GetValueSync().GetSession();
-
-        CreateAndSeedTablesInSession(session, 1);
-
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
-        auto victimTx = BeginReadTx(victimSession, victimQueryText);
-        NKqp::AssertSuccessResult(session.ExecuteQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
-        auto [status, issues] = ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
-        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        TString issues;
+        {
+            TKikimrRunner kikimr(settings);
+            auto* runtime = kikimr.GetTestServer().GetRuntime();
+
+            // Register fake Wilson uploader so spans are collected
+            auto* uploader = new NWilson::TFakeWilsonUploader();
+            TActorId uploaderId = runtime->Register(uploader, 0);
+            runtime->RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+
+            ConfigureKikimrForTli(kikimr);
+
+            TQueryClient client(kikimr.GetQueryClient());
+            TSession session = client.GetSession().GetValueSync().GetSession();
+            TSession victimSession = client.GetSession().GetValueSync().GetSession();
+
+            CreateAndSeedTablesInSession(session, 1);
+
+            auto victimTx = BeginReadTx(victimSession, victimQueryText);
+            NKqp::AssertSuccessResult(session.ExecuteQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
+            auto [status, victimIssues] = ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+            issues = victimIssues;
+
+            // Destroy runner to flush async logger before reading `ss`.
+        }
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
 

@@ -15,7 +15,9 @@ from typing import (
     Literal,
     SupportsIndex,
     Protocol,
+    NoReturn,
 )
+from typing_extensions import LiteralString
 
 from numpy import ufunc, _CastingKind, _OrderKACF
 from numpy.typing import NDArray
@@ -30,32 +32,28 @@ _2Tuple = tuple[_T, _T]
 _3Tuple = tuple[_T, _T, _T]
 _4Tuple = tuple[_T, _T, _T, _T]
 
-_NTypes = TypeVar("_NTypes", bound=int)
-_IDType = TypeVar("_IDType", bound=Any)
-_NameType = TypeVar("_NameType", bound=str)
+_NTypes = TypeVar("_NTypes", bound=int, covariant=True)
+_IDType = TypeVar("_IDType", covariant=True)
+_NameType = TypeVar("_NameType", bound=LiteralString, covariant=True)
+_Signature = TypeVar("_Signature", bound=LiteralString, covariant=True)
 
 
 class _SupportsArrayUFunc(Protocol):
     def __array_ufunc__(
         self,
         ufunc: ufunc,
-        method: Literal["__call__", "reduce", "reduceat", "accumulate", "outer", "inner"],
+        method: Literal["__call__", "reduce", "reduceat", "accumulate", "outer", "at"],
         *inputs: Any,
         **kwargs: Any,
     ) -> Any: ...
 
 
-# NOTE: In reality `extobj` should be a length of list 3 containing an
-# int, an int, and a callable, but there's no way to properly express
-# non-homogenous lists.
-# Use `Any` over `Union` to avoid issues related to lists invariance.
-
 # NOTE: `reduce`, `accumulate`, `reduceat` and `outer` raise a ValueError for
 # ufuncs that don't accept two input arguments and return one output argument.
-# In such cases the respective methods are simply typed as `None`.
+# In such cases the respective methods return `NoReturn`
 
 # NOTE: Similarly, `at` won't be defined for ufuncs that return
-# multiple outputs; in such cases `at` is typed as `None`
+# multiple outputs; in such cases `at` is typed to return `NoReturn`
 
 # NOTE: If 2 output types are returned then `out` must be a
 # 2-tuple of arrays. Otherwise `None` or a plain array are also acceptable
@@ -75,14 +73,6 @@ class _UFunc_Nin1_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
     def nargs(self) -> Literal[2]: ...
     @property
     def signature(self) -> None: ...
-    @property
-    def reduce(self) -> None: ...
-    @property
-    def accumulate(self) -> None: ...
-    @property
-    def reduceat(self) -> None: ...
-    @property
-    def outer(self) -> None: ...
 
     @overload
     def __call__(
@@ -96,7 +86,6 @@ class _UFunc_Nin1_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _2Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> Any: ...
     @overload
     def __call__(
@@ -110,7 +99,6 @@ class _UFunc_Nin1_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _2Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> NDArray[Any]: ...
     @overload
     def __call__(
@@ -124,7 +112,6 @@ class _UFunc_Nin1_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _2Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> Any: ...
 
     def at(
@@ -133,6 +120,12 @@ class _UFunc_Nin1_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         indices: _ArrayLikeInt_co,
         /,
     ) -> None: ...
+
+    def reduce(self, *args, **kwargs) -> NoReturn: ...
+    def accumulate(self, *args, **kwargs) -> NoReturn: ...
+    def reduceat(self, *args, **kwargs) -> NoReturn: ...
+    def outer(self, *args, **kwargs) -> NoReturn: ...
+
 
 class _UFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: ignore[misc]
     @property
@@ -163,7 +156,6 @@ class _UFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> Any: ...
     @overload
     def __call__(
@@ -178,7 +170,6 @@ class _UFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> NDArray[Any]: ...
 
     def at(
@@ -231,7 +222,6 @@ class _UFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> Any: ...
     @overload
     def outer(  # type: ignore[misc]
@@ -246,7 +236,6 @@ class _UFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> NDArray[Any]: ...
 
 class _UFunc_Nin1_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: ignore[misc]
@@ -264,16 +253,6 @@ class _UFunc_Nin1_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
     def nargs(self) -> Literal[3]: ...
     @property
     def signature(self) -> None: ...
-    @property
-    def at(self) -> None: ...
-    @property
-    def reduce(self) -> None: ...
-    @property
-    def accumulate(self) -> None: ...
-    @property
-    def reduceat(self) -> None: ...
-    @property
-    def outer(self) -> None: ...
 
     @overload
     def __call__(
@@ -288,7 +267,6 @@ class _UFunc_Nin1_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> _2Tuple[Any]: ...
     @overload
     def __call__(
@@ -304,7 +282,6 @@ class _UFunc_Nin1_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> _2Tuple[NDArray[Any]]: ...
     @overload
     def __call__(
@@ -320,8 +297,13 @@ class _UFunc_Nin1_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> _2Tuple[Any]: ...
+
+    def at(self, *args, **kwargs) -> NoReturn: ...
+    def reduce(self, *args, **kwargs) -> NoReturn: ...
+    def accumulate(self, *args, **kwargs) -> NoReturn: ...
+    def reduceat(self, *args, **kwargs) -> NoReturn: ...
+    def outer(self, *args, **kwargs) -> NoReturn: ...
 
 class _UFunc_Nin2_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: ignore[misc]
     @property
@@ -338,16 +320,6 @@ class _UFunc_Nin2_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
     def nargs(self) -> Literal[4]: ...
     @property
     def signature(self) -> None: ...
-    @property
-    def at(self) -> None: ...
-    @property
-    def reduce(self) -> None: ...
-    @property
-    def accumulate(self) -> None: ...
-    @property
-    def reduceat(self) -> None: ...
-    @property
-    def outer(self) -> None: ...
 
     @overload
     def __call__(
@@ -363,7 +335,6 @@ class _UFunc_Nin2_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _4Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> _2Tuple[Any]: ...
     @overload
     def __call__(
@@ -380,10 +351,15 @@ class _UFunc_Nin2_Nout2(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: i
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _4Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
     ) -> _2Tuple[NDArray[Any]]: ...
 
-class _GUFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: ignore[misc]
+    def at(self, *args, **kwargs) -> NoReturn: ...
+    def reduce(self, *args, **kwargs) -> NoReturn: ...
+    def accumulate(self, *args, **kwargs) -> NoReturn: ...
+    def reduceat(self, *args, **kwargs) -> NoReturn: ...
+    def outer(self, *args, **kwargs) -> NoReturn: ...
+
+class _GUFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType, _Signature]):  # type: ignore[misc]
     @property
     def __name__(self) -> _NameType: ...
     @property
@@ -396,21 +372,8 @@ class _GUFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: 
     def nout(self) -> Literal[1]: ...
     @property
     def nargs(self) -> Literal[3]: ...
-
-    # NOTE: In practice the only gufunc in the main namespace is `matmul`,
-    # so we can use its signature here
     @property
-    def signature(self) -> Literal["(n?,k),(k,m?)->(n?,m?)"]: ...
-    @property
-    def reduce(self) -> None: ...
-    @property
-    def accumulate(self) -> None: ...
-    @property
-    def reduceat(self) -> None: ...
-    @property
-    def outer(self) -> None: ...
-    @property
-    def at(self) -> None: ...
+    def signature(self) -> _Signature: ...
 
     # Scalar for 1D array-likes; ndarray otherwise
     @overload
@@ -425,7 +388,6 @@ class _GUFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: 
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
         axes: list[_2Tuple[SupportsIndex]] = ...,
     ) -> Any: ...
     @overload
@@ -440,6 +402,11 @@ class _GUFunc_Nin2_Nout1(ufunc, Generic[_NameType, _NTypes, _IDType]):  # type: 
         dtype: DTypeLike = ...,
         subok: bool = ...,
         signature: str | _3Tuple[None | str] = ...,
-        extobj: list[Any] = ...,
         axes: list[_2Tuple[SupportsIndex]] = ...,
     ) -> NDArray[Any]: ...
+
+    def at(self, *args, **kwargs) -> NoReturn: ...
+    def reduce(self, *args, **kwargs) -> NoReturn: ...
+    def accumulate(self, *args, **kwargs) -> NoReturn: ...
+    def reduceat(self, *args, **kwargs) -> NoReturn: ...
+    def outer(self, *args, **kwargs) -> NoReturn: ...

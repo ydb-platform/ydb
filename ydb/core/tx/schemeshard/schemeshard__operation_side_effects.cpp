@@ -510,6 +510,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode()) {
                 message->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
             }
+            message->Record.SetTablesMetricsLevel(subDomain->GetTablesMetricsLevel());
             hasChanges = true;
         }
 

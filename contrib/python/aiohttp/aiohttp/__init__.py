@@ -1,4 +1,4 @@
-__version__ = "3.10.6"
+__version__ = "3.10.11"
 
 from typing import TYPE_CHECKING, Tuple
 
@@ -8,6 +8,7 @@ from .client import (
     ClientConnectionError,
     ClientConnectionResetError,
     ClientConnectorCertificateError,
+    ClientConnectorDNSError,
     ClientConnectorError,
     ClientConnectorSSLError,
     ClientError,
@@ -127,6 +128,7 @@ __all__: Tuple[str, ...] = (
     "ClientConnectionError",
     "ClientConnectionResetError",
     "ClientConnectorCertificateError",
+    "ClientConnectorDNSError",
     "ClientConnectorError",
     "ClientConnectorSSLError",
     "ClientError",

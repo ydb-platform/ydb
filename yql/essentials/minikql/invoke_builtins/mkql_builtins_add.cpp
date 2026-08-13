@@ -5,8 +5,9 @@
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -134,8 +135,8 @@ struct TDateTimeAddT {
         const auto zero = ConstantInt::get(type, 0);
 
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(type, APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(
                 (std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() ||
                  std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>())
@@ -448,5 +449,4 @@ void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {
     NDecimal::RegisterAggregateFunctionForAllPrecisions<TDecimalAdd, TBinaryArgsSameOpt>(registry, "AggrAdd_");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

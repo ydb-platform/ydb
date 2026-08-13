@@ -337,6 +337,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterSecret);
     GENERIC_HELPERS(DropSecret);
     DROP_BY_PATH_ID_HELPERS(DropSecret);
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
 
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery);

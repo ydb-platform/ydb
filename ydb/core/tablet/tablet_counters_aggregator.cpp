@@ -339,13 +339,12 @@ public:
     }
 
     TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+        TVector<NPrivate::TTabletCounterValue> results;
         for (auto [_, counters] : CountersByTabletType) {
-            if (auto result = counters->Find(name)) {
-                return result;
-            }
+            counters->Find(name, results);
         }
 
-        return {};
+        return results;
     }
 
 private:
@@ -444,12 +443,9 @@ private:
             }
         }
 
-        TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
-            if (auto result = TabletExecutorCounters.Find(name)) {
-                return result;
-            } else {
-                return TabletAppCounters.Find(name);
-            }
+        bool Find(const TString& name, TVector<NPrivate::TTabletCounterValue>& results) const {
+            return TabletExecutorCounters.Find(name, results)
+                || TabletAppCounters.Find(name, results);
         }
 
     private:
@@ -704,16 +700,13 @@ private:
                 Convert<false>(sumCounters, maxCounters);
             }
 
-            TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+            bool Find(const TString& name, TVector<NPrivate::TTabletCounterValue>& results) const {
                 if (!IsInitialized) {
-                    return {};
+                    return false;
                 }
 
-                if (auto result = AggregatedSimpleCounters.Find(name)) {
-                    return result;
-                } else {
-                    return AggregatedCumulativeCounters.Find(name);
-                }
+                return AggregatedSimpleCounters.Find(name, results) 
+                    || AggregatedCumulativeCounters.Find(name, results);
             }
 
         private:
@@ -1230,6 +1223,7 @@ private:
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev, const TActorContext &ctx);
     void HandleWakeup(const TActorContext &ctx);
     void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev);
+    void HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev);
 
     TString RenderSearch(const TStringBuf relPath, const TString& name) const;
 
@@ -1465,6 +1459,12 @@ void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveData
 }
 
 ////////////////////////////////////////////
+void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev) {
+    // TODO(djant) join incoming metrics with it later
+    Y_UNUSED(ev);
+}
+
+////////////////////////////////////////////
 TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, const TString& name) const {
     TStringStream str;
 
@@ -1486,7 +1486,7 @@ TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, c
                         LI() { str << "Cumulative."; }
                     }
                 }
-                LI() { str << "The search stops when the first match is found. It is recommended to specify the full name of the counter."; }
+                LI() { str << "The search stops when the first match for each tablet type is found. It is recommended to specify the full name of the counter."; }
                 LI() { str << "The instantaneous values of the counter are displayed."; }
             }
         }
@@ -1588,6 +1588,7 @@ STFUNC(TTabletCountersAggregatorActor::StateWork) {
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersRequest, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleWork); //from cluster aggregator, for http requests
         hFunc(TEvTabletCounters::TEvRemoveDatabase, HandleWork);
+        hFunc(TEvTabletCounters::TEvTabletSetTableInfo, HandleWork);
         HFunc(NMon::TEvHttpInfo, HandleWork);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
 

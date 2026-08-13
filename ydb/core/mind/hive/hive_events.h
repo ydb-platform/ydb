@@ -41,7 +41,8 @@ struct TEvPrivate {
         EvUpdateBalanceCounters,
         EvProcessTabletMetrics,
         EvReassignInactiveGroupsComplete,
-        EvCompactComplete,
+        EvMoveDataComplete,
+        EvLogHangingRequests,
         EvEnd
     };
 
@@ -157,12 +158,14 @@ struct TEvPrivate {
         TEvReassignInactiveGroupsComplete(const TString& poolName) : PoolName(poolName) {};
     };
 
-    struct TEvCompactComplete : TEventLocal<TEvCompactComplete, EvCompactComplete> {
+    struct TEvMoveDataComplete : TEventLocal<TEvMoveDataComplete, EvMoveDataComplete> {
         TString PoolName;
         bool Success;
 
-        TEvCompactComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
+        TEvMoveDataComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
     };
+
+    struct TEvLogHangingRequests : TEventLocal<TEvLogHangingRequests, EvLogHangingRequests> {};
 };
 
 } // NHive

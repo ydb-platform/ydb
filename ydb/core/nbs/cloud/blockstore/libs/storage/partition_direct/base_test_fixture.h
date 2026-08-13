@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -47,10 +48,14 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         FixtureVChunkIndex,
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
+    TDiskDescription DiskDescription{
+        .DiskId = "disk-id",
+        .TabletId = 100,
+        .Generation = 1};
     TLogTitle LogTitle{
         GetCycleCount(),
         TLogTitle::TVChunk{
-            .DiskId = "disk-id",
+            .DiskId = DiskDescription.DiskId,
             .VChunkIndex = VChunkConfig.GetVChunkIndex()}};
 
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
@@ -60,7 +65,10 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
+    TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        VChunkConfig,
+        BlockSize,
+        VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;
@@ -92,9 +100,11 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     void SetEraseResult(TDBGEraseResponse response, bool async);
     bool WaitEraseRequests(size_t count, TDuration timeout);
 
+    size_t ReplyUpdateRequests();
+
     static auto& AccessBlocksDirtyMap(TVChunk& vchunk)
     {
-        return vchunk.BlocksDirtyMap;
+        return *vchunk.BlocksDirtyMap;
     }
 
     static auto& AccessConfig(TVChunk& vchunk)

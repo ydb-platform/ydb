@@ -1,4 +1,4 @@
-Export is available only for the following object types:
+Export is available only for objects of the following types:
 
 - [directory](../../../../concepts/datamodel/dir.md).
 - [row table](../../../../concepts/datamodel/table.md#row-oriented-tables).

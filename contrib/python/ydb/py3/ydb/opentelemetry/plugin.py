@@ -1,4 +1,11 @@
-"""OpenTelemetry bridge for YDB."""
+"""OpenTelemetry adapter for the YDB observability interface.
+
+This module implements :class:`ydb.observability.TracingProvider` on top of the
+``opentelemetry`` packages. The SDK core does not import it — the OTel
+dependency is only pulled in when a user calls :func:`ydb.opentelemetry.enable_tracing`.
+"""
+
+from typing import Dict, Iterable, Optional, Tuple
 
 from opentelemetry import context as otel_context
 from opentelemetry import trace
@@ -7,7 +14,8 @@ from opentelemetry.trace import StatusCode
 
 from ydb import issues
 from ydb.issues import StatusCode as YdbStatusCode
-from ydb.opentelemetry.tracing import _registry
+from ydb.observability import enable_tracing as _observability_enable
+from ydb.observability import disable_tracing as _observability_disable
 
 # YDB client transport StatusCode values (401xxx band) -> OTel error.type transport_error.
 _TRANSPORT_STATUSES = frozenset(
@@ -20,20 +28,10 @@ _TRANSPORT_STATUSES = frozenset(
     }
 )
 
-_tracer = None
-_enabled = False
-
 _KIND_MAP = {
     "client": trace.SpanKind.CLIENT,
     "internal": trace.SpanKind.INTERNAL,
 }
-
-
-def _otel_metadata_hook():
-    """Inject W3C Trace Context into outgoing gRPC metadata using the active OTel context."""
-    headers = {}
-    inject(headers)
-    return list(headers.items())
 
 
 def _set_error_on_span(span, exception):
@@ -49,7 +47,7 @@ def _set_error_on_span(span, exception):
 
 
 class _AttachContext:
-    """Make a span the active OTel context for a ``with`` block.
+    """Make an OTel span the active context for a ``with`` block.
 
     When ``end_on_exit=True`` (default) the span is ended on exit — used for
     single-shot RPCs. When ``end_on_exit=False`` the span is only ended on
@@ -79,13 +77,7 @@ class _AttachContext:
 
 
 class TracingSpan:
-    """Wrapper around an OTel span.
-
-    Use :meth:`attach_context` as a context manager around any RPC call.
-    The default (``end_on_exit=True``) is for single-shot operations; pass
-    ``end_on_exit=False`` for streaming RPCs where the result iterator owns
-    ``end()``.
-    """
+    """OpenTelemetry-backed :class:`ydb.observability.Span` implementation."""
 
     def __init__(self, span):
         self._span = span
@@ -103,32 +95,39 @@ class TracingSpan:
         return _AttachContext(self, end_on_exit)
 
 
-def _create_span(name, attributes=None, kind=None):
-    span = _tracer.start_span(
-        name,
-        kind=_KIND_MAP.get(kind, trace.SpanKind.CLIENT),
-        attributes=attributes or {},
-    )
-    return TracingSpan(span)
+class OtelTracingProvider:
+    """Bridges the YDB observability interface to an OpenTelemetry tracer.
+
+    Args:
+        tracer: An OTel tracer. If not provided, the global provider's
+            ``ydb.sdk`` tracer is used.
+    """
+
+    def __init__(self, tracer=None):
+        self._tracer = tracer if tracer is not None else trace.get_tracer("ydb.sdk")
+
+    def create_span(self, name, attributes=None, kind=None):
+        span = self._tracer.start_span(
+            name,
+            kind=_KIND_MAP.get(kind, trace.SpanKind.CLIENT),
+            attributes=attributes or {},
+        )
+        return TracingSpan(span)
+
+    def get_trace_metadata(self) -> Iterable[Tuple[str, str]]:
+        headers: Dict[str, str] = {}
+        inject(headers)
+        return tuple(headers.items())
 
 
-def _enable_tracing(tracer=None):
-    global _enabled, _tracer
+def _enable_tracing(tracer: Optional[object] = None) -> None:
+    """Install an :class:`OtelTracingProvider` (idempotent replace).
 
-    if _enabled:
-        return
-
-    _tracer = tracer if tracer is not None else trace.get_tracer("ydb.sdk")
-    _enabled = True
-    _registry.set_metadata_hook(_otel_metadata_hook)
-    _registry.set_create_span(_create_span)
+    Called by :func:`ydb.opentelemetry.enable_tracing`. Any previously
+    registered provider — OTel or custom — is replaced.
+    """
+    _observability_enable(OtelTracingProvider(tracer))
 
 
-def _disable_tracing():
-    """Clear hooks and tracer; after this, :func:`~ydb.opentelemetry.enable_tracing` may be called again."""
-    global _enabled, _tracer
-
-    _registry.set_create_span(None)
-    _registry.set_metadata_hook(None)
-    _enabled = False
-    _tracer = None
+def _disable_tracing() -> None:
+    _observability_disable()

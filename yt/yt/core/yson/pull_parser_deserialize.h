@@ -5,6 +5,8 @@
 #include "pull_parser.h"
 #include "protobuf_interop.h"
 
+#include <yt/yt/core/ytree/proto_yson_struct.h>
+
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
 namespace NYT::NYson {
@@ -173,8 +175,12 @@ void DeserializeProtobufMessage(
     NYson::TYsonPullParserCursor* cursor,
     const NYson::TProtobufWriterOptions& options = {});
 
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <NYTree::CProtobufMessageAsYson T>
+void Deserialize(
+    T& message,
+    NYson::TYsonPullParserCursor* cursor);
+
+template <NYTree::CProtobufMessageAsString T>
 void Deserialize(
     T& message,
     NYson::TYsonPullParserCursor* cursor);

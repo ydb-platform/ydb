@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_FETCH_REQUEST
 
 #define LOG_PREFIX TStringBuilder() << "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
@@ -169,7 +171,7 @@ public:
         YDB_LOG_DEBUG("DescribeTopics",
             {"logPrefix", LOG_PREFIX});
 
-        std::unordered_set<TString> topics;
+        absl::flat_hash_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
             topics.insert(part.Topic);
         }
@@ -188,7 +190,8 @@ public:
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
                 case NDescriber::EStatus::SUCCESS: {
-                    auto& topicInfo = TopicInfo[topicPath];
+                    // Describer keys responses by the original request path; TopicInfo is keyed by CanonizePath.
+                    auto& topicInfo = TopicInfo[CanonizePath(topicPath)];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
                     break;

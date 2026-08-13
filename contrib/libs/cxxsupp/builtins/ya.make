@@ -95,13 +95,6 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
     ENDIF()
 ENDIF()
 
-IF (ARCH_WASM64 OR ARCH_WASM32)
-    SRCS(
-        wasm/__c_longjmp.S
-        wasm/__cpp_exception.S
-    )
-ENDIF()
-
 IF (ARCH_ARM6 OR ARCH_ARM7)
     SRCS(
         absvdi2.c

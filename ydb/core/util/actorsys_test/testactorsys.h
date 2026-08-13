@@ -314,7 +314,7 @@ public:
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
 #if !defined(_msan_enabled_)
-        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool(/*emulateRegistration=*/true);
         setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
 #endif
 

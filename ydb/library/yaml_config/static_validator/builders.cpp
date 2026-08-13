@@ -192,12 +192,23 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Min(0)
           .Optional();
         })
+        .Int64("harmonizer_needy_cpu_window_seconds", [](auto& window){
+          window
+          .Range(1, 32)
+          .Optional();
+        })
         .Int64("time_per_mailbox_micro_secs", [](auto& timePerMailboxMicroSecs){
           timePerMailboxMicroSecs
           .Optional()
           .Min(0);
         })
-        .Enum("type", {"IO", "BASIC"});
+        .Enum("type", {"IO", "BASIC"})
+        .AddCheck("Harmonizer needy CPU window is supported only for BASIC executors", [](auto& executorContext){
+          auto node = executorContext.Node();
+          if (node["harmonizer_needy_cpu_window_seconds"].Exists()) {
+            executorContext.Expect(node["type"].Enum().Value() == "BASIC");
+          }
+        });
       });
     })
     .Map("scheduler", [](auto& scheduler){

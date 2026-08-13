@@ -16,7 +16,7 @@ std::optional<TTvmId> TTvmServiceConfig::GetClientSelfId() const
             return TTvmId(FromString<TTvmId::TUnderlying>(GetEnv(TString(*ClientSelfIdEnv))));
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv)
-                << ex;
+                .With(ex);
         }
     } else {
         return std::nullopt;

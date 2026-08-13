@@ -412,7 +412,7 @@ private:
         } else if (CurrentCharacter() == '\'') {
             if (!allowQuotedIdentifier) {
                 THROW_ERROR_EXCEPTION("Unexpected literal string")
-                    << TErrorAttribute("type_string", Str_);
+                    .With("type_string", Str_);
             }
             // Skip '.
             Step();
@@ -440,7 +440,7 @@ private:
 
             if (!identifierClosed) {
                 THROW_ERROR_EXCEPTION("Encountered invalid enclosure %Qv", Str_.SubStr(start, Index_ - start))
-                    << TErrorAttribute("type_string", Str_);
+                    .With("type_string", Str_);
             }
 
             UnescapedIdentifierHolder_ = UnescapeC(Str_.SubStr(start, Index_ - start));
@@ -451,7 +451,7 @@ private:
 
         if (Identifier_.empty()) {
             THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter())
-                << TErrorAttribute("type_string", Str_);
+                .With("type_string", Str_);
         }
 
         ConsumeWhitespaces();
@@ -1600,12 +1600,12 @@ void ValidateLogicalType(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("%Qv has bad type",
                 descriptor.GetDescription())
-                << ex;
+                .With(ex);
         }
         if (options.DepthLimit && std::ssize(context.Stack) > *options.DepthLimit) {
             THROW_ERROR_EXCEPTION("%Qv exceeds type depth limit",
                 descriptor.GetDescription())
-                << TErrorAttribute("limit", *options.DepthLimit);
+                .With("limit", *options.DepthLimit);
         }
     });
 }
@@ -2531,7 +2531,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     // Check depth early to avoid stack overflow.
     if (depth > MaxSchemaDepth) {
         THROW_ERROR_EXCEPTION("Logical type exceeds depth limit during parsing")
-            << TErrorAttribute("limit", MaxSchemaDepth);
+            .With("limit", MaxSchemaDepth);
     }
 
     if ((*cursor)->GetType() == EYsonItemType::StringValue) {

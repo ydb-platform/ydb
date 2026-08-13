@@ -463,7 +463,8 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
+        THashSet<ui64> targetShardIds = {})
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -486,6 +487,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .Inconsistent = InconsistentTx,
+                .TargetShardIds = std::move(targetShardIds),
             },
             Alloc);
 
@@ -2891,6 +2893,20 @@ public:
                 keyColumnTypes.push_back(typeInfoMod.TypeInfo);
             }
 
+            // Pass TargetShardIds from sink settings into the write controller.
+            // When non-empty, the controller will only write to the specified shards
+            // (rows destined for other shards are discarded — they belong to another task).
+            THashSet<ui64> targetShardIds(
+                Settings.GetTargetShardIds().begin(),
+                Settings.GetTargetShardIds().end());
+
+            if (!targetShardIds.empty()) {
+                YDB_LOG_INFO("CsWriteAffinity: DirectWriteActor initialized with shard affinity",
+                    {"logPrefix", this->LogPrefix},
+                    {"targetShardCount", targetShardIds.size()},
+                    {"expectedNodeId", Settings.GetExpectedNodeId()});
+            }
+
             WriteTableActor = new TKqpTableWriteActor(
                 this,
                 Settings.GetDatabase(),
@@ -2907,7 +2923,8 @@ public:
                 nullptr,
                 TActorId{},
                 Counters,
-                UserCtx);
+                UserCtx,
+                std::move(targetShardIds));
             // Set initial QuerySpanId for direct write actor
             WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
 

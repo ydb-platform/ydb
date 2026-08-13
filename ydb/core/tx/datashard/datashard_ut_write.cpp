@@ -4544,20 +4544,27 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
-
-        // A gap is not the shard's business: KQP notices a lost write on its own.
         NKikimrDataEvents::TLock lock;
         {
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3);
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 3u);
+        }
+
+        // A gap between EvWrites is a protocol error: the next batch must
+        // continue the chain at current + 1. current == 1, so seq 3 is rejected.
+        {
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
+                result.GetIssues(0).message());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("at 2"),
+                result.GetIssues(0).message());
         }
 
         CommitLock(runtime, sender, shard, lock);
 
         auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\n");
     }
 
     Y_UNIT_TEST(PipelinedUncommittedWriteMultipleWriters) {
@@ -4817,8 +4824,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // A gap between EvWrite messages is fine, but seq nums within one
-            // message must be ascending and contiguous: KQP allocates them sequentially.
+            // A gap within one EvWrite: seq nums must be ascending and contiguous.
             TVector<TUncommittedWriteOp> ops{{3, 33, 3}, {4, 44, 5}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
@@ -4839,15 +4845,28 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // Partial overlap: maxRequested > current but some ops are already applied.
-            // current == 2, batch [2, 3] — op with seq 2 is already applied.
+            // A gap between EvWrites: the next batch must continue the chain
+            // exactly at current + 1. current == 2, so batch must start at 3.
+            TVector<TUncommittedWriteOp> ops{{4, 44, 4}, {5, 55, 5}};
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
+                lockTxId, lockNodeId, 0, ops,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
+                result.GetIssues(0).message());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("at 3"),
+                result.GetIssues(0).message());
+        }
+
+        {
+            // Partial overlap: the batch starts at current instead of current + 1.
+            // current == 2, batch [2, 3] — must start at 3, not 2.
             TVector<TUncommittedWriteOp> ops{{2, 222, 2}, {3, 33, 3}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
                 NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"),
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
                 result.GetIssues(0).message());
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"),
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("at 3"),
                 result.GetIssues(0).message());
         }
 

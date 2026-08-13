@@ -187,27 +187,29 @@ public:
         // No lock means nothing applied yet, so current is 0.
         const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
 
-        // A gap between EvWrite messages is fine (KQP tracks deliveries itself),
-        // but within one EvWrite the seq nums must be ascending and contiguous:
-        // KQP allocates them sequentially for the batch, in operation order.
-        ui64 prevRequested = 0;
+        // WriteSeqNums form a single contiguous chain per (writer, shard): no gaps
+        // within one EvWrite and no gaps between EvWrites. KQP allocates them
+        // sequentially for the batch, in operation order, and the next batch must
+        // continue exactly where the previous one left off.
+        ui64 minRequested = 0;
+        ui64 maxRequested = 0;
         for (const auto& op : operations) {
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
             if (!requested) {
                 continue;
             }
-            if (prevRequested && requested != prevRequested + 1) {
+            if (!minRequested) {
+                minRequested = requested;
+            }
+            if (maxRequested && requested != maxRequested + 1) {
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                     << "Uncommitted write seq nums must be ascending and contiguous within one request, got "
-                    << writerIndex << ":" << prevRequested << " followed by "
+                    << writerIndex << ":" << maxRequested << " followed by "
                     << writerIndex << ":" << requested);
                 return EExecutionStatus::Executed;
             }
-            prevRequested = requested;
+            maxRequested = requested;
         }
-
-        // The last (== maximum) WriteSeqNum determines the batch's position in the chain.
-        const ui64 maxRequested = prevRequested;
 
         // A duplicate of the entire batch: the max seq num matches the last applied.
         if (maxRequested == current) {
@@ -239,16 +241,15 @@ public:
             return EExecutionStatus::Executed;
         }
 
-        // maxRequested > current: the batch advances the chain.
-        // But partial overlap with already-applied writes is a protocol error.
-        for (const auto& op : operations) {
-            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
-            if (requested && requested <= current) {
-                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                    << "Uncommitted write " << writerIndex << ":" << requested
-                    << " is already applied, writer is at " << current);
-                return EExecutionStatus::Executed;
-            }
+        // maxRequested > current: the batch must continue the chain exactly.
+        // A gap (minRequested > current + 1) or partial overlap (minRequested <= current)
+        // both violate the no-gap invariant.
+        if (minRequested != current + 1) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Uncommitted write " << writerIndex << ":" << minRequested
+                << " must continue the writer chain at " << (current + 1)
+                << ", writer is at " << current);
+            return EExecutionStatus::Executed;
         }
 
         // All operations are new: track the max for ApplyLocks to persist.

@@ -1376,24 +1376,22 @@ public:
         // Set per-operation WriteSeqNum for pipelined uncommitted writes
         if (PipelinedWrites && !isPrepare && !isImmediateCommit && !InconsistentTx) {
             const size_t opCount = evWrite->Record.OperationsSize();
-            auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, TInFlightBatch{});
+            auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId);
             if (allocated) {
                 // First send: allocate a new WriteSeqNum for each operation
-                it->second.Cookie = metadata->Cookie;
-                it->second.SeqNums.reserve(opCount);
+                it->second.reserve(opCount);
                 for (size_t i = 0; i < opCount; ++i) {
-                    it->second.SeqNums.push_back(TxManager->NextWriteSeqNum(WriterIndex, shardId));
+                    it->second.push_back(TxManager->NextWriteSeqNum(WriterIndex, shardId));
                 }
             }
-            // On resend: reuse the previously allocated seq nums for the same batch
-            YQL_ENSURE(it->second.Cookie == metadata->Cookie && it->second.SeqNums.size() == opCount,
-                "Batch identity changed on resend: stored cookie " << it->second.Cookie
-                << " ops " << it->second.SeqNums.size()
-                << ", got cookie " << metadata->Cookie << " ops " << opCount);
+            // On resend: reuse the previously allocated seq nums
+            YQL_ENSURE(it->second.size() == opCount,
+                "Operation count mismatch on resend: stored " << it->second.size()
+                << " operations, got " << opCount);
             for (size_t i = 0; i < opCount; ++i) {
                 auto* writeSeqNum = evWrite->Record.MutableOperations(i)->MutableWriteSeqNum();
                 writeSeqNum->SetWriterIndex(WriterIndex);
-                writeSeqNum->SetWriteSeqNum(it->second.SeqNums[i]);
+                writeSeqNum->SetWriteSeqNum(it->second[i]);
             }
         }
 
@@ -1742,11 +1740,7 @@ private:
     // Seq nums of the batch in flight at each shard, kept until the shard acks it.
     // Assumes at most one batch in flight per shard; must become per-cookie
     // (shardId -> cookie -> seq nums) before inflight > 1 is enabled.
-    struct TInFlightBatch {
-        ui64 Cookie = 0;
-        TVector<ui64> SeqNums;
-    };
-    THashMap<ui64, TInFlightBatch> InFlightWriteSeqNum;
+    THashMap<ui64, TVector<ui64>> InFlightWriteSeqNum;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;

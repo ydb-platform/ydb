@@ -330,7 +330,7 @@ namespace NActors {
             TlsThreadContext->LocalQueueContext.WriteTurn = 0;
             TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
-        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to ring queue");
         return GetReadyActivationRingQueue(revolvingCounter);
     }
 

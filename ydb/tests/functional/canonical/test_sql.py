@@ -4,8 +4,6 @@ import copy
 import pytest
 import decimal
 import functools
-import re
-import time
 import uuid
 
 import yatest
@@ -163,7 +161,15 @@ class BaseCanonicalTest(object):
             )
 
         for s in find_files(cls.data_folder, '.scheme'):
-            cls.execute_scheme_file(s)
+            cls.pool.retry_operation_sync(
+                lambda session: session.execute_scheme(
+                    cls.format_query(
+                        cls.read_query_text(
+                            s
+                        )
+                    )
+                )
+            )
 
         for s in find_files(cls.data_folder, '.data'):
             description = cls.describe_table(s)
@@ -192,48 +198,6 @@ class BaseCanonicalTest(object):
                     batch,
                 )
             )
-
-    @classmethod
-    def execute_scheme_file(cls, scheme_file):
-        query = cls.read_query_text(scheme_file)
-        syntax = ''
-        if query.startswith('--!syntax_v1'):
-            syntax = '--!syntax_v1\n'
-            query = query[len('--!syntax_v1'):]
-
-        for statement in query.split(';'):
-            if not statement.strip():
-                continue
-
-            cls.pool.retry_operation_sync(
-                lambda session: session.execute_scheme(
-                    cls.format_query(syntax + statement)
-                )
-            )
-
-            create_table = re.search(
-                r'\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([^`\s(]+)`?',
-                statement,
-                re.IGNORECASE,
-            )
-            if create_table:
-                cls.wait_for_table(create_table.group(1))
-
-    @classmethod
-    def wait_for_table(cls, table_name):
-        table_path = table_name if table_name.startswith('/') else os.path.join(cls.prefix, table_name)
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                cls.pool.retry_operation_sync(
-                    lambda session: session.describe_table(table_path),
-                    ydb.RetrySettings(max_retries=0),
-                )
-                return
-            except (ydb.GenericError, ydb.NotFound, ydb.SchemeError):
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.1)
 
     @classmethod
     def read_data_rows(cls, s):

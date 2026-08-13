@@ -34,6 +34,7 @@ struct TGRpcServersWrapper {
     TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
     std::atomic<bool> IsDisabled = false;
+    bool WaitForHttpProxy = false;
 
     TGuard<TMutex> Guard() {
         return TGuard<TMutex>(Mutex);

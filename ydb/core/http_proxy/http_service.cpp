@@ -1,5 +1,6 @@
 #include "http_service.h"
 
+#include "events.h"
 #include "http_req.h"
 
 #include <ydb/core/protos/config.pb.h>
@@ -12,6 +13,7 @@
 
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
+#include <util/generic/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
@@ -33,15 +35,22 @@ namespace NKikimr::NHttpProxy {
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+                HFunc(NHttp::TEvHttpProxy::TEvConfirmListen, Handle);
+                HFunc(TEvServerlessProxy::TEvWaitListen, Handle);
             }
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TActorContext& ctx);
+        void Handle(NHttp::TEvHttpProxy::TEvConfirmListen::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvServerlessProxy::TEvWaitListen::TPtr& ev, const TActorContext& ctx);
+        void NotifyListenReady(const TActorContext& ctx);
 
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
+        bool Listening = false;
+        TVector<TActorId> ListenWaiters;
     };
 
     THttpProxyActor::THttpProxyActor(const THttpProxyConfig& cfg)
@@ -77,10 +86,35 @@ namespace NKikimr::NHttpProxy {
         ev->CertificateFile = config.GetCert();
         ev->PrivateKeyFile = config.GetKey();
 
-        ctx.Send(new NActors::IEventHandle(MakeHttpServerServiceID(), TActorId(),
-                                           ev.Release(), 0, true));
+        // Register the handler before bind so the first accepted connection is not 404.
         ctx.Send(MakeHttpServerServiceID(),
                  new NHttp::TEvHttpProxy::TEvRegisterHandler("/", MakeHttpProxyID()));
+        // Sender must be SelfId so TEvConfirmListen comes back here.
+        ctx.Send(MakeHttpServerServiceID(), ev.Release());
+    }
+
+    void THttpProxyActor::NotifyListenReady(const TActorContext& ctx) {
+        Listening = true;
+        for (const auto& waiter : ListenWaiters) {
+            ctx.Send(waiter, new TEvServerlessProxy::TEvListenReady());
+        }
+        ListenWaiters.clear();
+    }
+
+    void THttpProxyActor::Handle(NHttp::TEvHttpProxy::TEvConfirmListen::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ev);
+        YDB_LOG_NOTICE_CTX(ctx, "HTTP proxy is listening",
+            {"logPrefix", LogPrefix()},
+            {"port", Config.GetHttpConfig().GetPort()});
+        NotifyListenReady(ctx);
+    }
+
+    void THttpProxyActor::Handle(TEvServerlessProxy::TEvWaitListen::TPtr& ev, const TActorContext& ctx) {
+        if (Listening) {
+            ctx.Send(ev->Sender, new TEvServerlessProxy::TEvListenReady());
+            return;
+        }
+        ListenWaiters.push_back(ev->Sender);
     }
 
     void THttpProxyActor::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev,

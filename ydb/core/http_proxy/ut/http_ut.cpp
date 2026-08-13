@@ -260,3 +260,17 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
     }
 
 } // Y_UNIT_TEST_SUITE(TestMalformedRequest)
+
+Y_UNIT_TEST_SUITE(TestHttpProxyListen) {
+    Y_UNIT_TEST_F(WaitListenReadyAfterStart, THttpProxyTestMock) {
+        auto edge = ActorRuntime->AllocateEdgeActor();
+        ActorRuntime->Send(new IEventHandle(
+            MakeHttpProxyID(),
+            edge,
+            new TEvServerlessProxy::TEvWaitListen()),
+            0, true);
+        auto ev = ActorRuntime->GrabEdgeEvent<TEvServerlessProxy::TEvListenReady>(
+            edge, TDuration::Seconds(5));
+        UNIT_ASSERT(ev);
+    }
+}

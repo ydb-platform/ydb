@@ -33,21 +33,34 @@ const TString APP_CATEGORY = "app";
 using TTabletKey = std::pair<ui64, ui32>;
 
 /**
- * Strip the database path prefix from the full path of the table.
+ * @return path with any trailing "/" chopped, as a view into path.
  */
-TString MakeRelativeTablePath(const TString& databasePath, const TString& tablePath) {
-    TStringBuf database(databasePath);
-    database.ChopSuffix("/");
+TStringBuf ChopTrailingSlash(const TStringBuf path) {
+    TStringBuf chopped(path);
+    chopped.ChopSuffix("/");
+    return chopped;
+}
 
+/**
+ * Strip the database path prefix from the full path of the table.
+ *
+ * @param[in] databasePrefix The database path with the trailing "/" already chopped
+ *                            (see TNodeDatabaseMetricsAggregatorImpl::DatabasePrefix)
+ * @param[in] tablePath The full path of the table, which outlives the returned view
+ *
+ * @return A view into tablePath: either the stripped suffix, or tablePath itself
+ *         when it does not start with the database. No allocation either way.
+ */
+TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath) {
     TStringBuf relativePath(tablePath);
 
     // The "/" is required, so that /Root/db10/table is NOT stripped down to "0/table"
     // within the database /Root/db1
-    if (relativePath.SkipPrefix(database) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
-        return TString(relativePath);
+    if (relativePath.SkipPrefix(databasePrefix) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
+        return relativePath;
     }
 
-    return tablePath;
+    return TStringBuf(tablePath);
 }
 
 /**
@@ -144,11 +157,6 @@ private:
 struct TTableEntry {
     TDetailedMetricsTableInfo Info;
 
-    /**
-     * The path of the table relative to the database (the "table" label).
-     */
-    TString RelativePath;
-
     NMonitoring::TDynamicCounterPtr TableGroup;
 
     /**
@@ -181,6 +189,7 @@ public:
     )
         : TargetCounterGroup(targetCounterGroup)
         , DatabasePath(databasePath)
+        , DatabasePrefix(ChopTrailingSlash(databasePath))
         , IsFollowerRole(isFollowerRole)
     {}
 
@@ -196,18 +205,20 @@ public:
         CheckSingleRole(followerId);
 
         const TTabletKey tablet(tabletId, followerId);
+        const TStringBuf relativePath = MakeRelativeTablePath(DatabasePrefix, table.TablePath);
 
         // A tablet reports exactly one table, so a tablet, which is re-reported under
         // another one, leaves behind a contribution to the old table, which ForgetTablet
         // can no longer reach. Drop it here, BEFORE the group of the new table is created,
         // because dropping the last table of the database removes the database group too
         auto mapIt = TabletToTableMap.find(tablet);
-        if (mapIt != TabletToTableMap.end() && mapIt->second != table.TableId) {
+        if (mapIt != TabletToTableMap.end() && mapIt->second != relativePath) {
             RemoveTabletFromTable(mapIt->second, tablet);
             TabletToTableMap.erase(mapIt);
+            mapIt = TabletToTableMap.end();
         }
 
-        auto* entry = GetOrCreateTable(table);
+        auto* entry = GetOrCreateTable(table, relativePath);
         if (!entry) {
             return;
         }
@@ -230,8 +241,13 @@ public:
             return;
         }
 
-        // Record the reverse mapping from tablet key to table for ForgetTablet
-        TabletToTableMap[tablet] = table.TableId;
+        // Record the reverse mapping from tablet key to table for ForgetTablet. mapIt
+        // still points at an up to date entry (found above and not the-erased-because-
+        // stale case), so the steady state — every report but the first of a tablet —
+        // writes nothing and copies no string.
+        if (mapIt == TabletToTableMap.end()) {
+            TabletToTableMap.emplace(tablet, TString(relativePath));
+        }
 
         if (IsTableLevel(entry->Info)) {
             auto& bucket = entry->TableBucket;
@@ -262,10 +278,12 @@ public:
             return;
         }
 
-        const TPathId tableId = mapIt->second;
+        // RemoveTabletFromTable takes relativePath as a view rather than copying it, so
+        // it MUST run before the reverse map entry it points into is erased below, or the
+        // view dangles. RemoveTabletFromTable is documented not to touch the reverse map,
+        // so calling it first before this function's own erase is safe.
+        RemoveTabletFromTable(mapIt->second, tablet);
         TabletToTableMap.erase(mapIt);
-
-        RemoveTabletFromTable(tableId, tablet);
     }
 
     void RecalculateAllCounters() override {
@@ -342,7 +360,7 @@ private:
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
-    TTableEntry* GetOrCreateTable(const TDetailedMetricsTableInfo& table) {
+    TTableEntry* GetOrCreateTable(const TDetailedMetricsTableInfo& table, const TStringBuf relativePath) {
         if (!IsTableLevel(table) && !IsPartitionLevel(table)) {
             return nullptr;
         }
@@ -351,7 +369,9 @@ private:
             return nullptr;
         }
 
-        auto it = Tables.find(table.TableId);
+        // THash<TString>/TEqualTo<TString> are transparent, so lookup on a TStringBuf
+        // needs no temporary TString
+        auto it = Tables.find(relativePath);
         if (it != Tables.end()) {
             return &it->second;
         }
@@ -362,10 +382,12 @@ private:
         //       the very first report, which MetricsLevelChangeIsIgnoredUntilReconciliation
         //       pins, so that the step has to flip an explicit assertion
 
-        auto& entry = Tables[table.TableId];
+        // A new entry: this is the one place the key is actually materialized into a
+        // TString, once, shared between the map key and the GetSubgroup() call
+        const TString newKey(relativePath);
+        auto& entry = Tables[newKey];
         entry.Info = table;
-        entry.RelativePath = MakeRelativeTablePath(DatabasePath, table.TablePath);
-        entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, entry.RelativePath);
+        entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
 
         return &entry;
     }
@@ -376,8 +398,8 @@ private:
      *
      * @note The caller owns the reverse map entry: this function does not touch it.
      */
-    void RemoveTabletFromTable(const TPathId& tableId, const TTabletKey& tablet) {
-        auto it = Tables.find(tableId);
+    void RemoveTabletFromTable(const TStringBuf relativePath, const TTabletKey& tablet) {
+        auto it = Tables.find(relativePath);
         if (it == Tables.end()) {
             // The table collects no detailed metrics, or its entry is already gone
             return;
@@ -392,7 +414,9 @@ private:
         }
 
         if (entry.IsEmpty()) {
-            DatabaseGroup->RemoveSubgroup(TABLE_LABEL, entry.RelativePath);
+            // it->first is the real TString key, so removal builds nothing from the
+            // (possibly borrowed) relativePath parameter
+            DatabaseGroup->RemoveSubgroup(TABLE_LABEL, it->first);
             Tables.erase(it);
         }
 
@@ -463,6 +487,14 @@ private:
     const TString DatabasePath;
 
     /**
+     * DatabasePath with the trailing "/" chopped, own storage (not a view into
+     * DatabasePath): the impl is copy-constructible (TThrRefBase), and a view member
+     * would alias the SOURCE's DatabasePath after a copy. Precomputed once so that
+     * MakeRelativeTablePath() needs no allocation on every AddCounters call.
+     */
+    const TString DatabasePrefix;
+
+    /**
      * The role of the tablets this instance serves. A validation input only: it never
      * reaches the counter tree, both roles build the very same shape.
      */
@@ -475,12 +507,27 @@ private:
     NMonitoring::TDynamicCounterPtr DatabaseGroup;
 
     /**
-     * Reverse map from (tabletId, followerId) to tableId, used to satisfy ForgetTablet
-     * when the forget event carries no table identity.
+     * Reverse map from (tabletId, followerId) to the table's relative path, used to
+     * satisfy ForgetTablet when the forget event carries no table identity.
      */
-    THashMap<TTabletKey, TPathId> TabletToTableMap;
+    THashMap<TTabletKey, TString> TabletToTableMap;
 
-    THashMap<TPathId, TTableEntry> Tables;
+    /**
+     * Keyed by the table's relative path (the same value the "table" label of the
+     * counter tree carries) rather than by TPathId.
+     *
+     * The counter group is created by GetSubgroup(TABLE_LABEL, relativePath), which
+     * returns the SAME group for any two calls with the same path. If the state were
+     * keyed by TPathId instead, two PathIds sharing one path — a table dropped and
+     * recreated at the same path, or an ESchemeOpMoveTable rename that moves a table
+     * away and a new one is created at the vacated path — would get two entries
+     * silently aliasing one TDynamicCounters group and one implicit source-ID space.
+     * Emptying either entry would then remove the group out from under the other, and
+     * their independent TAggregatedTabletCounters would keep overwriting each other's
+     * sums. Keying by path instead makes the two reports collapse into the very same
+     * entry, which is exactly what the shared group already does.
+     */
+    THashMap<TString, TTableEntry> Tables;
 };
 
 } // namespace <anonymous>

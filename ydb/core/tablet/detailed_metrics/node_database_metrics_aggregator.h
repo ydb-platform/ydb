@@ -85,9 +85,10 @@ public:
      * which are left empty.
      *
      * @param[in] tabletId The tablet ID and its role are sufficient: this class owns
-     *                      the reverse map from (tabletId, followerId) -> tableId,
-     *                      because the forget event from the Tablet Counters Aggregator
-     *                      carries no table identity.
+     *                      the reverse map from (tabletId, followerId) -> the table's
+     *                      relative path (the same key the table entries and their
+     *                      counter groups are addressed by), because the forget event
+     *                      from the Tablet Counters Aggregator carries no table identity.
      *
      * @note A tablet of an unknown table is silently ignored, and forgetting a tablet
      *       twice is not an error.

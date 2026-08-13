@@ -22,6 +22,12 @@ const TString RELATIVE_TABLE_PATH = "dir/table";
 
 const TPathId TABLE_ID(72057594046644480ull, 42);
 
+// The same schemeshard owner as TABLE_ID, but a different local id, reporting under
+// the very same TABLE_PATH: models a table dropped and recreated at the same path,
+// or an ESchemeOpMoveTable rename that moves the old table away and a new one is
+// created at the vacated path.
+const TPathId RECREATED_TABLE_ID(72057594046644480ull, 44);
+
 // Another table of the very same database
 const TString OTHER_TABLE_PATH = "/Root/db/dir/other_table";
 const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
@@ -1174,6 +1180,135 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
 
             UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        }
+    }
+
+    /**
+     * Verify that two different TPathIds, which report the very same table path, share
+     * ONE counter group and ONE aggregate rather than fragmenting the tree between them.
+     *
+     * @note In production this happens whenever a table is dropped and a new one is
+     *       created at the same path, or when an ESchemeOpMoveTable rename moves the
+     *       old table away and a new table is created at the vacated old path: the
+     *       schemeshard hands out a fresh PathId, but the "table" label of the counter
+     *       tree is keyed by path, not by PathId. Before this fix, the state map was
+     *       keyed by PathId, so the two reports created two TTableEntry-s aliasing one
+     *       GetSubgroup() result: their TAggregatedTabletCounters overwrote each other's
+     *       sums, and forgetting the last tablet of the OLDER entry unconditionally
+     *       removed the shared group, detaching the counters the SURVIVING entry still
+     *       wrote into.
+     */
+    Y_UNIT_TEST(SamePathUnderDifferentPathIdsSharesOneTable) {
+        const TInstant now = TInstant::Seconds(100);
+
+        // TEST 1: The table level, where both tablets contribute to a shared bucket
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet oldTablet(1000, 0);
+            TFakeTablet newTablet(1001, 0);
+
+            oldTablet.SetSimple(UNIQUE_ROWS, 5);
+            oldTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, TABLE_ID, TABLE_PATH);
+
+            newTablet.SetSimple(UNIQUE_ROWS, 7);
+            newTablet.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelTable,
+                now,
+                RECREATED_TABLE_ID,
+                TABLE_PATH
+            );
+
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Table level counters of two PathIds at one path", rootGroup);
+
+            // Exactly one table= group holds the sum of both PathIds' contributions:
+            // under the bug this would read 5 or 7 (whichever entry recalculated last),
+            // never their sum
+            UNIT_ASSERT(FindTableGroup(rootGroup));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(UniqueRows)"),
+                5 + 7
+            );
+
+            // The tablet of the OLDER PathId is forgotten: the group must stay reachable,
+            // because the surviving PathId's entry still owns it
+            aggregator->ForgetTablet(oldTablet.TabletId, oldTablet.FollowerId);
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Table level counters after forgetting the older PathId's tablet", rootGroup);
+
+            UNIT_ASSERT(FindTableGroup(rootGroup));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(UniqueRows)"),
+                7
+            );
+        }
+
+        // TEST 2: The partition level, where both tablets own a leaf of their own
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet oldTablet(1000, 0);
+            TFakeTablet newTablet(1001, 0);
+
+            oldTablet.SetSimple(UNIQUE_ROWS, 5);
+            oldTablet.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelPartition,
+                now,
+                TABLE_ID,
+                TABLE_PATH
+            );
+
+            newTablet.SetSimple(UNIQUE_ROWS, 7);
+            newTablet.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelPartition,
+                now,
+                RECREATED_TABLE_ID,
+                TABLE_PATH
+            );
+
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Partition level leaves of two PathIds at one path", rootGroup);
+
+            // Both leaves live under the very same table= group
+            UNIT_ASSERT(FindTableGroup(rootGroup));
+
+            auto oldLeaf = FindLeafCounters(rootGroup, oldTablet.TabletId, oldTablet.FollowerId);
+            UNIT_ASSERT(oldLeaf);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(oldLeaf, "SUM(UniqueRows)"), 5);
+
+            auto newLeaf = FindLeafCounters(rootGroup, newTablet.TabletId, newTablet.FollowerId);
+            UNIT_ASSERT(newLeaf);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(newLeaf, "SUM(UniqueRows)"), 7);
+
+            // Forgetting the OLDER PathId's tablet must not detach the surviving leaf
+            aggregator->ForgetTablet(oldTablet.TabletId, oldTablet.FollowerId);
+
+            DumpCounters("Partition level leaves after forgetting the older PathId's tablet", rootGroup);
+
+            UNIT_ASSERT(!FindLeafCounters(rootGroup, oldTablet.TabletId, oldTablet.FollowerId));
+
+            auto survivingLeaf = FindLeafCounters(rootGroup, newTablet.TabletId, newTablet.FollowerId);
+            UNIT_ASSERT(survivingLeaf);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(survivingLeaf, "SUM(UniqueRows)"), 7);
         }
     }
 

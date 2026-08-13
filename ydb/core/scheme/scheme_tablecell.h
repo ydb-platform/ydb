@@ -917,6 +917,12 @@ public:
 
     size_t Append(TConstArrayRef<TCell> cells);
 
+    void Truncate(size_t maxRows) {
+        if (CellVectors.size() > maxRows) {
+            CellVectors.resize(maxRows);
+        }
+    }
+
     size_t Size() const {
         return CellVectors.size();
     }

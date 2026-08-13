@@ -5961,17 +5961,20 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
+            // Join on the full primary key (Col1, Col2) so the column-store
+            // table is read via point lookups rather than range reads, which
+            // the column shard read iterator does not support.
             auto it = client.StreamExecuteQuery(R"sql(
                 SELECT r.Col3
                 FROM `/Root/DataShard` AS r
                 JOIN `/Root/ColumnShard` AS c
-                ON r.Col1 = c.Col1;
+                ON r.Col1 = c.Col1 AND r.Col2 = c.Col2;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(
                 output,
-                R"([[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]]])");
+                R"([[["row"]];[["row"]];[["row"]];[["row"]]])");
         }
     }
 

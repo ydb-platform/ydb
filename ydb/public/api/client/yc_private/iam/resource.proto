@@ -2,8 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.iam.v1;
 
-// Minimal wire-compatible copy of the canonical IAM resource identity:
-// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/iam/v1/resource.proto
+// Minimal IAM resource identity used by ServiceControl.
 message Resource {
   string id = 1;
   string type = 2;

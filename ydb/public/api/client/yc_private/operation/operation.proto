@@ -2,13 +2,6 @@ syntax = "proto3";
 
 package ydb.yc.priv.operation;
 
-// Wire-compatible copy of yandex.cloud.priv.operation.Operation. The package
-// is intentionally YDB-local because another vendored API already owns the
-// canonical package name; protobuf wire compatibility depends on field
-// numbers and types, which are preserved below.
-// Canonical source:
-// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/operation/operation.proto
-
 import "google/protobuf/any.proto";
 import "google/rpc/status.proto";
 import "google/protobuf/timestamp.proto";

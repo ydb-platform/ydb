@@ -5,9 +5,8 @@ package yandex.cloud.priv.iam.v1;
 import "ydb/public/api/client/yc_private/iam/resource.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-// Minimal wire-compatible copy of the canonical private IAM ServiceControl
-// API used by the external data source delegation lifecycle:
-// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/iam/v1/service_control_service.proto
+// Minimal private IAM ServiceControl API surface used by the external data
+// source delegation lifecycle.
 service ServiceControlService {
   rpc SetupDelegation(SetupDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
   rpc RevokeDelegation(RevokeDelegationRequest) returns (.ydb.yc.priv.operation.Operation);

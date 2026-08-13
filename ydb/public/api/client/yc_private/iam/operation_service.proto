@@ -4,9 +4,8 @@ package yandex.cloud.priv.iam.v1;
 
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-// Wire-compatible subset of the canonical IAM-specific operation service:
-// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/iam/v1/operation_service.proto
-// It is hosted on the same private API endpoint as ServiceControl.
+// IAM operations are read through the IAM-specific operation service on the
+// same private API endpoint as ServiceControl.
 service OperationService {
   rpc Get(GetOperationRequest) returns (.ydb.yc.priv.operation.Operation);
 }

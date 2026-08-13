@@ -30,13 +30,11 @@ bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
     return input->Kind == EOperator::Join;
 }
 
-// Inline join filters. In case of inner join, replace the join with a filter on top of inner or cross join
-// More complex logic for other types of joins
+// Inline join filters. Temporarily inline join filters only of there are no equi-join conditions in the join
 
 TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
-
     if (input->Kind != EOperator::Join) {
         return input;
     }
@@ -44,6 +42,12 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto join = CastOperator<TOpJoin>(input);
     if (join->JoinFilters.empty()) {
         return input;
+    }
+
+    for (const auto& f : join->JoinFilters) {
+        if (f.MaybeEquiJoinCondition()) {
+            return input;
+        }
     }
 
     // In case of inner or cross join, we push the join filters above the join

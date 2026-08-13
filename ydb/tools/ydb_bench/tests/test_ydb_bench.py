@@ -1119,7 +1119,7 @@ class YdbBenchTest(unittest.TestCase):
             },
             {
                 "name": "asymmetric_cpuset",
-                "nodes": ((0, "0-3"),), "l3": ((0, "0-1"), (2, "2-3")),
+                "nodes": ((0, "0-3"),), "l3": ((1, "0-1"), (2, "2-3")),
                 "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"),
                              (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
                 "allowed": (1, 2), "cores": ((1,), (2,)), "siblings": ((1,), (2,)), "reasons": (),

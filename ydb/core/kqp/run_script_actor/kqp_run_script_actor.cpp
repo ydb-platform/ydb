@@ -264,7 +264,7 @@ private:
                 {"finished", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
                 {"logPrefix", LogPrefix()},

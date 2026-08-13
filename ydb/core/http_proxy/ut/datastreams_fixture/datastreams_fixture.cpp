@@ -1020,13 +1020,13 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateIamTokenServiceActor(config));
+    actorId = as->Register(CreateIamTokenServiceActor(config, "ydb-http_proxy-datastreams"));
     as->RegisterLocalService(MakeIamTokenServiceID(), actorId);
 
     actorId = as->Register(CreateDiscoveryProxyActor(credentialsProvider, config));

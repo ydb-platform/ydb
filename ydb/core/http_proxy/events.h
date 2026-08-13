@@ -38,9 +38,7 @@ namespace NKikimr::NHttpProxy {
             EvCounter,
             EvHistCounter,
             EvToken,
-            EvClientReady,
-            EvWaitListen,
-            EvListenReady
+            EvClientReady
         };
 
         struct TEvGrpcRequestResult : public TEventLocal<TEvGrpcRequestResult, EvGrpcRequestResult> {
@@ -125,14 +123,6 @@ namespace NKikimr::NHttpProxy {
 
         struct TEvClientReady : public TEventLocal<TEvClientReady, EvClientReady> {
             TEvClientReady() {}
-        };
-
-        // GRpcServersManager waits for this before opening the gRPC port so a
-        // node is not advertised while HTTP proxy is still binding.
-        struct TEvWaitListen : public TEventLocal<TEvWaitListen, EvWaitListen> {
-        };
-
-        struct TEvListenReady : public TEventLocal<TEvListenReady, EvListenReady> {
         };
 
         struct TEvErrorWithIssue : public TEventLocal<TEvErrorWithIssue, EvErrorWithIssue> {

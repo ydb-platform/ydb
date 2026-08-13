@@ -4,7 +4,6 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -251,8 +250,6 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     bool WaitingForDisconnectRequest = false;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
-    bool WaitForHttpProxy = false;
-    bool HttpProxyReady = false;
 
 public:
     enum {
@@ -283,29 +280,6 @@ public:
         Become(&TThis::StateFunc);
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
-        if (auto wrapper = GRpcServersWrapper.lock()) {
-            WaitForHttpProxy = wrapper->WaitForHttpProxy;
-        }
-
-        if (WaitForHttpProxy) {
-            YDB_LOG_NOTICE("Delaying gRPC listen until HTTP proxy is listening");
-            Send(NHttpProxy::MakeHttpProxyID(), new NHttpProxy::TEvServerlessProxy::TEvWaitListen());
-            return;
-        }
-
-        TryStartAfterHttpProxy();
-    }
-
-    void HandleHttpProxyListenReady(NHttpProxy::TEvServerlessProxy::TEvListenReady::TPtr&) {
-        HttpProxyReady = true;
-        YDB_LOG_NOTICE("HTTP proxy is listening, opening gRPC port");
-        TryStartAfterHttpProxy();
-    }
-
-    void TryStartAfterHttpProxy() {
-        if (WaitForHttpProxy && !HttpProxyReady) {
-            return;
-        }
         if (!WarmupTimeout) {
             Start();
         } else {
@@ -355,9 +329,6 @@ public:
     }
 
     void Start() {
-        if (WaitForHttpProxy && !HttpProxyReady) {
-            return;
-        }
         if (Started) {
             return;
         }
@@ -425,7 +396,6 @@ public:
         cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
         hFunc(NKqp::TEvKqpWarmupComplete, HandleWarmupComplete)
         cFunc(EvWarmupTimeout, HandleWarmupTimeout)
-        hFunc(NHttpProxy::TEvServerlessProxy::TEvListenReady, HandleHttpProxyListenReady)
         cFunc(TEvents::TSystem::PoisonPill, PassAway)
     )
 };
@@ -814,11 +784,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    // Open the gRPC port as soon as the node is locally ready. KQP cache warmup
-    // is slow on a v2 cold bootstrap, so cold queries are held at KqpProxy instead
-    // of delaying listen. HTTP proxy must listen first: discovery/balancers treat
-    // a live gRPC port as "this node can take traffic", including SQS/YMQ HTTP.
-    GRpcServersWrapper->WaitForHttpProxy = runConfig.AppConfig.GetHttpProxyConfig().GetEnabled();
+    // Open the gRPC port immediately: a node must be reachable while its cache warms (slow on a v2 cold bootstrap); cold queries are instead held at the query layer (KqpProxy) until warmup completes.
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
 }
 

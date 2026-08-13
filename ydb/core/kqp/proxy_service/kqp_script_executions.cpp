@@ -1808,10 +1808,17 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        YDB_LOG_WARN("[ScriptExecutions] Reply failed",
-            {"logPrefix", LogPrefix()},
-            {"status", status},
-            {"issues", issues.ToOneLineString()});
+        if (status == Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
+                {"logPrefix", LogPrefix()},
+                {"issues", issues.ToOneLineString()});
+        } else {
+            YDB_LOG_WARN("[ScriptExecutions] Reply failed",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
+        }
+
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,

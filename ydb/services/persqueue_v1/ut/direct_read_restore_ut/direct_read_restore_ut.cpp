@@ -1050,17 +1050,24 @@ protected:
         if (!driver) {
             return;
         }
-        auto stop = NThreading::Async([&] {
-            if (reader) {
-                reader->Close(TDuration::MilliSeconds(50));
+        // Capture by value so Close/Stop outlive caller pointer resets.
+        const auto driverLocal = driver;
+        const auto readerLocal = reader;
+        auto stop = NThreading::Async([driverLocal, readerLocal] {
+            if (readerLocal) {
+                readerLocal->Close(TDuration::MilliSeconds(50));
             }
-            driver->Stop(true);
+            driverLocal->Stop(true);
             return true;
         }, DispatchPool());
         for (int i = 0; i < 40 && !stop.HasValue() && !stop.HasException(); ++i) {
             Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
             Sleep(TDuration::MilliSeconds(50));
         }
+        UNIT_ASSERT_C(stop.HasValue() || stop.HasException(),
+            "SDK sparse stop did not finish in time");
+        stop.TryRethrow();
+        stop.GetValueSync();
         reader.reset();
         driver.reset();
     }

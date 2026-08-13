@@ -4,6 +4,9 @@
 #include <ydb/core/base/event_filter.h>
 #include <util/generic/hash_set.h>
 
+#include <atomic>
+#include <memory>
+
 class TProgramShouldContinue;
 class IRandomProvider;
 class ITimeProvider;
@@ -17,6 +20,39 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    class THnswCacheMemoryTracker {
+    public:
+        void SetLimit(ui64 limit) noexcept {
+            Limit.store(limit, std::memory_order_relaxed);
+        }
+
+        ui64 GetLimit() const noexcept {
+            return Limit.load(std::memory_order_relaxed);
+        }
+
+        bool TryAcquire(ui64 bytes) noexcept {
+            ui64 used = Used.load(std::memory_order_relaxed);
+            while (true) {
+                const ui64 limit = Limit.load(std::memory_order_relaxed);
+                if (!limit || used > limit || bytes > limit - used) {
+                    return false;
+                }
+                if (Used.compare_exchange_weak(used, used + bytes,
+                        std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                    return true;
+                }
+            }
+        }
+
+        void Release(ui64 bytes) noexcept {
+            Used.fetch_sub(bytes, std::memory_order_acq_rel);
+        }
+
+    private:
+        std::atomic<ui64> Limit = 0;
+        std::atomic<ui64> Used = 0;
+    };
+
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -292,7 +328,8 @@ struct TAppData {
     bool AlwaysSetSystemOwner = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
-    ui64 VectorIndexHnswCacheMaxSize = 0;
+    std::shared_ptr<THnswCacheMemoryTracker> VectorIndexHnswCacheMemoryTracker =
+        std::make_shared<THnswCacheMemoryTracker>();
     bool AllowShadowDataInSchemeShardForTests = false;
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;

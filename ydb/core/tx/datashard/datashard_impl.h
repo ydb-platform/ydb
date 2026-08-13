@@ -1837,33 +1837,36 @@ public:
     }
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index, ui64 rowCountAtBuild = 0) {
-        const ui64 cacheLimit = AppData()->VectorIndexHnswCacheMaxSize;
+        auto& entry = HnswIndexCache[localTid];
+        // Drop this cache's ownership before reserving space for a replacement.
+        // Active reads may still own the old index and keep its reservation.
+        entry.Index.reset();
+
         bool exceedsCacheLimit = false;
-        if (index && cacheLimit) {
+        if (index) {
             const ui64 indexSize = index->EstimatedMemoryBytes();
-            if (indexSize > cacheLimit) {
+            auto memoryTracker = AppData()->VectorIndexHnswCacheMemoryTracker;
+            if (!memoryTracker->TryAcquire(indexSize)) {
                 index.reset();
                 exceedsCacheLimit = true;
             } else {
-                ui64 cacheSize = 0;
-                for (const auto& [tid, cached] : HnswIndexCache) {
-                    if (tid != localTid && cached.Index) {
-                        cacheSize += cached.Index->EstimatedMemoryBytes();
+                struct TReservation {
+                    std::shared_ptr<NDataShard::THnswIndex> Index;
+                    std::shared_ptr<THnswCacheMemoryTracker> MemoryTracker;
+                    ui64 Size = 0;
+
+                    ~TReservation() {
+                        MemoryTracker->Release(Size);
                     }
-                }
-                for (auto it = HnswIndexCache.begin(); cacheSize + indexSize > cacheLimit
-                        && it != HnswIndexCache.end();) {
-                    if (it->first != localTid && it->second.Index) {
-                        cacheSize -= it->second.Index->EstimatedMemoryBytes();
-                        auto toErase = it++;
-                        HnswIndexCache.erase(toErase);
-                    } else {
-                        ++it;
-                    }
-                }
+                };
+
+                auto reservation = std::make_shared<TReservation>();
+                reservation->Index = std::move(index);
+                reservation->MemoryTracker = std::move(memoryTracker);
+                reservation->Size = indexSize;
+                index = std::shared_ptr<NDataShard::THnswIndex>(reservation, reservation->Index.get());
             }
         }
-        auto& entry = HnswIndexCache[localTid];
         entry.Index = std::move(index);
         entry.RowCountAtBuild = rowCountAtBuild;
         entry.Building = false;

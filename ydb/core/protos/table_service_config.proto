@@ -63,7 +63,6 @@ message TTableServiceConfig {
 
         optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
         optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
-        optional uint64 VectorIndexHnswCacheMaxSize = 34 [default = 0]; // bytes, 0 is unlimited
     }
 
     message TSpillingServiceConfig {

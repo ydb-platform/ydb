@@ -12,9 +12,9 @@ namespace NKikimr::NPQ::NNameResolver {
 
 namespace {
 
-// Error reasons end with ". " for multi-part messages.
+// Error reasons end with '.' for stable client-visible messages.
 std::unexpected<TString> Fail(const TString& reason) {
-    return std::unexpected(reason + ". ");
+    return std::unexpected(reason + ".");
 }
 
 TStringBuf StripLeadingSlash(TStringBuf value) {
@@ -214,9 +214,9 @@ std::expected<bool, TString> IsAlreadyMirroredModernPath(TStringBuf path, TStrin
 
     TStringBuf withoutSuffix;
     TStringBuf cluster;
-    // Contains("-mirrored-from-") above ⇒ RSplit must succeed.
-    Y_DEBUG_ABORT_UNLESS(path.TryRSplit("-mirrored-from-", withoutSuffix, cluster));
-    if (cluster.empty()) {
+    // Do not put TryRSplit inside Y_DEBUG_ABORT_UNLESS: in release builds the
+    // expression is not evaluated and cluster stays empty.
+    if (!path.TryRSplit("-mirrored-from-", withoutSuffix, cluster) || cluster.empty()) {
         return Fail("Malformed mirrored topic path - expected to end with valid cluster name");
     }
     if (localDc == cluster) {
@@ -323,14 +323,34 @@ std::expected<TResolvedName, TString> ResolveName(
 ) {
     const auto& pqConfig = AppData()->PQConfig;
     const bool fcc = pqConfig.GetTopicsAreFirstClassCitizen();
+
+    // Absolute paths may contain accidental '//' (e.g. JoinPath({"/Root/PQ/", name})).
+    // Canonize those before BasicNameChecks; keep relative '//' rejected as before.
+    TString canonName;
+    if (name.StartsWith('/') && name.Contains("//")) {
+        canonName = CanonizePath(TString{name});
+        name = canonName;
+    }
+
     TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
     const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
 
-    // Full path under database: /Root/account/topic + database /Root → account/topic.
-    // Callers (e.g. describer) may pass database-prefixed absolute paths as-is.
-    if (!databaseNorm.empty()) {
+    // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
+    if (!fcc && topicName.EndsWith("/")) {
+        return Fail("Invalid topic path or trailing '/'");
+    }
+
+    // Absolute under PQ root first (more specific than request database).
+    // Otherwise "/Root" + "/Root/PQ/rt3..." becomes "PQ/rt3..." and is misclassified.
+    bool strippedPqPrefix = false;
+    if (!pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix)) {
+        SkipPathPrefix(topicName, pqPrefix);
+        strippedPqPrefix = true;
+    } else if (!databaseNorm.empty()) {
+        // Full path under database: /Root/account/topic + database /Root → account/topic.
+        // Callers (e.g. describer) may pass database-prefixed absolute paths as-is.
         SkipPathPrefix(topicName, databaseNorm);
     }
 
@@ -359,7 +379,10 @@ std::expected<TResolvedName, TString> ResolveName(
         return std::unexpected(TStringBuilder() << "Bad topic name for federation: " << name);
     }
     if (topicName.empty()) {
-        return Fail("Invalid topic path (only account provided?)");
+        // Exact PQ root strip → same wording as ClassifyFederationTopic empty topic.
+        return Fail(strippedPqPrefix
+            ? "Bad topic name (only account provided?)"
+            : "Invalid topic path (only account provided?)");
     }
     if (topicName.EndsWith("/")) {
         return Fail("Invalid topic path or trailing '/'");
@@ -392,6 +415,12 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     // Root-like database: path with '/' is federation account/topic; otherwise legacy name.
+    // Absolute path under PQ with empty LbRoot → classic PrimaryPath under PQ (leaf as-is).
+    // With LbRoot → modern path under LbRoot (federation, no miss→retry).
+    if (strippedPqPrefix && lbRoot.empty() && !pqPrefix.empty()) {
+        return wrap(JoinStrippedRoot(pqPrefix, TString{ctx.Topic}));
+    }
+
     if (ctx.Topic.Contains("/")) {
         // EndsWith('/') and StripLeadingSlash already rejected empty account/rest forms
         // like "account/" and "/topic"; Contains('/') ⇒ TrySplit succeeds.

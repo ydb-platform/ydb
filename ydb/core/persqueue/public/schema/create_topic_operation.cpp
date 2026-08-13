@@ -2,6 +2,7 @@
 #include "schema_operation.h"
 #include "schema_propose.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -78,11 +79,18 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
-        if (!resolved) {
-            return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
+        // !FCC create still expects the original legacy name so ForFederation can
+        // extract DC/producer metadata. ResolveName is only for FCC (modern + legacy → path).
+        TString path;
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+            if (!resolved) {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
+            }
+            path = std::move(resolved->Path);
+        } else {
+            path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
         }
-        TString path = std::move(resolved->Path);
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 

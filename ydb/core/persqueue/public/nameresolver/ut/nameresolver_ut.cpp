@@ -136,7 +136,7 @@ Y_UNIT_TEST_F(FederationMirroredFromEmptyClusterRejected, TNameResolverFixture) 
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/LbCommunal/account", "dir/topic-mirrored-from-", "dc1"),
-        "Malformed mirrored topic path - expected to end with valid cluster name. ");
+        "Malformed mirrored topic path - expected to end with valid cluster name.");
 }
 
 Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
@@ -222,7 +222,7 @@ Y_UNIT_TEST_F(AtWithoutDashDashIsLegacy, TNameResolverFixture) {
 Y_UNIT_TEST_F(DcMismatchReturnsError, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc2"),
-        "DC specified both in topic name and separate option and they mismatch. ");
+        "DC specified both in topic name and separate option and they mismatch.");
 }
 
 Y_UNIT_TEST_F(ShortWithoutDcIsLocal, TNameResolverFixture) {
@@ -237,13 +237,13 @@ Y_UNIT_TEST_F(ShortWithoutDcIsLocal, TNameResolverFixture) {
 Y_UNIT_TEST_F(MalformedRt3NoDashDash, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.bad", "dc1", ""),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
+        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
 }
 
 Y_UNIT_TEST_F(MalformedRt3EmptyDc, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.--account--topic", "dc1", ""),
-        "Internal error: Could not determine DC for topic: rt3.--account--topic. ");
+        "Internal error: Could not determine DC for topic: rt3.--account--topic.");
 }
 
 Y_UNIT_TEST_F(MalformedRt3EmptyShort, TNameResolverFixture) {
@@ -328,6 +328,29 @@ Y_UNIT_TEST_F(TopicPathStartsWithPqRoot, TNameResolverFixture) {
         "/Root/LbCommunal/account/topic");
 }
 
+Y_UNIT_TEST_F(AbsolutePathWithDoubleSlashCanonized, TNameResolverFixture) {
+    SetFcc(false);
+    // JoinPath({"/Root/PQ/", name}) produces '//'; accept and resolve like SplitPath.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "/Root/PQ//rt3.dc1--account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/PQ//rt3.dc1--topic-x", "dc1")),
+        "/Root/LbCommunal/topic-x");
+}
+
+Y_UNIT_TEST_F(AbsolutePqLegacyKeptWhenNoLbRoot, TNameResolverFixture) {
+    SetFcc(false);
+    SetLbRoot("");
+    // Classic discovery PrimaryPath: PQ root + full legacy leaf (describes_ut topics).
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/PQ/rt3.dc1--topic-x")),
+        "/Root/PQ/rt3.dc1--topic-x");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "/Root/PQ//rt3.dc1--topic-x")),
+        "/Root/PQ/rt3.dc1--topic-x");
+}
+
 Y_UNIT_TEST_F(FederationModernPathBadName, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
@@ -404,21 +427,21 @@ Y_UNIT_TEST_F(FederationPqRootWithTrailingSlash, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "/Root/PQ/", "dc1"),
-        "Invalid topic path or trailing '/'. ");
+        "Invalid topic path or trailing '/'.");
 }
 
 Y_UNIT_TEST_F(FederationOnlySlash, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "/", "dc1"),
-        "Invalid topic path (only account provided?). ");
+        "Invalid topic path (only account provided?).");
 }
 
 Y_UNIT_TEST_F(FederationEmptyTopicAfterExactPqRoot, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "/Root/PQ", "dc1"),
-        "Bad topic name (only account provided?). ");
+        "Bad topic name (only account provided?).");
 }
 
 Y_UNIT_TEST_F(SkipPathPrefixRestoresWhenNoSlashAfterPrefix, TNameResolverFixture) {
@@ -432,7 +455,7 @@ Y_UNIT_TEST_F(FederationTrailingSlash, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "account/", "dc1"),
-        "Invalid topic path or trailing '/'. ");
+        "Invalid topic path or trailing '/'.");
 }
 
 Y_UNIT_TEST_F(FederationEmptyName, TNameResolverFixture) {
@@ -453,7 +476,7 @@ Y_UNIT_TEST_F(FederationLegacyParseFailure, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "rt3.bad", "dc1"),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
+        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
 }
 
 Y_UNIT_TEST_F(FederationAccountTopicWithoutLbRoot, TNameResolverFixture) {
@@ -485,17 +508,17 @@ Y_UNIT_TEST_F(FederationBadMirroredFromRejected, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/db1", "dir/mirrored-from-dc2", "dc1", ""),
-        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic. ");
+        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic.");
     ExpectError(
         ResolveName("/Root/db1", "dir/topic-mirrored-from-", "dc1", ""),
-        "Malformed mirrored topic path - expected to end with valid cluster name. ");
+        "Malformed mirrored topic path - expected to end with valid cluster name.");
 }
 
 Y_UNIT_TEST_F(FederationMirroredFromLocalDcRejected, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/db1", "dir/topic-mirrored-from-dc1", "dc1", ""),
-        "Local topic cannot contain '-mirrored-from' part. ");
+        "Local topic cannot contain '-mirrored-from' part.");
 }
 
 Y_UNIT_TEST_F(FccModernWithEmptyDatabase, TNameResolverFixture) {
@@ -566,7 +589,7 @@ Y_UNIT_TEST_F(FederationUserDatabaseLegacyParseFailure, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/LbCommunal/account", "rt3.bad", "dc1"),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
+        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
 }
 
 Y_UNIT_TEST_F(FederationBareWithEmptyDatabase, TNameResolverFixture) {
@@ -580,7 +603,7 @@ Y_UNIT_TEST_F(FederationRootMirroredMalformedRejected, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root", "account/mirrored-from-dc2", "dc1"),
-        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic. ");
+        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic.");
 }
 
 Y_UNIT_TEST_F(NavigateDatabaseEmptyWhenNoAccountTopicShape, TNameResolverFixture) {

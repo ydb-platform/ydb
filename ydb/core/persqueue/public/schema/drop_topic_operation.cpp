@@ -80,6 +80,9 @@ private:
             case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
                 return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Path, TopicInfo.Status));
             }
+            case NDescriber::EStatus::BAD_REQUEST: {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Path, TopicInfo.Status));
+            }
             default: {
                 return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, TopicInfo.Status));
             }

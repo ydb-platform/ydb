@@ -60,7 +60,7 @@ struct TResolvedName {
  *
  *   // With localDc (mirroring / DC-aware resolve)
  *   ResolveName(db, "rt3.dc1--account--topic", "dc1")
- *     -> Path("/Root/LbCommunal/account/topic"), ...
+ *     -> Path("/Root/LbCommunal/account/topic"), NavigateDatabase(db)
  *   ResolveName("/Root", "account/topic", "dc1", "dc2")
  *     -> Path("/Root/LbCommunal/account/topic-mirrored-from-dc2"), NavigateDatabase("/Root/LbCommunal/account")
  */

@@ -321,14 +321,27 @@ void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const 
     AFL_ENSURE(requestInfo != CookieToRequestInfo.end())("cookie", partitionResult.GetCookie())("database", Context->DatabasePath);
 
     requestInfo->second.Done = true;
-    if (ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
+    const auto pqError = ev->Get()->Record.GetErrorCode();
+    // Kafka OffsetCommit does not validate against log start/end. PQ Strict
+    // still rejects those commits; map the error to NONE so Java clients do
+    // not treat OFFSET_OUT_OF_RANGE as a failed commit.
+    if (pqError == NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE ||
+        pqError == NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST) {
+        YDB_LOG_DEBUG("Ignoring out-of-range commit, Kafka OffsetCommit returns NONE",
+            {LogPrefix()},
+            {"status", EErrorCode_Name(pqError)},
+            {"reason", ev->Get()->Record.GetErrorReason()});
+        AddPartitionResponse(NONE_ERROR, requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
+        return;
+    }
+    if (pqError != NPersQueue::NErrorCode::OK) {
         YDB_LOG_CRIT("Commit offset error",
             {LogPrefix()},
-            {"status", EErrorCode_Name(ev->Get()->Record.GetErrorCode())},
+            {"status", EErrorCode_Name(pqError)},
             {"reason", ev->Get()->Record.GetErrorReason()});
     }
 
-    AddPartitionResponse(ConvertErrorCode(NGRpcProxy::V1::ConvertOldCode(ev->Get()->Record.GetErrorCode())), requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
+    AddPartitionResponse(ConvertErrorCode(NGRpcProxy::V1::ConvertOldCode(pqError)), requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
 }
 
 void TKafkaOffsetCommitActor::AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx) {

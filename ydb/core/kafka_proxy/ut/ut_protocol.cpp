@@ -1776,11 +1776,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 for (const auto& topic : msg->Topics) {
                     UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                     for (const auto& partition : topic.Partitions) {
-                        if (partition.PartitionIndex != 1) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                     }
                 }
                 auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
@@ -1928,13 +1924,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // Check commit
 
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
-                // or a zero committed offset and metadata
-                // than no error is thrown and metadata is updated
-
-                // check that otherwise, if the committed offset exceeds current endoffset of the partition
-                // than an error is returned and passed committed metadata is not saved
-
+                // Kafka OffsetCommit accepts offsets beyond the current log end.
+                // Metadata is stored whenever it is present in the request.
                 if (i == 0) {
                     partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
                 } else if (i == 1) {
@@ -1952,23 +1943,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    if (topic.Name.value() == firstTopicName) {
-                        // in first topic
-                        if (partition.PartitionIndex == 0 || partition.PartitionIndex == 1) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
-                    } else {
-                        if (partition.PartitionIndex == 1) {
-                            // nothing was produced in the second topic
-                            // check that if a zero offset is committed no error occurs and committed metadata is saved
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            // otherwise, an error occurs, because committed offset exceeds endoffset
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                 }
             }
         }
@@ -1987,16 +1962,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
             UNIT_ASSERT_VALUES_EQUAL(partition0->Metadata, commitedMetaData);
             int i = 0;
-            // checking committed metadata for the first topic
             for (auto it = partitions.begin(); it != partitions.end(); it++) {
                 if (i != 2) {
-                    // for i == 0 and i == 1 check that committed metadata == "additional-info" as committed offset didn't exceed endoffset
-                    // for other i != 2 values check that committed metadata is empty as no metadata was committed
-                    // that a new value of metadata is saved
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, partitionsAndOffsets[i].Metadata);
                 } else {
-                    // check that in case an error has occurred (because committed offset exceeded endoffset)
-                    // committed metadata is not saved
+                    // PQ Strict rejects commit beyond EndOffset; Kafka response is
+                    // still NONE, but the offset/metadata are not stored.
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, std::nullopt);
                 }
                 i += 1;
@@ -2012,7 +1983,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(partition.CommittedOffset, -1);
             }
         }
 
@@ -3320,7 +3292,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
 
             {
-                // non-existent topic with non-existent consumer should return an error for unexistent topic
+                // non-existent topic with non-existent consumer: Kafka OffsetFetch
+                // returns NONE + committedOffset = -1
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 topicsToPartions[nonExistedTopicName] = std::vector<i32>{0};
                 auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
@@ -3330,7 +3303,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
         }
         {
@@ -3429,7 +3403,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
 
             {
-                // existent topic with existent consumer but non-existent partition should return an error
+                // existent topic with existent consumer but non-existent partition:
+                // Kafka OffsetFetch returns NONE + committedOffset = -1
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{0, tooBigpartitionIndex};
@@ -3442,11 +3417,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].CommittedOffset, -1);
             }
 
             {
-                // existent topic with existent consumer but non-existent partition should return an error
+                // existent topic with existent consumer but non-existent partition
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{tooBigpartitionIndex};
@@ -3457,7 +3433,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
 
             {
@@ -3485,18 +3462,21 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto msg = client.OffsetFetch(request);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[2].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
             }
 
 
             {
-                // existent topic with non-existent consumer and non-existent partition should return an error
+                // existent topic with non-existent consumer and non-existent partition
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{tooBigpartitionIndex};
@@ -3508,7 +3488,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
 
             {
@@ -3559,7 +3540,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
         }
 
         {
@@ -3574,7 +3556,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
 
             std::map<TString, std::vector<i32>> topicsToPartions1;
             topicsToPartions1[existedTopicName] = std::vector<i32>{0};

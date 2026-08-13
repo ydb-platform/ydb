@@ -302,18 +302,16 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
         TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
         if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
             auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
-            bool consumerMissing = false;
+            bool consumerOnTopic = false;
             if (partitionsToOffsets) {
-                for (auto partitionIndex : topicRequest.PartitionIndexes) {
-                    auto partitionIt = partitionsToOffsets->find(partitionIndex);
-                    if (partitionIt != partitionsToOffsets->end() &&
-                        !partitionIt->second.contains(groupId)) {
-                        consumerMissing = true;
+                for (const auto& [_, consumers] : *partitionsToOffsets) {
+                    if (consumers.contains(groupId)) {
+                        consumerOnTopic = true;
                         break;
                     }
                 }
             }
-            if (consumerMissing) {
+            if (!consumerOnTopic) {
                 CreateConsumerGroupIfNecessary(topicNameWithoutDb, topicPath, topicNameWithoutDb, groupId);
             }
         } else if (!topicExists &&
@@ -633,8 +631,7 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    // OffsetFetch: existing partition with no committed offset for this
-                    // group is NONE + committedOffset = -1, not UNKNOWN_TOPIC_OR_PARTITION.
+                    // Existing partition, no committed offset for this group.
                     partition.CommittedOffset = -1;
                     partition.ErrorCode = NONE_ERROR;
                     YDB_LOG_DEBUG("No committed offset for group on partition",
@@ -644,12 +641,24 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                         {"requestPartition", requestPartition});
                 }
             } else {
-                partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
+                // Kafka OffsetFetch does not fail on an unknown partition:
+                // NONE + committedOffset = -1.
+                partition.CommittedOffset = -1;
+                partition.ErrorCode = NONE_ERROR;
                 YDB_LOG_DEBUG("Partition not found for topic",
                     {LogPrefix()},
                     {"requestPartition", requestPartition},
                     {"topicName", topicName});
             }
+            topic.Partitions.push_back(partition);
+        }
+    } else if (TopicsToResponses[topicName]->Status == UNKNOWN_TOPIC_OR_PARTITION) {
+        // Kafka coordinator OffsetFetch does not check that the topic exists.
+        for (auto requestPartition: requestTopic.PartitionIndexes) {
+            TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+            partition.PartitionIndex = requestPartition;
+            partition.CommittedOffset = -1;
+            partition.ErrorCode = NONE_ERROR;
             topic.Partitions.push_back(partition);
         }
     } else {

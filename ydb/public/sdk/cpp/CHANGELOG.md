@@ -2,6 +2,8 @@
 
 * Fix read session close deadlock in topic sdk.
 
+* Fixed untyped empty list parameters being sent with an invalid type; the value builder now reports the error locally.
+
 ## v3.21.0
 
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.

@@ -181,6 +181,53 @@ TEST(ParamsBuilder, IncompleteParam) {
     ASSERT_THROW(paramsBuilder.Build(), TExpectedErrorException);
 }
 
+TEST(ParamsBuilder, EmptyListWithoutType) {
+    try {
+        auto params = TParamsBuilder()
+            .AddParam("$key_list0")
+                .BeginList()
+                .EndList()
+                .Build()
+            .Build();
+        FAIL() << "Expected an untyped empty list to be rejected";
+    } catch (const TExpectedErrorException& e) {
+        EXPECT_STREQ(e.what(), "TTypeBuilder: EndList(): list item type is not set; "
+            "add a typed item or build the list with an explicit item type");
+    }
+}
+
+TEST(ParamsBuilder, EmptyListWithTypeInfo) {
+    auto keyListType = TTypeBuilder()
+        .BeginList()
+            .BeginTuple()
+            .AddElement()
+                .BeginOptional()
+                    .Primitive(EPrimitiveType::Uint32)
+                .EndOptional()
+            .AddElement()
+                .BeginOptional()
+                    .Primitive(EPrimitiveType::String)
+                .EndOptional()
+            .EndTuple()
+        .EndList()
+        .Build();
+
+    std::map<std::string, TType> paramsMap;
+    paramsMap.emplace("$key_list0", keyListType);
+
+    auto params = TParamsBuilder(paramsMap)
+        .AddParam("$key_list0")
+            .BeginList()
+            .EndList()
+            .Build()
+        .Build();
+
+    const auto keyList = params.GetValue("$key_list0");
+    ASSERT_TRUE(keyList);
+    EXPECT_EQ(FormatType(keyList->GetType()), "List<Tuple<Uint32?,String?>>");
+    EXPECT_EQ(keyList->GetProto().items_size(), 0);
+}
+
 TEST(ParamsBuilder, TypeMismatch) {
     auto param1Type = TTypeBuilder()
         .BeginList()

@@ -8,13 +8,16 @@ Like other aggregate functions, it can be combined with [GROUP BY](../syntax/sel
 
 ### Examples
 
+
 ```yql
 SELECT COUNT(*) FROM my_table;
 ```
 
+
 ```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
+
 
 {% if select_statement != "SELECT STREAM" %}
 
@@ -32,9 +35,11 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 ### Examples
 
+
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
 ```
+
 
 ## SUM {#sum}
 
@@ -44,9 +49,11 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
+
 ```yql
 SELECT SUM(value) FROM my_table;
 ```
+
 
 ## AVG {#avg}
 
@@ -58,9 +65,11 @@ Integer values and time intervals are automatically converted to Double.
 
 ### Examples
 
+
 ```yql
 SELECT AVG(value) FROM my_table;
 ```
+
 
 ## COUNT_IF {#count-if}
 
@@ -72,17 +81,20 @@ The function *does not* do the implicit type casting to Boolean for strings and 
 
 ### Examples
 
+
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
 FROM my_table;
 ```
 
+
 {% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
 To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
+
 
 ```yql
 SELECT
@@ -102,6 +114,7 @@ Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF
 
 ### Examples
 
+
 ```yql
 SELECT
     SUM_IF(value, value % 2 == 1) AS odd_sum,
@@ -109,7 +122,9 @@ SELECT
 FROM my_table;
 ```
 
+
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
+
 
 ```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
@@ -121,6 +136,7 @@ SELECT
 FROM my_table;
 ```
 
+
 ## SOME {#some}
 
 Get the value for an expression specified as an argument, for one of the table rows. Gives no guarantee of which row is used. It's similar to the [any()](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference/any/) function in ClickHouse.
@@ -129,19 +145,19 @@ Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min
 
 ### Examples
 
+
 ```yql
 SELECT
   SOME(value)
 FROM my_table;
 ```
 
+
 {% note alert %}
 
 When the aggregate function `SOME` is called multiple times, it's **not** guaranteed that all the resulting values are taken from the same row of the source table. To get this guarantee, pack the values into any container and pass it to `SOME`. For example, in the case of a structure, you can apply [AsStruct](basic.md#asstruct)
 
 {% endnote %}
-
-
 
 ## CountDistinctEstimate, HyperLogLog, and HLL {#countdistinctestimate}
 
@@ -158,18 +174,19 @@ All the three functions are aliases at the moment, but `CountDistinctEstimate` m
 
 ### Examples
 
+
 ```yql
 SELECT
   CountDistinctEstimate(my_column)
 FROM my_table;
 ```
 
+
 ```yql
 SELECT
   HyperLogLog(my_column, 4)
 FROM my_table;
 ```
-
 
 
 ## AGGREGATE_LIST {#agg-list}
@@ -186,6 +203,7 @@ For example, you can combine it with `DISTINCT` and the function [String::JoinFr
 
 ### Examples
 
+
 ```yql
 SELECT
    AGGREGATE_LIST( region ),
@@ -196,12 +214,14 @@ SELECT
 FROM users
 ```
 
+
 ```yql
 -- An equivalent of GROUP_CONCAT in MySQL
 SELECT
     String::JoinFromList(CAST(AGGREGATE_LIST(region, 2) AS List<String>), ",")
 FROM users
 ```
+
 
 These functions also have a short notation: `AGG_LIST` and `AGG_LIST_DISTINCT`.
 
@@ -210,8 +230,6 @@ These functions also have a short notation: `AGG_LIST` and `AGG_LIST_DISTINCT`.
 Execution is **NOT** lazy, so when you use it, be sure that the list has a reasonable size (about a thousand items or less). To stay on the safe side, better use a second optional numeric argument that limits the number of items in the list.
 
 {% endnote %}
-
-
 
 ## MAX_BY and MIN_BY {#max-min-by}
 
@@ -236,12 +254,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
   MIN_BY(value, LENGTH(value)),
   MAX_BY(value, key, 100)
 FROM my_table;
 ```
+
 
 ```yql
 $min_by_factory = AggregationFactory("MIN_BY");
@@ -254,12 +274,12 @@ FROM my_table;
 ```
 
 
-
 ## TOP and BOTTOM {#top-bottom}
 
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
 ### Examples
+
 
 ```yql
 SELECT
@@ -267,6 +287,7 @@ SELECT
     BOTTOM(value, 3)
 FROM my_table;
 ```
+
 
 ```yql
 $top_factory = AggregationFactory("TOP", 3);
@@ -278,6 +299,7 @@ SELECT
 FROM my_table;
 ```
 
+
 ## TOP_BY and BOTTOM_BY {#top-bottom-by}
 
 Return a list of values of the first argument for the rows containing the maximum/minimum values of the second argument. The third argument limits the number of items in the list.
@@ -286,12 +308,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
     TOP_BY(value, LENGTH(value), 3),
     BOTTOM_BY(value, key, 3)
 FROM my_table;
 ```
+
 
 ```yql
 $top_by_factory = AggregationFactory("TOP_BY", 3);
@@ -302,7 +326,6 @@ SELECT
     AGGREGATE_BY(AsTuple(value, key), $bottom_by_factory)
 FROM my_table;
 ```
-
 
 
 ## TOPFREQ and MODE {#topfreq-mode}
@@ -321,13 +344,13 @@ Optional arguments:
 
 ### Examples
 
+
 ```yql
 SELECT
     MODE(my_column),
     TOPFREQ(my_column, 5, 1000)
 FROM my_table;
 ```
-
 
 
 ## STDDEV and VARIANCE {#stddev-variance}
@@ -345,13 +368,13 @@ If all the values passed are `NULL`, it returns `NULL`.
 
 ### Examples
 
+
 ```yql
 SELECT
   STDDEV(numeric_column),
   VARIANCE(numeric_column)
 FROM my_table;
 ```
-
 
 
 ## CORRELATION and COVARIANCE {#correlation-covariance}
@@ -366,12 +389,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
   CORRELATION(numeric_column, another_numeric_column),
   COVARIANCE(numeric_column, another_numeric_column)
 FROM my_table;
 ```
+
 
 ```yql
 $corr_factory = AggregationFactory("CORRELATION");
@@ -380,7 +405,6 @@ SELECT
     AGGREGATE_BY(AsTuple(numeric_column, another_numeric_column), $corr_factory)
 FROM my_table;
 ```
-
 
 
 ## PERCENTILE and MEDIAN {#percentile-median}
@@ -393,13 +417,13 @@ The first argument (N) must be a table column name. If you need to bypass this r
 
 {% endnote %}
 
+
 ```yql
 SELECT
     MEDIAN(numeric_column),
     PERCENTILE(numeric_column, 0.99)
 FROM my_table;
 ```
-
 
 
 ## HISTOGRAM {#histogram}
@@ -426,6 +450,7 @@ If you pass two arguments, the meaning of the second argument is determined by i
 
 Various modifications of the algorithm are available:
 
+
 ```yql
 AdaptiveDistanceHistogram
 AdaptiveWeightHistogram
@@ -434,9 +459,11 @@ BlockWeightHistogram
 BlockWardHistogram
 ```
 
+
 By default, `HISTOGRAM` is a synonym for `AdaptiveWardHistogram`. Both functions are equivalent and interchangeable in all contexts.
 
 The Distance, Weight, and Ward algorithms differ in the formulas that combine two points into one:
+
 
 ```c++
     TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {
@@ -456,13 +483,14 @@ The Distance, Weight, and Ward algorithms differ in the formulas that combine tw
     }
 ```
 
+
 Difference between Adaptive and Block:
 
 > Contrary to adaptive histogram, block histogram doesn't rebuild bins after each point is added. Instead, it accumulates points and if the amount of points overflows specified limits, it shrinks all the points at once to produce a histogram. Indeed, there exist two limits and two shrinkage operations:
 >
 > 1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
 > 2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in 34constuctor)
-> While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
+>    While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
 
 {% endif %}
 
@@ -475,11 +503,13 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
     HISTOGRAM(numeric_column)
 FROM my_table;
 ```
+
 
 ```yql
 SELECT
@@ -490,6 +520,7 @@ SELECT
 FROM my_table;
 ```
 
+
 ```yql
 $hist_factory = AggregationFactory("HISTOGRAM");
 
@@ -497,6 +528,7 @@ SELECT
     AGGREGATE_BY(AsTuple(numeric_column, 1.0), $hist_factory)
 FROM my_table;
 ```
+
 
 ## LinearHistogram, LogarithmicHistogram, and LogHistogram {#linearhistogram}
 
@@ -515,6 +547,7 @@ If the spread of input values is uncontrollably large, we recommend that you spe
 
 ### Examples
 
+
 ```yql
 SELECT
     LogarithmicHistogram(numeric_column, 2)
@@ -522,16 +555,17 @@ FROM my_table;
 ```
 
 
-
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
 ### Signature
+
 
 ```yql
 BOOL_AND(Bool?)->Bool?
 BOOL_OR(Bool?)->Bool?
 BOOL_XOR(Bool?)->Bool?
 ```
+
 
 Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Boolean column or expression.
 
@@ -560,6 +594,7 @@ To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_
 
 ### Examples
 
+
 ```yql
 $data = [
     <|nonNull: true, nonFalse: true, nonTrue: NULL, anyVal: true|>,
@@ -583,11 +618,13 @@ SELECT
 FROM AS_TABLE($data);
 ```
 
+
 ## BIT_AND, BIT_OR and BIT_XOR {#bit-and-or-xor}
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
 
 ### Examples
+
 
 ```yql
 SELECT
@@ -596,16 +633,13 @@ FROM my_table;
 ```
 
 
-
 {% if feature_window_functions %}
 
-  ## SessionStart {#session-start}
+## SessionStart {#session-start}
 
 No arguments. It's allowed only if there is [SessionWindow](../syntax/select/group-by.md#session-window) in [GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Returns the value of the `SessionWindow` key column. If `SessionWindow` has two arguments, it returns the minimum value of the first argument within the group/section.
 In the case of the expanded version `SessionWindow`, it returns the value of the second element from the tuple returned by `<calculate_lambda>`, for which the first tuple element is `True`.
-
-
 
 {% endif %}
 
@@ -617,6 +651,7 @@ Applying an [aggregation factory](basic.md#aggregationfactory) to all values of 
 2. Factory.
 
 ### Examples
+
 
 ```yql
 $count_factory = AggregationFactory("COUNT");
@@ -633,5 +668,3 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
-
-

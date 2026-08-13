@@ -55,8 +55,7 @@ public:
 
         absl::flat_hash_set<TString> resolvedPaths;
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(
-                DatabasePath, topic, /*localDc=*/{}, /*dc=*/{});
+            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
             if (!resolved) {
                 YDB_LOG_DEBUG("Name resolve failed",
                     {"logPrefix", LOG_PREFIX},
@@ -281,7 +280,7 @@ public:
 private:
     const TVector<TString>& OriginalsFor(const TString& realPath) const {
         auto it = PathToOriginalPaths.find(realPath);
-        AFL_ENSURE(it != PathToOriginalPaths.end());
+        AFL_ENSURE(it != PathToOriginalPaths.end())("realPath", realPath);
         return it->second;
     }
 

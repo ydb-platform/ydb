@@ -33,28 +33,31 @@ namespace NKikimr::NPQ::NNameResolver {
  *
  * If dc is empty (default), it is taken from an rt3.<dc>--... name when present;
  * for short / modern paths without rt3., empty dc falls back to localDc.
- * Empty dc and localDc means local (no -mirrored-from- suffix) for short and modern names.
+ * Empty dc and localDc (both default) means local (no -mirrored-from- suffix)
+ * for short and modern names.
  *
- * Examples (localDc = "dc1", LbRoot = "/Root/LbCommunal", PQ Root = "/Root/PQ"):
+ * Examples (LbRoot = "/Root/LbCommunal", PQ Root = "/Root/PQ"):
  *
- *   // FCC + local rt3
+ *   // Without localDc/dc (defaults): local path, no -mirrored-from- suffix
+ *   ResolveName(db, "rt3.dc1--account--topic")
+ *     -> "/Root/LbCommunal/account/topic"
+ *   ResolveName("/Root", "account/topic")
+ *     -> "/Root/LbCommunal/account/topic"
+ *   ResolveName("/Root", "/Root/account/topic")
+ *     -> "/Root/LbCommunal/account/topic"
+ *   ResolveName("/Root/LbCommunal/account", "dir/topic")
+ *     -> "/Root/LbCommunal/account/dir/topic"
+ *
+ *   // With localDc (mirroring / DC-aware resolve)
  *   ResolveName(db, "rt3.dc1--account--topic", "dc1")
  *     -> "/Root/LbCommunal/account/topic"
- *
- *   // Federation + root-like DB + account/topic (also with empty PQ Root)
- *   ResolveName("/Root", "account/topic", "dc1")
- *     -> "/Root/LbCommunal/account/topic"
- *   ResolveName("/Root", "/Root/account/topic", "dc1")
- *     -> "/Root/LbCommunal/account/topic"
- *
- *   // Federation + user database + relative path
- *   ResolveName("/Root/LbCommunal/account", "dir/topic", "dc1")
- *     -> "/Root/LbCommunal/account/dir/topic"
+ *   ResolveName("/Root", "account/topic", "dc1", "dc2")
+ *     -> "/Root/LbCommunal/account/topic-mirrored-from-dc2"
  */
 std::expected<TString, TString> ResolveName(
     TStringBuf database,
     TStringBuf name,
-    TStringBuf localDc,
+    TStringBuf localDc = {},
     TStringBuf dc = {}
 );
 

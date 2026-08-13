@@ -5,10 +5,12 @@ from __future__ import annotations
 import pytest
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
+    DEFAULT_STUCK_TIMEOUT_SEC,
     NEMESIS_TYPES,
-    impairment_hold_sec_for,
+    confirm_timeout_for,
     recovery_mode_for,
     recovery_sec_for,
+    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
 )
@@ -24,6 +26,8 @@ TOGGLE_TYPES = (
     "SuspendNodeNemesis",
     "SafelyBreakDiskNemesis",
     "SafelyCleanupDisksNemesis",
+    "NetworkNemesis",
+    "DnsNemesis",
     "TimeSkewNemesis",
 )
 
@@ -47,19 +51,22 @@ def test_kills_are_self_recovering():
     assert recovery_mode_for("KillSlotDaemonNemesis") == "self"
 
 
-class TestImpairmentHold:
-    def test_paired_extract_holds_a_toggle_until_extracted(self):
-        assert impairment_hold_sec_for("StopStartNodeNemesis", paired_extract=True) is None
+class TestRecoveryTimeouts:
+    """The probe's stuck/confirm budgets: scaled to what the recovery actually takes."""
 
-    def test_unpaired_toggle_is_held_for_its_pulse(self):
-        # The legacy loop toggles the fault back with its next inject, so the hold covers the gap.
-        hold = impairment_hold_sec_for("StopStartNodeNemesis", paired_extract=False)
-        assert hold is not None and hold >= float(NEMESIS_TYPES["StopStartNodeNemesis"]["schedule"])
+    def test_stuck_timeout_defaults_by_scope(self):
+        assert stuck_timeout_for("KillNodeNemesis") == DEFAULT_STUCK_TIMEOUT_SEC
+        assert stuck_timeout_for("KillSlotDaemonNemesis") == DEFAULT_STUCK_TIMEOUT_SEC
+        # DISK scope waits out re-replication (BLUE blocks GREEN), not just a process restart.
+        assert stuck_timeout_for("SafelyBreakDiskNemesis") == 3600.0
 
-    def test_self_recovering_types_ignore_pairing(self):
-        expected = recovery_sec_for("KillNodeNemesis")
-        assert impairment_hold_sec_for("KillNodeNemesis", paired_extract=True) == expected
-        assert impairment_hold_sec_for("KillNodeNemesis", paired_extract=False) == expected
+    def test_cleanup_disks_confirm_waits_for_a_full_resync(self):
+        # Obliterate wipes the node's disks; re-replication takes far longer than the default.
+        assert confirm_timeout_for("SafelyCleanupDisksNemesis") == 7200.0
+
+    def test_unknown_type_uses_defaults(self):
+        assert stuck_timeout_for("NoSuchNemesis") == DEFAULT_STUCK_TIMEOUT_SEC
+        assert confirm_timeout_for("NoSuchNemesis") == DEFAULT_STUCK_TIMEOUT_SEC
 
 
 class TestBoundarySchedulerCompatibility:

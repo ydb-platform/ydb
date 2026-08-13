@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Available OS Images:
+        # https://github.com/actions/runner-images/#available-images
+        #
+        # Allow Python pre-releases:
+        # https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#allow-pre-releases
+        # See "allow-prereleases: true" below.
+        os: [ubuntu-latest]
+        python:
+          # Python versions (CPython):
+          # https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json
+          - "3.7"
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          # CPython 3.13 final is scheduled for October 2024:
+          # https://peps.python.org/pep-0719/
+          - "3.13"
+
+          # PyPy versions:
+          # - https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md
+          # - https://downloads.python.org/pypy/
+          # - Only versions listed in this JSON are supported:
+          #   https://downloads.python.org/pypy/versions.json
+          - "pypy2.7"
+          - "pypy3.6"
+          - "pypy3.7"
+          - "pypy3.8"
+          - "pypy3.9"
+          - "pypy3.10"
+
+          # Old PyPy versions
+          # See https://foss.heptapod.net/pypy/pypy/-/issues/3991
+          - "pypy2.7-v7.3.2"
+          - "pypy3.6-v7.3.2"
+          - "pypy3.7-v7.3.2"
+
+        include:
+          # Windows: test old and new Python
+          - os: windows-latest
+            python: 3.6
+          - os: windows-latest
+            python: 3.12
+
+          # macOS: test only new Python
+          - os: macos-latest
+            python: 3.12
+
+          # Ubuntu: test deadsnakes Python versions which are not supported by
+          # GHA python-versions.
+          - os: ubuntu-20.04
+            python: 3.6
+
+    steps:
+        # https://github.com/actions/checkout
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        # https://github.com/actions/setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+      - name: Install setuptools
+        run: python -m pip install setuptools
+      - name: Display the Python version
+        run: python -VV
+      - name: Run tests
+        run: python runtests.py --current --verbose
+
+  test_python27:
+    # Get Python 2.7 from Ubuntu 22.04.
+    #
+    # Python 2.7 was removed from GHA setup-python in June 2023:
+    # https://github.com/actions/setup-python/issues/672
+    name: 'Test Python 2.7'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python 2.7
+        run: |
+          sudo apt-get update
+          sudo apt-get -yq install python2.7 python2.7-dev
+      - name: Display the Python version
+        run: python2.7 -VV
+      - name: Run tests
+        run: python2.7 runtests.py --current --verbose

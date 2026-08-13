@@ -297,6 +297,19 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorSearch: {
+                    // The actor reads the index impl tables and (unless the index covers every
+                    // output column) the main table inside the connection, so there is no
+                    // separate read operation in the plan to catch here.
+                    const auto& vectorSearch = input.GetVectorSearch();
+                    if (modifiedTables.contains(getTable(vectorSearch.GetTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetLevelTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetPostingTable())))
+                    {
+                        return true;
+                    }
+                    break;
+                }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:

@@ -41,7 +41,7 @@ class Config:
     :type user_agent_appid: str
     :param user_agent_appid: A value that gets included in the User-Agent
         string in the format "app/<user_agent_appid>". Allowed characters are
-        ASCII alphanumerics and ``!$%&'*+-.^_`|~``. All other characters will
+        ASCII alphanumerics and ``!#$%&'*+-.^_`|~``. All other characters will
         be replaced by a ``-``.
 
     :type connect_timeout: float or int
@@ -282,6 +282,12 @@ class Config:
         If a value is not provided, the client will default to ``preferred``.
 
         Defaults to None.
+
+    :type auth_scheme_preference: str
+    :param auth_scheme_preference: A comma-delimited string of case-sensitive
+        auth scheme names used to determine the client's auth scheme preference.
+
+        Defaults to None.
     """
 
     OPTION_DEFAULTS = OrderedDict(
@@ -314,6 +320,7 @@ class Config:
             ('request_checksum_calculation', None),
             ('response_checksum_validation', None),
             ('account_id_endpoint_mode', None),
+            ('auth_scheme_preference', None),
         ]
     )
 

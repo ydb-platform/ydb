@@ -14,7 +14,6 @@ SRCS(
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
-    columnshard__statistics.cpp
     columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
@@ -72,7 +71,7 @@ PEERDIR(
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/tx_reader
     ydb/core/tx/conveyor/usage
-    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache/usage
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/priorities/usage
@@ -82,6 +81,7 @@ PEERDIR(
     ydb/core/util
     ydb/library/actors/core
     ydb/library/chunks_limiter
+    ydb/library/slide_limiter/usage
     ydb/library/yql/dq/actors/compute
     ydb/public/api/protos
 )

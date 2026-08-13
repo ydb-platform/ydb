@@ -209,6 +209,17 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(CountMinSketchNestedTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "subdir/Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
     Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

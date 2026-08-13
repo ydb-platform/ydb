@@ -299,9 +299,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
-    void Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext& ctx);
-    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
@@ -474,9 +471,6 @@ protected:
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
-
-            HFunc(NStat::TEvStatistics::TEvAnalyzeShard, Handle);
-            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
 
@@ -653,8 +647,8 @@ private:
 
     void SetupMetadata();
     bool SetupTtl();
-    void SetupCleanupPortions();
-    void SetupCleanupTables();
+    void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
+    void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();
     void SetupGC();
 

@@ -10,21 +10,19 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 const TVector<double> RequestTimeBoundsMs = {
-    0.01,   // 10th us
-    0.02,
-    0.03,
-    0.04,
-    0.05,
-    0.1,   // 100th us
-    0.25,
+    0.25,   // 250th us
     0.5,
     0.75,
     1,   // ms
     2,
     4,
     8,
+    16,
     32,
+    64,
     128,
+    256,
+    512,
     1'024,   // s
     65'536   // minutes
 };
@@ -39,6 +37,7 @@ TVolumeRequestCounters::TVolumeRequestCounters(
     , ReplyOk(parent ? parent->GetCounter("ReplyOk", true) : nullptr)
     , ReplyErr(parent ? parent->GetCounter("ReplyErr", true) : nullptr)
     , Bytes(parent ? parent->GetCounter("Bytes", true) : nullptr)
+    , Inflight(parent ? parent->GetCounter("Inflight", false) : nullptr)
     , RequestTime(
           parent ? parent->GetHistogram(
                        "RequestTimeMs",
@@ -49,22 +48,28 @@ TVolumeRequestCounters::TVolumeRequestCounters(
 void TVolumeRequestCounters::RequestStarted(ui32 bytes)
 {
     if (Requests) {
-        ++*Requests;
+        Requests->Inc();
     }
     if (bytes && Bytes) {
-        *Bytes += bytes;
+        Bytes->Add(bytes);
+    }
+    if (Inflight) {
+        Inflight->Inc();
     }
 }
 
 void TVolumeRequestCounters::RequestFinished(bool ok, TDuration duration)
 {
     if (ok && ReplyOk) {
-        ++*ReplyOk;
+        ReplyOk->Inc();
     } else if (!ok && ReplyErr) {
-        ++*ReplyErr;
+        ReplyErr->Inc();
     }
     if (RequestTime && duration != TDuration::Zero()) {
         RequestTime->Collect(duration.MillisecondsFloat());
+    }
+    if (Inflight) {
+        Inflight->Dec();
     }
 }
 

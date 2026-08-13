@@ -233,10 +233,9 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         TKqpStreamLookupSettings settings;
         NYql::TExprNode::TPtr inputTypeNode;
         if (lookup->IsJoin()) {
-            settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
-            // TODO: move this settings to lookuptable operator. It sets to 0, because it depends on pushed point predicate on the right side. 
-            // Currently we do not push them, we use original predicate to filter after.
-            settings.AllowNullKeysPrefixSize = 0;
+            settings.Strategy = lookup->JoinKind == "LeftSemi" ? EStreamLookupStrategyType::LookupSemiJoinRows : EStreamLookupStrategyType::LookupJoinRows;
+            // For point prefix lookup we allow null keys with it size.
+            settings.AllowNullKeysPrefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
         } else {
             settings.Strategy = EStreamLookupStrategyType::LookupRows;
 

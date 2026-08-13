@@ -2,6 +2,9 @@
 
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+
 namespace NKikimr::NStorage {
 
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {

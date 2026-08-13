@@ -26,7 +26,7 @@ else:
     from os import getuid
 
 
-class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
+class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
     """Default directories for Unix/Linux without XDG environment variable overrides.
 
     The XDG env var handling is in :class:`~platformdirs._xdg.XDGMixin`.
@@ -40,7 +40,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_data_dir(self) -> str:
         """Data directory tied to the user, e.g. ``~/.local/share/$appname/$version`` or ``$XDG_DATA_HOME/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/.local/share"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/.local/share"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def _site_data_dirs(self) -> list[str]:
@@ -49,7 +49,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_config_dir(self) -> str:
         """Config directory tied to the user, e.g. ``~/.config/$appname/$version`` or ``$XDG_CONFIG_HOME/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/.config"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/.config"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def _site_config_dirs(self) -> list[str]:
@@ -58,7 +58,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_cache_dir(self) -> str:
         """Cache directory tied to the user, e.g. ``~/.cache/$appname/$version`` or ``$XDG_CACHE_HOME/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/.cache"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/.cache"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_cache_dir(self) -> str:
@@ -68,7 +68,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_state_dir(self) -> str:
         """State directory tied to the user, e.g. ``~/.local/state/$appname/$version`` or ``$XDG_STATE_HOME/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/.local/state"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/.local/state"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_state_dir(self) -> str:
@@ -80,7 +80,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
         """Log directory tied to the user, same as `user_state_dir` if not opinionated else ``log`` in it."""
         path = self.user_state_dir
         if self.opinion:
-            path = os.path.join(path, "log")  # noqa: PTH118
+            path = os.path.join(path, "log")  # ruff:ignore[os-path-join]
             self._optionally_create_directory(path)
         return path
 
@@ -141,7 +141,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_fonts_dir(self) -> str:
         """Fonts directory tied to the user, e.g. ``~/.local/share/fonts``."""
-        return f"{os.path.expanduser('~/.local/share')}/fonts"  # noqa: PTH111  # API returns str, not Path
+        return f"{os.path.expanduser('~/.local/share')}/fonts"  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
 
     @property
     def user_preference_dir(self) -> str:
@@ -151,7 +151,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_bin_dir(self) -> str:
         """Bin directory tied to the user, e.g. ``~/.local/bin``."""
-        return os.path.expanduser("~/.local/bin")  # noqa: PTH111
+        return os.path.expanduser("~/.local/bin")  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_bin_dir(self) -> str:
@@ -161,11 +161,11 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_applications_dir(self) -> str:
         """Applications directory tied to the user, e.g. ``~/.local/share/applications``."""
-        return os.path.join(os.path.expanduser("~/.local/share"), "applications")  # noqa: PTH111, PTH118
+        return os.path.join(os.path.expanduser("~/.local/share"), "applications")  # ruff:ignore[os-path-expanduser, os-path-join]
 
     @property
     def _site_applications_dirs(self) -> list[str]:
-        return [os.path.join(p, "applications") for p in ["/usr/local/share", "/usr/share"]]  # noqa: PTH118
+        return [os.path.join(p, "applications") for p in ["/usr/local/share", "/usr/share"]]  # ruff:ignore[os-path-join]
 
     @property
     def site_applications_dir(self) -> str:
@@ -183,7 +183,7 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
 
         """
         if sys.platform.startswith("openbsd"):
-            path = f"/tmp/run/user/{getuid()}"  # noqa: S108
+            path = f"/tmp/run/user/{getuid()}"  # ruff:ignore[hardcoded-temp-file]
         elif sys.platform.startswith(("freebsd", "netbsd")):
             path = f"/var/run/user/{getuid()}"
         else:
@@ -294,7 +294,7 @@ class Unix(XDGMixin, _UnixDefaults):
 def _get_user_media_dir(env_var: str, fallback_tilde_path: str) -> str:
     if media_dir := _get_user_dirs_folder(env_var):
         return media_dir
-    return os.path.expanduser(fallback_tilde_path)  # noqa: PTH111
+    return os.path.expanduser(fallback_tilde_path)  # ruff:ignore[os-path-expanduser]
 
 
 def _get_user_dirs_folder(key: str) -> str | None:
@@ -303,7 +303,7 @@ def _get_user_dirs_folder(key: str) -> str | None:
     See https://freedesktop.org/wiki/Software/xdg-user-dirs/.
 
     """
-    config_home = os.environ.get("XDG_CONFIG_HOME", "").strip() or os.path.expanduser("~/.config")  # noqa: PTH111
+    config_home = os.environ.get("XDG_CONFIG_HOME", "").strip() or os.path.expanduser("~/.config")  # ruff:ignore[os-path-expanduser]
     user_dirs_config_path = Path(config_home) / "user-dirs.dirs"
     if user_dirs_config_path.exists():
         parser = ConfigParser()
@@ -315,7 +315,7 @@ def _get_user_dirs_folder(key: str) -> str | None:
             return None
 
         path = parser["top"][key].strip('"')
-        return path.replace("$HOME", os.path.expanduser("~"))  # noqa: PTH111
+        return path.replace("$HOME", os.path.expanduser("~"))  # ruff:ignore[os-path-expanduser]
 
     return None
 

@@ -158,8 +158,87 @@ def test_build_workspace_without_lockfile(tmp_path):
 
     package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
 
-    lockfile = package_manager.load_lockfile(os.path.join(package_manager.build_path, "pre.pnpm-lock.yaml"))
+    lockfile = package_manager.load_lockfile(os.path.join(package_manager.build_path, "pnpm-lock.yaml"))
     assert lockfile.data["lockfileVersion"] == "9.0"
+
+
+def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
+    source_path = tmp_path / "source" / "consumer"
+    build_path = tmp_path / "build" / "consumer"
+    reporter_path = tmp_path / "build" / "reporter"
+    ci_reporter_path = tmp_path / "build" / "ci-reporter"
+    source_path.mkdir(parents=True)
+    reporter_path.mkdir(parents=True)
+    ci_reporter_path.mkdir(parents=True)
+
+    (source_path / "package.json").write_text(
+        '{"dependencies":{"reporter":"workspace:../reporter"}}\n'
+    )
+    source_lockfile = package_manager_module.Lockfile(str(source_path / "pnpm-lock.yaml"))
+    source_lockfile.data = {
+        "lockfileVersion": "9.0",
+        "importers": {
+            ".": {
+                "dependencies": {
+                    "reporter": {"specifier": "workspace:../reporter", "version": "link:../reporter"}
+                }
+            }
+        },
+    }
+    source_lockfile.write()
+
+    reporter_workspace = package_manager_module.PnpmWorkspace(str(reporter_path / "pnpm-workspace.yaml"))
+    reporter_workspace.packages = {".", "../ci-reporter"}
+    reporter_workspace.write()
+
+    reporter_lockfile = package_manager_module.Lockfile(str(reporter_path / "pnpm-lock.yaml"))
+    reporter_lockfile.data = {
+        "lockfileVersion": "9.0",
+        "importers": {".": {"dependencies": {"ci-reporter": {"specifier": "workspace:../ci-reporter"}}}},
+    }
+    reporter_lockfile.write()
+
+    ci_reporter_lockfile = package_manager_module.Lockfile(str(ci_reporter_path / "pnpm-lock.yaml"))
+    ci_reporter_lockfile.data = {
+        "lockfileVersion": "9.0",
+        "importers": {
+            ".": {"devDependencies": {"typescript": {"specifier": "5.9.3", "version": "5.9.3"}}}
+        },
+    }
+    ci_reporter_lockfile.write()
+
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.sources_path = str(source_path)
+    package_manager.build_path = str(build_path)
+    package_manager.module_path = "consumer"
+    package_manager.inject_peers = False
+
+    package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
+
+    lockfile = package_manager.load_lockfile(str(build_path / "pnpm-lock.yaml"))
+    assert set(lockfile.get_importers()) == {".", "../reporter", "../ci-reporter"}
+
+
+def test_rebase_file_tarball_resolutions(tmp_path):
+    source_dir = tmp_path / "source" / "module"
+    target_dir = tmp_path / "target" / "module"
+    lockfile = package_manager_module.Lockfile(str(source_dir / "pnpm-lock.yaml"))
+    lockfile.data = {
+        "lockfileVersion": "9.0",
+        "packages": {
+            "pkg@1.0.0": {
+                "resolution": {
+                    "integrity": "sha512-YQ==",
+                    "tarball": "file:__tarballs__/pkg/-/pkg-1.0.0.tgz",
+                }
+            }
+        },
+    }
+
+    package_manager_module.PackageManager._rebase_file_tarball_resolutions(lockfile, str(target_dir))
+
+    tarball = lockfile.data["packages"]["pkg@1.0.0"]["resolution"]["tarball"]
+    assert tarball == "file:../../source/module/__tarballs__/pkg/-/pkg-1.0.0.tgz"
 
 
 def _load_package_json(path):

@@ -7,8 +7,9 @@ The module provides handy URL class for URL parsing and changing.
    :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
    :align: right
 
-.. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/yarl
+.. image:: https://codecov.io/gh/aio-libs/yarl/graph/badge.svg?flag=pytest
+   :target: https://app.codecov.io/gh/aio-libs/yarl?flags[]=pytest
+   :alt: Codecov coverage for the pytest-driven measurements
 
 .. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
    :target: https://codspeed.io/aio-libs/yarl
@@ -112,7 +113,7 @@ The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
 ``yarl`` on another operating system where wheels are not provided,
-the the tarball will be used to compile the library from
+the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517

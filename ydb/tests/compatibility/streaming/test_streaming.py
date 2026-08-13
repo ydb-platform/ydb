@@ -4,6 +4,7 @@ import os
 import pytest
 import time
 
+from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
@@ -23,7 +24,8 @@ class StreamingTestBase:
 
         extra_feature_flags = [
             "enable_external_data_sources",
-            "enable_streaming_queries"
+            "enable_streaming_queries",
+            "enable_streaming_queries_counters"
         ]
 
         if min(self.versions) >= (26, 1) and min(self.versions) < (26, 2):
@@ -99,9 +101,10 @@ class StreamingTestBase:
 
     def create_streaming_query(self):
         logger.debug("create_streaming_query")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
                 {'$precompute_data = SELECT value FROM table_name LIMIT 1;' if self.test_precompute_queries else ''}
 
                 $input = (
@@ -134,9 +137,10 @@ class StreamingTestBase:
 
     def create_simple_streaming_query(self):
         logger.debug("create_simple_streaming_query")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
                 {'$precompute_data = SELECT value FROM table_name LIMIT 1;' if self.test_precompute_queries else ''}
 
                 $input = (
@@ -192,9 +196,10 @@ class StreamingTestBase:
 
     def create_streaming_query_with_join(self):
         logger.debug("create_streaming_query_with_join")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
 
                 $input = (
                     SELECT * FROM
@@ -233,9 +238,10 @@ class StreamingTestBase:
 
     def create_simple_streaming_query_with_join(self):
         logger.debug("create_simple_streaming_query_with_join")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
 
                 $input = (
                     SELECT
@@ -283,9 +289,10 @@ class StreamingTestBase:
 
     def create_streaming_query_with_multi_output(self):
         logger.debug("create_streaming_query_with_multi_output")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
                 $input = (
                     SELECT * FROM
                         {self.input_object} WITH (
@@ -319,9 +326,10 @@ class StreamingTestBase:
 
     def create_simple_streaming_query_with_multi_output(self):
         logger.debug("create_simple_streaming_query_with_multi_output")
+        self.query_name = "my_queries/query_name"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
                 $input = (
                     SELECT
                         *
@@ -446,6 +454,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.create_objects(external)
         self.create_streaming_query()
         self.do_test_part1()
+        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
         self.change_cluster_version()
         self.do_test_part2()
 
@@ -456,6 +465,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.create_join_objects()
         self.create_streaming_query_with_join()
         self.do_test_part1(extra_suffix='-row-col')
+        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
         self.change_cluster_version()
         self.do_test_part2(extra_suffix='-row-col')
 
@@ -466,6 +476,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.create_streaming_query_with_multi_output()
         self.do_test_part1()
         self.check_multi_output_table(2)
+        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
         self.change_cluster_version()
         self.do_test_part2()
         self.check_multi_output_table(4)

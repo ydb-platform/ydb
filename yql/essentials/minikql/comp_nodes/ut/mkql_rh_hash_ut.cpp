@@ -5,8 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
 Y_UNIT_TEST(Map) {
@@ -463,5 +462,4 @@ Y_UNIT_TEST(BatchLookup) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

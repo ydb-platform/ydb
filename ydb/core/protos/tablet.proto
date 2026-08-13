@@ -293,4 +293,10 @@ message TEvMoveData {
 
 message TEvMoveDataResponse {
     optional uint64 TabletId = 1;
+    enum EStatus {
+        Success = 0;
+        ErrorGroupIdMismatch = 1;
+    }
+    optional EStatus Status = 2;
+    optional string ErrorReason = 3;
 }

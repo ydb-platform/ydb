@@ -136,4 +136,34 @@ inline void TTaggedPayloadWriter::BackpatchLengthPrefix()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TBuilder>
+void FormatTaggedPayload(TBuilder* builder, const TTaggedLogEventPayload& payload)
+{
+    TTaggedPayloadReader reader(payload);
+    builder->AppendString(reader.ReadMessage());
+    // Well-known tags are last by construction (see #TWellKnownTaggedLoggingGuard), hence single-pass.
+    bool parenOpen = false;
+    while (auto tag = reader.TryReadTag()) {
+        if (tag->IsWellKnown) {
+            if (parenOpen) {
+                builder->AppendChar(')');
+                parenOpen = false;
+            }
+            builder->AppendChar('\n');
+            builder->AppendString(tag->Value);
+        } else {
+            builder->AppendString(parenOpen ? ", "_sb : " ("_sb);
+            parenOpen = true;
+            builder->AppendString(tag->Key);
+            builder->AppendString(": "_sb);
+            builder->AppendString(tag->Value);
+        }
+    }
+    if (parenOpen) {
+        builder->AppendChar(')');
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NLogging

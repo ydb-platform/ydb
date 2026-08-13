@@ -664,6 +664,10 @@ struct TCmdWriteOptions {
 };
 void CmdWrite(const TCmdWriteOptions&);
 
+NKikimrClient::TCmdReadResult CmdReadAndGetResult(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc);
+
 void CmdRunCompaction(TTestActorRuntime& runtime,
                       ui64 tabletId,
                       const TActorId& sender,

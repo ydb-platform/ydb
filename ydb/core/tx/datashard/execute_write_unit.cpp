@@ -181,14 +181,29 @@ public:
         // No lock means nothing applied yet, so current is 0.
         const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
 
-        // The maximum WriteSeqNum in this batch determines its position in the chain.
-        ui64 maxRequested = 0;
+        // A gap between EvWrite messages is fine (KQP tracks deliveries itself),
+        // but within one EvWrite the operations' seq nums must be contiguous:
+        // KQP allocates them sequentially for the batch.
+        TVector<ui64> requestedSeqNums;
+        requestedSeqNums.reserve(operations.size());
         for (const auto& op : operations) {
-            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
-            if (requested > maxRequested) {
-                maxRequested = requested;
+            if (const ui64 requested = op.GetWriteSeqNum().WriteSeqNum) {
+                requestedSeqNums.push_back(requested);
             }
         }
+        std::sort(requestedSeqNums.begin(), requestedSeqNums.end());
+        for (size_t i = 1; i < requestedSeqNums.size(); ++i) {
+            if (requestedSeqNums[i] != requestedSeqNums[i - 1] + 1) {
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Uncommitted write seq nums must be contiguous within one request, got "
+                    << writerIndex << ":" << requestedSeqNums[i - 1] << " followed by "
+                    << writerIndex << ":" << requestedSeqNums[i]);
+                return EExecutionStatus::Executed;
+            }
+        }
+
+        // The maximum WriteSeqNum in this batch determines its position in the chain.
+        const ui64 maxRequested = requestedSeqNums.back();
 
         // A duplicate of the entire batch: the max seq num matches the last applied.
         if (maxRequested == current) {

@@ -4772,8 +4772,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        // Helper: send a two-operation write with WriteSeqNums [1, 2]
+        // Helper: send a two-operation write with WriteSeqNums [seqNum1, seqNum2]
         auto sendMultiOp = [&](ui32 key1, ui32 val1, ui32 key2, ui32 val2,
+                               ui64 seqNum1 = 1, ui64 seqNum2 = 2,
                                NKikimrDataEvents::TEvWriteResult::EStatus expected =
                                    NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
@@ -4781,35 +4782,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             req->SetLockId(lockTxId, lockNodeId);
             const std::vector<ui32> columnIds = {1, 2};
 
-            // Operation 1: key1=val1, WriteSeqNum=1
-            {
+            auto addOperation = [&](ui32 key, ui32 val, ui64 seqNum) {
                 TVector<TCell> cells;
-                cells.emplace_back(TCell((const char*)&key1, sizeof(ui32)));
-                cells.emplace_back(TCell((const char*)&val1, sizeof(ui32)));
+                cells.emplace_back(TCell((const char*)&key, sizeof(ui32)));
+                cells.emplace_back(TCell((const char*)&val, sizeof(ui32)));
                 TSerializedCellMatrix matrix(cells, 1, 2);
                 ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
                     .AddDataToPayload(matrix.ReleaseBuffer());
                 req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                     tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
-                auto* wsn = req->Record.MutableOperations(0)->MutableWriteSeqNum();
+                auto* wsn = req->Record.MutableOperations(req->Record.OperationsSize() - 1)->MutableWriteSeqNum();
                 wsn->SetWriterIndex(0);
-                wsn->SetWriteSeqNum(1);
-            }
+                wsn->SetWriteSeqNum(seqNum);
+            };
 
-            // Operation 2: key2=val2, WriteSeqNum=2
-            {
-                TVector<TCell> cells;
-                cells.emplace_back(TCell((const char*)&key2, sizeof(ui32)));
-                cells.emplace_back(TCell((const char*)&val2, sizeof(ui32)));
-                TSerializedCellMatrix matrix(cells, 1, 2);
-                ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
-                    .AddDataToPayload(matrix.ReleaseBuffer());
-                req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                    tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
-                auto* wsn = req->Record.MutableOperations(1)->MutableWriteSeqNum();
-                wsn->SetWriterIndex(0);
-                wsn->SetWriteSeqNum(2);
-            }
+            addOperation(key1, val1, seqNum1);
+            addOperation(key2, val2, seqNum2);
 
             return Write(runtime, sender, shard, std::move(req), expected);
         };
@@ -4829,7 +4817,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             // A duplicate delivery of the same multi-operation batch must be detected
             // as a duplicate, not rejected as STATUS_BAD_REQUEST.
-            auto result = sendMultiOp(1, 11, 2, 22,
+            auto result = sendMultiOp(1, 11, 2, 22, 1, 2,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
@@ -4851,6 +4839,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"),
                 result.GetIssues(0).message());
             UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"),
+                result.GetIssues(0).message());
+        }
+
+        {
+            // A gap between EvWrite messages is fine, but seq nums within one
+            // message must be contiguous: KQP allocates them sequentially.
+            auto result = sendMultiOp(3, 33, 4, 44, 3, 5,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must be contiguous"),
                 result.GetIssues(0).message());
         }
 

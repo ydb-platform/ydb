@@ -80,6 +80,7 @@ public:
 
     void AddState(EPDiskState state, bool isNodeLocked);
     bool IsChanged() const;
+    bool IsDriveStatusChanged() const;
     bool IsMaintenanceStatusChanged() const;
     void ApplyChanges(TString& reason);
     void ApplyChanges();

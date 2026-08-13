@@ -272,9 +272,13 @@ void TPDiskStatus::AddState(EPDiskState state, bool isNodeLocked) {
     TPDiskStatusComputer::AddState(state, isNodeLocked);
 }
 
-bool TPDiskStatus::IsChanged() const {
+bool TPDiskStatus::IsDriveStatusChanged() const {
     TString unused;
-    return Current != Compute(Current, unused) || IsMaintenanceStatusChanged();
+    return Current != Compute(Current, unused);
+}
+
+bool TPDiskStatus::IsChanged() const {
+    return IsDriveStatusChanged() || IsMaintenanceStatusChanged();
 }
 
 bool TPDiskStatus::IsMaintenanceStatusChanged() const {
@@ -1211,7 +1215,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             all.AddPDisk(id, hasGoodState);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood() || info.HasForcedStatus() || info.IsMaintenanceStatusChanged()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus()
+                        || (info.IsMaintenanceStatusChanged() && !info.IsDriveStatusChanged())) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id, hasGoodState);

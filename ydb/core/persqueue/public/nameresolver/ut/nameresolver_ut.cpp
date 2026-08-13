@@ -32,16 +32,23 @@ public:
         ActorSystemStub.AppData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(root);
     }
 
-    static TString Ok(std::expected<TString, TString> result) {
+    static TString Ok(std::expected<TResolvedName, TString> result) {
+        if (!result.has_value()) {
+            UNIT_FAIL(result.error());
+        }
+        return result->Path;
+    }
+
+    static TResolvedName OkFull(std::expected<TResolvedName, TString> result) {
         if (!result.has_value()) {
             UNIT_FAIL(result.error());
         }
         return *result;
     }
 
-    static void ExpectError(std::expected<TString, TString> result, TStringBuf reason) {
+    static void ExpectError(std::expected<TResolvedName, TString> result, TStringBuf reason) {
         if (result.has_value()) {
-            UNIT_FAIL(TStringBuilder() << "got path: " << *result);
+            UNIT_FAIL(TStringBuilder() << "got path: " << result->Path);
         }
         UNIT_ASSERT_VALUES_EQUAL(result.error(), reason);
     }
@@ -65,15 +72,24 @@ Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {
 
 Y_UNIT_TEST_F(FederationRootDbAccountTopic, TNameResolverFixture) {
     SetFcc(false);
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "account/topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+    {
+        const auto resolved = OkFull(ResolveName("", "account/topic", "dc1"));
+        UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/LbCommunal/account");
+    }
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/dir/topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
+}
+
+Y_UNIT_TEST_F(FccLegacyKeepsRequestNavigateDatabase, TNameResolverFixture) {
+    // FCC: path may be under LbRoot, but SchemeCache DatabaseName stays the request DB.
+    const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
 }
 
 Y_UNIT_TEST_F(FederationRootDbViaDatabasePrefix, TNameResolverFixture) {
@@ -187,6 +203,14 @@ Y_UNIT_TEST_F(BareTopic, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "dc1", "dc2")),
         "/Root/LbCommunal/topic-mirrored-from-dc2");
+}
+
+Y_UNIT_TEST_F(FccBareInUserDatabaseUnderLbRoot, TNameResolverFixture) {
+    // CREATE TOPIC in a dedicated account DB under LbRoot must not remap to LbRoot/topic.
+    SetLbRoot("/Root");
+    const auto resolved = OkFull(ResolveName("/Root/account1", "topic"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/account1/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
 }
 
 Y_UNIT_TEST_F(AtWithoutDashDashIsLegacy, TNameResolverFixture) {

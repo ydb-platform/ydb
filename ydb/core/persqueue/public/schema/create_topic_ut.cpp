@@ -37,6 +37,23 @@ Y_UNIT_TEST(CreateTopicSuccess) {
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING));
 }
 
+Y_UNIT_TEST(CreateTopicLegacyName) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    const TString legacyName = "rt3.dc1--account--topic";
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(legacyName)), Ydb::StatusIds::SUCCESS);
+
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(NDescriber::CreateDescriberActor(edge, "/Root", {legacyName}));
+    auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics[legacyName];
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.RealPath, "/Root/account/topic");
+}
+
 Y_UNIT_TEST(CreateSharedConsumer) {
     auto setup = CreateSetup("CoreCreateShared");
     auto& runtime = setup->GetRuntime();

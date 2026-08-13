@@ -46,14 +46,9 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
-        if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            FederationRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
-        }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
-        RequestDatabaseName = DatabasePath;
 
-        absl::flat_hash_set<TString> resolvedPaths;
         for (const auto& topic : TopicPaths) {
             auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
             if (!resolved) {
@@ -67,18 +62,18 @@ public:
             YDB_LOG_DEBUG("Name resolved",
                 {"logPrefix", LOG_PREFIX},
                 {"topic", topic},
-                {"resolvedPath", *resolved});
-            // Several client names may resolve to the same navigate path.
-            PathToOriginalPaths[*resolved].push_back(topic);
-            resolvedPaths.insert(*resolved);
+                {"resolvedPath", resolved->Path},
+                {"navigateDatabase", resolved->NavigateDatabase});
+            PathToOriginalPaths[resolved->Path].push_back(topic);
+            PendingByDatabase[resolved->NavigateDatabase].insert(resolved->Path);
         }
 
-        if (resolvedPaths.empty()) {
+        if (PendingByDatabase.empty()) {
             Send(Parent, new TEvDescribeTopicsResponse(std::move(Result), UsedSyncVersion));
             PassAway();
             return;
         }
-        DoRequest(resolvedPaths);
+        StartNextDatabaseRequest();
     }
 
     void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
@@ -136,11 +131,6 @@ public:
                                 {"realPath", realPath});
 
                             SetErrorResults(originals, EStatus::UNAUTHORIZED);
-                        } else if (TryScheduleFederationRetry(realPath)) {
-                            YDB_LOG_DEBUG("Path not found, will try FederationRoot",
-                                {"logPrefix", LOG_PREFIX},
-                                {"realPath", realPath},
-                                {"federationRoot", FederationRoot});
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
@@ -178,17 +168,10 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                if (TryScheduleFederationRetry(realPath)) {
-                                    YDB_LOG_DEBUG("Path not found, will try FederationRoot",
-                                        {"logPrefix", LOG_PREFIX},
-                                        {"realPath", realPath},
-                                        {"federationRoot", FederationRoot});
-                                } else {
-                                    YDB_LOG_DEBUG("Path not found",
-                                        {"logPrefix", LOG_PREFIX},
-                                        {"realPath", realPath});
-                                    SetErrorResults(originals, EStatus::NOT_FOUND);
-                                }
+                                YDB_LOG_DEBUG("Path not found",
+                                    {"logPrefix", LOG_PREFIX},
+                                    {"realPath", realPath});
+                                SetErrorResults(originals, EStatus::NOT_FOUND);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -258,7 +241,7 @@ public:
             return DoRequest(unknownPaths);
         }
 
-        if (TryStartNextFederationDatabaseRequest()) {
+        if (StartNextDatabaseRequest()) {
             return;
         }
 
@@ -284,68 +267,25 @@ private:
         return it->second;
     }
 
-    bool TryScheduleFederationRetry(const TString& realPath) {
-        if (FederationRoot.empty()) {
-            return false;
-        }
-        if (CDCPaths.contains(realPath)) {
-            // streamImpl miss must not spawn FederationRoot/<...>/streamImpl retries.
-            return false;
-        }
-        if (FederationPaths.contains(realPath)) {
-            // Already navigating this FederationRoot path (account DB attempt).
-            return false;
-        }
-        if (RetryWithFederation) {
-            return false;
-        }
-
-        // ResolveName already places federation topics under FederationRoot; retry only
-        // switches SchemeCache DatabaseName to the account tenant.
-        const auto target = NNameResolver::TryFederationAccountTarget(realPath, FederationRoot);
-        if (!target) {
-            return false;
-        }
-        if (target->Path == realPath && RequestDatabaseName == target->AccountDatabase) {
-            return false;
-        }
-
-        if (target->Path != realPath) {
-            PathToOriginalPaths[target->Path] = PathToOriginalPaths[realPath];
-        }
-        FederationPaths[target->Path] = TFederationTopicInfo{
-            .AccountDatabase = target->AccountDatabase
-        };
-        return true;
-    }
-
-    // One SchemeCache request per account database (DatabaseName = FederationRoot/account).
-    // Empty AccountDatabase is valid (fetch/API callers may pass Database="").
-    bool TryStartNextFederationDatabaseRequest() {
+    // One SchemeCache request per NavigateDatabase from ResolveName.
+    bool StartNextDatabaseRequest() {
         std::optional<TString> nextDatabase;
-        for (const auto& [_, info] : FederationPaths) {
-            if (!RequestedFederationDatabases.contains(info.AccountDatabase)) {
-                nextDatabase = info.AccountDatabase;
+        absl::flat_hash_set<TString>* nextPaths = nullptr;
+        for (auto& [database, paths] : PendingByDatabase) {
+            if (!RequestedDatabases.contains(database)) {
+                nextDatabase = database;
+                nextPaths = &paths;
                 break;
             }
         }
-        if (!nextDatabase) {
+        if (!nextDatabase || !nextPaths || nextPaths->empty()) {
             return false;
         }
 
-        RetryWithFederation = true;
-        RetryWithSyncVersion = false;
+        RetryWithSyncVersion = Settings.ForceSyncVersion;
         RequestDatabaseName = *nextDatabase;
-        RequestedFederationDatabases.insert(*nextDatabase);
-
-        absl::flat_hash_set<TString> newPath;
-        for (const auto& [path, info] : FederationPaths) {
-            if (info.AccountDatabase == *nextDatabase) {
-                newPath.insert(path);
-            }
-        }
-
-        DoRequest(newPath);
+        RequestedDatabases.insert(*nextDatabase);
+        DoRequest(*nextPaths);
         return true;
     }
 
@@ -408,14 +348,13 @@ private:
     const TDescribeSettings Settings;
     // navigate path -> originally requested client path(s)
     absl::flat_hash_map<TString, TVector<TString>> PathToOriginalPaths;
+    // SchemeCache DatabaseName -> resolved paths (from ResolveName.NavigateDatabase)
+    absl::flat_hash_map<TString, absl::flat_hash_set<TString>> PendingByDatabase;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
-    bool RetryWithFederation = false;
-    TString FederationRoot;
-    // DatabaseName for the current SchemeCache request (account DB on Federation retry).
     TString RequestDatabaseName;
-    absl::flat_hash_set<TString> RequestedFederationDatabases;
+    absl::flat_hash_set<TString> RequestedDatabases;
     absl::flat_hash_set<TString> RequestedCdcDatabases;
     // CDC streamImpl path metadata (originals live in PathToOriginalPaths)
     struct TCDCTopicInfo {
@@ -423,11 +362,6 @@ private:
         TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
-    // FederationRoot-prefixed path -> account database for SchemeCache retry
-    struct TFederationTopicInfo {
-        TString AccountDatabase;
-    };
-    absl::flat_hash_map<TString, TFederationTopicInfo> FederationPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;
 };
 

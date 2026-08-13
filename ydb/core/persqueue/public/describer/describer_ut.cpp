@@ -815,8 +815,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
-        // Primary resolve under /Root misses into account tenants; Federation retries
-        // with DatabaseName=/Root/account1 and /Root/account2.
+        // account1/topic → Path=/Root/account1/topic, NavigateDatabase=/Root/account1.
         StartDescribe(runtime, {"account1/topic", "account2/topic"}, {}, "/Root");
         auto topics = WaitResult(runtime);
 
@@ -1030,6 +1029,77 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("rt3.bad"));
         UNIT_ASSERT_VALUES_EQUAL(topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(TopicInDatabaseWithSlashInName) {
+        // Database path has an extra path component ("my/db"), so topic paths look like
+        // /Root/my/db/... while the tenant boundary is /Root/my/db.
+        const TString dbPath = "/Root/my/db";
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(0, 1);
+        settings.SetNodeCount(1);
+        settings.SetDynamicNodeCount(1);
+        settings.AddStoragePoolType(dbPath);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+
+        ::NPersQueue::TTestServer server(settings, false);
+        server.StartServer(false);
+        server.AnnoyingClient->GrantConnect("root@builtin");
+        server.EnableLogs(
+            {NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER},
+            NActors::NLog::PRI_DEBUG
+        );
+
+        const ui32 firstDynamicNode = server.CleverServer->StaticNodes();
+        CreateDedicatedDatabase(server, dbPath, firstDynamicNode);
+
+        auto& runtime = *server.GetRuntime();
+        SetPqChannelPoolKind(runtime, dbPath);
+        ExecuteDDLInDatabase(server.Endpoint, dbPath, "CREATE TOPIC `my-topic`");
+        ExecuteDDLInDatabase(server.Endpoint, dbPath, "CREATE TOPIC `my-dir/my-topic`");
+
+        // Relative topic name + matching tenant database.
+        {
+            StartDescribe(runtime, {"my-topic"}, {}, dbPath);
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains("my-topic"));
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-topic");
+        }
+
+        // Absolute topic path + matching tenant database.
+        {
+            const TString topic = "/Root/my/db/my-topic";
+            StartDescribe(runtime, {topic}, {}, dbPath);
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains(topic));
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].RealPath, "/Root/my/db/my-topic");
+        }
+
+        // Absolute topic path under /Root database (navigate from domain root).
+        // SchemeCache with DatabaseName=/Root does not resolve into the dedicated
+        // tenant schemeshard → NOT_FOUND (path exists only under /Root/my/db).
+        {
+            const TString topic = "/Root/my/db/my-topic";
+            StartDescribe(runtime, {topic}, {}, "/Root");
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains(topic));
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::NOT_FOUND);
+        }
+
+        // Topic in a subdirectory; DatabaseName points at that subdirectory
+        // (not the tenant root /Root/my/db). SchemeCache still resolves the path
+        // under the owning schemeshard → SUCCESS.
+        {
+            StartDescribe(runtime, {"my-topic"}, {}, "/Root/my/db/my-dir");
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains("my-topic"));
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-dir/my-topic");
+        }
     }
 
 }

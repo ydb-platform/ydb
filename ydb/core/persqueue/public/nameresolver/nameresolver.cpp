@@ -74,15 +74,72 @@ bool IsExplicitLegacyName(TStringBuf topic) {
     return topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@");
 }
 
-// Prefer LbRoot, else database; empty root leaves modernPath unchanged (no leading '/').
-TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TString modernPath) {
-    if (!lbRoot.empty()) {
-        return NormalizePath(lbRoot, modernPath);
+// True when database is a strict child of lbRoot (e.g. Root/account1 under Root).
+bool IsDatabaseUnderLbRoot(TStringBuf databaseNorm, TStringBuf lbRoot) {
+    return !lbRoot.empty()
+        && databaseNorm != lbRoot
+        && IsPathPrefix(databaseNorm, lbRoot);
+}
+
+bool IsCleanRelativePath(TStringBuf path) {
+    return !path.empty()
+        && !path.StartsWith('/')
+        && !path.EndsWith('/')
+        && !path.Contains("//");
+}
+
+// Join slash-stripped absolute root with a relative modern path.
+// Avoids CanonizePath when both sides are already clean.
+TString JoinStrippedRoot(TStringBuf rootStripped, TString modernPath) {
+    if (rootStripped.empty()) {
+        return modernPath;
+    }
+    if (modernPath.empty()) {
+        return TStringBuilder() << '/' << rootStripped;
+    }
+    if (IsCleanRelativePath(modernPath)) {
+        return TStringBuilder() << '/' << rootStripped << '/' << modernPath;
+    }
+    return NormalizePath(TStringBuilder() << '/' << rootStripped, modernPath);
+}
+
+// Prefer LbRoot (slash-stripped), else original database; empty root leaves modernPath as-is.
+TString JoinWithRoot(TStringBuf lbRootStripped, TStringBuf database, TString modernPath) {
+    if (!lbRootStripped.empty()) {
+        return JoinStrippedRoot(lbRootStripped, std::move(modernPath));
     }
     if (!database.empty()) {
+        const TStringBuf databaseNorm = StripSlashes(database);
+        if (!databaseNorm.empty() && IsCleanRelativePath(modernPath)) {
+            return TStringBuilder() << '/' << databaseNorm << '/' << modernPath;
+        }
         return NormalizePath(database, modernPath);
     }
     return modernPath;
+}
+
+// Join request database with a relative topic path (user-DB / FCC modern paths).
+TString JoinWithDatabase(TStringBuf database, TStringBuf databaseNorm, TStringBuf relative) {
+    if (databaseNorm.empty()) {
+        if (relative.empty()) {
+            return {};
+        }
+        if (IsCleanRelativePath(relative)) {
+            return TStringBuilder() << '/' << relative;
+        }
+        return NormalizePath(TStringBuf{}, relative);
+    }
+    if (relative.empty()) {
+        // name equal to database → absolute database path.
+        if (!database.empty() && database.StartsWith('/') && !database.EndsWith('/') && !database.Contains("//")) {
+            return TString{database};
+        }
+        return TStringBuilder() << '/' << databaseNorm;
+    }
+    if (IsCleanRelativePath(relative)) {
+        return TStringBuilder() << '/' << databaseNorm << '/' << relative;
+    }
+    return NormalizePath(database, relative);
 }
 
 // Append -mirrored-from-<dc> to the leaf topic name when dc != localDc.
@@ -189,6 +246,7 @@ struct TFederationContext {
 
 // Classify topic relative to PQ root / LbRoot vs user database.
 // database is a prefix of lbRoot (e.g. /Root vs /Root/Federation) → root-like.
+// Caller already stripped the database prefix from topic when present.
 TFederationContext ClassifyFederationTopic(
     TStringBuf database,
     TStringBuf topic,
@@ -210,27 +268,68 @@ TFederationContext ClassifyFederationTopic(
         ctx.IsRootDb = true;
         SkipPathPrefix(ctx.Topic, pqPrefix);
     }
-
-    if (!ctx.IsRootDb) {
-        SkipPathPrefix(ctx.Topic, database);
-    }
     return ctx;
+}
+
+TString AbsoluteDatabase(TStringBuf database, TStringBuf databaseNorm) {
+    if (databaseNorm.empty()) {
+        return {};
+    }
+    if (!database.empty() && database.StartsWith('/') && !database.EndsWith('/') && !database.Contains("//")) {
+        return TString{database};
+    }
+    return TStringBuilder() << '/' << databaseNorm;
+}
+
+TString NavigateDatabaseFor(
+    const TString& path,
+    TStringBuf database,
+    TStringBuf databaseNorm,
+    TStringBuf lbRoot,
+    bool fcc
+) {
+    // Federation account topics live in the account tenant; FCC keeps the request database.
+    if (!fcc && !lbRoot.empty()) {
+        TStringBuf rest = StripLeadingSlash(path);
+        if (IsPathPrefix(rest, lbRoot)) {
+            SkipPathPrefix(rest, lbRoot);
+            TStringBuf account;
+            TStringBuf topicRest;
+            if (rest.TrySplit("/", account, topicRest) && !account.empty() && !topicRest.empty()) {
+                return TStringBuilder() << '/' << lbRoot << '/' << account;
+            }
+        }
+    }
+    return AbsoluteDatabase(database, databaseNorm);
+}
+
+std::expected<TResolvedName, TString> MakeResolved(
+    TString path,
+    TStringBuf database,
+    TStringBuf databaseNorm,
+    TStringBuf lbRoot,
+    bool fcc
+) {
+    TResolvedName resolved;
+    resolved.NavigateDatabase = NavigateDatabaseFor(path, database, databaseNorm, lbRoot, fcc);
+    resolved.Path = std::move(path);
+    return resolved;
 }
 
 } // namespace
 
-std::expected<TString, TString> ResolveName(
+std::expected<TResolvedName, TString> ResolveName(
     TStringBuf database,
     TStringBuf name,
     TStringBuf localDc,
     TStringBuf dc
 ) {
     const auto& pqConfig = AppData()->PQConfig;
+    const bool fcc = pqConfig.GetTopicsAreFirstClassCitizen();
     TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
     const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
-    const TString& lbRootRaw = pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
 
     // Full path under database: /Root/account/topic + database /Root → account/topic.
     // Callers (e.g. describer) may pass database-prefixed absolute paths as-is.
@@ -238,15 +337,24 @@ std::expected<TString, TString> ResolveName(
         SkipPathPrefix(topicName, databaseNorm);
     }
 
-    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
+    auto wrap = [&](TString path) {
+        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, fcc);
+    };
+
+    if (fcc) {
         if (!IsLegacyStyleName(topicName)) {
-            return NormalizePath(database, topicName);
+            return wrap(JoinWithDatabase(database, databaseNorm, topicName));
         }
         auto parsed = TryParseLegacyToModernPath(topicName, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+        // Bare name inside a user DB under LbRoot stays in that DB (CREATE TOPIC in tenant).
+        // Explicit legacy (rt3/--/@) and bare names outside LbRoot still join via LbRoot.
+        if (!IsExplicitLegacyName(topicName) && IsDatabaseUnderLbRoot(databaseNorm, lbRoot)) {
+            return wrap(JoinWithDatabase(database, databaseNorm, *parsed));
+        }
+        return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
     }
 
     // Federation mode.
@@ -273,7 +381,7 @@ std::expected<TString, TString> ResolveName(
             if (!parsed) {
                 return std::unexpected(parsed.error());
             }
-            return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+            return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
         }
         // database is non-empty here: empty database is classified as root DB.
         auto mirrored = IsAlreadyMirroredModernPath(ctx.Topic, localDc);
@@ -281,10 +389,9 @@ std::expected<TString, TString> ResolveName(
             return std::unexpected(mirrored.error());
         }
         if (*mirrored) {
-            // Keep topic as TStringBuf until the final join — no intermediate copy.
-            return NormalizePath(database, ctx.Topic);
+            return wrap(JoinWithDatabase(database, databaseNorm, ctx.Topic));
         }
-        return NormalizePath(database, BuildModernTopicPath(ctx.Topic, localDc, dc));
+        return wrap(JoinWithDatabase(database, databaseNorm, BuildModernTopicPath(ctx.Topic, localDc, dc)));
     }
 
     // Root-like database: path with '/' is federation account/topic; otherwise legacy name.
@@ -301,9 +408,9 @@ std::expected<TString, TString> ResolveName(
             return std::unexpected(mirrored.error());
         }
         if (*mirrored) {
-            return JoinWithRoot(lbRootRaw, database, TString{ctx.Topic});
+            return wrap(JoinWithRoot(lbRoot, database, TString{ctx.Topic}));
         }
-        return JoinWithRoot(lbRootRaw, database, BuildModernTopicPath(ctx.Topic, localDc, dc));
+        return wrap(JoinWithRoot(lbRoot, database, BuildModernTopicPath(ctx.Topic, localDc, dc)));
     }
 
     auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);
@@ -313,9 +420,9 @@ std::expected<TString, TString> ResolveName(
     // Bare names with a non-empty root-like request database stay under that database
     // (e.g. /Root/local) instead of LbRoot/local.
     if (!IsExplicitLegacyName(ctx.Topic) && !database.empty()) {
-        return NormalizePath(database, *parsed);
+        return wrap(JoinWithDatabase(database, databaseNorm, *parsed));
     }
-    return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+    return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
 }
 
 std::optional<TFederationAccountTarget> TryFederationAccountTarget(

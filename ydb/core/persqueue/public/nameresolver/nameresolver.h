@@ -8,15 +8,27 @@
 
 namespace NKikimr::NPQ::NNameResolver {
 
+struct TResolvedName {
+    TString Path;              // absolute topic path
+    TString NavigateDatabase;  // SchemeCache DatabaseName hint (may be empty)
+};
+
 /**
- * Converts a topic name to its full path.
+ * Converts a topic name to its full path and SchemeCache database hint.
  * Also converts a full/legacy topic name to the full path used for reading from mirrored topics.
  *
- * Returns resolved path on success, or error reason on failure.
+ * Returns resolved path + navigate database on success, or error reason on failure.
+ *
+ * NavigateDatabase:
+ *   - FCC: request database (absolute)
+ *   - Federation + path under LbRoot/account/...: LbRoot/account
+ *   - Otherwise: request database (absolute), or empty if request database is empty
  *
  * First-class citizen (FCC) mode:
  *   Converts legacy-style names (rt3.*, short legacy with --/@, or bare name without '/').
- *   Modern paths with '/' are joined with database via NormalizePath (full topic path).
+ *   Modern paths with '/' are joined with database (full topic path).
+ *   Bare names inside a user database under LbRoot stay under that database
+ *   (not remapped to LbRoot); explicit legacy still joins via LbRoot.
  *
  * Federation mode (!FCC):
  *   - Root-like database (empty, prefixes PQ Root, or prefixes LbUserDatabaseRoot):
@@ -40,21 +52,19 @@ namespace NKikimr::NPQ::NNameResolver {
  *
  *   // Without localDc/dc (defaults): local path, no -mirrored-from- suffix
  *   ResolveName(db, "rt3.dc1--account--topic")
- *     -> "/Root/LbCommunal/account/topic"
- *   ResolveName("/Root", "account/topic")
- *     -> "/Root/LbCommunal/account/topic"
- *   ResolveName("/Root", "/Root/account/topic")
- *     -> "/Root/LbCommunal/account/topic"
+ *     -> Path="/Root/LbCommunal/account/topic"), NavigateDatabase(db)  // FCC
+ *   ResolveName("/Root", "account/topic")  // !FCC
+ *     -> Path("/Root/LbCommunal/account/topic"), NavigateDatabase("/Root/LbCommunal/account")
  *   ResolveName("/Root/LbCommunal/account", "dir/topic")
- *     -> "/Root/LbCommunal/account/dir/topic"
+ *     -> Path("/Root/LbCommunal/account/dir/topic"), NavigateDatabase("/Root/LbCommunal/account")
  *
  *   // With localDc (mirroring / DC-aware resolve)
  *   ResolveName(db, "rt3.dc1--account--topic", "dc1")
- *     -> "/Root/LbCommunal/account/topic"
+ *     -> Path("/Root/LbCommunal/account/topic"), ...
  *   ResolveName("/Root", "account/topic", "dc1", "dc2")
- *     -> "/Root/LbCommunal/account/topic-mirrored-from-dc2"
+ *     -> Path("/Root/LbCommunal/account/topic-mirrored-from-dc2"), NavigateDatabase("/Root/LbCommunal/account")
  */
-std::expected<TString, TString> ResolveName(
+std::expected<TResolvedName, TString> ResolveName(
     TStringBuf database,
     TStringBuf name,
     TStringBuf localDc = {},

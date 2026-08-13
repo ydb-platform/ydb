@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
@@ -77,7 +78,11 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
+        auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+        if (!resolved) {
+            return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
+        }
+        TString path = std::move(resolved->Path);
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -87,7 +92,6 @@ private:
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(database, topicName);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");

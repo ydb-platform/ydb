@@ -1,11 +1,16 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
+<<<<<<< HEAD
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/events.h>
+=======
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+>>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -208,7 +213,12 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
+<<<<<<< HEAD
     TActorSystem* actorSystem
+=======
+    NActors::TActorSystem* actorSystem,
+    bool forModify = false
+>>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 );
 
 IActor* CreateDescribeSchemaSecretsService();
@@ -247,5 +257,13 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 );
 
 IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
+
+NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
+    const TString& serviceAccount,
+    const TString& token,
+    NActors::TActorSystem* actorSystem
+);
+
+NActors::IActor* CreateAccessServiceActor();
 
 }  // namespace NKikimr::NKqp

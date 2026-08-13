@@ -260,7 +260,7 @@ public:
     std::atomic<bool> Finished = false;
     std::atomic<bool> Aborted = false;
 
-    IMemoryQuotaManager::TPtr QuotaManager;
+    const IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 class TOutputBuffer;

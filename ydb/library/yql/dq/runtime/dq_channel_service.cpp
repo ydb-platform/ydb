@@ -701,7 +701,7 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (IsQuoted) {
+    if (IsQuoted && Data.Bytes) {
         Descriptor->FreeQuota(Data.Bytes);
     }
 }
@@ -975,8 +975,9 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
             if (info.DstStageId) {
                 result->Info.DstStageId = info.DstStageId;
             }
-            if (!result->QuotaManager) {
-                result->QuotaManager = quotaManager;
+            // QuotaManager should be never reassigned, it's either nullptr or points to the same copy every time
+            if (quotaManager) {
+                Y_ENSURE(result->QuotaManager);
             }
             return result;
         } else {

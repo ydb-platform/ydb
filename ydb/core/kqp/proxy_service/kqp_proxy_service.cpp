@@ -72,6 +72,8 @@
 
 #include <util/folder/dirut.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
+
 namespace NKikimr::NKqp {
 
 namespace {

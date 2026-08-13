@@ -300,8 +300,13 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     } else {
         // Honour the caller's remaining budget (post-admit path passes what is left after wait).
         // Cap at the historical 20s shard default so a full BulkUpsert timeout does not silently
-        // stretch each shard write from 20s to minutes.
-        const TDuration writeTimeout = Min(TDuration::Seconds(20), operationTimeout);
+        // stretch each shard write from 20s to minutes. Also clamp by the absolute deadline so a
+        // caller that passed the original timeout (not pre-subtracted) cannot run past it.
+        TDuration writeTimeout = Min(TDuration::Seconds(20), operationTimeout);
+        if (deadline != TInstant::Max()) {
+            const TInstant now = NActors::TActivationContext::Now();
+            writeTimeout = deadline > now ? Min(writeTimeout, deadline - now) : TDuration::Zero();
+        }
         ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(
             replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues),
             std::move(userCtx), writeTimeout));

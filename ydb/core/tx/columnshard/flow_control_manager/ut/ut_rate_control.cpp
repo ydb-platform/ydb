@@ -337,13 +337,16 @@ Y_UNIT_TEST_SUITE(TNodeStateMapTest) {
         UNIT_ASSERT_VALUES_EQUAL(picked.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(picked[0], 1);
 
-        // A resolve is already in flight.
-        UNIT_ASSERT(nodes.PickTabletsForRecheck({ 1 }, T0 + period * 2, period).empty());
+        // Still in flight and within the period: do not duplicate the resolve.
+        UNIT_ASSERT(nodes.PickTabletsForRecheck({ 1 }, T0 + TDuration::Seconds(1), period).empty());
+
+        // Period elapsed with no FinishRecheck: treat the in-flight as lost and allow a retry.
+        UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0 + period, period).size(), 1);
 
         nodes.FinishRecheck(1);
-        // Resolve finished, but the per-tablet period has not elapsed.
-        UNIT_ASSERT(nodes.PickTabletsForRecheck({ 1 }, T0 + TDuration::Seconds(1), period).empty());
-        UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0 + period, period).size(), 1);
+        // Resolve finished, but the per-tablet period (from the retry stamp) has not elapsed.
+        UNIT_ASSERT(nodes.PickTabletsForRecheck({ 1 }, T0 + period + TDuration::Seconds(1), period).empty());
+        UNIT_ASSERT_VALUES_EQUAL(nodes.PickTabletsForRecheck({ 1 }, T0 + period * 2, period).size(), 1);
     }
 
     Y_UNIT_TEST(ForgetTabletDropsRecheckBookkeepingToo) {

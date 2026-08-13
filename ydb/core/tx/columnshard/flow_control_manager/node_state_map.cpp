@@ -88,7 +88,14 @@ TVector<ui64> TNodeStateMap::PickTabletsForRecheck(const TVector<ui64>& tabletId
             continue;
         }
         if (RecheckInFlight.contains(tabletId)) {
-            continue;
+            // A lost TEvForwardResult would leave the tablet here forever and permanently suppress
+            // rechecks. LastRecheck is stamped when the pick is made, so an entry older than the
+            // recheck period is treated as abandoned and eligible again.
+            const auto* last = LastRecheck.FindPtr(tabletId);
+            if (last && now - *last < period) {
+                continue;
+            }
+            RecheckInFlight.erase(tabletId);
         }
         if (const auto* last = LastRecheck.FindPtr(tabletId)) {
             if (now - *last < period) {

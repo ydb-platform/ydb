@@ -106,6 +106,7 @@ constexpr TDuration AdmitRpcTimeout = TDuration::Seconds(5);
 
 constexpr TStringBuf OverloadedMessage = "destination node is overloaded";
 constexpr TStringBuf QueueFullMessage = "destination node is overloaded; wait queue full";
+constexpr TStringBuf TimeoutBeforeWriteMessage = "operation timeout exhausted before shard writes started";
 
 // Runs on the caller's mailbox (BulkUpsert / DoLongTxWriteSameMailbox). Does data split + FCM admit
 // RPC here, then starts TLongTxWriteInternal on the same mailbox (forceNoFlowControl).
@@ -148,7 +149,8 @@ public:
             // request to the normal write actor, which produces the real navigate/split error.
             Counters.OnAdmitSkippedNoSplit();
             StartWrite(ctx);
-            return Finish(ctx);
+            Finish(ctx);
+            return;
         }
 
         WaitAdmitStartedAt = TActivationContext::Now();
@@ -312,18 +314,19 @@ private:
 
     void StartWrite(const TActorContext& ctx) {
         // Time already burned in the admit RPC and the wait queue belongs to the client's budget,
-        // so the write gets what is left of it rather than a fresh full timeout.
+        // so the write gets what is left of it rather than a fresh full timeout. Callers always
+        // own Finish()/PassAway — this method must not call them, or an early return double-decrements
+        // RequestsInFlight and double-PassesAway.
         const TInstant now = TActivationContext::Now();
-        if (now >= Tx.GetDeadline()) {
-            ReplyOverloaded(ctx, OverloadedMessage);
-            Finish(ctx);
-            return;
-        }
+        const TDuration untilDeadline = Tx.GetDeadline() > now ? Tx.GetDeadline() - now : TDuration::Zero();
+        // StartedAt is helper-boot time (after navigate/split upstream), so OperationTimeout - elapsed
+        // can still exceed Deadline - now. Cap by the absolute cut-off.
         const TDuration elapsed = now - StartedAt;
-        const TDuration remainingTimeout = Tx.GetOperationTimeout() > elapsed ? Tx.GetOperationTimeout() - elapsed : TDuration::Zero();
+        TDuration remainingTimeout = Tx.GetOperationTimeout() > elapsed ? Tx.GetOperationTimeout() - elapsed : TDuration::Zero();
+        remainingTimeout = Min(remainingTimeout, untilDeadline);
         if (remainingTimeout == TDuration::Zero()) {
-            ReplyOverloaded(ctx, OverloadedMessage);
-            Finish(ctx);
+            // Matching TLongTxWriteBase: no budget left is a timeout, not backpressure.
+            ReplyTimeout(ctx);
             return;
         }
         // forceNoFlowControl stops the write from re-entering flow control here.
@@ -342,6 +345,11 @@ private:
     void ReplyOverloaded(const TActorContext& ctx, TStringBuf message) {
         AddIssue(message);
         ctx.Send(Tx.GetReplyTo(), new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
+    }
+
+    void ReplyTimeout(const TActorContext& ctx) {
+        AddIssue(TimeoutBeforeWriteMessage);
+        ctx.Send(Tx.GetReplyTo(), new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::TIMEOUT));
     }
 
     void Finish(const TActorContext& /*ctx*/) {

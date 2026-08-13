@@ -106,12 +106,12 @@ private:
         Ydb::StatusIds::StatusCode status;
         TString error;
         FillConsumer(
-                *result.mutable_consumer(),
-                ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
-                *consumer,
-                status,
-                error,
-                false);
+            *result.mutable_consumer(),
+            ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
+            *consumer,
+            status,
+            error,
+            false);
 
         result.mutable_self()->CopyFrom(ev->Get()->SelfEntry);
         result.mutable_self()->set_name(TStringBuilder() << result.self().name() << "/" << consumerName);

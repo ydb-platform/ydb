@@ -6,8 +6,9 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
-#include <absl/container/flat_hash_map.h>
 #include <util/generic/maybe.h>
+
+#include <absl/container/flat_hash_map.h>
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
@@ -26,8 +27,7 @@ public:
     }
 
     bool NeedProcessPartition(
-        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition&) const override
-    {
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition&) const override {
         return true;
     }
 

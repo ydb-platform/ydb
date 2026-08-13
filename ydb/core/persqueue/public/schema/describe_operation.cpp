@@ -5,7 +5,6 @@
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/string/join.h>
 
@@ -27,11 +26,11 @@ void AddWindowsStat(Ydb::Topic::MultipleWindowsStat* stat, ui64 perMin, ui64 per
     stat->set_per_day(stat->per_day() + perDay);
 }
 
-class TDescribeOperationActor: public NActors::TActorBootstrapped<TDescribeOperationActor>
-    , protected TPipeCacheClient
-    , public TConstantLogPrefix
+class TDescribeOperationActor: public TBaseActor<TDescribeOperationActor>
+                             , protected TPipeCacheClient
+                             , public TConstantLogPrefix
 {
-    static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
+private:
     static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
     static constexpr size_t StatsMaxRetries = 15;
     static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
@@ -45,7 +44,8 @@ public:
         const NActors::TActorId& parent,
         TDescribeOperationSettings&& settings,
         std::unique_ptr<IDescribeStrategy> strategy)
-        : TPipeCacheClient(this)
+        : TBaseActor<TDescribeOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
+        , TPipeCacheClient(this)
         , Parent(parent)
         , Settings(std::move(settings))
         , Strategy(std::move(strategy))
@@ -79,6 +79,15 @@ public:
         return TStringBuilder() << "[" << (Strategy ? Strategy->GetName() : "DescribeOperation") << "]";
     }
 
+    bool OnUnhandledException(const std::exception& exc) override {
+        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        ReplyWithError(
+            Ydb::StatusIds::INTERNAL_ERROR,
+            TStringBuilder() << "Unhandled exception: " << exc.what(),
+            Ydb::PersQueue::ErrorCode::ERROR);
+        return true;
+    }
+
 private:
     void PassAway() override {
         LOG_D("PassAway");
@@ -87,7 +96,7 @@ private:
             DescriberActorId = {};
         }
         TPipeCacheClient::Close();
-        TActorBootstrapped::PassAway();
+        TBaseActor::PassAway();
     }
 
     void HandlePoison() {
@@ -308,24 +317,22 @@ private:
                 partResult.GetAvgWriteSpeedPerHour(),
                 partResult.GetAvgWriteSpeedPerDay());
 
-            if (partResult.HasLagsInfo()) {
-                const auto& lagInfo = partResult.GetLagsInfo();
-                auto consStats = partRes.mutable_partition_consumer_stats();
+            const auto& lagInfo = partResult.GetLagsInfo();
+            auto consStats = partRes.mutable_partition_consumer_stats();
 
-                consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
-                consStats->set_committed_offset(lagInfo.GetWritePosition().GetOffset());
+            consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
+            consStats->set_committed_offset(lagInfo.GetWritePosition().GetOffset());
 
-                SetProtoTime(consStats->mutable_last_read_time(), lagInfo.GetLastReadTimestampMs());
-                SetProtoTime(consStats->mutable_max_read_time_lag(), lagInfo.GetReadLagMs());
-                SetProtoTime(consStats->mutable_max_write_time_lag(), lagInfo.GetWriteLagMs());
-                SetProtoTime(consStats->mutable_max_committed_time_lag(), lagInfo.GetCommitedLagMs());
+            SetProtoTime(consStats->mutable_last_read_time(), lagInfo.GetLastReadTimestampMs());
+            SetProtoTime(consStats->mutable_max_read_time_lag(), lagInfo.GetReadLagMs());
+            SetProtoTime(consStats->mutable_max_write_time_lag(), lagInfo.GetWriteLagMs());
+            SetProtoTime(consStats->mutable_max_committed_time_lag(), lagInfo.GetCommitedLagMs());
 
-                AddWindowsStat(
-                    consStats->mutable_bytes_read(),
-                    partResult.GetAvgReadSpeedPerMin(),
-                    partResult.GetAvgReadSpeedPerHour(),
-                    partResult.GetAvgReadSpeedPerDay());
-            }
+            AddWindowsStat(
+                consStats->mutable_bytes_read(),
+                partResult.GetAvgReadSpeedPerMin(),
+                partResult.GetAvgReadSpeedPerHour(),
+                partResult.GetAvgReadSpeedPerDay());
 
             if (const auto consumerCount = partResult.ConsumerResultSize(); consumerCount > 0) {
                 partitionInfo.Consumers.reserve(consumerCount);

@@ -72,6 +72,15 @@ std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
 }
 
 template <typename TRequest, typename TResponse>
+class TInternalRequestCtx
+    : public TRequestCtx<TRequest, TResponse>
+    , public NGRpcService::IInternalRequestCtx
+{
+public:
+    using TRequestCtx<TRequest, TResponse>::TRequestCtx;
+};
+
+template <typename TRequest, typename TResponse>
 std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     NActors::TTestActorRuntime& runtime,
     const TRequest& request,
@@ -793,6 +802,25 @@ Y_UNIT_TEST(DescribeTopicUnauthenticatedRejectedWhenRequired) {
     auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
         runtime, request, CreateDescribeTopicActor, path);
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(DescribeTopicInternalRequestAllowedWithoutToken) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_internal";
+    CreateTopic(runtime, path);
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    auto result = std::make_shared<TResultHolder<Ydb::Topic::DescribeTopicResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
+    auto* ctx = new TInternalRequestCtx<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        request, path, "/Root", result, edgeActor);
+    runtime.Register(CreateDescribeTopicActor(ctx));
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(30));
+    UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
 Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {

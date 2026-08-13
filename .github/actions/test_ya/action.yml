@@ -698,7 +698,7 @@ runs:
     - name: build_stats
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.target_platform == ""
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}"
@@ -709,7 +709,7 @@ runs:
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.target_platform == ""
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |

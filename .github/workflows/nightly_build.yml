@@ -87,5 +87,5 @@ jobs:
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
           upload_path="ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/config-meta.json"
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://$upload_path" -d
-          echo "Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}${upload_path}).' >> $GITHUB_STEP_SUMMARY
+          echo "Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}${upload_path})." >> $GITHUB_STEP_SUMMARY
         fi

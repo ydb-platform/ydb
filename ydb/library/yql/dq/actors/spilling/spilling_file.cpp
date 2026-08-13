@@ -802,28 +802,25 @@ private:
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        // node_<nodeId>_<sessionId>
+        // Old format when Root was configured: spilling_root/node_<nodeId>_<sessionId>
         const auto isOwnOldFormatDir = [&](TStringBuf dirName) {
             TStringBuf rest = dirName;
             return rest.SkipPrefix("node_") && rest.NextTok('_') == nodeIdString && !rest.empty();
         };
 
-        // spilling-tmp-<nodeId>-<username>-<sessionId>
+        // New format: spilling_root/spilling-tmp-<nodeId>-<username>-<sessionId>
+        const TString ownPrefix = MakeSpillingNodeDirName(msg.NodeId, msg.Username, {});
         const auto isOwnDir = [&](TStringBuf dirName) {
-            TStringBuf rest = dirName;
-            if (!rest.SkipPrefix(SpillingDirPrefix)) {
-                return isOwnOldFormatDir(dirName);
+            if (dirName.StartsWith(ownPrefix)) {
+                return dirName != currentDirName;
             }
-            return rest.NextTok('-') == nodeIdString && !rest.empty() && dirName != currentDirName;
+            return isOwnOldFormatDir(dirName);
         };
 
         try {
             RemoveMatchingChildren(root, isOwnDir);
-
-            // Legacy default root shared by all nodes of this user: other nodes may still
-            // write there during a rolling upgrade, so drop only this node's directories.
-            RemoveMatchingChildren(TFsPath{GetSystemTempDir()} / (TStringBuilder() << SpillingDirPrefix << msg.Username),
-                isOwnOldFormatDir);
+            // Old format when Root was empty: $TMP/spilling-tmp-<username>/node_<nodeId>_<sessionId>
+            RemoveMatchingChildren(root / (TStringBuilder() << SpillingDirPrefix << msg.Username), isOwnOldFormatDir);
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
         }
@@ -851,7 +848,11 @@ private:
         }
 
         for (const auto& dirName : toRemove) {
-            (dir / dirName).ForceDelete();
+            try {
+                (dir / dirName).ForceDelete();
+            } catch (const yexception& e) {
+                LOG_E("[RemoveOldTmp] failed to remove " << (dir / dirName) << ": " << e.what());
+            }
         }
     }
 

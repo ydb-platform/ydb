@@ -4,6 +4,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <util/system/fs.h>
@@ -30,7 +31,7 @@ public:
     }
 
     ~TTestActorRuntime() {
-        if (SpillingRoot_ && SpillingRoot_.Exists()) {
+        if (SpillingRoot_ && SpillingRoot_.Exists() && SpillingRoot_ != GetDefaultSpillingRoot()) {
             SpillingRoot_.ForceDelete();
         }
     }
@@ -123,6 +124,13 @@ TChunkedBuffer CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
         size -= count;
     }
     return result;
+}
+
+TFsPath MakeDirWithContent(const TFsPath& path) {
+    path.MkDirs();
+    (path / "nested").MkDir();
+    TFileOutput((path / "nested" / "blob").GetPath()).Write("data");
+    return path;
 }
 
 void AssertEquals(const TBuffer& lhs, const TBuffer& rhs) {
@@ -701,6 +709,115 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
             UNIT_ASSERT_VALUES_EQUAL(resp->Get()->BlobId, 1);
+        }
+    }
+
+    // The service spills into <root>/spilling-tmp-<nodeId>-<user>-<sessionId>/, where <root> is the
+    // configured Root, or $TMP when Root is empty. Both roots are covered by UseDefaultRoot.
+    //
+    // Directories left by the previous version of the service are named node_<nodeId>_<sessionId> and
+    // live either directly in <root> (Root was configured) or in <root>/spilling-tmp-<user>/ (Root was
+    // empty, so the service spilled into $TMP/spilling-tmp-<user>/). Both places are cleaned up here.
+    //
+    // Before the service starts:
+    //
+    //   <root>/
+    //   ├── node_<thisNode>_<old-session>/                       delete: this node, old format
+    //   ├── node_<otherNode>_<old-session>/                      keep:   other node may still be running
+    //   ├── spilling-tmp-<thisNode>-<user>-<old-session>/        delete: this node, previous run
+    //   ├── spilling-tmp-<thisNode>-<other-user>-<old-session>/  keep:   same node id, another OS user
+    //   ├── spilling-tmp-<otherNode>-<user>-<old-session>/       keep:   other node may still be running
+    //   ├── unrelated-<old-session>/                             keep:   not a spilling directory
+    //   └── spilling-tmp-<user>/                                 keep:   shared root of the old format
+    //       ├── node_<thisNode>_<old-session>/                   delete: this node, old format
+    //       └── node_<otherNode>_<old-session>/                  keep:   other node may still be running
+    //
+    // After the service starts:
+    //
+    //   <root>/
+    //   ├── node_<otherNode>_<old-session>/
+    //   ├── spilling-tmp-<thisNode>-<user>-<current-session>/    created by the service for this run
+    //   ├── spilling-tmp-<thisNode>-<other-user>-<old-session>/
+    //   ├── spilling-tmp-<otherNode>-<user>-<old-session>/
+    //   ├── unrelated-<old-session>/
+    //   └── spilling-tmp-<user>/
+    //       └── node_<otherNode>_<old-session>/
+    Y_UNIT_TEST_TWIN(RemoveOldTmpDirectories, UseDefaultRoot) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        const ui32 thisNodeId = runtime.GetNodeId();
+        const ui32 otherNodeId = thisNodeId + 1;
+        const TString username = GetUsername();
+        const TString oldSessionId = CreateGuidAsString();
+
+        const TFsPath root = UseDefaultRoot
+            ? GetDefaultSpillingRoot()
+            : TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_cleanup");
+        if (!UseDefaultRoot) {
+            root.ForceDelete();
+        }
+        root.MkDir();
+
+        // $TMP is shared with the rest of the system, so the test removes what it created instead of
+        // deleting the whole root.
+        struct TCreatedPaths {
+            TVector<TFsPath> Paths;
+
+            TFsPath Add(const TFsPath& path) {
+                Track(path);
+                return MakeDirWithContent(path);
+            }
+
+            TFsPath Track(const TFsPath& path) {
+                Paths.push_back(path);
+                return path;
+            }
+
+            ~TCreatedPaths() {
+                for (const auto& path : Paths) {
+                    if (path.Exists()) {
+                        path.ForceDelete();
+                    }
+                }
+            }
+        } created;
+
+        const auto oldFormatDirName = [&](ui32 nodeId) {
+            return TStringBuilder() << "node_" << nodeId << "_" << oldSessionId;
+        };
+
+        const TFsPath oldFormatThisNode = created.Add(root / oldFormatDirName(thisNodeId));
+        const TFsPath oldFormatOtherNode = created.Add(root / oldFormatDirName(otherNodeId));
+        const TFsPath thisNodePreviousRun = created.Add(root / MakeSpillingNodeDirName(thisNodeId, username, oldSessionId));
+        const TFsPath otherUserSameNode = created.Add(root / MakeSpillingNodeDirName(thisNodeId, "other-user", oldSessionId));
+        const TFsPath otherNode = created.Add(root / MakeSpillingNodeDirName(otherNodeId, username, oldSessionId));
+        const TFsPath unrelated = created.Add(root / (TStringBuilder() << "unrelated-" << oldSessionId));
+
+        const TFsPath oldFormatRoot = root / (TStringBuilder() << SpillingDirPrefix << username);
+        const TFsPath oldFormatRootThisNode = created.Add(oldFormatRoot / oldFormatDirName(thisNodeId));
+        const TFsPath oldFormatRootOtherNode = created.Add(oldFormatRoot / oldFormatDirName(otherNodeId));
+
+        runtime.StartSpillingService(1000, 500, 100, 1000, root);
+        runtime.WaitBootstrap();
+
+        // Cleanup is asynchronous, so wait until the service actually spills something.
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester);
+        runtime.WaitBootstrap();
+        runtime.Send(new IEventHandle(spillingActor, tester, new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'))));
+        auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(resp->Get()->BlobId, 1);
+
+        const TFsPath currentDir = created.Track(runtime.GetSpillingNodeDir());
+        UNIT_ASSERT_C(currentDir.IsDirectory(), currentDir);
+
+        for (const auto& removed : {oldFormatThisNode, thisNodePreviousRun, oldFormatRootThisNode}) {
+            UNIT_ASSERT_C(!removed.Exists(), TStringBuilder() << "must be removed: " << removed);
+        }
+
+        for (const auto& kept : {oldFormatOtherNode, otherUserSameNode, otherNode, unrelated, oldFormatRoot, oldFormatRootOtherNode}) {
+            UNIT_ASSERT_C(kept.IsDirectory(), TStringBuilder() << "must be kept: " << kept);
         }
     }
 

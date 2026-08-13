@@ -53,7 +53,7 @@ runs:
       shell: bash
       if: inputs.build_preset
       run: |
-        folder="${{ target_platform != "" && target_platform || (runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown') }}"
+        folder="${{ inputs.target_platform != '' && inputs.target_platform || (runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown') }}"
         
         BUILD_PRESET="${{ inputs.build_preset }}"
         

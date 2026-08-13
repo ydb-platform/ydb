@@ -95,6 +95,11 @@ runs:
           # If the branch name is not provided, use a default prefix
           FOLDER_PREFIX='ya-'
         fi
+        
+        if [ -n "${{ inputs.target_platform }}" ]; then
+          FOLDER_PREFIX="${FOLDER_PREFIX}-${{ inputs.target_platform }}-"
+        fi
+        
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
 
@@ -107,6 +112,7 @@ runs:
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
+        target_platform: ${{ inputs.target_platform }}
 
     - name: Run build and tests
       id: build

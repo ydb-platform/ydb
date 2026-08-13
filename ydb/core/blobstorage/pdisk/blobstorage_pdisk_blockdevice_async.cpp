@@ -59,6 +59,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void *DoThreadProc() override {
             ::SetCurrentThreadName(Name.data());
+            TPDiskThreadStatsRegistration registration(Device.PCtx, Name);
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -291,6 +292,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         void* DoThreadProc() override {
             ::SetCurrentThreadName("PdSbmEv");
+            TPDiskThreadStatsRegistration registration(Device.PCtx, "submit");
             Exec();
             return nullptr;
         }
@@ -381,6 +383,7 @@ class TRealBlockDevice : public IBlockDevice {
             }
             Y_VERIFY_S(OperationsToBeSubmit.GetWaitingSize() == 0, PCtx->PDiskLogPrefix);
         }
+
     };
 
     ////////////////////////////////////////////////////////
@@ -399,6 +402,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         void* DoThreadProc() override {
             ::SetCurrentThreadName("PdGetEv");
+            TPDiskThreadStatsRegistration registration(Device.PCtx, "get");
             Exec();
             return nullptr;
         }
@@ -611,6 +615,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Run() {
             ::SetCurrentThreadName("PdSbmGet");
+            TPDiskThreadStatsRegistration registration(Device.PCtx, "submit_get");
             Exec();
         }
 
@@ -764,6 +769,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         void* DoThreadProc() override {
             ::SetCurrentThreadName("PdTrim");
+            TPDiskThreadStatsRegistration registration(Device.PCtx, "trim");
             Exec();
             return nullptr;
         }

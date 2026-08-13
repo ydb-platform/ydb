@@ -211,6 +211,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/executor_pool_counters.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -1948,7 +1949,8 @@ void TSelfPingInitializer::InitializeServices(
 
     for (size_t poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
         const auto& poolName = setup->GetPoolName(poolId);
-        auto poolGroup = counters->GetSubgroup("execpool", poolName);
+        auto poolGroup = NActors::GetExecutorPoolCountersGroup(
+            counters.Get(), poolName, setup->GetExecutorPoolPlacementGroupId(poolId));
         auto maxPingCounter = poolGroup->GetCounter("SelfPingMaxUs", false);
         auto avgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
         auto avgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
@@ -2797,7 +2799,8 @@ void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* 
     for (ui32 i = 0; i < setup->GetExecutorsCount(); ++i) {
         config.Pools.push_back(NSysView::TExtCountersConfig::TPool{
             setup->GetPoolName(i),
-            setup->GetThreads(i)});
+            setup->GetThreads(i),
+            setup->GetExecutorPoolPlacementGroupId(i)});
     }
 
     // external counters only for dynamic nodes

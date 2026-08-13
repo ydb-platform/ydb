@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/actors/util
     library/cpp/monlib/dynamic_counters
 )
 
@@ -18,4 +19,3 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
-

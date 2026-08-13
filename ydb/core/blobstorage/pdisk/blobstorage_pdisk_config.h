@@ -185,6 +185,7 @@ struct TPDiskConfig : public TThrRefBase {
     bool SortFreeChunksHDD = true;
 
     std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
+    std::optional<ui32> BlobStorageExecutorPoolPlacementGroupId;
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
@@ -350,6 +351,10 @@ struct TPDiskConfig : public TThrRefBase {
         if (BlobStorageExecutorPoolAffinity) {
             str << " BlobStorageExecutorPoolAffinityCpuCount# "
                 << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
+        if (BlobStorageExecutorPoolPlacementGroupId) {
+            str << " BlobStorageExecutorPoolPlacementGroupId# "
+                << *BlobStorageExecutorPoolPlacementGroupId << x;
         }
         str << "}";
         return str.Str();

@@ -9,16 +9,43 @@
 #include <ydb/core/util/light.h>
 #include <ydb/core/util/max_tracker.h>
 
+#include <ydb/library/actors/core/thread_stats.h>
+
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+#include <util/generic/map.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
+#include <optional>
 
 namespace NKikimr {
 
 struct TPDiskConfig;
+struct TPDiskMon;
+
+class TPDiskThreadMon {
+public:
+    TPDiskThreadMon(
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& pdiskGroup,
+        const TString& threadName);
+
+private:
+    friend struct TPDiskMon;
+
+    void Register(ui64 threadId);
+    void Unregister(ui64 threadId);
+    void Update();
+
+    ui64 ThreadId = 0;
+    std::optional<NActors::TThreadSchedulerStatsReader> Reader;
+    NMonitoring::TDynamicCounters::TCounterPtr CpuMicrosec;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedRuntimeMicrosec;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedWaitMicrosec;
+    NMonitoring::TDynamicCounters::TCounterPtr NonvoluntaryContextSwitches;
+};
 
 class TBurstmeter {
 private:
@@ -566,8 +593,15 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
 
+private:
+    TMap<TString, TPDiskThreadMon> ThreadMonitors;
+
+public:
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
+    void RegisterThread(const TString& threadName, ui64 threadId);
+    void UnregisterThread(const TString& threadName, ui64 threadId);
+    void UpdateThreadStats();
     ::NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
     void IncrementQueueTime(ui8 priorityClass, size_t timeMs);
     void IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes);

@@ -107,6 +107,8 @@ namespace NKikimr::NStorage {
             ActorContext().ActorSystem()->GetExecutorPoolAffinity(blobStorageExecutorPoolId);
         if (affinity) {
             pdiskConfig->BlobStorageExecutorPoolAffinity = std::move(*affinity);
+            pdiskConfig->BlobStorageExecutorPoolPlacementGroupId =
+                ActorContext().ActorSystem()->GetExecutorPoolPlacementGroupId(blobStorageExecutorPoolId);
         }
     }
 

@@ -240,7 +240,8 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     TCheckDiskFormatResult ReadChunk0Format(ui8* formatSectors, const TMainKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize, const TMainKey& mainKey); // Called by actor

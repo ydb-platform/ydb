@@ -100,6 +100,9 @@ namespace NActors {
         ui64 NonDeliveredEvents = 0;
         ui64 EmptyMailboxActivation = 0;
         ui64 CpuUs = 0; // microseconds thread was executing on CPU (accounts for preemtion)
+        ui64 SchedRuntimeNs = 0;
+        ui64 SchedWaitNs = 0;
+        ui64 NonvoluntaryContextSwitches = 0;
         ui64 SafeElapsedTicks = 0;
         ui64 SafeParkedTicks = 0;
         ui64 WorstActivationTimeUs = 0;

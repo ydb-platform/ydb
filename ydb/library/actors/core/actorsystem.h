@@ -147,6 +147,10 @@ namespace NActors {
                 return CpuManager.GetThreadsOptional(poolId);
             }
         }
+
+        std::optional<ui32> GetExecutorPoolPlacementGroupId(const ui32 poolId) const {
+            return Executors ? std::nullopt : CpuManager.GetPlacementGroupId(poolId);
+        }
     };
 
     class TActorSystem : TNonCopyable {
@@ -311,6 +315,7 @@ namespace NActors {
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStats) const;
+        TVector<TThreadId> GetPoolThreadIds(ui32 poolId) const;
 
         THarmonizerStats GetHarmonizerStats() const;
 
@@ -322,6 +327,8 @@ namespace NActors {
         }
 
         std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
+        std::optional<ui32> GetExecutorPoolPlacementGroupId(ui32 poolId) const;
 
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));

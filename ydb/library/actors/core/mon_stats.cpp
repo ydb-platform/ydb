@@ -59,6 +59,9 @@ namespace NActors {
         NonDeliveredEvents += RelaxedLoad(&other.NonDeliveredEvents);
         EmptyMailboxActivation += RelaxedLoad(&other.EmptyMailboxActivation);
         CpuUs += RelaxedLoad(&other.CpuUs);
+        SchedRuntimeNs += RelaxedLoad(&other.SchedRuntimeNs);
+        SchedWaitNs += RelaxedLoad(&other.SchedWaitNs);
+        NonvoluntaryContextSwitches += RelaxedLoad(&other.NonvoluntaryContextSwitches);
         SafeElapsedTicks += RelaxedLoad(&other.SafeElapsedTicks);
         SafeParkedTicks += RelaxedLoad(&other.SafeParkedTicks);
         RelaxedStore(

@@ -42,6 +42,8 @@ namespace NActors {
         }
 
         std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+        std::optional<ui32> GetExecutorPoolPlacementGroupId(ui32 poolId) const;
+        TVector<TThreadId> GetPoolThreadIds(ui32 poolId) const;
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {

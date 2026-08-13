@@ -52,6 +52,7 @@ SRCS(
     executor_pool_base.h
     executor_pool_basic.cpp
     executor_pool_basic.h
+    executor_pool_counters.h
     executor_pool_io.cpp
     executor_pool_io.h
     executor_pool_shared.cpp
@@ -90,6 +91,8 @@ SRCS(
     probes.h
     process_stats.cpp
     process_stats.h
+    thread_stats.cpp
+    thread_stats.h
     scheduler_actor.cpp
     scheduler_actor.h
     scheduler_basic.cpp

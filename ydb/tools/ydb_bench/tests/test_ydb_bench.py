@@ -1687,6 +1687,122 @@ class WebTest(unittest.TestCase):
         self.assertEqual(service.cancel(run_id)["state"], "cancelled")
         self.assertEqual(service.events(run_id), events)
 
+    def test_run_service_shutdown_cancels_and_joins_active_workers(self):
+        """Server teardown cooperatively stops every registered web run."""
+        started = threading.Event()
+        cancellation_seen = threading.Event()
+
+        def fake_executor(run, emit, cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            started.set()
+            self.assertTrue(cancelled.wait(2))
+            cancellation_seen.set()
+
+        server = make_server("127.0.0.1", 0, self.root, executor=fake_executor)
+        yaml_text = "ping-bench:\n  shutdown: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = server.service.start(yaml_text)["id"]
+        self.assertTrue(started.wait(2))
+
+        # Both public HTTP-server teardown paths are lifecycle boundaries.  A
+        # direct close is enough even when serve_forever was never entered.
+        server.server_close()
+        self.assertTrue(cancellation_seen.is_set())
+        run = server.service._runs[run_id]
+        self.assertFalse(run["worker"].is_alive())
+        manifest = load_manifest(run["root"] / "run.json")
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["status"], "cancelled")
+        self.assertIn("finished_at", manifest)
+        self.assertTrue(all(step["state"] == "cancelled" for step in manifest["steps"]))
+        events = server.service.events(run_id)
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
+        self.assertEqual(events[-1]["type"], "run-finished")
+
+        # Repeated shutdown is a no-op, and no run can cross the closed
+        # service's start-vs-shutdown publication boundary.
+        self.assertEqual(server.service.shutdown(), server.service.shutdown())
+        with self.assertRaisesRegex(BenchmarkError, "shutting down"):
+            server.service.start(yaml_text)
+
+    def test_run_service_shutdown_timeout_does_not_claim_a_live_worker_is_terminal(self):
+        """A diagnostic timeout reports unfinished work without hiding an orphan."""
+        started = threading.Event()
+        release = threading.Event()
+
+        def stubborn_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            started.set()
+            release.wait(2)
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+
+        service = RunService(self.root, executor=stubborn_executor)
+        yaml_text = "ping-bench:\n  stubborn: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = service.start(yaml_text)["id"]
+        self.assertTrue(started.wait(2))
+        before = time.monotonic()
+        result = service.shutdown(timeout=.05)
+        elapsed = time.monotonic() - before
+        try:
+            self.assertLess(elapsed, .5)
+            self.assertEqual(result["timed_out"], [run_id])
+            manifest_path = service._runs[run_id]["root"] / "run.json"
+            incomplete_manifest = load_manifest(manifest_path)
+            self.assertEqual(incomplete_manifest["state"], "running")
+            self.assertNotIn("finished_at", incomplete_manifest)
+            incomplete_events = service.events(run_id)
+            self.assertEqual(incomplete_events[-1]["type"], "cancel-requested")
+            self.assertTrue(service._runs[run_id]["worker"].is_alive())
+        finally:
+            release.set()
+        # A later production-style shutdown must continue waiting rather than
+        # returning a cached incomplete result.
+        completed = service.shutdown()
+        self.assertEqual(completed["timed_out"], [])
+        self.assertFalse(service._runs[run_id]["worker"].is_alive())
+        terminal_manifest = load_manifest(manifest_path)
+        self.assertEqual(terminal_manifest["state"], "cancelled")
+        self.assertIn("finished_at", terminal_manifest)
+        terminal_events = service.events(run_id)
+        self.assertEqual(terminal_events[-1]["type"], "run-finished")
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in terminal_events), 1)
+
+    def test_run_service_rejects_a_start_racing_with_shutdown(self):
+        """A run delayed before publication is rejected after shutdown wins the race."""
+        topology = discover_topology()
+        discovering = threading.Event()
+        release = threading.Event()
+        errors = []
+
+        def delayed_topology():
+            discovering.set()
+            self.assertTrue(release.wait(2))
+            return topology
+
+        service = RunService(self.root, executor=lambda *_args: None)
+        yaml_text = "ping-bench:\n  race: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+
+        def start():
+            try:
+                service.start(yaml_text)
+            except Exception as error:
+                errors.append(error)
+
+        with mock.patch("ydb.tools.ydb_bench.lib.web.discover_topology", side_effect=delayed_topology):
+            starter = threading.Thread(target=start)
+            starter.start()
+            self.assertTrue(discovering.wait(2))
+            self.assertEqual(service.shutdown(timeout=.1)["cancelled"], [])
+            release.set()
+            starter.join(2)
+        self.assertFalse(starter.is_alive())
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], BenchmarkError)
+        self.assertIn("shutting down", str(errors[0]))
+        self.assertEqual(service._runs, {})
+        self.assertEqual(list(self.root.glob("*-web")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

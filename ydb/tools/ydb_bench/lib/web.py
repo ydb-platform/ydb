@@ -12,6 +12,7 @@ import mimetypes
 import socket
 import tempfile
 import threading
+import time
 import uuid
 import webbrowser
 from collections import deque
@@ -276,7 +277,22 @@ addEventListener('hashchange',compose);compose();
 """
 
 
-class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+class _RunServiceHTTPServer(ThreadingHTTPServer):
+    """Tie HTTP server teardown to the benchmark worker lifecycle."""
+    def shutdown(self):
+        super().shutdown()
+        service = getattr(self, "service", None)
+        if service is not None:
+            service.shutdown()
+
+    def server_close(self):
+        service = getattr(self, "service", None)
+        if service is not None:
+            service.shutdown()
+        super().server_close()
+
+
+class _IPv6ThreadingHTTPServer(_RunServiceHTTPServer):
     address_family = socket.AF_INET6
 
 
@@ -544,6 +560,7 @@ class RunService:
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
         self._runs, self._lock = {}, threading.RLock()
+        self._accepting_runs = True
         self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
 
@@ -589,45 +606,61 @@ class RunService:
         return editor_model(loaded, self.output)
 
     def start(self, yaml_text, perf=False, continue_on_error=False):
+        with self._lock:
+            if not self._accepting_runs:
+                raise BenchmarkError("web run service is shutting down")
         plan_result = self.plan(yaml_text, perf)
         if not plan_result["valid"]: raise BenchmarkError(plan_result["error"])
-        run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
-        while (self.output / run_id).exists(): run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
-        root = self.output / run_id; root.mkdir(); atomic_write_text(root / "config.yaml", yaml_text)
-        manifest = {
-            "schema_version": 4,
-            "status": "running",
-            "state": "running",
-            "started_at": _utc_now(),
-            "config": {"snapshot": yaml_text, "sha256": plan_result["sha256"], "path": "config.yaml"},
-            "topology": topology_record(discover_topology()),
-            "profiler": {"type": "perf-record", "event": "cycles:u", "frequency_hz": 99, "call_graph": "dwarf"} if perf else None,
-            "options": {"perf": perf, "continue_on_error": bool(continue_on_error)},
-            "runs": [],
-            "steps": [dict(item, state="pending", artifacts=[]) for item in plan_result["plan"]],
-            "events": 0,
-        }
-        run = {
-            "id": run_id,
-            "root": root,
-            "loaded": self._load(yaml_text, perf),
-            "store": ResultStore(root / "run.json", manifest),
-            "events": deque(maxlen=self.event_limit),
-            "tail": {"stdout": "", "stderr": ""},
-            "cancel": threading.Event(),
-            "cancel_requested": False,
-            "finished": threading.Event(),
-            "lock": threading.RLock(),
-            "continue_on_error": bool(continue_on_error),
-            "failed": False,
-        }
-        run["store"].write()
-        with self._lock: self._runs[run_id] = run
-        threading.Thread(target=self._run, args=(run,), daemon=True, name="ydb-bench-" + run_id).start()
+        loaded = self._load(yaml_text, perf)
+        topology = topology_record(discover_topology())
+        with self._lock:
+            # This lock is also the start-vs-shutdown publication boundary.  A
+            # run is either rejected without creating files, or is registered
+            # with its worker before shutdown takes its active-run snapshot.
+            if not self._accepting_runs:
+                raise BenchmarkError("web run service is shutting down")
+            run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+            while (self.output / run_id).exists(): run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
+            root = self.output / run_id; root.mkdir(); atomic_write_text(root / "config.yaml", yaml_text)
+            manifest = {
+                "schema_version": 4,
+                "status": "running",
+                "state": "running",
+                "started_at": _utc_now(),
+                "config": {"snapshot": yaml_text, "sha256": plan_result["sha256"], "path": "config.yaml"},
+                "topology": topology,
+                "profiler": {"type": "perf-record", "event": "cycles:u", "frequency_hz": 99, "call_graph": "dwarf"} if perf else None,
+                "options": {"perf": perf, "continue_on_error": bool(continue_on_error)},
+                "runs": [],
+                "steps": [dict(item, state="pending", artifacts=[]) for item in plan_result["plan"]],
+                "events": 0,
+            }
+            run = {
+                "id": run_id,
+                "root": root,
+                "loaded": loaded,
+                "store": ResultStore(root / "run.json", manifest),
+                "events": deque(maxlen=self.event_limit),
+                "tail": {"stdout": "", "stderr": ""},
+                "cancel": threading.Event(),
+                "cancel_requested": False,
+                "finished": threading.Event(),
+                "finalized": False,
+                "lock": threading.RLock(),
+                "continue_on_error": bool(continue_on_error),
+                "failed": False,
+            }
+            run["store"].write()
+            worker = threading.Thread(target=self._run, args=(run,), daemon=True, name="ydb-bench-" + run_id)
+            run["worker"] = worker
+            self._runs[run_id] = run
+            worker.start()
         return {"id": run_id, "state": "running"}
 
     def _emit(self, run, event):
         with run["lock"]:
+            if run["finalized"]:
+                return
             self._emit_locked(run, event)
 
     def _emit_locked(self, run, event):
@@ -667,32 +700,38 @@ class RunService:
             error = caught
         try:
             with run["lock"]:
-                if run["cancel"].is_set():
-                    self._cancel_unfinished(run)
-                    state, status = "cancelled", "cancelled"
-                elif error is not None:
-                    self._cancel_unfinished(run)
-                    state, status = "failed", "failed"
-                elif run["failed"]:
-                    self._cancel_unfinished(run)
-                    state, status = "failed", "failed"
-                else:
-                    # An executor is not allowed to report a completed run with a
-                    # hidden pending step.  Keep the durable queue terminal even
-                    # for a faulty adapter, then make the invariant visible.
-                    pending = [step for step in run["store"].manifest["steps"] if step["state"] in ("pending", "running")]
-                    if pending:
-                        self._cancel_unfinished(run)
-                        state, status = "failed", "failed"
-                        run["store"].manifest["error"] = "executor returned with unfinished run steps"
-                    else:
-                        state, status = "passed", "completed"
-                if error is not None:
-                    run["store"].manifest["error"] = str(error)
-                run["store"].manifest.update({"state": state, "status": status, "finished_at": _utc_now()})
-                self._emit_locked(run, {"type": "run-finished", "state": state})
+                if not run["finalized"]:
+                    self._finalize_locked(run, error)
         finally:
             run["finished"].set()
+
+    def _finalize_locked(self, run, error=None):
+        if run["cancel"].is_set():
+            self._cancel_unfinished(run)
+            state, status = "cancelled", "cancelled"
+        elif error is not None:
+            self._cancel_unfinished(run)
+            state, status = "failed", "failed"
+        elif run["failed"]:
+            self._cancel_unfinished(run)
+            state, status = "failed", "failed"
+        else:
+            # An executor is not allowed to report a completed run with a
+            # hidden pending step.  Keep the durable queue terminal even for a
+            # faulty adapter, then make the invariant visible.
+            pending = [step for step in run["store"].manifest["steps"] if step["state"] in ("pending", "running")]
+            if pending:
+                self._cancel_unfinished(run)
+                state, status = "failed", "failed"
+                run["store"].manifest["error"] = "executor returned with unfinished run steps"
+            else:
+                state, status = "passed", "completed"
+        if error is not None:
+            run["store"].manifest["error"] = str(error)
+        run["store"].manifest.update({"state": state, "status": status, "finished_at": _utc_now()})
+        self._emit_locked(run, {"type": "run-finished", "state": state})
+        run["finalized"] = True
+        run["finished"].set()
 
     def cancel(self, run_id):
         with self._lock: run = self._runs.get(run_id)
@@ -704,6 +743,32 @@ class RunService:
                 run["cancel"].set()
                 self._emit_locked(run, {"type": "cancel-requested"})
             return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
+
+    def shutdown(self, timeout=None):
+        """Stop accepting runs, cancel active work, and wait for its workers.
+
+        Production teardown uses the default unbounded wait: its executors pass
+        the cancellation event into ``run_command``, which interrupts and,
+        after its own grace period, kills the benchmark process group.  A
+        diagnostic caller may supply one shared timeout.  Such a timeout is
+        only reported to the caller; the still-running manifest deliberately
+        remains nonterminal and a later call can continue waiting.
+        """
+        if timeout is not None:
+            timeout = max(0.0, float(timeout))
+        with self._lock:
+            self._accepting_runs = False
+            runs = list(self._runs.values())
+        for run in runs:
+            self.cancel(run["id"])
+        deadline = None if timeout is None else time.monotonic() + timeout
+        timed_out = []
+        for run in runs:
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            run["worker"].join(remaining)
+            if run["worker"].is_alive():
+                timed_out.append(run)
+        return {"cancelled": [run["id"] for run in runs], "timed_out": [run["id"] for run in timed_out]}
 
     def model(self): return read_model(self.output)
     def settings(self): return {"output": str(self.output), "perf_available": self.perf_available}
@@ -794,6 +859,7 @@ def production_executor(resource_loader, tool_revision):
                 relative = Path(configuration.benchmark.name) / configuration.profile
                 directory = run["root"] / relative; directory.mkdir(parents=True, exist_ok=True)
                 with run["lock"]:
+                    if run["finalized"]: return
                     run["store"].manifest["runs"].append({"benchmark": configuration.benchmark.name, "profile": configuration.profile, "status": "running", "directory": str(relative)})
                     run["store"].write()
                 def event(event):
@@ -808,11 +874,13 @@ def production_executor(resource_loader, tool_revision):
                     profile = run_benchmark(binary, configuration, directory, tool_revision, work_dir_hint=work, event_sink=event, cancel_event=cancelled)
                 except BenchmarkInterrupted:
                     with run["lock"]:
+                        if run["finalized"]: return
                         run["store"].manifest["runs"][-1].update({"status": "cancelled"})
                         run["store"].write()
                     raise
                 except BenchmarkError as error:
                     with run["lock"]:
+                        if run["finalized"]: return
                         run["store"].manifest["runs"][-1].update({"status": "failed", "error": str(error), "manifest": str(relative / "run.json")})
                         # The actor benchmark stops after its first failed process.
                         # The durable queue still records every remaining member of
@@ -826,6 +894,7 @@ def production_executor(resource_loader, tool_revision):
                     with run["lock"]: run["failed"] = True
                     continue
                 with run["lock"]:
+                    if run["finalized"]: return
                     run["store"].manifest["runs"][-1].update({"status": "completed", "manifest": str(relative / "run.json"), "summary": str(relative / profile["summary"])})
                     run["store"].write()
     return execute
@@ -930,7 +999,7 @@ def _handler(service):
 
 def make_server(listen, port, output, allow_remote=False, executor=None, perf_available=True):
     if not _is_loopback(listen) and not allow_remote: raise BenchmarkError("non-loopback --listen requires --allow-remote")
-    server_class = _IPv6ThreadingHTTPServer if ":" in listen else ThreadingHTTPServer
+    server_class = _IPv6ThreadingHTTPServer if ":" in listen else _RunServiceHTTPServer
     service = RunService(output, executor=executor, perf_available=perf_available)
     server = server_class((listen, port), _handler(service))
     server.service = service

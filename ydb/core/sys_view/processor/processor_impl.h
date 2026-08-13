@@ -165,6 +165,7 @@ private:
     void PersistStage(NIceDb::TNiceDb& db);
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
     void PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb& db);
+    void PersistMetricsOneHourEvictBeforeHourEnd(NIceDb::TNiceDb& db);
 
     template <typename TSchema>
     void PersistQueryTopResults(NIceDb::TNiceDb& db,

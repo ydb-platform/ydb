@@ -219,7 +219,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageChargesRequestUnits
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageInvalid
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
@@ -291,7 +290,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonE
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNotUtf8
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAttemptId
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAttemptIdChangeVisibilityInvalidatesReplay
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithDifferentAttemptIds
@@ -375,7 +373,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlEmpty
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlWithConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthCreateQueue
@@ -461,7 +458,6 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
-ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -485,9 +481,7 @@ ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
-ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
-ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.Update
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
@@ -549,7 +543,6 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestTest
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
@@ -561,7 +554,6 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.UnauthorizedWithDescribe
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.CheckAccess
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CapacitySmokeKeepOrder
-ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CommitMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionDifferentDeadlines
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.MixedDeadlineResults
@@ -614,7 +606,6 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.DimensionMisma
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
-ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
@@ -695,7 +686,6 @@ ydb/services/metadata/secret/ut Secret.Validation
 ydb/services/metadata/secret/ut Secret.ValidationQueryService
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.FailWithoutGrants
-ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GetInParallel
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GroupGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/test_shard/ut unittest.sole chunk
@@ -891,12 +881,8 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-8388608-COLUMN]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-2-1-False]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version_join[restart_prestable-26-4_to_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version_join[restart_prestable-26-4_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version_join[restart_stable-26-3-1_to_stable-26-2-1-False]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version_join[restart_stable-26-3-1_to_stable-26-2-1-True]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version_join[restart_stable-26-3-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-4_to_prestable-26-4-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-4_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_prestable-26-4-True]

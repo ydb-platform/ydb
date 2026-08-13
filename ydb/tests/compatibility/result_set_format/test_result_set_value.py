@@ -49,7 +49,8 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
             ],
             table_service_config={
                 "resource_manager": {
-                    "channel_buffer_size": channel_buffer_size
+                    "channel_buffer_size": channel_buffer_size,
+                    "channel_chunk_size_limit": channel_buffer_size,
                 }
             },
             column_shard_config={
@@ -186,12 +187,17 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
     ):
         with ydb.QuerySessionPool(self.driver) as pool:
             try:
-                return pool.execute_with_retries(
-                    query,
-                    result_set_format=ydb.QueryResultSetFormat.VALUE,
-                    schema_inclusion_mode=schema_inclusion_mode,
-                    concurrent_result_sets=concurrent_result_sets
-                )
+                def callee(session):
+                    # session.execute() yields one result set per streamed part;
+                    # execute_with_retries() merges same-index VALUE parts, which
+                    # hides the per-part schema behaviour this test validates.
+                    return list(session.execute(
+                        query,
+                        result_set_format=ydb.QueryResultSetFormat.VALUE,
+                        schema_inclusion_mode=schema_inclusion_mode,
+                        concurrent_result_sets=concurrent_result_sets,
+                    ))
+                return pool.retry_operation_sync(callee)
             except Exception as e:
                 assert False, f"Failed query `{query}`, error: {e}"
 

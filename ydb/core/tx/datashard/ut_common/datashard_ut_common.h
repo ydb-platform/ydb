@@ -1049,6 +1049,24 @@ ui64 AsyncTruncateTable(
     const TString& workingDir,
     const TString& tableName);
 
+// A single upsert operation within an uncommitted write.
+struct TUncommittedWriteOp {
+    ui64 Key;
+    ui64 Value;
+    ui64 WriteSeqNum; // 0 = no WriteSeqNum
+};
+
+// Sends an uncommitted multi-operation upsert. Each element of `ops` becomes one
+// OPERATION_UPSERT with its own WriteSeqNum (0 means none).
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 writerIndex,
+        const TVector<TUncommittedWriteOp>& ops,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Convenience overload for a single-operation uncommitted upsert.
 NKikimrDataEvents::TEvWriteResult UncommittedWrite(
         TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
         const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,

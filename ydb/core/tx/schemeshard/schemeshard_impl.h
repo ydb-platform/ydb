@@ -1621,7 +1621,8 @@ public:
     void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo);
     void AddExport(const TExportInfo::TPtr& exportInfo);
 
-    static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistCreateExport(NIceDb::TNiceDb& db, TExportInfo& exportInfo);
+    static void PersistExportItemCount(NIceDb::TNiceDb& db, TExportInfo& exportInfo, ui32 count);
     void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
@@ -1677,9 +1678,10 @@ public:
     void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo& importInfo);
     void AddImport(const TImportInfo::TPtr& importInfo);
 
-    static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
-    static void PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
-    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistCreateImport(NIceDb::TNiceDb& db, TImportInfo& importInfo);
+    static void PersistImportItemCount(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 count);
+    static void PersistNewImportItem(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 itemIdx);
+    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, TImportInfo& importInfo);
     void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo);

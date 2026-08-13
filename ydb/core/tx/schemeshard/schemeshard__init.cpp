@@ -5087,6 +5087,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     ui32 items = rowset.GetValue<Schema::Exports::Items>();
                     exportInfo->Items.resize(items);
+                    exportInfo->PersistedItemCount = items;
 
                     exportInfo->ExportPathId = TPathId(rowset.GetValueOrDefault<Schema::Exports::ExportOwnerPathId>(selfId),
                                                        rowset.GetValueOrDefault<Schema::Exports::ExportPathId>(InvalidLocalPathId));
@@ -5194,6 +5195,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
+                    importInfo->PersistedItemCount = items;
 
                     importInfo->State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::Imports::State>());
                     importInfo->Issue = rowset.GetValueOrDefault<Schema::Imports::Issue>(TString());

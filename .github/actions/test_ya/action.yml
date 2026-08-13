@@ -7,6 +7,10 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
+  target_platform:
+    default: ""
+    description: "target platform"
+    type: string
   test_type:
     required: false
     type: string
@@ -139,6 +143,7 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        echo "TARGET_PLATFORM=${{ inputs.target_platform }}" >> $GITHUB_ENV
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
@@ -246,7 +251,23 @@ runs:
             exit 1
             ;;
         esac
-
+        
+        if [ -n "$TARGET_PLATFORM" ]; then
+          case "$TARGET_PLATFORM" in
+            DEFAULT-LINUX-AARCH64)
+              params+=(
+                -DMKQL_DISABLE_CODEGEN=1
+                --target-platform=DEFAULT-LINUX-AARCH64
+              )
+              ;;
+            *)
+              params+=(
+                "--target-platform=$TARGET_PLATFORM"
+              )
+              ;;
+          esac
+        fi
+        
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ -z $TEST_RETRY_COUNT ]; then

@@ -1262,6 +1262,7 @@ message TStreamingQueriesConfig {
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
     optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
+    optional string ResourcePoolForSharedReading = 6;
 }
 
 message TQueryServiceConfig {

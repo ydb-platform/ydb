@@ -8,8 +8,9 @@ inputs:
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
   target_platform:
-    default: "DEFAULT-LINUX-X86_64"
+    default: ""
     description: "target platform"
+    type: string
   test_type:
     required: false
     type: string
@@ -251,20 +252,22 @@ runs:
             ;;
         esac
         
-        case "$TARGET_PLATFORM" in
-          DEFAULT-LINUX-AARCH64)
-            params+=(
-              -DMKQL_DISABLE_CODEGEN=1
-              --target-platform=DEFAULT-LINUX-AARCH64
-            )
-            ;;
-          *)
-            params+=(
-              "--target-platform=$TARGET_PLATFORM"
-            )
-            ;;
-        esac
-
+        if [ -n "$TARGET_PLATFORM" ]; then
+          case "$TARGET_PLATFORM" in
+            DEFAULT-LINUX-AARCH64)
+              params+=(
+                -DMKQL_DISABLE_CODEGEN=1
+                --target-platform=DEFAULT-LINUX-AARCH64
+              )
+              ;;
+            *)
+              params+=(
+                "--target-platform=$TARGET_PLATFORM"
+              )
+              ;;
+          esac
+        fi
+        
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ -z $TEST_RETRY_COUNT ]; then

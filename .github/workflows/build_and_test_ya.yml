@@ -11,7 +11,7 @@ on:
         type: string
       target_platform:
         type: string
-        default: "DEFAULT-LINUX-X86_64"
+        default: ""
       runner_label:
         type: string
         default: "linux"

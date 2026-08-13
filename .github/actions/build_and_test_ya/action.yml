@@ -7,8 +7,9 @@ inputs:
   build_preset:
     type: string
   target_platform:
-    default: "DEFAULT-LINUX-X86_64"
+    default: ""
     description: "target platform"
+    type: string
   run_build:
     type: boolean
     default: true

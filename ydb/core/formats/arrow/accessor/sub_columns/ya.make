@@ -49,8 +49,10 @@ END()
 
 RECURSE(
     tools
+    ut_common
 )
 
 RECURSE_FOR_TESTS(
     ut
+    dense_encoding/ut
 )

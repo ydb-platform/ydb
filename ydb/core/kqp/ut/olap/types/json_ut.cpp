@@ -1572,6 +1572,38 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     }
 
+    Y_UNIT_TEST(DenseEncoding) {
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"one"}')), (2u, JsonDocument('{}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"a":"two"}')), (4u, JsonDocument('{"a":"one"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":\"one\"}"]];[2u;["{}"]];[3u;["{\"a\":\"two\"}"]];[4u;["{\"a\":\"one\"}"]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
 }
 
 namespace {

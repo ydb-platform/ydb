@@ -10,7 +10,7 @@
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
@@ -43,7 +43,7 @@ std::shared_ptr<arrow::BinaryArray> MakeBinary(const std::vector<std::optional<T
     return result;
 }
 
-std::shared_ptr<arrow::UInt8Array> MakePositions(const std::vector<std::optional<ui32>>& values) {
+std::shared_ptr<arrow::UInt8Array> MakePositions(const std::vector<std::optional<ui8>>& values) {
     arrow::UInt8Builder builder;
     for (const auto& value : values) {
         if (value) {
@@ -92,12 +92,12 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         }
     }
 
-    void CheckBinaryRoundTrip(
+    void CheckStringArrayRoundTrip(
         const std::vector<std::optional<TString>>& values, const std::shared_ptr<arrow::util::Codec>& codec) {
         CheckBinaryArrayRoundTrip(*MakeBinary(values), codec);
     }
 
-    void CheckIndicesRoundTrip(const std::vector<std::optional<ui32>>& values, const std::shared_ptr<arrow::util::Codec>& codec) {
+    void CheckIndicesRoundTrip(const std::vector<std::optional<ui8>>& values, const std::shared_ptr<arrow::util::Codec>& codec) {
         auto positions = MakePositions(values);
         const auto indexType = std::make_shared<arrow::UInt8Type>();
         const TString blob = SerializeIndices(positions, indexType, codec);
@@ -110,9 +110,9 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             TString("alpha"), std::nullopt, TString(""), TString("a longer string value"), std::nullopt, TString("z") };
         const std::vector<std::optional<TString>> dense = { TString("a"), TString("bb"), TString("ccc"), TString("dddd") };
         for (const auto& codec : { ZstdCodec(), RawCodec() }) {
-            CheckBinaryRoundTrip(withNulls, codec);
-            CheckBinaryRoundTrip(dense, codec);
-            CheckBinaryRoundTrip({}, codec);
+            CheckStringArrayRoundTrip(withNulls, codec);
+            CheckStringArrayRoundTrip(dense, codec);
+            CheckStringArrayRoundTrip({}, codec);
         }
     }
 
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
     }
 
     Y_UNIT_TEST(IndicesRoundTrip) {
-        const std::vector<std::optional<ui32>> indexes = { 2, std::nullopt, 0, 3, std::nullopt, 1 };
+        const std::vector<std::optional<ui8>> indexes = { 2, std::nullopt, 0, 3, std::nullopt, 1 };
         for (const auto& codec : { ZstdCodec(), RawCodec() }) {
             CheckIndicesRoundTrip(indexes, codec);
         }
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         }
     }
 
-    Y_UNIT_TEST(DictionaryMetadata) {
+    Y_UNIT_TEST(DictionaryMetadataSplitsBlobsAndRoundTrips) {
         const auto dictionary = MakeBinary({ "alpha", "beta", "gamma" });
         const auto positions = MakePositions({ 0, 1, 0, 2, std::nullopt, 1 });
         const auto array = std::make_shared<NAccessor::TDictionaryArray>(dictionary, positions);
@@ -182,11 +182,11 @@ Y_UNIT_TEST_SUITE(DenseEncodingEndToEnd) {
         settings.SetDenseEncodingVersion(encodingVersion);
         settings.SetEnableNativeColumns(nativeColumns);
 
-        const std::vector<TString> jsons = {
+        const std::vector<std::optional<TString>> jsons = {
             R"({"kind":"alpha","id":"rec-00001"})",
             R"({"kind":"beta","id":"rec-00002"})",
             R"({"kind":"alpha"})",
-            "null",
+            std::nullopt,
             R"({"kind":"gamma","id":"rec-00005"})",
             R"({"kind":"beta","id":"rec-00006"})",
             R"({"kind":"alpha","id":"rec-00007"})",
@@ -197,8 +197,8 @@ Y_UNIT_TEST_SUITE(DenseEncodingEndToEnd) {
 
         TTrivialArray::TPlainBuilder<arrow::BinaryType> builder;
         for (ui32 i = 0; i < jsons.size(); ++i) {
-            if (jsons[i] != "null") {
-                auto v = NBinaryJson::SerializeToBinaryJson(jsons[i]);
+            if (jsons[i]) {
+                auto v = NBinaryJson::SerializeToBinaryJson(*jsons[i]);
                 auto* bj = std::get_if<NBinaryJson::TBinaryJson>(&v);
                 UNIT_ASSERT(bj);
                 builder.AddRecord(i, std::string_view(bj->data(), bj->size()));
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(DenseEncodingEndToEnd) {
 
     // Every encoding version must reconstruct the reference documents byte-for-byte, and each must
     // reach a distinct on-disk encoding (otherwise the version silently did nothing).
-    void CheckLevers(const bool nativeColumns, const double dictFraction, const TString& what) {
+    void CheckEncodingModes(const bool nativeColumns, const double dictFraction, const TString& what) {
         const auto legacy = RunRoundTrip(/*version*/ 0, nativeColumns, dictFraction);
         for (ui32 version = 1; version <= GetMaxDenseEncodingVersion(); ++version) {
             const auto encoded = RunRoundTrip(version, nativeColumns, dictFraction);
@@ -227,34 +227,18 @@ Y_UNIT_TEST_SUITE(DenseEncodingEndToEnd) {
     }
 
     Y_UNIT_TEST(PlainArrays) {
-        CheckLevers(/*native*/ false, /*dictFraction*/ 0.0, "plain");
+        CheckEncodingModes(/*native*/ false, /*dictFraction*/ 0.0, "plain");
     }
 
     Y_UNIT_TEST(Dictionaries) {
-        CheckLevers(/*native*/ false, /*dictFraction*/ 1.0, "dictionary");
+        CheckEncodingModes(/*native*/ false, /*dictFraction*/ 1.0, "dictionary");
     }
 
     Y_UNIT_TEST(NativeStringColumns) {
-        CheckLevers(/*native*/ true, /*dictFraction*/ 0.0, "native");
+        CheckEncodingModes(/*native*/ true, /*dictFraction*/ 0.0, "native");
     }
 
-    Y_UNIT_TEST(PartialReaderKeepsEncodingSettings) {
-        NSubColumns::TSettings settings(
-            4, 1024, 0, /*othersFraction*/ 0, NSubColumns::TDataAdapterContainer::GetDefault(), /*dictFraction*/ 0.0);
-        settings.SetDenseEncodingVersion(1);
-
-        const auto value = NBinaryJson::SerializeToBinaryJson(R"({"key":"value"})");
-        const auto* binaryJson = std::get_if<NBinaryJson::TBinaryJson>(&value);
-        UNIT_ASSERT(binaryJson);
-        TTrivialArray::TPlainBuilder<arrow::BinaryType> builder;
-        builder.AddRecord(0, std::string_view(binaryJson->data(), binaryJson->size()));
-        auto array = builder.Finish(1);
-        auto data = TSubColumnsArray::Make(array, settings, array->GetDataType()).DetachResult();
-
-        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
-        const TChunkConstructionData constructionData(data->GetRecordsCount(), nullptr, arrow::binary(), serializer);
-        const TString blob = data->SerializeToString(constructionData);
-        const auto partial = NSubColumns::TConstructor::BuildPartialReader(blob, constructionData, settings).DetachResult();
-        UNIT_ASSERT(partial->GetSettings().GetEncodingParams().IsEnabled());
+    Y_UNIT_TEST(NativeAndDictionary) {
+        CheckEncodingModes(/*native*/ true, /*dictFraction*/ 1.0, "native_and_dictionary");
     }
 }

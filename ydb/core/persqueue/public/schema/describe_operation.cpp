@@ -291,7 +291,8 @@ private:
         }
 
         for (const auto& partResult : record.GetPartResult()) {
-            Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = Partitions[partResult.GetPartition()].Stats;
+            auto& partitionInfo = Partitions[partResult.GetPartition()];
+            Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = partitionInfo.Stats;
             Ydb::Topic::PartitionStats* partStats = partRes.mutable_partition_stats();
 
             partStats->set_store_size_bytes(partResult.GetPartitionSize());
@@ -307,23 +308,40 @@ private:
                 partResult.GetAvgWriteSpeedPerHour(),
                 partResult.GetAvgWriteSpeedPerDay());
 
-            const auto& lagInfo = partResult.GetLagsInfo();
+            if (partResult.HasLagsInfo()) {
+                const auto& lagInfo = partResult.GetLagsInfo();
+                auto consStats = partRes.mutable_partition_consumer_stats();
 
-            auto consStats = partRes.mutable_partition_consumer_stats();
+                consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
+                consStats->set_committed_offset(lagInfo.GetWritePosition().GetOffset());
 
-            consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
-            consStats->set_committed_offset(lagInfo.GetWritePosition().GetOffset());
+                SetProtoTime(consStats->mutable_last_read_time(), lagInfo.GetLastReadTimestampMs());
+                SetProtoTime(consStats->mutable_max_read_time_lag(), lagInfo.GetReadLagMs());
+                SetProtoTime(consStats->mutable_max_write_time_lag(), lagInfo.GetWriteLagMs());
+                SetProtoTime(consStats->mutable_max_committed_time_lag(), lagInfo.GetCommitedLagMs());
 
-            SetProtoTime(consStats->mutable_last_read_time(), lagInfo.GetLastReadTimestampMs());
-            SetProtoTime(consStats->mutable_max_read_time_lag(), lagInfo.GetReadLagMs());
-            SetProtoTime(consStats->mutable_max_write_time_lag(), lagInfo.GetWriteLagMs());
-            SetProtoTime(consStats->mutable_max_committed_time_lag(), lagInfo.GetCommitedLagMs());
+                AddWindowsStat(
+                    consStats->mutable_bytes_read(),
+                    partResult.GetAvgReadSpeedPerMin(),
+                    partResult.GetAvgReadSpeedPerHour(),
+                    partResult.GetAvgReadSpeedPerDay());
+            }
 
-            AddWindowsStat(
-                consStats->mutable_bytes_read(),
-                partResult.GetAvgReadSpeedPerMin(),
-                partResult.GetAvgReadSpeedPerHour(),
-                partResult.GetAvgReadSpeedPerDay());
+            if (const auto consumerCount = partResult.ConsumerResultSize(); consumerCount > 0) {
+                partitionInfo.Consumers.reserve(consumerCount);
+                for (const auto& cons : partResult.GetConsumerResult()) {
+                    auto& consumerStats = partitionInfo.Consumers[cons.GetConsumer()];
+                    SetProtoTime(consumerStats.mutable_min_partitions_last_read_time(), cons.GetLastReadTimestampMs());
+                    SetProtoTime(consumerStats.mutable_max_read_time_lag(), cons.GetReadLagMs());
+                    SetProtoTime(consumerStats.mutable_max_write_time_lag(), cons.GetWriteLagMs());
+                    SetProtoTime(consumerStats.mutable_max_committed_time_lag(), cons.GetCommitedLagMs());
+                    AddWindowsStat(
+                        consumerStats.mutable_bytes_read(),
+                        cons.GetAvgReadSpeedPerMin(),
+                        cons.GetAvgReadSpeedPerHour(),
+                        cons.GetAvgReadSpeedPerDay());
+                }
+            }
         }
 
         StatsRetryPending.erase(tabletId);

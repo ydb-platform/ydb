@@ -118,10 +118,6 @@ private:
 
         Response->Partitions.reserve(ev->Get()->Partitions.size());
         for (const auto& [partitionId, info] : ev->Get()->Partitions) {
-            if (!PartitionIds.empty() && !PartitionIds.contains(partitionId)) {
-                continue;
-            }
-
             TEvPQProxy::TPartitionLocationInfo partLocation;
             partLocation.PartitionId = partitionId;
             partLocation.Generation = info.Location.generation();

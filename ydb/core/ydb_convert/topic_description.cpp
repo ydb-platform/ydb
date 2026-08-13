@@ -16,7 +16,7 @@ namespace NKikimr {
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
     out.set_name(consumerName);
 
@@ -95,7 +95,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
 
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
     ConvertDirectoryEntry(inDirEntry, selfEntry, true);

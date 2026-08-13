@@ -711,6 +711,46 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("ping-bench/first: ping-bench/first/summary.csv", console.getvalue())
         self.assertIn("star-ping-bench/star: star-ping-bench/star/summary.csv", console.getvalue())
 
+    def test_cli_generated_manifest_round_trips_through_portable_archive(self):
+        """A real CLI manifest keeps its integer case index when imported."""
+        benchmark = self._script(
+            """
+            test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            """
+        )
+        config = self._config(
+            """
+            ping-bench:
+              portable:
+                threads: [1]
+                actor-pairs: [32]
+                inflight: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """
+        )
+        output = self.root / "portable-source"
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(
+                main(
+                    ["run", "--config", str(config), "--output", str(output)],
+                    resource_loader=lambda _: benchmark.read_bytes(),
+                    tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+                ),
+                0,
+            )
+
+        produced = load_manifest(output / "run.json")
+        self.assertEqual(produced["steps"][0]["case"], 1)
+        destination = self.root / "portable-destination"
+        imported = import_archive(destination, export_archive(output))
+        restored = load_manifest(destination / imported["id"] / "run.json")
+        self.assertEqual(restored["steps"][0]["case"], 1)
+        self.assertEqual(restored["steps"][0]["parameters"], produced["steps"][0]["parameters"])
+
     def test_cli_exit_code_uses_interruption_error_type(self):
         config = self._config(
             """
@@ -1314,7 +1354,7 @@ class WebTest(unittest.TestCase):
             "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
             "steps": [{
                 "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+                "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
                 "state": "running" if status == "running" else "passed",
                 "artifacts": ["artifact.txt"],
             }],
@@ -1344,7 +1384,7 @@ class WebTest(unittest.TestCase):
             "runs": [],
             "steps": [{
                 "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-                "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+                "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
                 "state": "passed", "artifacts": ["artifact.txt"],
             }],
             "topology": {
@@ -1397,16 +1437,26 @@ class WebTest(unittest.TestCase):
             }]}))
         malformed_step = {
             "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
-            "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+            "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
             "state": "passed", "artifacts": ["not-in-archive.txt"],
         }
         with self.assertRaisesRegex(BenchmarkError, "does not name a file in the archive"):
             import_archive(self.root, self._portable_archive(run_updates={"steps": [malformed_step]}))
 
+    def test_import_rejects_invalid_case_indices(self):
+        for case in (True, 0, 1.5):
+            with self.subTest(case=case), self.assertRaisesRegex(BenchmarkError, r"steps\[0\]\.case must be an integer greater than or equal to 1"):
+                step = {
+                    "id": "step-1", "benchmark": "ping-bench", "profile": "baseline",
+                    "affinity": "none", "threads": 1, "case": case, "parameters": {}, "repeat": 1,
+                    "state": "passed", "artifacts": ["artifact.txt"],
+                }
+                import_archive(self.root, self._portable_archive(run_updates={"steps": [step]}))
+
     def test_import_rejects_duplicate_step_ids(self):
         step = {
             "id": "same", "benchmark": "ping-bench", "profile": "baseline",
-            "affinity": "none", "threads": 1, "case": {}, "parameters": {}, "repeat": 1,
+            "affinity": "none", "threads": 1, "case": 1, "parameters": {}, "repeat": 1,
             "state": "passed", "artifacts": [],
         }
         with self.assertRaisesRegex(BenchmarkError, "duplicate step id"):

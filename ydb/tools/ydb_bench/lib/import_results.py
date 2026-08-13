@@ -165,9 +165,12 @@ def _validate_portable_run_manifest(manifest, files):
         step_ids.add(step["id"])
         _integer(step.get("threads"), prefix + ".threads", 1)
         _integer(step.get("repeat"), prefix + ".repeat", 1)
-        for field in ("case", "parameters"):
-            if not isinstance(step.get(field), dict):
-                _manifest_error("{}.{} must be an object".format(prefix, field))
+        # ``case`` is the one-based, stable index of the expanded parameter
+        # combination.  The actual values from that combination are recorded
+        # separately in ``parameters``.
+        _integer(step.get("case"), prefix + ".case", 1)
+        if not isinstance(step.get("parameters"), dict):
+            _manifest_error("{}.parameters must be an object".format(prefix))
         if step.get("state") not in TERMINAL_STATES:
             _manifest_error("{}.state must be terminal".format(prefix))
         artifacts = step.get("artifacts")

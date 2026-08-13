@@ -444,11 +444,14 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const THashSet<ui64>& targetShardIds,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) // key columns then value columns
             : Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
-            , Alloc(std::move(alloc)) {
+            , Alloc(std::move(alloc))
+            , TargetShardIds(targetShardIds) {
+        AFL_VERIFY(TargetShardIds.size() == 1)("actual", TargetShardIds.size()); //TODO delete me before commit 
         AFL_ENSURE(Alloc);
         AFL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
@@ -493,6 +496,11 @@ public:
     void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
         for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
                                                     unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
+            AFL_VERIFY(TargetShardIds.size() == 1)("actual", TargetShardIds.size()); //TODO delete me before commit 
+            if (TargetShardIds.empty()) {
+                AFL_VERIFY(TargetShardIds.contains(shardId));
+            }
+
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
             AFL_ENSURE(shardBatchMemory != 0);
 
@@ -637,6 +645,8 @@ private:
     const std::vector<ui32> WriteColumnIds;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    THashSet<ui64> TargetShardIds;
 
     THashMap<ui64, TUnpreparedBatch> UnpreparedBatches;
     TBatches Batches;
@@ -1024,10 +1034,11 @@ private:
 };
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const THashSet<ui64>& targetShardIds,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, std::move(alloc));
+        schemeEntry, targetShardIds, inputColumns, std::move(alloc));
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
@@ -1773,6 +1784,7 @@ public:
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
+                Settings.TargetShardIds,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
         }
@@ -1861,6 +1873,7 @@ public:
         } else if (SchemeEntry) {
             iter->second.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
+                Settings.TargetShardIds,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
         }
@@ -2118,20 +2131,6 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
-            // Per-node shard affinity: skip shards not assigned to this task.
-            // When TargetShardIds is non-empty, this WriteActor only owns those shards.
-            // Rows routed to other shards are intentionally discarded — they arrive via
-            // TDqCnBroadcast on every Sink task but will be written by the owning task.
-            if (!Settings.TargetShardIds.empty() && !Settings.TargetShardIds.contains(shardId)) {
-                // Batch for a shard not owned by this task — discard it.
-                // The owning task (on the node where this shard lives) will write it.
-                // This is expected in the CTAS per-node affinity mode (EnableCsWriteAffinity):
-                // TDqCnBroadcast sends all rows to all M sink tasks; each task keeps only its shards.
-                AFL_TRACE(NKikimrServices::KQP_COMPUTE)("event", "ctas_affinity_shard_drop")
-                    ("shardId", shardId)
-                    ("targetShardCount", Settings.TargetShardIds.size());
-                continue;
-            }
             for (auto& batch : batches) {
                 if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT

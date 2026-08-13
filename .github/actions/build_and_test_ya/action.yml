@@ -97,7 +97,7 @@ runs:
         fi
         
         if [ -n "${{ inputs.target_platform }}" ]; then
-          FOLDER_PREFIX="${FOLDER_PREFIX}-${{ inputs.target_platform }}-"
+          FOLDER_PREFIX="${FOLDER_PREFIX}${{ inputs.target_platform }}-"
         fi
         
         # Output the folder_prefix for use in subsequent steps

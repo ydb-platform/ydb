@@ -2608,7 +2608,11 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot");
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
+=======
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
         Env(); // Init test env
         ui64 txId = 100;
 
@@ -2622,12 +2626,16 @@ partitioning_settings {
 
         UpdateRow(Runtime(), "Table", 1, "valueA");
         UpdateRow(Runtime(), "Table", 2, "valueB");
+<<<<<<< HEAD
         Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         // Reject the first 'CompleteMultipartUpload' the way s3 does when the stored etags do not
         // match the parts it holds. The request is dropped, so the upload is still there and its
         // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
         // as UNKNOWN with the exception name set and without the retryable flag.
+=======
+
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
         THolder<IEventHandle> injectResult;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -2640,6 +2648,10 @@ partitioning_settings {
                     NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
                     UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
 
+<<<<<<< HEAD
+=======
+                    // Force a multipart upload so that CompleteMultipartUpload is reached.
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
                     if (schemeTx.HasBackup()) {
                         schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
                         schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
@@ -2650,6 +2662,7 @@ partitioning_settings {
                 }
 
                 case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
+<<<<<<< HEAD
                     if (injectResult) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
@@ -2665,6 +2678,28 @@ partitioning_settings {
                         Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(std::move(error))
                     );
                     injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
+=======
+                    // S3 no longer knows about this multipart upload (session expired, aborted by
+                    // a lifecycle policy, or lost across a restart). Drop the request so it never
+                    // reaches the server: CompleteMultipartUpload is what assembles the object, so
+                    // nothing is materialised - exactly what happens in production.
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                        Aws::S3::S3Errors::NO_SUCH_UPLOAD,
+                        "NoSuchUpload",
+                        "The specified upload does not exist. The upload ID may be invalid,"
+                        " or the upload may have been aborted or completed.",
+                        false /* isRetryable */);
+                    // The 4-arg ctor leaves m_responseCode at REQUEST_NOT_MADE, which
+                    // NWrappers::ShouldRetry treats as retryable - set the real code explicitly.
+                    error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+
+                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                        std::nullopt,
+                        Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(error)
+                    );
+                    // Reply to the uploader (the request's sender) on behalf of the storage wrapper.
+                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -2675,11 +2710,18 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
+<<<<<<< HEAD
         TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
               number_of_retries: 10
+=======
+        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
@@ -2699,11 +2741,23 @@ partitioning_settings {
         Runtime().Send(injectResult.Release(), 0, true);
 
         Env().TestWaitNotification(Runtime(), exportId);
+<<<<<<< HEAD
         TestGetExport(Runtime(), exportId, "/MyRoot");
 
         const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
         UNIT_ASSERT(data);
         UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+=======
+
+        // The table's data object was never assembled by S3.
+        const auto& data = S3Mock().GetData();
+        UNIT_ASSERT_C(data.find("/data_00.csv") == data.end(),
+            "precondition: CompleteMultipartUpload failed, so /data_00.csv must not exist");
+
+        // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
+        // is recorded as complete while the exported table is missing from the bucket.
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+>>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {

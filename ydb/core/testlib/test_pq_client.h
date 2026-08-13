@@ -507,6 +507,9 @@ private:
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
     THolder<NYdb::TDriver> Driver;
+    // Authenticated driver for Topic/PQv1 schema ops. Main Driver stays
+    // unauthenticated: FullInit YQL and many UTs rely on that.
+    THolder<NYdb::TDriver> AdminDriver;
     std::unique_ptr<NKikimrClient::TGRpcServer::Stub> Stub;
 
     ui64 TopicsVersion = 0;
@@ -564,14 +567,19 @@ public:
         , Kikimr(GetClientConfig())
     {
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
-        // Topic/PQv1 scheme ops reject empty tokens when credentials are required.
-        // ACL UTs also use this driver for create before RequireCredentials flips on.
+        const TString database = databaseName ? *databaseName : TString("/Root");
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetDatabase(databaseName ? *databaseName : TString("/Root"))
-            .SetAuthToken(BUILTIN_ACL_ROOT)
+            .SetDatabase(database)
             .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
+
+        auto adminDriverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase(database)
+            .SetAuthToken(BUILTIN_ACL_ROOT)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        AdminDriver.Reset(MakeHolder<NYdb::TDriver>(adminDriverConfig));
 
         grpc::ChannelArguments args;
         if (settings.GrpcMaxMessageSize != 0)
@@ -587,6 +595,7 @@ public:
     }
 
     ~TFlatMsgBusPQClient() {
+        AdminDriver->Stop(true);
         Driver->Stop(true);
     }
 
@@ -1073,7 +1082,7 @@ public:
 
     void CreateTopicViaTopicSdk(const TRequestCreatePQ& createRequest) {
         const TString path = ResolveTopicSdkPath(createRequest.Topic);
-        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
 
         NYdb::NTopic::TCreateTopicSettings settings;
         settings.PartitioningSettings(createRequest.NumParts, createRequest.NumParts);
@@ -1124,7 +1133,7 @@ public:
     void CreateTopicViaPersQueueSdk(const TRequestCreatePQ& createRequest) {
         Y_ABORT_UNLESS(createRequest.MirrorFrom);
         const TString path = ResolveTopicSdkPath(createRequest.Topic);
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
 
         NYdb::NPersQueue::TCreateTopicSettings settings;
         settings.PartitionsCount(createRequest.NumParts);
@@ -1250,7 +1259,7 @@ public:
             .PartitionsCount(nParts)
             .ReadRules({NYdb::NPersQueue::TReadRuleSettings().ConsumerName("user")});
         settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
         auto res = pqClient.AlterTopic(path, settings);
         if (UseConfigTables) {  // ToDo - legacy
             AlterTopic();
@@ -1278,7 +1287,7 @@ public:
         const TString path = ResolveTopicSdkPath(name);
         if (mirrorFrom) {
             // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
-            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
             NYdb::NPersQueue::TAlterTopicSettings settings;
             settings.PartitionsCount(nParts);
             if (fillPartitionConfig) {
@@ -1291,7 +1300,7 @@ public:
             auto res = pqClient.AlterTopic(path, settings).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         } else {
-            auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+            auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
             NYdb::NTopic::TAlterTopicSettings settings;
             settings.AlterPartitioningSettings(nParts, nParts);
             if (fillPartitionConfig) {
@@ -1327,7 +1336,7 @@ public:
     }
 
     NYdb::TStatus DropTopic(const TString& path) {
-        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
         Cerr << "Drop topic: " << path << Endl;
         auto res = topicClient.DropTopic(path).GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
@@ -1341,7 +1350,7 @@ public:
 
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
         const TString path = ResolveTopicSdkPath(name);
-        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
         Cerr << "PQ Client: drop topic via Topic SDK: " << path << Endl;
         auto res = topicClient.DropTopic(path).GetValueSync();
 
@@ -1743,7 +1752,7 @@ public:
             path = TStringBuilder() << "/Root/PQ/" << params.Name;
         }
 
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);

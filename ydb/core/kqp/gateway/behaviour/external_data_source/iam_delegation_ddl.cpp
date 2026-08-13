@@ -5,6 +5,7 @@
 #include "iam_delegation_ddl_bridge.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 
 #include <ydb/library/actors/async/async.h>
@@ -38,6 +39,13 @@ TIamDelegationSettings GetIamDelegationSettings(NActors::TActorSystem* actorSyst
     settings.MicroserviceId = config.GetMicroserviceId();
     settings.ResourceType = config.GetResourceType();
     settings.EnableSsl = config.GetEnableSsl();
+    const auto& authConfig = AppData(actorSystem)->AuthConfig;
+    if (authConfig.HasLocalMetadataService()) {
+        settings.MetadataServiceHost =
+            authConfig.GetLocalMetadataService().GetHost();
+        settings.MetadataServicePort =
+            authConfig.GetLocalMetadataService().GetPort();
+    }
     return settings;
 }
 
@@ -45,21 +53,13 @@ TString GetIamSubject(const NACLib::TUserToken& token) {
     return NormalizeIamSubject(token.GetUserSID());
 }
 
-TString GetIamOperationToken(const TContext& context) {
+TStatus ValidateIamDelegationSubject(const TContext& context) {
     const auto& userToken = context.GetUserToken();
-    return userToken ? userToken->GetOriginalUserToken() : TString{};
-}
-
-TStatus ValidateIamOperationUser(const TContext& context) {
-    const auto& userToken = context.GetUserToken();
-    if (!userToken || !userToken->HasAuthType() ||
-        userToken->GetAuthType() != "AccessService" ||
-        userToken->GetOriginalUserToken().empty() ||
-        userToken->GetSerializedToken().empty())
+    if (!userToken || !IsVerifiedIamDelegationSubject(*userToken))
     {
         return TStatus::Fail(
             NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
-            "IAM delegation requires a cloud IAM authenticated session");
+            "IAM delegation requires a verified cloud IAM subject");
     }
     return TStatus::Success();
 }
@@ -87,57 +87,70 @@ protected:
     NActors::async<TIamDelegationResult> SetupDelegation(
         const TIamDelegation& delegation)
     {
-        const TString token = GetIamOperationToken(Context);
-        if (token.empty()) {
-            co_return TIamDelegationResult{false, "user IAM token is empty"};
+        auto token = co_await AcquireSystemIamToken(
+            DelegationSettings, this->SelfId());
+        if (!token.Success) {
+            co_return TIamDelegationResult{
+                false,
+                TStringBuilder()
+                    << "failed to obtain YDB system service-account token: "
+                    << token.Error,
+            };
         }
         EnsureServiceControl();
 
         const TString subject = GetIamSubject(*Context.GetUserToken());
 
         auto ensure = MakeHolder<NCloud::TEvServiceControl::TEvEnsureEnabledRequest>();
-        ensure->Token = token;
-        ensure->Request = MakeEnsureEnabledRequest(
-            DelegationSettings, delegation, subject);
+        ensure->Token = token.Token;
+        ensure->Request = MakeEnsureEnabledRequest(DelegationSettings, delegation);
         this->Send(ServiceControl, ensure.Release(), 0, EnsureCookie);
 
         const auto ensureResponse = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvEnsureEnabledResponse>(EnsureCookie);
         if (auto result = co_await WaitForOperation(
-                *ensureResponse->Get(), "EnsureEnabled");
+                *ensureResponse->Get(), "EnsureEnabled", token.Token);
             !result.Success)
         {
             co_return result;
         }
 
         auto setup = MakeHolder<NCloud::TEvServiceControl::TEvSetupDelegationRequest>();
-        setup->Token = token;
+        setup->Token = token.Token;
         setup->Request = MakeSetupDelegationRequest(
             DelegationSettings, delegation, subject);
         this->Send(ServiceControl, setup.Release(), 0, DelegationCookie);
 
         const auto setupResponse = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvSetupDelegationResponse>(DelegationCookie);
-        co_return co_await WaitForOperation(*setupResponse->Get(), "SetupDelegation");
+        co_return co_await WaitForOperation(
+            *setupResponse->Get(), "SetupDelegation", token.Token);
     }
 
     NActors::async<TIamDelegationResult> RevokeDelegation(
         const TIamDelegation& delegation)
     {
-        const TString token = GetIamOperationToken(Context);
-        if (token.empty()) {
-            co_return TIamDelegationResult{false, "user IAM token is empty"};
+        auto token = co_await AcquireSystemIamToken(
+            DelegationSettings, this->SelfId());
+        if (!token.Success) {
+            co_return TIamDelegationResult{
+                false,
+                TStringBuilder()
+                    << "failed to obtain YDB system service-account token: "
+                    << token.Error,
+            };
         }
         EnsureServiceControl();
 
         auto revoke = MakeHolder<NCloud::TEvServiceControl::TEvRevokeDelegationRequest>();
-        revoke->Token = token;
+        revoke->Token = token.Token;
         revoke->Request = MakeRevokeDelegationRequest(DelegationSettings, delegation);
         this->Send(ServiceControl, revoke.Release(), 0, DelegationCookie);
 
         const auto response = co_await NActors::ActorWaitForEvent<
             NCloud::TEvServiceControl::TEvRevokeDelegationResponse>(DelegationCookie);
-        co_return co_await WaitForOperation(*response->Get(), "RevokeDelegation");
+        co_return co_await WaitForOperation(
+            *response->Get(), "RevokeDelegation", token.Token);
     }
 
     TStatus DelegationStatus(const TIamDelegationResult& result) const {
@@ -187,7 +200,8 @@ private:
     template <typename TResponse>
     NActors::async<TIamDelegationResult> WaitForOperation(
         const TResponse& response,
-        TStringBuf method)
+        TStringBuf method,
+        const TString& token)
     {
         if (!response.Status.Ok()) {
             co_return TIamDelegationResult{
@@ -211,7 +225,7 @@ private:
             EnsureOperationService();
 
             auto get = MakeHolder<NCloud::TEvServiceControl::TEvGetOperationRequest>();
-            get->Token = GetIamOperationToken(Context);
+            get->Token = token;
             // Keep polling the operation id returned by the mutating RPC. A
             // sparse Get response does not change the identity of the
             // accepted operation and must not make us abandon it.
@@ -293,14 +307,6 @@ private:
         AddIamPathVersionPrecondition(
             SchemeTx, described.SnapshotPathId, described.SnapshotPathVersion);
 
-        if (IsManagedIamDelegation(described.Delegation)) {
-            auto status = ValidateIamOperationUser(Context);
-            if (status.IsFail()) {
-                Finish(std::move(status));
-                co_return;
-            }
-        }
-
         const auto schemeStatus = co_await AwaitLegacyDdl(
             ExecuteLegacyDdl(SchemeTx, Context), SelfId());
         if (!schemeStatus.IsFail() && !described.NotFound &&
@@ -356,14 +362,6 @@ private:
         AddIamPathVersionPrecondition(
             SchemeTx, previous.SnapshotPathId, previous.SnapshotPathVersion);
 
-        if (IsManagedIamDelegation(previous.Delegation)) {
-            auto status = ValidateIamOperationUser(Context);
-            if (status.IsFail()) {
-                Finish(std::move(status));
-                co_return;
-            }
-        }
-
         const auto schemeStatus = co_await AwaitLegacyDdl(
             ExecuteLegacyDdl(SchemeTx, Context), SelfId());
         if (!schemeStatus.IsFail() && IsManagedIamDelegation(previous.Delegation)) {
@@ -417,7 +415,7 @@ private:
                 "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
             co_return;
         }
-        auto status = ValidateIamOperationUser(Context);
+        auto status = ValidateIamDelegationSubject(Context);
         if (status.IsFail()) {
             Finish(std::move(status));
             co_return;

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/client/yc_private/iam/service_control_service.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
@@ -13,6 +15,8 @@ struct TIamDelegationSettings {
     TString ServiceId;
     TString MicroserviceId;
     TString ResourceType;
+    TString MetadataServiceHost;
+    ui32 MetadataServicePort = 0;
     bool EnableSsl = true;
     TDuration Timeout = TDuration::Seconds(10);
 };
@@ -29,6 +33,12 @@ struct TIamDelegationResult {
     TString Error;
 };
 
+struct TIamTokenResult {
+    bool Success = false;
+    TString Token;
+    TString Error;
+};
+
 enum class EDelegationCleanup {
     None,
     Previous,
@@ -41,10 +51,11 @@ enum class EIamOperationState {
     Failed,
 };
 
+NYdb::TIamHost MakeMetadataServiceHost(const TIamDelegationSettings& settings);
+
 yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation,
-    const TString& subjectId);
+    const TIamDelegation& delegation);
 
 yandex::cloud::priv::iam::v1::SetupDelegationRequest MakeSetupDelegationRequest(
     const TIamDelegationSettings& settings,
@@ -56,6 +67,7 @@ yandex::cloud::priv::iam::v1::RevokeDelegationRequest MakeRevokeDelegationReques
     const TIamDelegation& delegation);
 
 TString NormalizeIamSubject(TString subjectId);
+bool IsVerifiedIamDelegationSubject(const NACLib::TUserToken& token);
 TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBuf uniqueId);
 EIamOperationState ClassifyIamOperation(
     const ydb::yc::priv::operation::Operation& operation);

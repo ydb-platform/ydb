@@ -5,18 +5,29 @@ package yandex.cloud.priv.iam.v1;
 import "ydb/public/api/client/yc_private/iam/resource.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-// Minimal wire-compatible copy of the private IAM ServiceControl API used by
-// the external data source delegation lifecycle.
+// Minimal wire-compatible copy of the canonical private IAM ServiceControl
+// API used by the external data source delegation lifecycle:
+// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/iam/v1/service_control_service.proto
 service ServiceControlService {
   rpc SetupDelegation(SetupDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
   rpc RevokeDelegation(RevokeDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
   rpc EnsureEnabled(EnsureServicesEnabledRequest) returns (.ydb.yc.priv.operation.Operation);
+  rpc CanEnsureEnabled(CanEnsureServicesEnabledRequest) returns (CanEnsureServicesEnabledResponse);
 }
 
 message EnsureServicesEnabledRequest {
   repeated string service_ids = 1;
   Resource resource = 2;
   string on_behalf_of_subject_id = 3;
+}
+
+message CanEnsureServicesEnabledRequest {
+  repeated string service_ids = 1;
+  Resource resource = 2;
+  string on_behalf_of_subject_id = 3;
+}
+
+message CanEnsureServicesEnabledResponse {
 }
 
 message SetupDelegationRequest {

@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/gateway/behaviour/external_data_source
+    ydb/public/api/client/yc_private/iam
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub

@@ -2,10 +2,10 @@
 // (rfc/external_data_source_cloud_authentication_for_ydb.md).
 //
 // Goal: prove that when a user authenticated with a *cloud IAM token* runs
-// CREATE EXTERNAL DATA SOURCE, the schemeshard operation actually sees that
-// raw IAM token — i.e. NACLib::TUserToken::GetOriginalUserToken() is non-empty
-// and equals the token the user presented. This is the fact the RFC relies on
-// for sourcing SetupDelegation's on_behalf_of at CREATE time.
+// CREATE EXTERNAL DATA SOURCE, SchemeShard receives the same serialized user
+// identity used for normal DDL authorization. The gateway derives
+// SetupDelegation.on_behalf_of_subject_id from this verified identity, while
+// ServiceControl itself is authenticated separately with the YDB System SA.
 //
 // It exercises the *real* path (no hand-built token):
 //   NYdb driver (auth token) -> gRPC -> TicketParser -> fake AccessService
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
              << " capturedTokenBytes=" << capturedSerializedToken.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
 
-        // ---- assertions: the token reached schemeshard, intact ----
+        // ---- assertions: the authenticated identity reached SchemeShard intact ----
         UNIT_ASSERT_C(sawCreateEds, "schemeshard did not receive CreateExternalDataSource");
         UNIT_ASSERT_C(!capturedSerializedToken.empty(),
             "no user token on the modify-scheme event at schemeshard");

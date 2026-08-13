@@ -5,16 +5,25 @@
 
 namespace NKikimr::NKqp::NExternalDataSource {
 
+NYdb::TIamHost MakeMetadataServiceHost(const TIamDelegationSettings& settings) {
+    NYdb::TIamHost result;
+    if (!settings.MetadataServiceHost.empty()) {
+        result.Host = settings.MetadataServiceHost;
+    }
+    if (settings.MetadataServicePort) {
+        result.Port = settings.MetadataServicePort;
+    }
+    return result;
+}
+
 yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,
-    const TIamDelegation& delegation,
-    const TString& subjectId)
+    const TIamDelegation& delegation)
 {
     yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest request;
     request.add_service_ids(settings.ServiceId);
     request.mutable_resource()->set_id(delegation.ResourceId);
     request.mutable_resource()->set_type(settings.ResourceType);
-    request.set_on_behalf_of_subject_id(subjectId);
     return request;
 }
 
@@ -58,6 +67,11 @@ TString NormalizeIamSubject(TString subjectId) {
         subjectId.resize(subjectId.size() - suffix.size());
     }
     return subjectId;
+}
+
+bool IsVerifiedIamDelegationSubject(const NACLib::TUserToken& token) {
+    return token.HasAuthType() && token.GetAuthType() == "AccessService" &&
+        !NormalizeIamSubject(token.GetUserSID()).empty();
 }
 
 TString MakeIamDelegationReferrerId(TStringBuf externalDataSourceName, TStringBuf uniqueId) {

@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/ycloud/impl
     ydb/public/sdk/cpp/src/client/iam
+    ydb/public/sdk/cpp/src/client/types/core_facility
 
     ydb/services/metadata/abstract
     ydb/services/metadata/initializer

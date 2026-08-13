@@ -21,6 +21,7 @@ public:
     bool DequeueCheck(TGroupId groupId);
 
     void ResetState();
+    void ResetPacing();
 
     // at first we obtain timestamp when to start the next check
     TMonotonic GetNextAllowedCheckTimestamp(TMonotonic now);

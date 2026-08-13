@@ -720,8 +720,6 @@ public:
         // a reference to proxy group id when this group is a part of Bridge group
         std::optional<TGroupId> BridgeProxyGroupId;
 
-        bool IsCheckInProgress = false;
-
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
             NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
@@ -1773,10 +1771,10 @@ private:
         return *it->second;
     }
 
-    // returns number of groups, including static groups
-    ui32 TotalGroupCount() const {
-        return GroupLookup.size() + StaticGroups.size();
-    }
+    bool IsBlobCheckerGroupEligible(TGroupId groupId) const;
+
+    // Returns number of dynamic and static groups eligible for BlobChecker.
+    ui32 TotalGroupCount() const;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE ACCESS
@@ -1999,7 +1997,9 @@ private:
         void OnScrubPeriodicityChange();
         void OnMaxScrubbedDisksAtOnceChange();
         void UpdateVDiskState(const TVSlotInfo *vslot);
-        void UpdateGroupState(const TGroupInfo *group);
+        bool IsGroupScrubbed(TGroupId groupId) const;
+        bool IsBlobCheckerInProgress(TGroupId groupId) const;
+        void SetBlobCheckerInProgress(TGroupId groupId, bool inProgress);
     };
 
     TScrubState ScrubState;
@@ -2018,6 +2018,8 @@ private:
     TActorId BlobCheckerOrchestratorId;
     std::unique_ptr<TBlobCheckerPlanner> BlobCheckerPlanner;
     TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+    THashSet<TGroupId> BlobCheckerCancellationsPending;
+    THashSet<TGroupId> BlobCheckerGroupDeletionsPending;
 
     std::unordered_map<TGroupId, TString> BlobCheckerGroupRecords;
 
@@ -2028,7 +2030,9 @@ private:
     void UpdateBlobCheckerState();
     void UpdateBlobCheckerSettings(TDuration periodicity);
     void DequeueCheckForGroup(TGroupId groupId, bool notifyOrchestrator);
+    void DeleteBlobCheckerGroup(TGroupId groupId);
     void InitializeBlobCheckerOrchestratorActor();
+    void PersistBlobCheckerGroupStatus(TGroupId groupId);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection

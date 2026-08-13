@@ -20,6 +20,7 @@ namespace NKikimr::NBsController {
             bool Success = true;
             bool RollbackSuccess = false;
             TString Error;
+            std::optional<TDuration> PendingBlobCheckerPeriodicity;
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
@@ -184,10 +185,11 @@ namespace NKikimr::NBsController {
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        for (ui64 value : settings.GetBlobCheckerPeriodicitySeconds()) {
-                            TDuration duration = TDuration::Seconds(value);
+                        if (!settings.GetBlobCheckerPeriodicitySeconds().empty()) {
+                            const TDuration duration = TDuration::Seconds(
+                                    *settings.GetBlobCheckerPeriodicitySeconds().rbegin());
                             db.Table<T>().Key(true).Update<T::BlobCheckerPeriodicity>(duration);
-                            Self->UpdateBlobCheckerSettings(duration);
+                            PendingBlobCheckerPeriodicity = duration;
                         }
                         return;
                     }
@@ -451,6 +453,9 @@ namespace NKikimr::NBsController {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
+                }
+                if (PendingBlobCheckerPeriodicity) {
+                    Self->UpdateBlobCheckerSettings(*PendingBlobCheckerPeriodicity);
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();

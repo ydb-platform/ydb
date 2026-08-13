@@ -269,6 +269,7 @@ public:
             }
             scrub->ScrubState = TVDiskItem::EScrubState::IN_PROGRESS;
             AdjustUserState(scrub);
+            Self->DequeueCheckForGroup(GetGroupId(scrub), /*notifyOrchestrator=*/true);
         }
     }
 
@@ -548,7 +549,7 @@ public:
     std::unordered_map<TPDiskId, TScrubbedEntityInfo<TPredLockedByPDisk>, THash<TPDiskId>> CurrentlyScrubbedDisks;
     std::unordered_map<TGroupId, TScrubbedEntityInfo<TPredLockedByGroup>> CurrentlyScrubbedGroups;
     std::unordered_map<TGroupId, TProhibitInfo> ScrubProhibitedGroups;
-    std::unordered_map<TGroupId, TActorId> Scrubbed;
+    std::unordered_set<TGroupId> BlobCheckerGroups;
     std::map<TInstant, TIntrusiveList<TVDiskItem, TPredLockedByTime>> LockedByTime;
     ui64 LastQueueIndex = 0;
     TIntrusiveList<TVDiskItem, TCandidates> Candidates;
@@ -759,7 +760,7 @@ public:
             return true;
         }
 
-        if (group->IsCheckInProgress) {
+        if (BlobCheckerGroups.contains(group->ID)) {
             return true;
         }
 
@@ -773,8 +774,29 @@ public:
         ProcessQueue(now);
     }
 
-    void UpdateGroupState(const TGroupInfo* group, TInstant now) {
-        UpdateGroupProhibition(group);
+    bool IsGroupScrubbed(TGroupId groupId) const {
+        return CurrentlyScrubbedGroups.contains(groupId);
+    }
+
+    bool IsBlobCheckerInProgress(TGroupId groupId) const {
+        return BlobCheckerGroups.contains(groupId);
+    }
+
+    void SetBlobCheckerInProgress(TGroupId groupId, bool inProgress, TInstant now) {
+        if (inProgress) {
+            BlobCheckerGroups.insert(groupId);
+        } else {
+            BlobCheckerGroups.erase(groupId);
+        }
+
+        if (const TGroupInfo* group = Self->FindGroup(groupId)) {
+            UpdateGroupProhibition(group);
+        } else if (inProgress) {
+            ScrubProhibitedGroups.try_emplace(groupId);
+        } else if (const auto it = ScrubProhibitedGroups.find(groupId); it != ScrubProhibitedGroups.end()) {
+            AddCandidates(it->second);
+            ScrubProhibitedGroups.erase(it);
+        }
         ProcessQueue(now);
     }
 
@@ -851,8 +873,16 @@ void TBlobStorageController::TScrubState::UpdateVDiskState(const TVSlotInfo *slo
     Impl->UpdateVDiskState(slot, TActivationContext::Now());
 }
 
-void TBlobStorageController::TScrubState::UpdateGroupState(const TGroupInfo *group) {
-    Impl->UpdateGroupState(group, TActivationContext::Now());
+bool TBlobStorageController::TScrubState::IsGroupScrubbed(TGroupId groupId) const {
+    return Impl->IsGroupScrubbed(groupId);
+}
+
+bool TBlobStorageController::TScrubState::IsBlobCheckerInProgress(TGroupId groupId) const {
+    return Impl->IsBlobCheckerInProgress(groupId);
+}
+
+void TBlobStorageController::TScrubState::SetBlobCheckerInProgress(TGroupId groupId, bool inProgress) {
+    Impl->SetBlobCheckerInProgress(groupId, inProgress, TActivationContext::Now());
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TPtr ev) {

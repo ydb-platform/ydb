@@ -623,21 +623,20 @@ namespace NKikimr::NBsController {
                 std::unordered_map<TGroupId, TString> newGroups;
                 std::vector<TGroupId> deletedGroups;
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
-                    if (!overlay->second) {
-                        const TGroupId groupId = overlay->first;
+                    const TGroupId groupId = overlay->first;
+                    const bool wasEligible = base && !base->second->BridgeGroupInfo;
+                    const bool isEligible = overlay->second && !overlay->second->BridgeGroupInfo;
+
+                    if (!isEligible) {
+                        const bool hadRecord = BlobCheckerGroupRecords.erase(groupId);
+                        if (!wasEligible && !hadRecord) {
+                            continue;
+                        }
                         db.Table<Schema::BlobCheckerGroupStatus>().Key(groupId.GetRawId()).Delete();
                         deletedGroups.push_back(groupId);
-
-                        auto it = BlobCheckerGroupRecords.find(groupId);
-                        if (it != BlobCheckerGroupRecords.end()) {
-                            BlobCheckerGroupRecords.erase(it);
-                        } else {
-                            Y_DEBUG_ABORT_S("Non-existent in-memory record for group# " << groupId);
-                        }
-                    } else if (!base) {
-                        const TGroupId groupId = overlay->first;
+                    } else if (!wasEligible || !BlobCheckerGroupRecords.contains(groupId)) {
                         TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(
-                                TActivationContext::Monotonic());
+                                TActivationContext::Now());
                         db.Table<Schema::BlobCheckerGroupStatus>().Key(groupId.GetRawId())
                                 .Update<Schema::BlobCheckerGroupStatus::SerializedStatus>(serialized);
                         BlobCheckerGroupRecords[groupId] = serialized;
@@ -645,16 +644,22 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                if (IsBlobCheckerEnabled()) {
-                    Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateGroupSet(
-                            std::move(newGroups), std::move(deletedGroups)));
+                if (!newGroups.empty() || !deletedGroups.empty()) {
+                    state.Callbacks.push_back([this, newGroups = std::move(newGroups),
+                            deletedGroups = std::move(deletedGroups)]() mutable {
+                        for (TGroupId groupId : deletedGroups) {
+                            DeleteBlobCheckerGroup(groupId);
+                        }
+                        if (BlobCheckerOrchestratorId) {
+                            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateGroupSet(
+                                    std::move(newGroups), std::move(deletedGroups)));
+                        }
+                        if (BlobCheckerPlanner) {
+                            BlobCheckerPlanner->SetGroupCount(TotalGroupCount());
+                        }
+                    });
                 }
 
-                if (BlobCheckerPlanner) {
-                    BlobCheckerPlanner->SetGroupCount(TotalGroupCount());
-                } else {
-                    Y_DEBUG_ABORT_S("Uninitialized BlobCheckerPlanner");
-                }
             }
 
             // remove unused vdisk metrics for either deleted vslots or with changed generation
@@ -738,8 +743,12 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            for (TGroupId groupId : groupsWithErrorDisks) {
-                DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/true);
+            if (!groupsWithErrorDisks.empty()) {
+                state.Callbacks.push_back([this, groups = std::move(groupsWithErrorDisks)] {
+                    for (TGroupId groupId : groups) {
+                        DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/true);
+                    }
+                });
             }
 
             TNodeWardenUpdateNotifier(this, state).Execute();

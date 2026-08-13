@@ -1781,12 +1781,14 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     }
 
     bool hasWriteSeqNum = false;
+    size_t opsWithWriteSeqNum = 0;
     std::optional<ui64> writerIndex;
     for (const auto& op : rec.GetOperations()) {
         if (!op.HasWriteSeqNum()) {
             continue;
         }
         hasWriteSeqNum = true;
+        ++opsWithWriteSeqNum;
         const auto& writeSeqNum = op.GetWriteSeqNum();
         const ui64 opWriterIndex = writeSeqNum.GetWriterIndex();
         const ui64 seqNum = writeSeqNum.GetWriteSeqNum();
@@ -1808,6 +1810,12 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             return writeOp;
         }
         writerIndex = opWriterIndex;
+    }
+    if (hasWriteSeqNum && opsWithWriteSeqNum != rec.OperationsSize()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+            << "WriteSeqNum must be set on all operations or none, got "
+            << opsWithWriteSeqNum << " of " << rec.OperationsSize());
+        return writeOp;
     }
     if (hasWriteSeqNum && AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {
         writeOp->SetPipelinedWriteFlag();

@@ -135,13 +135,19 @@ public:
     // Falls back to STATUS_COMPLETED when there is no stored result or the blob fails to parse.
     static void FillDuplicateWriteResult(const TWriteSeqNumState& state, NKikimrDataEvents::TEvWriteResult& record) {
         NKikimrDataEvents::TEvWriteResult stored;
-        if (!state.SerializedResult.empty() && stored.ParseFromString(state.SerializedResult)) {
+        if (state.SerializedResult.empty()) {
+            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        } else if (stored.ParseFromString(state.SerializedResult)) {
             record.SetStatus(stored.GetStatus());
             record.MutableIssues()->Swap(stored.MutableIssues());
             if (stored.HasTxStats()) {
                 record.MutableTxStats()->Swap(stored.MutableTxStats());
             }
         } else {
+            // Only possible via a buggy migration peer; degrade to a bare success.
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Failed to parse stored write result for writer " << state.WriterIndex
+                << " seq num " << state.WriteSeqNum);
             record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
     }
@@ -182,28 +188,26 @@ public:
         const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
 
         // A gap between EvWrite messages is fine (KQP tracks deliveries itself),
-        // but within one EvWrite the operations' seq nums must be contiguous:
-        // KQP allocates them sequentially for the batch.
-        TVector<ui64> requestedSeqNums;
-        requestedSeqNums.reserve(operations.size());
+        // but within one EvWrite the seq nums must be ascending and contiguous:
+        // KQP allocates them sequentially for the batch, in operation order.
+        ui64 prevRequested = 0;
         for (const auto& op : operations) {
-            if (const ui64 requested = op.GetWriteSeqNum().WriteSeqNum) {
-                requestedSeqNums.push_back(requested);
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (!requested) {
+                continue;
             }
-        }
-        std::sort(requestedSeqNums.begin(), requestedSeqNums.end());
-        for (size_t i = 1; i < requestedSeqNums.size(); ++i) {
-            if (requestedSeqNums[i] != requestedSeqNums[i - 1] + 1) {
+            if (prevRequested && requested != prevRequested + 1) {
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                    << "Uncommitted write seq nums must be contiguous within one request, got "
-                    << writerIndex << ":" << requestedSeqNums[i - 1] << " followed by "
-                    << writerIndex << ":" << requestedSeqNums[i]);
+                    << "Uncommitted write seq nums must be ascending and contiguous within one request, got "
+                    << writerIndex << ":" << prevRequested << " followed by "
+                    << writerIndex << ":" << requested);
                 return EExecutionStatus::Executed;
             }
+            prevRequested = requested;
         }
 
-        // The maximum WriteSeqNum in this batch determines its position in the chain.
-        const ui64 maxRequested = requestedSeqNums.back();
+        // The last (== maximum) WriteSeqNum determines the batch's position in the chain.
+        const ui64 maxRequested = prevRequested;
 
         // A duplicate of the entire batch: the max seq num matches the last applied.
         if (maxRequested == current) {
@@ -879,16 +883,10 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
-            ui64 lastRequested = 0;
-            for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
-                if (op.GetWriteSeqNum().WriteSeqNum) {
-                    lastRequested = op.GetWriteSeqNum().WriteSeqNum;
-                }
-            }
-            if (lastRequested) {
+            if (guardLocks.SetWriteSeqNum) {
                 // Remembered for a duplicate delivery of this write
                 auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-                if (lock && lock->GetWriteSeqNum() == lastRequested) {
+                if (lock && lock->GetWriteSeqNum() == guardLocks.SetWriteSeqNum->WriteSeqNum) {
                     lock->SetWriteSeqNumResult(SerializeWriteSeqNumResult(writeResult->Record));
                 }
             }

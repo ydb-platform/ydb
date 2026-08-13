@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -16,6 +17,7 @@
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 #include <util/generic/guid.h>
 
@@ -333,9 +335,16 @@ class TDropIamDelegationDdlActor final
     : public TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>
 {
     using TBase = TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>;
-    using TBase::TBase;
 
 public:
+    TDropIamDelegationDdlActor(
+        NKikimrSchemeOp::TModifyScheme schemeTx,
+        TContext context,
+        NThreading::TPromise<TStatus> promise)
+        : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+    {
+    }
+
     void Bootstrap() {
         Become(&TDropIamDelegationDdlActor::StateWork);
         Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
@@ -385,9 +394,16 @@ class TCreateOrAlterIamDelegationDdlActor final
     : public TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>
 {
     using TBase = TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>;
-    using TBase::TBase;
 
 public:
+    TCreateOrAlterIamDelegationDdlActor(
+        NKikimrSchemeOp::TModifyScheme schemeTx,
+        TContext context,
+        NThreading::TPromise<TStatus> promise)
+        : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+    {
+    }
+
     void Bootstrap() {
         Become(&TCreateOrAlterIamDelegationDdlActor::StateWork);
         Send(SelfId(), new TEvIamDelegationDdl::TEvStart());

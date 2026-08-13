@@ -11,9 +11,11 @@ PEERDIR(
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/utils
+    ydb/core/kqp/provider
 
     ydb/library/conclusion
     ydb/library/actors/async
+    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/ycloud/impl
     ydb/public/sdk/cpp/src/client/iam
 

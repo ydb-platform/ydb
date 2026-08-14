@@ -107,6 +107,9 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+            "query_limits": {
+                "result_rows_limit": 20,
+            },
         },
         replication_config={
             "iam_service_control": {

@@ -99,6 +99,7 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableStreamingQueries(true);
@@ -559,12 +560,21 @@ public:
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
         RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
+        size_t count = 20;
 
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+        for (size_t i = 0; i < count; ++i) {
+            auto state = MakeState(TStringBuilder() << "some random state " << i);
+            auto checkpointId = TCheckpointId(Generation, i);
+            CreateCheckpoint(GraphId, Generation, checkpointId, false);
+            SaveState(1316, checkpointId, state);
+            SaveState(1317, checkpointId, state);
+        }
+
+        ui64 seqNo = 10;
+        auto checkpointId = TCheckpointId(Generation, seqNo);
+        auto actual = GetState(1317, GraphId, checkpointId);
+        auto expected = MakeState(TStringBuilder() << "some random state " << seqNo);
+        UNIT_ASSERT_VALUES_EQUAL(expected, actual);
     }
 
     void ShouldUseGc() {

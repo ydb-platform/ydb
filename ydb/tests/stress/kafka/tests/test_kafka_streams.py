@@ -70,6 +70,7 @@ class TestYdbTopicWorkload(StressFixture):
             self.database,
             suffix="-batch",
             extra_args=[
+                "--num-workers", "1",
                 "--source-writer", "kafka",
             ],
         )

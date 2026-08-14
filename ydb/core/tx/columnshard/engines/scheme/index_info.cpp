@@ -558,9 +558,17 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    // ReuseIndexChunks likewise always returns Success (dropping an oversize chunk rather than failing), so
-    // AppendIndex never propagates a failure to the compaction/actualization DetachResult callers.
-    return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
+    // AppendIndex must never fail: its callers DetachResult and would crash (the #26733 symptom). ReuseIndexChunks
+    // already drops rather than fails, but guard defensively so a future Fail there cannot propagate.
+    auto status = ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
+    if (status.IsFail()) {
+        YDB_LOG_WARN("",
+            {"event", "index_skipped"},
+            {"index_id", indexId},
+            {"index_name", index->GetIndexName()},
+            {"reason", status.GetErrorMessage()});
+    }
+    return TConclusionStatus::Success();
 }
 
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {

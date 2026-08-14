@@ -20,6 +20,8 @@ REQUIREMENTS(ram:32)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 
 SET(ORIG_SOURCES
@@ -143,4 +145,3 @@ COPY(
     OUTPUT_INCLUDES
         yql/essentials/minikql/computation/mkql_computation_node_codegen.h
 )
-

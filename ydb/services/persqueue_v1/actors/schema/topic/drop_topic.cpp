@@ -12,11 +12,6 @@ class TDropTopicActor: public TGrpcProxyActor<TDropTopicActor, NGRpcService::TEv
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>;
 
 public:
-    TDropTopicActor(NGRpcService::TEvDropTopicRequest* request)
-        : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
-    {
-    }
-
     TDropTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
     {

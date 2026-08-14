@@ -33,10 +33,10 @@ void RunSkipTakeTest(TStreamOp&& streamOp,
 Y_UNIT_TEST_SUITE(TMiniKQLWideSkipBlocksTest) {
 
 Y_UNIT_TEST(SkipPartial) {
-    TVector<ui32> key = {1u, 2u, 3u, 4u, 5u};
+    TVector<ui32> key = {1U, 2U, 3U, 4U, 5U};
     TVector<TString> payload = {"a", "b", "c", "d", "e"};
 
-    TVector<ui32> expectedKey = {3u, 4u, 5u};
+    TVector<ui32> expectedKey = {3U, 4U, 5U};
     TVector<TString> expectedPayload = {"c", "d", "e"};
 
     RunSkipTakeTest(
@@ -45,8 +45,8 @@ Y_UNIT_TEST(SkipPartial) {
 }
 
 Y_UNIT_TEST(SkipZeroKeepsAll) {
-    TVector<ui64> key = {10u, 20u, 30u};
-    TVector<ui8> payload = {1u, 2u, 3u};
+    TVector<ui64> key = {10U, 20U, 30U};
+    TVector<ui8> payload = {1U, 2U, 3U};
 
     RunSkipTakeTest(
         [](TSetup<false>& setup, TRuntimeNode s) { return SkipBlocksBy(setup, s, 0); },
@@ -54,7 +54,7 @@ Y_UNIT_TEST(SkipZeroKeepsAll) {
 }
 
 Y_UNIT_TEST(SkipAllRowsIsEmpty) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TVector<TString> payload = {"x", "y", "z"};
 
     TVector<ui32> expectedKey;
@@ -66,10 +66,10 @@ Y_UNIT_TEST(SkipAllRowsIsEmpty) {
 }
 
 Y_UNIT_TEST(SkipMixedScalarArray) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TString payload = "const";
 
-    TVector<ui32> expectedKey = {2u, 3u};
+    TVector<ui32> expectedKey = {2U, 3U};
     TVector<TString> expectedPayload = {"const", "const"};
 
     RunSkipTakeTest(
@@ -78,7 +78,7 @@ Y_UNIT_TEST(SkipMixedScalarArray) {
 }
 
 Y_UNIT_TEST(SkipAllScalarsFullySkipped) {
-    ui32 key = 7u;
+    ui32 key = 7U;
     TString payload = "solo";
 
     TVector<ui32> expectedKey;
@@ -90,15 +90,15 @@ Y_UNIT_TEST(SkipAllScalarsFullySkipped) {
 }
 
 Y_UNIT_TEST(SkipDoubleOptionalPayload) {
-    TVector<ui32> key = {1u, 2u, 3u, 4u};
+    TVector<ui32> key = {1U, 2U, 3U, 4U};
     TVector<TMaybe<TMaybe<ui64>>> payload = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4U)),
     };
 
-    TVector<ui32> expectedKey = {2u, 3u, 4u};
+    TVector<ui32> expectedKey = {2U, 3U, 4U};
     TVector<TMaybe<TMaybe<ui64>>> expectedPayload = {payload[1], payload[2], payload[3]};
 
     RunSkipTakeTest(
@@ -107,14 +107,14 @@ Y_UNIT_TEST(SkipDoubleOptionalPayload) {
 }
 
 Y_UNIT_TEST(SkipVoidPayload) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TVector<TMaybe<NTest::TSingularVoid>> payload = {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    TVector<ui32> expectedKey = {2u, 3u};
+    TVector<ui32> expectedKey = {2U, 3U};
     TVector<TMaybe<NTest::TSingularVoid>> expectedPayload = {payload[1], payload[2]};
 
     RunSkipTakeTest(
@@ -127,10 +127,10 @@ Y_UNIT_TEST(SkipVoidPayload) {
 Y_UNIT_TEST_SUITE(TMiniKQLWideTakeBlocksTest) {
 
 Y_UNIT_TEST(TakePartial) {
-    TVector<ui32> key = {1u, 2u, 3u, 4u, 5u};
+    TVector<ui32> key = {1U, 2U, 3U, 4U, 5U};
     TVector<TString> payload = {"a", "b", "c", "d", "e"};
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TString> expectedPayload = {"a", "b", "c"};
 
     RunSkipTakeTest(
@@ -139,8 +139,8 @@ Y_UNIT_TEST(TakePartial) {
 }
 
 Y_UNIT_TEST(TakeZeroIsEmpty) {
-    TVector<ui64> key = {10u, 20u, 30u};
-    TVector<ui8> payload = {1u, 2u, 3u};
+    TVector<ui64> key = {10U, 20U, 30U};
+    TVector<ui8> payload = {1U, 2U, 3U};
 
     TVector<ui64> expectedKey;
     TVector<ui8> expectedPayload;
@@ -151,7 +151,7 @@ Y_UNIT_TEST(TakeZeroIsEmpty) {
 }
 
 Y_UNIT_TEST(TakeMoreThanAvailableKeepsAll) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TVector<TString> payload = {"x", "y", "z"};
 
     RunSkipTakeTest(
@@ -160,10 +160,10 @@ Y_UNIT_TEST(TakeMoreThanAvailableKeepsAll) {
 }
 
 Y_UNIT_TEST(TakeMixedScalarArray) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TString payload = "const";
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TString> expectedPayload = {"const", "const"};
 
     RunSkipTakeTest(
@@ -172,10 +172,10 @@ Y_UNIT_TEST(TakeMixedScalarArray) {
 }
 
 Y_UNIT_TEST(TakeAllScalarsKeepsSingleRow) {
-    ui32 key = 7u;
+    ui32 key = 7U;
     TString payload = "solo";
 
-    TVector<ui32> expectedKey = {7u};
+    TVector<ui32> expectedKey = {7U};
     TVector<TString> expectedPayload = {"solo"};
 
     RunSkipTakeTest(
@@ -184,15 +184,15 @@ Y_UNIT_TEST(TakeAllScalarsKeepsSingleRow) {
 }
 
 Y_UNIT_TEST(TakeDoubleOptionalPayload) {
-    TVector<ui32> key = {1u, 2u, 3u, 4u};
+    TVector<ui32> key = {1U, 2U, 3U, 4U};
     TVector<TMaybe<TMaybe<ui64>>> payload = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4U)),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TMaybe<TMaybe<ui64>>> expectedPayload = {payload[0], payload[1], payload[2]};
 
     RunSkipTakeTest(
@@ -201,14 +201,14 @@ Y_UNIT_TEST(TakeDoubleOptionalPayload) {
 }
 
 Y_UNIT_TEST(TakeVoidPayload) {
-    TVector<ui32> key = {1u, 2u, 3u};
+    TVector<ui32> key = {1U, 2U, 3U};
     TVector<TMaybe<NTest::TSingularVoid>> payload = {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> expectedPayload = {payload[0], payload[1]};
 
     RunSkipTakeTest(

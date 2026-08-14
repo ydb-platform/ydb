@@ -129,6 +129,7 @@ private:
             return NUdf::EFetchStatus::Ok;
         }
 
+    private:
         TComputationContext& Ctx_;
         const NUdf::TUnboxedValue Stream_;
         const TVector<ui64> FuzzIds_;

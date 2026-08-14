@@ -199,11 +199,11 @@ public:
                     ConsumerPath_,
                     *oldOffset,
                     currentOffset)
-                        << TErrorAttribute("partition", partitionIndex)
-                        << TErrorAttribute("consumer", ConsumerPath_)
-                        << TErrorAttribute("expected_offset", *oldOffset)
-                        << TErrorAttribute("current_offset", currentOffset)
-                        << TErrorAttribute("current_offset_timestamp", offsetTimestamp);
+                        .With("partition", partitionIndex)
+                        .With("consumer", ConsumerPath_)
+                        .With("expected_offset", *oldOffset)
+                        .With("current_offset", currentOffset)
+                        .With("current_offset_timestamp", offsetTimestamp);
             }
         }
 
@@ -667,8 +667,8 @@ IConsumerClientPtr CreateConsumerClient(
     if (consumerSchema == *YTMultiConsumerTableSchema) {
         if (!consumerPath.GetQueueConsumerName()) {
             THROW_ERROR_EXCEPTION("Queue consumer name is required for multi-consumer schema")
-                << TErrorAttribute("consumer_schema", consumerSchema)
-                << TErrorAttribute("consumer_path", consumerPath);
+                .With("consumer_schema", consumerSchema)
+                .With("consumer_path", consumerPath);
         }
         return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), consumerPath.GetQueueConsumerName(), YTMultiConsumerTableSchema);
     }
@@ -677,14 +677,14 @@ IConsumerClientPtr CreateConsumerClient(
     bool isConsumerSchemaWithoutMeta = consumerSchema == *YTConsumerWithoutMetaTableSchema;
     if (!isConsumerSchemaWithMeta && !isConsumerSchemaWithoutMeta) {
         THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid consumer schema")
-            << TErrorAttribute("actual_schema", consumerSchema)
-            << TErrorAttribute("consumer_path", consumerPath);
+            .With("actual_schema", consumerSchema)
+            .With("consumer_path", consumerPath);
     }
 
     if (consumerPath.GetQueueConsumerName()) {
         THROW_ERROR_EXCEPTION("Queue consumer name is not supported for consumer schema")
-            << TErrorAttribute("consumer_schema", consumerSchema)
-            << TErrorAttribute("consumer_path", consumerPath);
+            .With("consumer_schema", consumerSchema)
+            .With("consumer_path", consumerPath);
     }
 
     return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), std::nullopt, isConsumerSchemaWithMeta ? YTConsumerTableSchema : YTConsumerWithoutMetaTableSchema);

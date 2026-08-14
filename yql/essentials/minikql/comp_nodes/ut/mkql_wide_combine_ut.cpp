@@ -9,6 +9,8 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
+#include <util/generic/size_literals.h>
+
 #include <cstring>
 #include <algorithm>
 
@@ -117,8 +119,8 @@ TComputationNodeFactory GetNodeFactory(TTestStreamParams& params) {
     };
 }
 
-template <bool LLVM>
-TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
+template <bool LLVM, bool SPILLING = false>
+TRuntimeNode MakeStream(TSetup<LLVM, SPILLING>& setup) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
@@ -157,6 +159,108 @@ TRuntimeNode WideLastCombiner(TProgramBuilder& pb, TRuntimeNode flow,
     } else {
         return pb.WideLastCombiner(flow, extractor, init, update, finish);
     }
+}
+
+// https://github.com/ydb-platform/ydb/issues/40326
+enum class ETeardownCombinerKind {
+    Combiner,
+    LastCombiner,
+    LastCombinerWithSpilling,
+};
+
+TRuntimeNode BuildAggrConcatCombinerGraph(TProgramBuilder& pb, TRuntimeNode input,
+                                          const TProgramBuilder::TExpandLambda& expand, ETeardownCombinerKind kind) {
+    const auto wideFlow = pb.ExpandMap(pb.ToFlow(input, {}), expand);
+    const TProgramBuilder::TWideLambda extractor = [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; };
+    const TProgramBuilder::TBinaryWideLambda init = [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; };
+    const TProgramBuilder::TTernaryWideLambda update = [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.AggrConcat(state.front(), items.back())}; };
+    const TProgramBuilder::TBinaryWideLambda finish = [&](TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList { return state; };
+
+    TRuntimeNode combined;
+    switch (kind) {
+        case ETeardownCombinerKind::Combiner:
+            combined = pb.WideCombiner(wideFlow, 0ULL, extractor, init, update, finish);
+            break;
+        case ETeardownCombinerKind::LastCombiner:
+            combined = pb.WideLastCombiner(wideFlow, extractor, init, update, finish);
+            break;
+        case ETeardownCombinerKind::LastCombinerWithSpilling:
+            combined = pb.WideLastCombinerWithSpilling(wideFlow, extractor, init, update, finish);
+            break;
+    }
+    return pb.FromFlow(pb.NarrowMap(combined, [&](TRuntimeNode::TList items) { return items.front(); }));
+}
+
+// Unlike TMockSpiller (which completes every operation synchronously), this spiller's
+// Put operations never complete (real spillers are asynchronous).
+class TPendingMockSpiller: public ISpiller {
+public:
+    NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&&) override {
+        Promises_.push_back(NThreading::NewPromise<TKey>());
+        return Promises_.back().GetFuture();
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<void> Delete(TKey) override {
+        return NThreading::MakeFuture();
+    }
+    void ReportAlloc(ui64) override {
+    }
+    void ReportFree(ui64) override {
+    }
+
+private:
+    TVector<NThreading::TPromise<TKey>> Promises_;
+};
+
+// Unlike TMockSpillerFactory (which creates synchronous spillers that complete immediately),
+// this factory creates spillers whose Put operations never complete, modeling a query being
+// torn down while spill operations are still in flight.
+class TPendingMockSpillerFactory: public ISpillerFactory {
+public:
+    void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>&) override {
+    }
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback, ISpiller::TMemoryReportCallback) override {
+    }
+    ISpiller::TPtr CreateSpiller() override {
+        return std::make_shared<TPendingMockSpiller>();
+    }
+};
+
+// https://github.com/ydb-platform/ydb/issues/40326
+template <bool UseLLVM, bool UseSpilling>
+void RunLastCombinerTeardownTest(std::shared_ptr<ISpillerFactory> spillerFactory, bool appendYieldSentinel) {
+    static constexpr ui64 RowCount = 400;
+    static constexpr ui64 StringSize = 5000;
+    TTestStreamParams params;
+    params.StringSize = StringSize;
+    for (ui64 i = 0; i < RowCount; ++i) {
+        params.TestYieldStreamData.push_back(i);
+    }
+    if (appendYieldSentinel) {
+        params.TestYieldStreamData.push_back(TTestStreamParams::Yield);
+        params.TestYieldStreamData.push_back(RowCount);
+    }
+    TSetup<UseLLVM, UseSpilling> setup(GetNodeFactory(params));
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto stream = MakeStream<UseLLVM, UseSpilling>(setup);
+    const auto pgmReturn = BuildAggrConcatCombinerGraph(pb, stream,
+                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; },
+                                                        UseSpilling ? ETeardownCombinerKind::LastCombinerWithSpilling : ETeardownCombinerKind::LastCombiner);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (spillerFactory) {
+        graph->GetContext().SpillerFactory = std::move(spillerFactory);
+    }
+
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Yield);
 }
 
 void CheckIfStreamHasExpectedStringValues(const NUdf::TUnboxedValue& streamValue, std::unordered_set<TString>& expected) {
@@ -423,6 +527,35 @@ Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
     UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
     UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
+}
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM(TestMemoryLimitExceptionTeardownSafety) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<char*>::Id));
+    const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
+
+    const auto pgmReturn = BuildAggrConcatCombinerGraph(pb, TRuntimeNode(list, /*isImmediate=*/false),
+                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; },
+                                                        ETeardownCombinerKind::Combiner);
+
+    const auto graph = setup.BuildGraph(pgmReturn, {list});
+    static constexpr ui32 RowCount = 8192;
+    static constexpr ui32 KeyCount = 64;
+    static constexpr size_t PayloadSize = 2048;
+    static constexpr ui64 MemoryLimit = 128_KB;
+    NUdf::TUnboxedValue* items = nullptr;
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(RowCount, items));
+    for (ui32 i = 0; i < RowCount; ++i) {
+        items[i] = NUdf::TUnboxedValuePod(MakeString(TStringBuilder() << "key_" << (i % KeyCount) << "_" << TString(PayloadSize, 'x')));
+    }
+
+    const auto streamVal = graph->GetValue();
+    setup.Alloc.Ref().SetLimit(setup.Alloc.Ref().GetAllocated() + MemoryLimit);
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EXCEPTION(streamVal.Fetch(result), TMemoryLimitExceededException);
+    setup.Alloc.Ref().SetLimit(0);
 }
 #endif // defined(_asan_enabled_)
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest)
@@ -1217,6 +1350,17 @@ Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
 
     auto anyEmpty = std::any_of(flushedBucketsSizes.begin(), flushedBucketsSizes.end(), [](size_t size) { return size == 0; });
     UNIT_ASSERT_C(!anyEmpty, "Spiller flushed empty bucket");
+}
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM_SPILLING(TestTeardownMidConsumptionSafety) {
+    RunLastCombinerTeardownTest<LLVM, SPILLING>(SPILLING ? std::make_shared<TMockSpillerFactory>() : nullptr,
+                                                /*appendYieldSentinel=*/true);
+}
+
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM(TestTeardownWithPendingSpillWrites) {
+    RunLastCombinerTeardownTest<LLVM, true>(std::make_shared<TPendingMockSpillerFactory>(),
+                                            /*appendYieldSentinel=*/false);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest)
 

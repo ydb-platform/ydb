@@ -412,7 +412,7 @@ void TClientRequest::OnPullRequestAttachmentsStream()
     auto control = RequestControl_.Lock();
     if (!control) {
         RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+            .With("request_id", GetRequestId()));
         return;
     }
 
@@ -450,7 +450,7 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
     auto control = RequestControl_.Lock();
     if (!control) {
         ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+            .With("request_id", GetRequestId()));
         return;
     }
 

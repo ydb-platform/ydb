@@ -91,16 +91,16 @@ inline void BlockSignal(int signal)
     sigset_t mask;
     if (sigprocmask(SIG_BLOCK, nullptr, &mask) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to get blocked signal mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
     if (sigaddset(&mask, signal) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to add signal to mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
 
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to set blocked signal mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
 #endif // _unix_
 }

@@ -58,8 +58,8 @@ public:
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
         TBlockTypeHelper helper;
-        for (size_t i = 0; i < inputItems.size(); i++) {
-            TType* blockItemType = AS_TYPE(TBlockType, inputItems[i])->GetItemType();
+        for (const auto inputItem : inputItems) {
+            TType* blockItemType = AS_TYPE(TBlockType, inputItem)->GetItemType();
             Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
             Hashers_.push_back(helper.MakeHasher(blockItemType));
@@ -966,19 +966,19 @@ class TBlockMapJoinCoreWraper: public TMutableComputationNode<TBlockMapJoinCoreW
 public:
     TBlockMapJoinCoreWraper(
         TComputationMutables& mutables,
-        const TVector<TType*>&& resultItemTypes,
-        const TVector<TType*>&& leftItemTypes,
-        const TVector<ui32>&& leftKeyColumns,
-        const TVector<ui32>&& leftIOMap,
-        const TVector<ui32>&& rightIOMap,
+        TVector<TType*>&& resultItemTypes,
+        TVector<TType*>&& leftItemTypes,
+        TVector<ui32>&& leftKeyColumns,
+        TVector<ui32>&& leftIOMap,
+        TVector<ui32>&& rightIOMap,
         IComputationNode* leftStream,
         IComputationNode* rightBlockIndex)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , ResultItemTypes_(resultItemTypes)
-        , LeftItemTypes_(leftItemTypes)
-        , LeftKeyColumns_(leftKeyColumns)
-        , LeftIOMap_(leftIOMap)
-        , RightIOMap_(rightIOMap)
+        , ResultItemTypes_(std::move(resultItemTypes))
+        , LeftItemTypes_(std::move(leftItemTypes))
+        , LeftKeyColumns_(std::move(leftKeyColumns))
+        , LeftIOMap_(std::move(leftIOMap))
+        , RightIOMap_(std::move(rightIOMap))
         , LeftStream_(leftStream)
         , RightBlockIndex_(rightBlockIndex)
         , KeyTupleCache_(mutables)
@@ -1139,6 +1139,7 @@ private:
             return TKeyItemsRef(slot, keyWidth);
         }
 
+    private:
         NUdf::TUnboxedValue JoinState_;
 
         const TVector<ui32>& LeftKeyColumns_;
@@ -1188,17 +1189,17 @@ class TBlockCrossJoinCoreWraper: public TMutableComputationNode<TBlockCrossJoinC
 public:
     TBlockCrossJoinCoreWraper(
         TComputationMutables& mutables,
-        const TVector<TType*>&& resultItemTypes,
-        const TVector<TType*>&& leftItemTypes,
-        const TVector<ui32>&& leftIOMap,
-        const TVector<ui32>&& rightIOMap,
+        TVector<TType*>&& resultItemTypes,
+        TVector<TType*>&& leftItemTypes,
+        TVector<ui32>&& leftIOMap,
+        TVector<ui32>&& rightIOMap,
         IComputationNode* leftStream,
         IComputationNode* rightBlockStorage)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , ResultItemTypes_(resultItemTypes)
-        , LeftItemTypes_(leftItemTypes)
-        , LeftIOMap_(leftIOMap)
-        , RightIOMap_(rightIOMap)
+        , ResultItemTypes_(std::move(resultItemTypes))
+        , LeftItemTypes_(std::move(leftItemTypes))
+        , LeftIOMap_(std::move(leftIOMap))
+        , RightIOMap_(std::move(rightIOMap))
         , LeftStream_(std::move(leftStream))
         , RightBlockStorage_(std::move(rightBlockStorage))
         , KeyTupleCache_(mutables)
@@ -1308,6 +1309,7 @@ private:
             return NUdf::EFetchStatus::Ok;
         }
 
+    private:
         NUdf::TUnboxedValue JoinState_;
 
         const TVector<ui32>& RightIOMap_;
@@ -1418,7 +1420,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
                 "Expected Multi as a resulting item type");
     const auto joinComponents = GetWideComponents(joinStreamType);
     MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
-    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
+    TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
@@ -1427,7 +1429,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
                 "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
     MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least one column");
-    const TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
+    TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
 
     const auto joinKindNode = callable.GetInput(3);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();

@@ -72,6 +72,11 @@ EExecutionStatus TTruncateUnit::Execute(
 
     txc.DB.Truncate(localTid);
 
+    // Truncate drops every row version, so nothing below this operation can be read any more.
+    // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently
+    // returning no rows.
+    DataShard.GetSnapshotManager().AdvanceWatermark(txc.DB, DataShard.GetMvccVersion(op.Get()));
+
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
 
     // We must set these flags here for the following reasons:
@@ -93,7 +98,7 @@ EExecutionStatus TTruncateUnit::Execute(
     userTable->StatsNeedUpdate = true;
 
     // Passing locksDb invalidates every lock of this shard, like any other schema change does.
-    DataShard.AddUserTable(pathId, userTable, &locksDb);
+    DataShard.ReplaceUserTable(pathId, userTable, locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);
     }

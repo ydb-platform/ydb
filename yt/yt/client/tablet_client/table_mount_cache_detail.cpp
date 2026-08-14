@@ -225,9 +225,9 @@ TFuture<TTableMountInfoPtr> TTableMountCacheBase::GetTableInfo(const NYPath::TYP
         // COMPAT(babenko): replace with TransientFailure error code.
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::Unavailable,
             "Mount info is unavailable, please try again")
-            << TError(NTabletClient::EErrorCode::TableMountInfoNotReady,
-                "Table mount info is not ready, but has already been requested")
-                << TErrorAttribute("path", path);
+            .With(TError(NTabletClient::EErrorCode::TableMountInfoNotReady,
+                "Table mount info is not ready, but has already been requested"))
+            .With("path", path);
     }
 
     return future;

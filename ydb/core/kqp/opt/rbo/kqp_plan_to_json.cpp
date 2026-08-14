@@ -532,7 +532,12 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
     Y_UNUSED(queryStats);
     Y_UNUSED(poolId);
-    auto txPlan = txPlans.at(txPlans.size()-1);
+
+    if (txPlans.empty()) {
+        return "";
+    }
+
+    auto txPlan = txPlans.back();
     NJson::TJsonValue txPlanJson;
     NJson::ReadJsonTree(txPlan, &txPlanJson, true);
 

@@ -44,7 +44,7 @@ std::unique_ptr<TFile> TryOpenFile(const std::string& path)
         }
         THROW_ERROR_EXCEPTION("Error opening %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     // TODO(babenko): migrate to std::string
     return std::make_unique<TFile>(handle.Release(), TString(path));

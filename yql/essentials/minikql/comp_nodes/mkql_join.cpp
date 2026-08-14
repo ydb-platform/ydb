@@ -13,6 +13,7 @@
 #include <util/system/fstat.h>
 #include <util/generic/ylimits.h>
 
+#include <array>
 #include <utility>
 
 namespace NKikimr::NMiniKQL {
@@ -132,7 +133,7 @@ public:
             } else {
                 if (Count_ == DEFAULT_STACK_ITEMS) {
                     Y_DEBUG_ABORT_UNLESS(Heap_.empty());
-                    Heap_.assign(Stack_, Stack_ + DEFAULT_STACK_ITEMS);
+                    Heap_.assign(Stack_.begin(), Stack_.end());
                 }
 
                 Heap_.push_back(std::move(value));
@@ -313,7 +314,7 @@ private:
     TValuePacker& ItemPacker_;
     ui64 Count_;
     NUdf::TUnboxedValue ReadValue_;
-    NUdf::TUnboxedValue Stack_[DEFAULT_STACK_ITEMS];
+    std::array<NUdf::TUnboxedValue, DEFAULT_STACK_ITEMS> Stack_;
     TUnboxedValueVector Heap_;
 #ifndef NDEBUG
     bool IsSealed_;
@@ -392,8 +393,8 @@ public:
                     EatInput_ = false;
                 } else {
                     if (!KeyHasNulls_ && (Kind == EJoinKind::Exclusion || Kind == EJoinKind::Full)) {
-                        for (ui32 i = 0U; i < Self_->KeyColumns_.size(); ++i) {
-                            if (!value.GetElement(Self_->KeyColumns_[i])) {
+                        for (const auto& keyColumn : Self_->KeyColumns_) {
+                            if (!value.GetElement(keyColumn)) {
                                 KeyHasNulls_ = true;
                                 break;
                             }
@@ -807,8 +808,8 @@ public:
             , Fetcher_(std::move(fetcher))
             , TempValuesPin_(Self_->GetTempValuesBox(ctx))
             , Values_(Self_->GetValues(ctx))
-            , CrossValues1_(Self_->GetCrossValues(ctx, true))
-            , CrossValues2_(Self_->GetCrossValues(ctx, false))
+            , CrossValues1_(Self_->GetCrossValues(ctx, /*one=*/true))
+            , CrossValues2_(Self_->GetCrossValues(ctx, /*one=*/false))
             , List1_(Self_->GetLogger(ctx), Self_->GetLogComponent(ctx), Self_->PackerLeft_.RefMutableObject(ctx, false, Self_->InputLeftType_), IsAnyJoinLeft(Self_->AnyJoinSettings_), Self_->InputLeftType_->GetElementsCount())
             , List2_(Self_->GetLogger(ctx), Self_->GetLogComponent(ctx), Self_->PackerRight_.RefMutableObject(ctx, false, Self_->InputRightType_), IsAnyJoinRight(Self_->AnyJoinSettings_), Self_->InputRightType_->GetElementsCount())
             , Fields_(Self_->GetFields(ctx))
@@ -827,7 +828,7 @@ public:
             InitialUsage_ = std::nullopt;
         }
 
-        virtual ~TValue() {
+        ~TValue() override {
             std::fill(Values_.begin(), Values_.end(), NUdf::TUnboxedValuePod());
             std::fill(CrossValues1_.begin(), CrossValues1_.end(), NUdf::TUnboxedValuePod());
             std::fill(CrossValues2_.begin(), CrossValues2_.end(), NUdf::TUnboxedValuePod());
@@ -857,8 +858,8 @@ public:
                 }
 
                 if (!KeyHasNulls_ && (Kind == EJoinKind::Exclusion || Kind == EJoinKind::Full)) {
-                    for (ui32 i = 0U; i < Self_->KeyColumns_.size(); ++i) {
-                        if (!*Fields_[Self_->KeyColumns_[i]]) {
+                    for (const auto& keyColumn : Self_->KeyColumns_) {
+                        if (!*Fields_[keyColumn]) {
                             KeyHasNulls_ = true;
                             break;
                         }
@@ -1221,7 +1222,7 @@ public:
         return static_cast<TValue*>(state.AsBoxed().Get())->FetchValues(ctx, output);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1412,7 +1413,7 @@ private:
         const auto arrayType = ArrayType::get(pointerType, InputRepresentations_.size());
         const auto contextType = GetCompContextType(context);
         const auto resultType = Type::getInt32Ty(context);
-        const auto funcType = FunctionType::get(resultType, {PointerType::getUnqual(contextType), PointerType::getUnqual(arrayType)}, false);
+        const auto funcType = FunctionType::get(resultType, {PointerType::getUnqual(contextType), PointerType::getUnqual(arrayType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1548,7 +1549,7 @@ public:
             } else {
                 if (Count_ == DEFAULT_STACK_ITEMS) {
                     Y_DEBUG_ABORT_UNLESS(Heap_.empty());
-                    Heap_.assign(Stack_, Stack_ + DEFAULT_STACK_ITEMS);
+                    Heap_.assign(Stack_.begin(), Stack_.end());
                 }
 
                 Heap_.push_back(std::move(value));
@@ -1563,9 +1564,9 @@ public:
         IsSealed_ = true;
 #endif
         if (FileState_) {
-            FileState_->Output_->Finish();
+            FileState_->Output->Finish();
             Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill finished at " << Count_ << " items");
-            FileState_->Output_.reset();
+            FileState_->Output.reset();
             Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "File size: " << GetFileLength(FileState_->File.GetName()) << ", expected: " << FileState_->TotalSize);
 
             MKQL_INC_STAT(Ctx_->Stats, Join_Spill_Count);
@@ -1651,34 +1652,34 @@ private:
 
     void OpenWrite() {
         Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count_ << " items to " << FileState_->File.GetName());
-        FileState_->Output_.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
-        FileState_->Output_->SetFlushPropagateMode(false);
-        FileState_->Output_->SetFinishPropagateMode(false);
+        FileState_->Output.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
+        FileState_->Output->SetFlushPropagateMode(false);
+        FileState_->Output->SetFinishPropagateMode(false);
     }
 
     void Write(NUdf::TUnboxedValue&& value) {
-        Y_DEBUG_ABORT_UNLESS(FileState_->Output_);
+        Y_DEBUG_ABORT_UNLESS(FileState_->Output);
         TStringBuf serialized = ItemPacker_.Pack(value);
         ui32 length = serialized.size();
-        FileState_->Output_->Write(&length, sizeof(length));
-        FileState_->Output_->Write(serialized.data(), length);
+        FileState_->Output->Write(&length, sizeof(length));
+        FileState_->Output->Write(serialized.data(), length);
         FileState_->TotalSize += sizeof(length);
         FileState_->TotalSize += length;
     }
 
     void OpenRead() {
-        FileState_->Input_.reset();
-        FileState_->Input_.reset(new TFileInput(FileState_->File.GetName()));
+        FileState_->Input.reset();
+        FileState_->Input.reset(new TFileInput(FileState_->File.GetName()));
     }
 
     NUdf::TUnboxedValue Read() {
         ui32 length = 0;
-        auto wasRead = FileState_->Input_->Load(&length, sizeof(length));
+        auto wasRead = FileState_->Input->Load(&length, sizeof(length));
         Y_ABORT_UNLESS(wasRead == sizeof(length));
-        FileState_->Buffer_.Reserve(length);
-        wasRead = FileState_->Input_->Load((void*)FileState_->Buffer_.Data(), length);
+        FileState_->Buffer.Reserve(length);
+        wasRead = FileState_->Input->Load((void*)FileState_->Buffer.Data(), length);
         Y_ABORT_UNLESS(wasRead == length);
-        return ItemPacker_.Unpack(TStringBuf(FileState_->Buffer_.Data(), length), Ctx_->HolderFactory);
+        return ItemPacker_.Unpack(TStringBuf(FileState_->Buffer.Data(), length), Ctx_->HolderFactory);
     }
 
 private:
@@ -1687,7 +1688,7 @@ private:
     TValuePacker& ItemPacker_;
     TComputationContext* Ctx_;
     ui64 Count_;
-    NUdf::TUnboxedValue Stack_[DEFAULT_STACK_ITEMS];
+    std::array<NUdf::TUnboxedValue, DEFAULT_STACK_ITEMS> Stack_;
     TUnboxedValueVector Heap_;
 #ifndef NDEBUG
     bool IsSealed_;
@@ -1703,9 +1704,9 @@ private:
 
         TTempFileHandle File;
         ui64 TotalSize;
-        std::unique_ptr<TFileInput> Input_;
-        std::unique_ptr<TFixedBufferFileOutput> Output_;
-        TBuffer Buffer_;
+        std::unique_ptr<TFileInput> Input;
+        std::unique_ptr<TFixedBufferFileOutput> Output;
+        TBuffer Buffer;
     };
 
     std::unique_ptr<TFileState> FileState_;
@@ -1770,8 +1771,8 @@ public:
                     EatInput_ = false;
                 } else {
                     if (!KeyHasNulls_ && (Kind == EJoinKind::Exclusion || Kind == EJoinKind::Full)) {
-                        for (ui32 i = 0U; i < Self_->KeyColumns_.size(); ++i) {
-                            if (!value.GetElement(Self_->KeyColumns_[i])) {
+                        for (const auto& keyColumn : Self_->KeyColumns_) {
+                            if (!value.GetElement(keyColumn)) {
                                 KeyHasNulls_ = true;
                                 break;
                             }

@@ -1,4 +1,4 @@
 RECURSE(
-    kqp_yt_file
-    kqp_yt_import
+    kqp_yt
+    yt_integration
 )

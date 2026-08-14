@@ -79,7 +79,7 @@ public:
         : TBase(memInfo)
         , States_(0, hash, equal)
     {
-        States_.max_load_factor(1.2f);
+        States_.max_load_factor(1.2F);
     }
 
     NUdf::TUnboxedValuePod& At(const NUdf::TUnboxedValuePod key) {
@@ -131,7 +131,7 @@ private:
     llvm::IntegerType* StatusType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
@@ -143,11 +143,11 @@ public:
     }
 
     llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetMap() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
     explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
@@ -159,22 +159,57 @@ public:
 };
 #endif
 
+template <typename TDerived, bool IsPairState>
+class TCombineFlowCodegeneratorBase;
+
+template <typename TDerived>
+class TCombineFlowCodegeneratorBase<TDerived, false>
+    : public TStatefulFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatefulFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TCombineFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind, EValueRepresentation::Any)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, statePtr, block);
+    }
+#endif
+};
+
+template <typename TDerived>
+class TCombineFlowCodegeneratorBase<TDerived, true>
+    : public TPairStateFlowCodegeneratorNode<TDerived> {
+    using TBase = TPairStateFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TCombineFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind, EValueRepresentation::Any)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, Value* currentPtr, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, statePtr, currentPtr, block);
+    }
+#endif
+};
+
 template <bool IsMultiRowState, bool StateContainerOpt, bool TrackRss>
-class TCombineCoreFlowWrapper: public std::conditional_t<IsMultiRowState,
-                                                         TPairStateFlowCodegeneratorNode<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>>,
-                                                         TStatefulFlowCodegeneratorNode<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>>>
+class TCombineCoreFlowWrapper: public TCombineFlowCodegeneratorBase<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>, IsMultiRowState>
 #ifndef MKQL_DISABLE_CODEGEN
     ,
                                public ICodegeneratorRootNode
 #endif
 {
-    using TBaseComputation = std::conditional_t<IsMultiRowState,
-                                                TPairStateFlowCodegeneratorNode<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>>,
-                                                TStatefulFlowCodegeneratorNode<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>>>;
+    using TBaseComputation = TCombineFlowCodegeneratorBase<TCombineCoreFlowWrapper<IsMultiRowState, StateContainerOpt, TrackRss>, IsMultiRowState>;
 
 public:
     TCombineCoreFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, const TCombineCoreNodes& nodes, TKeyTypes&& keyTypes, bool isTuple, ui64 memLimit)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Any)
+        : TBaseComputation(mutables, flow, kind)
         , Flow_(flow)
         , Nodes_(nodes)
         , KeyTypes_(std::move(keyTypes))
@@ -255,7 +290,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Nodes_.ItemNode);
@@ -426,7 +461,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, Value* currentPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* statePtr, Value* currentPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto statusType = Type::getInt32Ty(context);
@@ -482,7 +517,7 @@ public:
 
             block = skip;
 
-            const auto list = DoGenerateGetValue(ctx, statePtr, block);
+            const auto list = GenerateGetValue(ctx, statePtr, block);
             result->addIncoming(list, block);
             BranchInst::Create(over, good, IsSpecial(list, block, context), block);
 
@@ -504,11 +539,11 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(TValueHasher(KeyTypes_, IsTuple_, nullptr), TValueEqual(KeyTypes_, IsTuple_, nullptr));
+        state = ctx.HolderFactory.Create<TState>(TValueHasher(KeyTypes_, IsTuple_, /*hash=*/nullptr), TValueEqual(KeyTypes_, IsTuple_, /*equate=*/nullptr));
 #else
         state = ctx.HolderFactory.Create<TState>(
-            ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TValueHasher(KeyTypes_, IsTuple_, nullptr)),
-            ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TValueEqual(KeyTypes_, IsTuple_, nullptr)));
+            ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TValueHasher(KeyTypes_, IsTuple_, /*hash=*/nullptr)),
+            ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TValueEqual(KeyTypes_, IsTuple_, /*equate=*/nullptr)));
 #endif
     }
 
@@ -651,12 +686,12 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Combine_) {
             return ctx.HolderFactory.Create<TCodegenValue>(Combine_, &ctx, Stream_->GetValue(ctx),
-                                                           ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TValueHasher(KeyTypes_, IsTuple_, nullptr)),
-                                                           ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TValueEqual(KeyTypes_, IsTuple_, nullptr)));
+                                                           ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TValueHasher(KeyTypes_, IsTuple_, /*hash=*/nullptr)),
+                                                           ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TValueEqual(KeyTypes_, IsTuple_, /*equate=*/nullptr)));
         }
 #endif
         return ctx.HolderFactory.Create<TStreamValue>(Stream_->GetValue(ctx), Nodes_, MemLimit_, ctx,
-                                                      TValueHasher(KeyTypes_, IsTuple_, nullptr), TValueEqual(KeyTypes_, IsTuple_, nullptr));
+                                                      TValueHasher(KeyTypes_, IsTuple_, /*hash=*/nullptr), TValueEqual(KeyTypes_, IsTuple_, /*equate=*/nullptr));
     }
 
 private:
@@ -720,7 +755,7 @@ private:
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = IsMultiRowState ? FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType, ptrValueType}, false) : FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, false);
+        const auto funcType = IsMultiRowState ? FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType, ptrValueType}, /*isVarArg=*/false) : FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -955,13 +990,13 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
     const auto stateNode = LocateExternalNode(ctx.NodeLocator, callable, 5);
 
     const TCombineCoreNodes nodes = {
-        itemNode,
-        keyNode,
-        stateNode,
-        keyExtractorResultNode,
-        initResultNode,
-        updateResultNode,
-        finishResultNode};
+        .ItemNode = itemNode,
+        .KeyNode = keyNode,
+        .StateNode = stateNode,
+        .KeyResultNode = keyExtractorResultNode,
+        .InitResultNode = initResultNode,
+        .UpdateResultNode = updateResultNode,
+        .FinishResultNode = finishResultNode};
 
     if (type->IsFlow()) {
         const auto kind = GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType());

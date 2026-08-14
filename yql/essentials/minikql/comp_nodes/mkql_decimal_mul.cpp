@@ -46,14 +46,14 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
 
         const bool useMulAddDiv = Divider_ > 1;
         const auto name = useMulAddDiv ? "DecimalMulAndDivNormalDivider" : "DecimalMul";
-        const auto fnType = useMulAddDiv ? FunctionType::get(valType, {valType, valType, valType}, false) : FunctionType::get(valType, {valType, valType}, false);
+        const auto fnType = useMulAddDiv ? FunctionType::get(valType, {valType, valType, valType}, /*isVarArg=*/false) : FunctionType::get(valType, {valType, valType}, /*isVarArg=*/false);
 
         ctx.Codegen.AddGlobalMapping(name, useMulAddDiv ? reinterpret_cast<const void*>(&DecimalMulAndDivNormalDivider) : reinterpret_cast<const void*>(&DecimalMul));
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -156,7 +156,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -164,7 +164,7 @@ public:
         const auto name = "DecimalMul";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMul));
         const auto fnType =
-            FunctionType::get(valType, {valType, valType}, false);
+            FunctionType::get(valType, {valType, valType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left_, ctx, block);

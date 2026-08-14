@@ -49,6 +49,8 @@ namespace NKikimr::NBsController {
         const bool DonorMode;
         const bool PreferLessOccupiedRack;
         const bool WithAttentionToReplication;
+        const bool UseSelfHealLocalPolicy;
+        const bool TryToRelocateBrokenDisksLocallyFirst;
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
@@ -57,7 +59,8 @@ namespace NKikimr::NBsController {
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
                 std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
                 bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode, bool preferLessOccupiedRack,
-                bool withAttentionToReplication)
+                bool withAttentionToReplication,
+                bool useSelfHealLocalPolicy, bool tryToRelocateBrokenDisksLocallyFirst)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -69,6 +72,8 @@ namespace NKikimr::NBsController {
             , DonorMode(donorMode)
             , PreferLessOccupiedRack(preferLessOccupiedRack)
             , WithAttentionToReplication(withAttentionToReplication)
+            , UseSelfHealLocalPolicy(useSelfHealLocalPolicy)
+            , TryToRelocateBrokenDisksLocallyFirst(tryToRelocateBrokenDisksLocallyFirst)
         {}
 
         void Bootstrap(const TActorId& parent) {
@@ -185,6 +190,10 @@ namespace NKikimr::NBsController {
                 cmd->SetSettleOnlyOnOperationalDisks(true);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
                 cmd->SetFromSelfHeal(true);
+                cmd->SetPreferLessOccupiedRack(PreferLessOccupiedRack);
+                cmd->SetWithAttentionToReplication(WithAttentionToReplication);
+                cmd->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+                cmd->SetTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
                 return;
             }
@@ -328,6 +337,8 @@ namespace NKikimr::NBsController {
         bool GroupLayoutSanitizerEnabled;
         bool AllowMultipleRealmsOccupation;
         bool DonorMode;
+        bool UseSelfHealLocalPolicy;
+        bool TryToRelocateBrokenDisksLocallyFirst;
         THostRecordMap HostRecords;
         std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
         std::shared_ptr<std::atomic_uint64_t> GroupsWithInvalidLayoutCounter;
@@ -350,12 +361,15 @@ namespace NKikimr::NBsController {
                 bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
                 std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
                 std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter,
-                const TSelfHealSettings& selfHealSettings)
+                const TSelfHealSettings& selfHealSettings,
+                bool useSelfHealLocalPolicy, bool tryToRelocateBrokenDisksLocallyFirst)
             : TabletId(tabletId)
             , UnreassignableGroupsCount(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
             , AllowMultipleRealmsOccupation(allowMultipleRealmsOccupation)
             , DonorMode(donorMode)
+            , UseSelfHealLocalPolicy(useSelfHealLocalPolicy)
+            , TryToRelocateBrokenDisksLocallyFirst(tryToRelocateBrokenDisksLocallyFirst)
             , HostRecords(std::move(hostRecords))
             , EnableSelfHealWithDegraded(std::move(enableSelfHealWithDegraded))
             , GroupsWithInvalidLayoutCounter(std::move(groupsWithInvalidLayoutCounter))
@@ -386,6 +400,12 @@ namespace NKikimr::NBsController {
 
             if (const auto& setting = ev->Get()->DonorMode) {
                 DonorMode = *setting;
+            }
+            if (const auto& setting = ev->Get()->UseSelfHealLocalPolicy) {
+                UseSelfHealLocalPolicy = *setting;
+            }
+            if (const auto& setting = ev->Get()->TryToRelocateBrokenDisksLocallyFirst) {
+                TryToRelocateBrokenDisksLocallyFirst = *setting;
             }
             bool groupsDeleted = false;
             for (const auto& [groupId, data] : ev->Get()->GroupsToUpdate) {
@@ -766,7 +786,8 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(!ActiveReassignerActorId);
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
                     vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode,
-                    SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication));
+                    SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication,
+                    UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst));
         }
 
         void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
@@ -1045,7 +1066,8 @@ namespace NKikimr::NBsController {
     IActor *TBlobStorageController::CreateSelfHealActor() {
         Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords, GroupLayoutSanitizerEnabled,
-            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups, SelfHealSettings);
+            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups, SelfHealSettings,
+            UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {
@@ -1057,6 +1079,10 @@ namespace NKikimr::NBsController {
         }
         FillInSelfHealGroups(*ev, nullptr);
         ev->GroupLayoutSanitizerEnabled = GroupLayoutSanitizerEnabled;
+        ev->AllowMultipleRealmsOccupation = AllowMultipleRealmsOccupation;
+        ev->DonorMode = DonorMode;
+        ev->UseSelfHealLocalPolicy = UseSelfHealLocalPolicy;
+        ev->TryToRelocateBrokenDisksLocallyFirst = TryToRelocateBrokenDisksLocallyFirst;
         Send(SelfHealId, ev.Release());
     }
 

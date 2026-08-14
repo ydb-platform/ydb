@@ -6,10 +6,16 @@
 #include "access_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
+#include <ydb/library/ycloud/impl/util.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
+
+TAccessServiceSettings::TAccessServiceSettings(TString endpoint, TStringBuf userAgentHint) {
+    Endpoint = std::move(endpoint);
+    UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
+}
 
 class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::servicecontrol::v1::AccessService> {
     using TThis = TAccessServiceV1;

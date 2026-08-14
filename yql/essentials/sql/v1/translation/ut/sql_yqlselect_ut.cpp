@@ -1163,6 +1163,22 @@ Y_UNIT_TEST(NamedNodeSubquerySource) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
 }
 
+Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        $source = select * from as_table([<|key1:1, key2:2|>]);
+        SELECT * FROM $source;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
 Y_UNIT_TEST(NamedNodeSubqueryReuse) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

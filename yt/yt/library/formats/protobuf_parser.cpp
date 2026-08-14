@@ -144,7 +144,7 @@ private:
         if (Current_ + length > End_) {
             THROW_ERROR_EXCEPTION("Broken protobuf message: field with length %v is out of message bounds",
                 length)
-                << GetContextErrorAttributes();
+                .With(GetContextErrorAttributes());
         }
     }
 
@@ -373,7 +373,7 @@ private:
                         GetPathString(),
                         childDescription.WireTag,
                         wireTag)
-                        << TErrorAttribute("field_number", fieldNumber);
+                        .With("field_number", fieldNumber);
                 }
 
                 int embeddedChildIndex = childIndex;
@@ -394,8 +394,8 @@ private:
             }
         } catch (const std::exception& exception) {
             THROW_ERROR_EXCEPTION(exception)
-                << TErrorAttribute("table_index", TableIndex_)
-                << rowParser.GetContextErrorAttributes();
+                .With("table_index", TableIndex_)
+                .With(rowParser.GetContextErrorAttributes());
         }
     }
 
@@ -428,7 +428,7 @@ private:
                 THROW_ERROR_EXCEPTION("Error parsing protobuf: found %v entries for non-repeated field %Qv",
                     std::distance(begin, end),
                     GetPathString())
-                    << TErrorAttribute("table_index", TableIndex_);
+                    .With("table_index", TableIndex_);
             }
             OutputValue(begin->Value, childDescription, depth);
         }
@@ -474,7 +474,7 @@ private:
                         "Error parsing protobuf: multiple entries for oneof field %Qv; the second one is %Qv",
                         GetPathString(/* offset */ 1),
                         GetPathString())
-                        << TErrorAttribute("table_index", TableIndex_);
+                        .With("table_index", TableIndex_);
                 }
                 skipElements(structFieldIndex - lastOutputStructFieldIndex - 1);
                 if (inRoot) {
@@ -632,7 +632,7 @@ private:
                 case EProtobufType::Oneof:
                     THROW_ERROR_EXCEPTION("Oneof inside oneof is not supported in protobuf format; offending field %Qv",
                         GetPathString())
-                        << TErrorAttribute("table_index", TableIndex_);
+                        .With("table_index", TableIndex_);
                 case EProtobufType::EmbeddedMessage:
                     Y_ABORT();
             }

@@ -88,8 +88,8 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->RefreshTime && *config->RefreshTime && *config->RefreshTime > config->ExpireAfterSuccessfulUpdateTime) {
             THROW_ERROR_EXCEPTION("\"refresh_time\" must be less than \"expire_after_successful_update_time\"")
-                << TErrorAttribute("refresh_time", config->RefreshTime)
-                << TErrorAttribute("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
+                .With("refresh_time", config->RefreshTime)
+                .With("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
         }
     });
 }

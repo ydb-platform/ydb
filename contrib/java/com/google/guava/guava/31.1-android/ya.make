@@ -17,4 +17,6 @@ JAR_RESOURCE(3096861724)
 
 SRC_RESOURCE(3096861737)
 
+ORIGINAL_SOURCE(https://github.com/google/guava)
+
 END()

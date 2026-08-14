@@ -739,11 +739,12 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        system->Register(
-            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
-            TMailboxType::ReadAsFilled,
-            appData.UserPoolId
-        );
+        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
+                appData.TracingConfigurator,
+                appData.UserFacingTracingConfigurator,
+                *Settings->AppConfig)) {
+            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -1279,7 +1280,7 @@ namespace Tests {
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), appData.Counters);
+            auto* actor = NConveyor::CreateService<NConveyor::TScanConveyorPolicy>(NConveyor::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

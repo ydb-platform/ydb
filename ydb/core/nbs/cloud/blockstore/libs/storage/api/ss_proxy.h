@@ -20,8 +20,8 @@ namespace NYdb::NBS::NStorage {
     xxx(ModifyScheme, __VA_ARGS__)             \
     xxx(DescribeScheme, __VA_ARGS__)           \
     xxx(WaitSchemeTx, __VA_ARGS__)             \
-                                               \
-    xxx(BackupPathDescriptions, __VA_ARGS__)
+    xxx(BackupPathDescriptions, __VA_ARGS__)   \
+    xxx(DestroyVolume, __VA_ARGS__)
 
 // BLOCKSTORE_SS_PROXY_REQUESTS
 
@@ -53,6 +53,23 @@ struct TEvSSProxy
             : Status(status)
             , Reason(std::move(reason))
         {}
+    };
+
+    //
+    // DestroyVolume
+    //
+
+    struct TDestroyVolumeRequest
+    {
+        const TString DiskId;
+
+        explicit TDestroyVolumeRequest(TString diskId)
+            : DiskId(std::move(diskId))
+        {}
+    };
+
+    struct TDestroyVolumeResponse
+    {
     };
 
     //
@@ -254,6 +271,9 @@ struct TEvSSProxy
 
         EvBackupPathDescriptionsRequest = EvBegin + 13,
         EvBackupPathDescriptionsResponse = EvBegin + 14,
+
+        EvDestroyVolumeRequest = EvBegin + 15,
+        EvDestroyVolumeResponse = EvBegin + 16,
 
         EvEnd
     };

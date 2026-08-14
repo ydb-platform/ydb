@@ -128,7 +128,7 @@ table_service_config:
 
 **Type:** `string`  
 **Default:** `""` (temporary directory)  
-**Description:** File directory for storing spilling files. If the value is empty, the system temporary directory is used (usually `/tmp`). The directory must already exist, {{ ydb-short-name }} does not create it, see [Requirements for the root directory](#root-requirements).
+**Description:** File directory for storing spilling files. The directory must already exist and be readable and writable by the `ydbd` process: {{ ydb-short-name }} does not create it, see [Requirements for the root directory](#root-requirements). If the value is empty, the OS temporary directory is used, see [Default directory](#default-root).
 
 For each `ydbd` process, a separate directory is created inside `root`:
 
@@ -169,9 +169,20 @@ All OS users that run database nodes need read and write access to `root`: a nod
 
 {% note warning %}
 
-If spilling is enabled but the `root` directory is missing or not writable, the database node does not start. Make sure that `root` exists and is accessible on all database nodes before enabling spilling.
+If spilling is enabled but the `root` directory is missing or not readable and writable, the database node does not start. Make sure that `root` exists and is accessible on all database nodes before enabling spilling.
 
 {% endnote %}
+
+##### Default directory {#default-root}
+
+If `root` is not set, the OS temporary directory of the `ydbd` process that runs the node is used:
+
+- if the `TMPDIR` environment variable is set for the process, its value is used
+- otherwise, `/tmp` is used
+
+The requirements described above apply to this directory as well, but `/tmp` usually already exists with mode `1777` and needs no extra setup.
+
+Nevertheless, it is recommended to set `root` explicitly, to a dedicated directory and preferably on a separate disk.
 
 ##### Directory cleanup at startup {#cleanup}
 

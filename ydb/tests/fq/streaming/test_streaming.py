@@ -2148,6 +2148,7 @@ FROM `{table_name}`"""
             DROP STREAMING QUERY `{query_name}`;
         """)
 
+    @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_discovery": False}], indirect=["kikimr"])
     def test_streaming_query_issues_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"test_issues_after_restart_{local_topics!s:.1}", local_topics, entity_name)
@@ -2247,11 +2248,6 @@ FROM `{table_name}`"""
         entity_name: Callable[[str], str],
         local_topics: bool,
     ) -> None:
-        """
-        Start a query on a topic with 1 partition, stop the query, increase partition
-        count to 10, restart the query WITHOUT recompilation (no FORCE / no SQL change),
-        write data to random partitions, verify all messages appear in the output.
-        """
         inp, out, endpoint = self.get_io_names(
             kikimr,
             f"test_restart_after_part_inc{local_topics!s:.1}",
@@ -2281,13 +2277,11 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
         time.sleep(0.5)
 
-        # Increase partition count from 1 to 20 via the Topic API (not SQL, to avoid PQ gateway session issues)
         logger.debug(f"altering topic {self.input_topic} partition count to 20")
         self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
             self.input_topic, set_min_active_partitions=20
         )
 
-        # Restart WITHOUT recompilation: no FORCE flag, SQL is unchanged
         logger.debug(f"restarting query {name} without recompilation")
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
         self.wait_completed_checkpoints(kikimr, path, timeout=30)

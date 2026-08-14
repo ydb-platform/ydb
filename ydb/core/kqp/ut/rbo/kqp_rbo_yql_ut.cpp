@@ -1481,6 +1481,43 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
     }
 
+    Y_UNIT_TEST(ExpressionInputIUBufferSupportsAllResolutionModes) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit tupleIU("tuple");
+        const TInfoUnit dependentIU("dependent");
+        auto expression = MakeColumnAccess(binding, pos, &exprCtx, &planProps);
+
+        planProps.Subplans.Add(
+            binding,
+            MakeIntrusive<TOpEmptySource>(pos),
+            ESubplanType::EXPR,
+            {tupleIU});
+        planProps.Subplans.AddDependentIU(binding, dependentIU);
+
+        const auto neither = expression.GetInputIUs(false, false);
+        UNIT_ASSERT(neither.empty());
+
+        const auto contextOnly = expression.GetInputIUs(true, false);
+        UNIT_ASSERT_VALUES_EQUAL(contextOnly.size(), 1);
+        UNIT_ASSERT(contextOnly[0] == binding);
+        UNIT_ASSERT(contextOnly[0].IsSubplanContext());
+        UNIT_ASSERT(contextOnly[0].GetDependencies() == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto dependenciesOnly = expression.GetInputIUs(false, true);
+        UNIT_ASSERT(dependenciesOnly == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto both = expression.GetInputIUs(true, true);
+        UNIT_ASSERT(both == (TVector<TInfoUnit>{binding, tupleIU, dependentIU}));
+        UNIT_ASSERT(both[0].IsSubplanContext());
+        UNIT_ASSERT(both[0].GetDependencies() == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto refreshed = expression.GetInputIUs(false, false);
+        UNIT_ASSERT(refreshed.empty());
+    }
+
     Y_UNIT_TEST(SubplanTraversalFollowsRegistryMutations) {
         NYql::TExprContext exprCtx;
         TPlanProps expressionProps;

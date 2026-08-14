@@ -66,8 +66,9 @@ class TExpression {
     // Return all column references used in this expression
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
     // If the result list of column references is not empty and plan properties are not set in the expression,
-    // an exception will be thrown. The returned buffer is refreshed by the next
-    // call with the same flags; do not retain its elements or iterators across calls.
+    // an exception will be thrown. A subsequent GetInputIUs() call on the same
+    // TExpression may refresh the returned buffer; do not retain references,
+    // pointers, or iterators into it across calls.
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
     // Return Member names without classifying them against the current subplan registry.
@@ -105,9 +106,9 @@ class TExpression {
 
     mutable TExprNode::TPtr RawInputIUsCacheKey;
     mutable std::optional<TVector<TInfoUnit>> RawInputIUs;
-    // Reusable buffers. Each call refreshes the selected buffer against the
+    // Reusable scratch buffer. Every resolving call refreshes it against the
     // current subplan registry, so registry mutations cannot stale the result.
-    mutable std::optional<TVector<TInfoUnit>> ResolvedInputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+    mutable TVector<TInfoUnit> ResolvedInputIUs;
 
 };
 

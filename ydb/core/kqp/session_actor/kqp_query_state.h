@@ -211,6 +211,7 @@ public:
     TString ObfuscatedQueryText;
     TInstant CompileWallStart;
     TInstant CompileWallEnd;
+    Ydb::StatusIds::StatusCode CompileStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     std::shared_ptr<const TUserFacingCompileTrace> UserFacingCompileSpans;
     std::optional<TUserFacingCompileActorSpan> UserFacingCompileActorSpan;
     ETableReadType MaxReadType = ETableReadType::Other;

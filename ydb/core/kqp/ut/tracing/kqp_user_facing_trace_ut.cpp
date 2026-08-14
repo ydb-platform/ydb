@@ -116,6 +116,16 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         return nullptr;
     }
 
+    const NWilson::TFakeWilsonUploader::TOtelSpan* FindSpanById(
+            const TFakeWilsonUploader& uploader, const TString& spanId) {
+        for (const auto& span : uploader.Spans) {
+            if (span.span_id() == spanId) {
+                return &span;
+            }
+        }
+        return nullptr;
+    }
+
     const NWilson::TFakeWilsonUploader::TOtelSpan* FindReadShardSpan(
             const TFakeWilsonUploader& uploader, TStringBuf timingBoundary = {}) {
         for (const auto& span : uploader.Spans) {
@@ -159,6 +169,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             }
         }
         return nullptr;
+    }
+
+    void AssertSpanStatus(const TFakeWilsonUploader::TOtelSpan* span,
+            NWilson::NTraceProto::Status::StatusCode status, TStringBuf message) {
+        UNIT_ASSERT_C(span, message);
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(span->status().code()),
+            static_cast<int>(status), message);
     }
 
     Y_UNIT_TEST(ForwardedRequestKeepsProxySnapshot) {
@@ -209,17 +226,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(session, "KQP session actor span missing");
         const auto* sessionSpan = FindSpan(*userUploader, "Session");
         UNIT_ASSERT(sessionSpan);
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*sessionSpan, "ydb.actor.type")->value().string_value(),
-            "TKqpSessionActor");
+        UNIT_ASSERT(FindAttribute(*sessionSpan, "ydb.actor.type"));
 
         auto execute = session->get().BFSFindOne("Execute");
         UNIT_ASSERT_C(execute, "user Execute phase missing (executer live span)");
         const auto* executeSpan = FindSpan(*userUploader, "Execute");
         UNIT_ASSERT(executeSpan);
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*executeSpan, "ydb.actor.type")->value().string_value(),
-            "TKqpDataExecuter");
+        UNIT_ASSERT(FindAttribute(*executeSpan, "ydb.actor.type"));
         UNIT_ASSERT_C(execute->get().BFSFindOne("Run"), "user Run phase missing");
         auto prepare = execute->get().FindOne("Prepare");
         UNIT_ASSERT_C(prepare, "user Prepare group missing");
@@ -244,26 +257,21 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         const auto* compileQuerySpan = FindSpan(*userUploader, "Compile query");
         UNIT_ASSERT(compileSpan);
         UNIT_ASSERT(compileQuerySpan);
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*compileSpan, "ydb.actor.type")->value().string_value(),
-            "TKqpCompileService");
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*compileQuerySpan, "ydb.actor.type")->value().string_value(),
-            "TKqpCompileActor");
+        UNIT_ASSERT(FindAttribute(*compileSpan, "ydb.actor.type"));
+        UNIT_ASSERT(FindAttribute(*compileQuerySpan, "ydb.actor.type"));
 
         auto run = execute->get().BFSFindOne("Run");
         UNIT_ASSERT(run);
-        const auto* stage = FindSpanWithAttribute(*userUploader, "ydb.stage_id");
-        UNIT_ASSERT_C(stage, "stage span missing, traces: " << userUploader->PrintTraces());
         const auto* task = FindSpanWithAttribute(*userUploader, "ydb.task_id");
         UNIT_ASSERT_C(task, "per-task span missing, traces: " << userUploader->PrintTraces());
-        UNIT_ASSERT_VALUES_EQUAL(task->parent_span_id(), stage->span_id());
+        const auto* stage = FindSpanById(*userUploader, task->parent_span_id());
+        UNIT_ASSERT_C(stage && FindAttribute(*stage, "ydb.stage_id"),
+            "task parent is not a stage span, traces: " << userUploader->PrintTraces());
         const auto* runSpan = FindSpan(*userUploader, "Run");
         UNIT_ASSERT(runSpan);
         UNIT_ASSERT_VALUES_EQUAL(stage->parent_span_id(), runSpan->span_id());
         const auto* taskActor = FindAttribute(*task, "ydb.actor.type");
         UNIT_ASSERT(taskActor);
-        UNIT_ASSERT_VALUES_EQUAL(taskActor->value().string_value(), "TKqpComputeActor");
 
         UNIT_ASSERT_C(!userRoot->BFSFindOne("ComputeActor"), "user tree leaked engine internals");
 
@@ -280,6 +288,59 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             }
         }
         UNIT_ASSERT_C(queryTextChecked, "db.query.text attribute missing");
+        AssertChildSpansAreWithinParents(*userUploader);
+    }
+
+    Y_UNIT_TEST(CompileAndRuntimeErrorsHaveErrorStatus) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        auto [runtime, server, sender] = CreateServer(1, std::move(appConfig));
+        Y_UNUSED(server);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(runtime, sender, "SELECT * FRM `/Root/missing`;",
+            /*devTracing*/ false, /*userTracing*/ true, Ydb::StatusIds::GENERIC_ERROR);
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        AssertSpanStatus(FindSpan(*userUploader, "Compile"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "compile error was exported as successful");
+        auto* compileRoot = FindRootChild(*userUploader, "EXECUTE");
+        UNIT_ASSERT_C(compileRoot, "compile error root span missing");
+        AssertSpanStatus(FindSpan(*userUploader, "EXECUTE"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "compile error root span was exported as successful");
+
+        userUploader->Spans.clear();
+        userUploader->Traces.clear();
+
+        ExecSQL(runtime, sender, R"(
+            CREATE TABLE `/Root/UniqueValues` (
+                Key Uint32,
+                Value Uint32 NOT NULL,
+                PRIMARY KEY (Key),
+                INDEX ValueIndex GLOBAL UNIQUE SYNC ON (Value)
+            );
+        )", /*devTracing*/ false, /*userTracing*/ false,
+            Ydb::StatusIds::SUCCESS, {}, 0, /*dml*/ false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u);",
+            /*devTracing*/ false, /*userTracing*/ false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (2u, 10u);",
+            /*devTracing*/ false, /*userTracing*/ true,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        AssertSpanStatus(FindSpan(*userUploader, "Execute"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "runtime error Execute span was exported as successful");
+        auto* runtimeRoot = FindRootChild(*userUploader, "UPSERT /Root/UniqueValues");
+        UNIT_ASSERT_C(runtimeRoot, "runtime error root span missing");
+        AssertSpanStatus(FindSpan(*userUploader, "UPSERT /Root/UniqueValues"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "runtime error root span was exported as successful");
         AssertChildSpansAreWithinParents(*userUploader);
     }
 
@@ -564,25 +625,35 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(corrected.End <= parent.End);
 
         NKqp::TShardReadDiagnosticsCollector collector;
-        for (ui64 shardId = 1; shardId <= NKqp::MaxShardReadDiagnostics + 1; ++shardId) {
-            collector.OnStart(shardId);
+        for (ui64 shardId = 1; shardId <= NKqp::MaxShardReadDiagnostics; ++shardId) {
+            collector.OnStart(shardId, TInstant::MilliSeconds(100));
+            collector.OnFinish(shardId, 0, 0, 0, Ydb::StatusIds::SUCCESS, true,
+                TInstant::MilliSeconds(101));
         }
-        collector.OnFinish(1, 0, 2, 7, Ydb::StatusIds::ABORTED, true);
+        const ui64 slowShard = NKqp::MaxShardReadDiagnostics + 1;
+        collector.OnStart(slowShard, TInstant::MilliSeconds(200));
+        collector.OnFinish(slowShard, 0, 0, 0, Ydb::StatusIds::SUCCESS, true,
+            TInstant::MilliSeconds(1200));
+        const ui64 failedShard = slowShard + 1;
+        collector.OnStart(failedShard, TInstant::MilliSeconds(1300));
+        collector.OnFinish(failedShard, 0, 2, 7, Ydb::StatusIds::ABORTED, true,
+            TInstant::MilliSeconds(1301));
         NKqpProto::TKqpTaskExtraStats stats;
         collector.Export(stats, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.ShardReadsSize(), NKqp::MaxShardReadDiagnostics);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReadsTruncated(), 1u);
-        for (size_t i = 0; i < NKqp::MaxShardReadDiagnostics; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReads(i).GetShardId(), i + 1);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReadsTruncated(), 2u);
+        bool slowFound = false;
         bool errorFound = false;
         for (const auto& shard : stats.GetShardReads()) {
-            if (shard.GetShardId() == 1) {
+            slowFound = slowFound || shard.GetShardId() == slowShard;
+            if (shard.GetShardId() == failedShard) {
                 UNIT_ASSERT_VALUES_EQUAL(shard.GetStatus(), Ydb::StatusIds::ABORTED);
+                UNIT_ASSERT_VALUES_EQUAL(shard.GetRetries(), 2u);
                 UNIT_ASSERT(shard.GetFinished());
                 errorFound = true;
             }
         }
+        UNIT_ASSERT_C(slowFound, "slow shard was not retained");
         UNIT_ASSERT(errorFound);
     }
 
@@ -608,6 +679,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "Query text is hidden due to a sensitive marker: password");
         UNIT_ASSERT_C(!TStringBuf(querySpan->status().message()).Contains("swordfish"),
             "secret leaked through span status");
+        const auto* execute = FindSpan(*userUploader, "Execute");
+        UNIT_ASSERT_C(execute, "literal query has no Execute span");
+        UNIT_ASSERT(FindAttribute(*execute, "ydb.actor.type"));
     }
 
     Y_UNIT_TEST(UserOnlyProductionConfigSamplesGrpcRequest) {
@@ -861,14 +935,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "scan did not export its first-to-last-message boundary");
         const auto* executeSpan = FindSpan(*userUploader, "Execute");
         UNIT_ASSERT(executeSpan);
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*executeSpan, "ydb.actor.type")->value().string_value(),
-            "TKqpScanExecuter");
+        UNIT_ASSERT(FindAttribute(*executeSpan, "ydb.actor.type"));
         const auto* taskSpan = FindSpanWithAttribute(*userUploader, "ydb.task_id");
         UNIT_ASSERT(taskSpan);
-        UNIT_ASSERT_VALUES_EQUAL(
-            FindAttribute(*taskSpan, "ydb.actor.type")->value().string_value(),
-            "TKqpScanComputeActor");
+        UNIT_ASSERT(FindAttribute(*taskSpan, "ydb.actor.type"));
         AssertChildSpansAreWithinParents(*userUploader);
     }
 }

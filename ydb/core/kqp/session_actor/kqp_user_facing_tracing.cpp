@@ -53,6 +53,16 @@ using TQueryLevels = TComponentTracingLevels::TQueryProcessor;
 
 using TSpanBudget = TUserFacingSpanBudget;
 
+NWilson::NTraceProto::Status::StatusCode ToWilsonStatus(Ydb::StatusIds::StatusCode status) {
+    if (status == Ydb::StatusIds::SUCCESS) {
+        return NWilson::NTraceProto::Status::STATUS_CODE_OK;
+    }
+    if (status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+        return NWilson::NTraceProto::Status::STATUS_CODE_UNSET;
+    }
+    return NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
+}
+
 NWilson::TSpan MakePhase(const NWilson::TTraceId& parentId, TInstant start, TInstant end,
         const TString& name, TPhaseAttrs attrs = {}, TSpanBudget* budget = nullptr,
         ui8 requiredVerbosity = TQueryLevels::TopLevel,
@@ -417,11 +427,14 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
     TInstant executeStart = tl.Execute.Start;
     TInstant executeEnd = tl.Execute.End;
     NWilson::TSpan executeSpan = MakePhase(rootId, executeStart, executeEnd, "Execute", {},
-        &budget, TQueryLevels::Basic);
+        &budget, TQueryLevels::Basic, ToWilsonStatus(trace.Status));
     if (!executeSpan) {
         return;
     }
     executeSpan.Attribute("ydb.actor.type", trace.ExecuterActorType);
+    if (trace.Status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+        executeSpan.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(trace.Status));
+    }
     const NWilson::TTraceId executeId = executeSpan.GetTraceId();
 
     struct TPhaseName {
@@ -639,8 +652,12 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
 
     if (state.CompileWallStart && state.CompileWallEnd > state.CompileWallStart) {
         if (NWilson::TSpan compile = MakePhase(parentId, state.CompileWallStart, state.CompileWallEnd, "Compile",
-                {{"ydb.compile.cache_hit", state.CompileStats.FromCache}}, &budget, TQueryLevels::Basic)) {
+                {{"ydb.compile.cache_hit", state.CompileStats.FromCache}}, &budget, TQueryLevels::Basic,
+                ToWilsonStatus(state.CompileStatus))) {
             compile.Attribute("ydb.actor.type", TString("TKqpCompileService"));
+            if (state.CompileStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                compile.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(state.CompileStatus));
+            }
             auto emitDependencies = [&](const NWilson::TTraceId& dependencyParent,
                     TInstant windowStart, TInstant windowEnd) {
                 if (!state.UserFacingCompileSpans) {

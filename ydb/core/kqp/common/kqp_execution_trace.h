@@ -105,6 +105,7 @@ struct TBufferLookupDiagnostics {
 struct TExecutionTraceSnapshot {
     TString ExecuterActorType;
     TString ComputeActorType;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TExecutionTimeline Timeline;
     ui64 CpuUs = 0;
     std::vector<TStageTraceSnapshot> Stages;

@@ -2800,9 +2800,9 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
-            if (ev->ExecutionTrace) {
-                QueryState->QueryStats.ExecutionTraces.push_back(std::move(*ev->ExecutionTrace));
-            }
+            QueryState->QueryStats.ExecutionTraces.insert(QueryState->QueryStats.ExecutionTraces.end(),
+                std::make_move_iterator(ev->ExecutionTraces.begin()),
+                std::make_move_iterator(ev->ExecutionTraces.end()));
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;

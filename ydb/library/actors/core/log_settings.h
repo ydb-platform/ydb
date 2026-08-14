@@ -171,6 +171,7 @@ namespace NActors {
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
+            void SetJsonTextMessageWithValues(bool value);
 
         private:
             int SetLevelImpl(

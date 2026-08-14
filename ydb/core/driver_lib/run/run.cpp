@@ -1770,6 +1770,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
     }
 
+    if (logConfig.HasJsonTextMessageWithValues()) {
+        LogSettings->SetJsonTextMessageWithValues(logConfig.GetJsonTextMessageWithValues());
+    }
+
     if (logConfig.HasUseLocalTimestamps()) {
         LogSettings->SetUseLocalTimestamps(logConfig.GetUseLocalTimestamps());
     }

@@ -1417,6 +1417,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         );
         return msg;
     }
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path) {
+        return MakeAccessDeniedError(ctx, path, TString());
+    }
     TString MakeAccessDeniedError(const TActorContext& ctx, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken);
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1534,6 +1537,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 || (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic
                     && entry.Self
                     && entry.Self->Info.GetPathSubType() == NKikimrSchemeOp::EPathSubTypeStreamImpl);
+            // KindTopic without PQGroupInfo is a topic that has not finished resolving
+            // (e.g. still being created). Reject it rather than treating it as a valid DLQ.
             if (!isCdc && entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic && entry.PQGroupInfo) {
                 continue;
             }
@@ -1742,7 +1747,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 const TString errString = requestIt->RequireAnyOfAccess.empty()
                     ? MakeAccessDeniedError(ctx, entry.Path, access)
                     : TStringBuilder()
-                        << MakeAccessDeniedError(ctx, entry.Path, "with any of access rights AlterSchema or UpdateRow")
+                        << MakeAccessDeniedError(ctx, entry.Path)
                         << " with any of access rights AlterSchema or UpdateRow";
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

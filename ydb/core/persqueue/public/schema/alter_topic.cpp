@@ -477,12 +477,11 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
 } // namespace
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
-    const TString database = std::move(settings.Database);
     return CreateAlterTopicOperationActor(parentId, {
-        .Database = database,
+        .Database = settings.Database,
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
-        .Strategy = std::make_unique<TAlterTopicStrategy>(database, std::move(settings.Request)),
+        .Strategy = std::make_unique<TAlterTopicStrategy>(settings.Database, std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .PrepareOnly = settings.PrepareOnly,
         .Cookie = settings.Cookie

@@ -195,7 +195,7 @@ def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_
                 session.execute_scheme(query)
 
             assert exc_info.type is ydb.issues.Unauthorized
-            assert 'Access denied.' in exc_info.value.message
+            assert 'Access denied for' in exc_info.value.message
 
 
 @pytest.mark.parametrize('query', [
@@ -219,7 +219,7 @@ def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_r
 
         assert exc_info.type is ydb.issues.Unauthorized
         logger.debug(exc_info.value.message)
-        assert 'Access denied.' in exc_info.value.message
+        assert 'Access denied for' in exc_info.value.message
 
 
 def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):

@@ -12464,7 +12464,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "CDC stream cannot be used as a dead letter queue: /Root/table/feed",
             result.GetIssues().ToString());
@@ -12479,7 +12479,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(implResult.GetStatus(), EStatus::SCHEME_ERROR, implResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(implResult.GetStatus(), EStatus::BAD_REQUEST, implResult.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(implResult.GetIssues().ToString(),
             "CDC stream cannot be used as a dead letter queue: /Root/table/feed/streamImpl",
             implResult.GetIssues().ToString());
@@ -12516,7 +12516,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "Dead letter queue path must be a topic, got /Root/table",
             result.GetIssues().ToString());
@@ -12653,7 +12653,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     dead_letter_queue='/Root/table/feed'
                 )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "CDC stream cannot be used as a dead letter queue: /Root/table/feed",
             result.GetIssues().ToString());
@@ -12696,7 +12696,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     dead_letter_queue='/Root/table'
                 )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "Dead letter queue path must be a topic, got /Root/table",
             result.GetIssues().ToString());

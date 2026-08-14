@@ -562,7 +562,7 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsATable) {
     auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TABLE);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");
 }
 
@@ -587,7 +587,7 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
     auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcStreamPath);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
 }
 
@@ -612,7 +612,7 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
     auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcImplPath);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
 }
 
@@ -632,7 +632,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsATable) {
     auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TABLE);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");
 }
 
@@ -657,7 +657,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
     auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcStreamPath);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
 }
 
@@ -682,7 +682,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
     auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcImplPath);
 
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
     UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
 }
 

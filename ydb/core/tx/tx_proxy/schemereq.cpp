@@ -1543,8 +1543,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 : TStringBuilder() << "Dead letter queue path must be a topic, got " << path;
             LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
                 << ", " << msg);
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, msg);
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
             return false;
         }
 

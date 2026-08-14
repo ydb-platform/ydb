@@ -390,6 +390,35 @@ def test_viewer_describe_schemeshard_id_forbidden(mon_base_url_with_extra_sids_c
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
 
 
+def test_viewer_direct_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+):
+    # this list is not exhaustive and covers some of the endpoints that use direct param
+    for ep in [
+        '/viewer/sysinfo',
+        '/viewer/json/feature_flags',
+        '/viewer/nodelist',
+    ]:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'direct': 'true'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 403)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, token, 200)
+
+
 def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,

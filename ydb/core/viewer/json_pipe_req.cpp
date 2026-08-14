@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -1352,6 +1353,14 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
     }
     auto request = GetRequest();
+    if (Params.Has("direct") && FromStringWithDefault<bool>(Params.Get("direct"), false) &&
+        IsStrictDatabaseOnlyToken(AppData(), TString(request.GetUserTokenObject()))
+    ) {
+        ReplyAndPassAway(
+            GETHTTPACCESSDENIED("text/plain", "Direct requests are not allowed for database-scoped access"),
+            "Access denied");
+        return true;
+    }
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;

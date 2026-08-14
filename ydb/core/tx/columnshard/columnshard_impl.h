@@ -66,6 +66,10 @@ struct TEvConfigNotificationRequest;
 }
 }   // namespace NKikimr::NConsole
 
+namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
+class THistoryCutterWrapper;
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage
+
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
@@ -535,6 +539,9 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
+    // Non-owning pointer to the cut-history engine; set in SetupCutHistory() once per boot.
+    NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper* CutHistoryCutter = nullptr;
+
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
     // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
@@ -603,6 +610,11 @@ private:
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();
     void SetupGC();
+    void SetupCutHistory();
+
+    void Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, const TActorContext& ctx);
 
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
@@ -622,6 +634,10 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
+    // Engine portion lifecycle hooks for cut-history counter maintenance.
+    void OnPortionAddedToEngine(const NOlap::TPortionDataAccessor& accessor);
+    void OnPortionRemovedFromEngine(ui64 portionId);
+
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

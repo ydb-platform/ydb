@@ -669,8 +669,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        YDB_LOG_DEBUG("[Export]",
-            {"result", result});
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -681,13 +682,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear();
             Retry();
         } else {
-            NActors::NStructuredLog::TTextWriter writer;
-
-            TStringBuilder errorBuilder;
-            writer.Write(errorBuilder, LogPrefix());
-            errorBuilder << " error: " << error;
-
-            Error = errorBuilder;
+            Error = TStringBuilder() << LogPrefix() << " error: " << error;
             PassAway();
         }
     }
@@ -950,8 +945,6 @@ public:
     }
 
     STATEFN(StateCheckUploadedData) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
-            {"actorState", "StateCheckUploadedData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
         default:

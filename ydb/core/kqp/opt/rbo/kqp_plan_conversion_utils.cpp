@@ -98,7 +98,7 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
     const TOpTraversal traversal(IterateSubtree(op).begin());
     for (const auto& item : traversal) {
         auto currOp = item.Current;
-        const auto& subplanCandidates = currOp->GetSubplanCandidates();
+        const auto subplanIUs = currOp->GetSubplanIUs(props->Subplans);
 
         // If the current operator contains references to subplans:
         // - Compute dependent variables of the subplan
@@ -107,16 +107,11 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
         // - Add new dependencies to the AddDepencies operator below the current, or create one if it doesn't exit
         // - Return the full list of dependecies
 
-        if (!subplanCandidates.empty()) {
+        if (!subplanIUs.empty()) {
             TVector<DependencyPairType> allOpDependencies;
 
-            for (const auto& subplanVar : subplanCandidates) {
-                const auto* subplanEntry = props->Subplans.Find(subplanVar);
-                if (!subplanEntry) {
-                    continue;
-                }
-
-                auto subplan = subplanEntry->Plan;
+            for (const auto& subplanVar : subplanIUs) {
+                auto subplan = props->Subplans.At(subplanVar).Plan;
                 auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplan), props);
                 if (!opDependencies.empty()) {
                     for (const auto& dependency : opDependencies) {

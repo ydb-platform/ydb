@@ -31,7 +31,7 @@ TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     return result;
 }
 
-void AddExpressionMembers(const TExpression& expression, TVector<TInfoUnit>& members, TInfoUnitSet& seen) {
+void AppendUniqueRawInputIUs(const TExpression& expression, TVector<TInfoUnit>& members, TInfoUnitSet& seen) {
     for (const auto& iu : expression.GetRawInputIUs()) {
         if (seen.insert(iu).second) {
             members.push_back(iu);
@@ -48,6 +48,20 @@ void AddExpressionMembers(const TExpression& expression, TVector<TInfoUnit>& mem
 const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
     auto structType = Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     return structType->FindItemType(iu.GetFullName());
+}
+
+TVector<TInfoUnit> IOperator::GetSubplanIUs(const TSubplans& subplans) const {
+    TVector<TInfoUnit> result;
+    if (subplans.Empty()) {
+        return result;
+    }
+
+    for (const auto& iu : GetUniqueRawInputIUs()) {
+        if (subplans.Contains(iu)) {
+            result.push_back(iu);
+        }
+    }
+    return result;
 }
 
 void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TIntrusivePtr<IOperator> newChild) {
@@ -387,7 +401,7 @@ void TOpMap::SetMapElementExpression(size_t index, TExpression expression) {
 
 void TOpMap::InvalidateCachedIUs() {
     Props.OutputIUs.reset();
-    SubplanCandidatesDirty = true;
+    UniqueRawInputIUsDirty = true;
 }
 
 bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
@@ -451,16 +465,16 @@ TVector<std::reference_wrapper<const TExpression>> TOpMap::GetExpressions() cons
     return result;
 }
 
-const TVector<TInfoUnit>& TOpMap::GetSubplanCandidates() const {
-    if (SubplanCandidatesDirty) {
-        SubplanCandidates.clear();
+const TVector<TInfoUnit>& TOpMap::GetUniqueRawInputIUs() const {
+    if (UniqueRawInputIUsDirty) {
+        UniqueRawInputIUs.clear();
         TInfoUnitSet seen;
         for (const auto& mapElement : MapElements) {
-            AddExpressionMembers(mapElement.GetExpression(), SubplanCandidates, seen);
+            AppendUniqueRawInputIUs(mapElement.GetExpression(), UniqueRawInputIUs, seen);
         }
-        SubplanCandidatesDirty = false;
+        UniqueRawInputIUsDirty = false;
     }
-    return SubplanCandidates;
+    return UniqueRawInputIUs;
 }
 
 // Returns explicit renames as pairs of <to, from>
@@ -645,7 +659,7 @@ TVector<std::reference_wrapper<const TExpression>> TOpFilter::GetExpressions() c
 
 void TOpFilter::SetFilterExpression(TExpression filterExpr) {
     FilterExpr = std::move(filterExpr);
-    SubplanCandidatesDirty = true;
+    UniqueRawInputIUsDirty = true;
 }
 
 void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
@@ -661,14 +675,14 @@ TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     return FilterExpr.GetInputIUs(false, true);
 }
 
-const TVector<TInfoUnit>& TOpFilter::GetSubplanCandidates() const {
-    if (SubplanCandidatesDirty) {
-        SubplanCandidates.clear();
+const TVector<TInfoUnit>& TOpFilter::GetUniqueRawInputIUs() const {
+    if (UniqueRawInputIUsDirty) {
+        UniqueRawInputIUs.clear();
         TInfoUnitSet seen;
-        AddExpressionMembers(FilterExpr, SubplanCandidates, seen);
-        SubplanCandidatesDirty = false;
+        AppendUniqueRawInputIUs(FilterExpr, UniqueRawInputIUs, seen);
+        UniqueRawInputIUsDirty = false;
     }
-    return SubplanCandidates;
+    return UniqueRawInputIUs;
 }
 
 TString TOpFilter::ToString(TExprContext& ctx) {
@@ -1595,12 +1609,12 @@ void TOpIterator::Advance() {
         }
 
         if (RecurseIntoSubplans && !PlanProps->Subplans.Empty()) {
-            if (!frame.SubplanCandidates) {
-                frame.SubplanCandidates = &frame.Current->GetSubplanCandidates();
+            if (!frame.UniqueRawInputIUs) {
+                frame.UniqueRawInputIUs = &frame.Current->GetUniqueRawInputIUs();
             }
             bool pushedSubplan = false;
-            while (frame.NextSubplanCandidateIdx < frame.SubplanCandidates->size()) {
-                const auto& iu = (*frame.SubplanCandidates)[frame.NextSubplanCandidateIdx++];
+            while (frame.NextRawInputIUIdx < frame.UniqueRawInputIUs->size()) {
+                const auto& iu = (*frame.UniqueRawInputIUs)[frame.NextRawInputIUIdx++];
                 const auto* subplan = PlanProps->Subplans.Find(iu);
                 if (!subplan) {
                     continue;

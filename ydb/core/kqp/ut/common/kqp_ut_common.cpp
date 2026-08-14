@@ -837,6 +837,11 @@ void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TE
     return AssertTableStats(stats, table, expectedStats);
 }
 
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
 TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,
     const TString& expectedYson)
 {

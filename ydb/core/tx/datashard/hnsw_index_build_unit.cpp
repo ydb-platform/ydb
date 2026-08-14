@@ -1,10 +1,10 @@
 #include "backup_restore_common.h"
 #include "datashard_impl.h"
 #include "execution_unit_ctors.h"
+#include "hnsw_index_build_actor.h"
 #include "hnsw_index_build_unit.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -77,48 +77,6 @@ bool ScanPostingTableVectors(
     return true;
 }
 
-class THnswIndexBuildJob : public TActorBootstrapped<THnswIndexBuildJob> {
-public:
-    THnswIndexBuildJob(
-            const TActorId& replyTo,
-            ui64 txId,
-            const Ydb::Table::VectorIndexSettings& settings,
-            std::vector<std::pair<TString, TString>> keysAndVectors,
-            std::shared_ptr<void> memoryReservation)
-        : TActorBootstrapped(NKikimrServices::TActivity::DATASHARD_HNSW_BUILDER)
-        , ReplyTo(replyTo)
-        , TxId(txId)
-        , Settings(settings)
-        , KeysAndVectors(std::move(keysAndVectors))
-        , MemoryReservation(std::move(memoryReservation))
-    {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        TString error;
-        auto index = THnswIndex::Build(Settings, KeysAndVectors, /* maxMemoryBytes */ 0, error);
-
-        std::shared_ptr<THnswIndex> sharedIndex;
-        std::shared_ptr<void> memoryReservation;
-        if (index) {
-            sharedIndex = std::shared_ptr<THnswIndex>(std::move(index));
-            memoryReservation = std::move(MemoryReservation);
-        }
-
-        TAutoPtr<IDestructable> prod = new THnswIndexBuildProduct(
-            std::move(sharedIndex), std::move(memoryReservation), std::move(error));
-
-        ctx.Send(ReplyTo, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
-        Die(ctx);
-    }
-
-private:
-    const TActorId ReplyTo;
-    const ui64 TxId;
-    const Ydb::Table::VectorIndexSettings Settings;
-    const std::vector<std::pair<TString, TString>> KeysAndVectors;
-    std::shared_ptr<void> MemoryReservation;
-};
-
 } // namespace
 
 IActor* CreateHnswIndexBuildJob(
@@ -128,8 +86,14 @@ IActor* CreateHnswIndexBuildJob(
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation)
 {
-    return new THnswIndexBuildJob(replyTo, txId, settings, std::move(keysAndVectors),
-        std::move(memoryReservation));
+    return CreateHnswIndexBuildWorker(settings, std::move(keysAndVectors),
+        std::move(memoryReservation),
+        [replyTo, txId](THnswIndexBuildResult&& result, const TActorContext& ctx) mutable {
+            TAutoPtr<IDestructable> product = new THnswIndexBuildProduct(
+                std::move(result.Index), std::move(result.MemoryReservation),
+                std::move(result.Error));
+            ctx.Send(replyTo, new TEvDataShard::TEvAsyncJobComplete(product), 0, txId);
+        });
 }
 
 // Builds the in-memory HNSW index for a vector index posting table as part of

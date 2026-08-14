@@ -72,6 +72,15 @@ std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
 }
 
 template <typename TRequest, typename TResponse>
+class TInternalRequestCtx
+    : public TRequestCtx<TRequest, TResponse>
+    , public NGRpcService::IInternalRequestCtx
+{
+public:
+    using TRequestCtx<TRequest, TResponse>::TRequestCtx;
+};
+
+template <typename TRequest, typename TResponse>
 std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     NActors::TTestActorRuntime& runtime,
     const TRequest& request,
@@ -537,6 +546,60 @@ Y_UNIT_TEST(DescribeConsumerRetriesOnLocationDeliveryProblem) {
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
     const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
     UNIT_ASSERT(describeResult.partitions(0).has_partition_location());
+
+    {
+        const TString path2 = "/Root/topic_describe_consumer_false_status";
+        CreateTopic(runtime, path2);
+        size_t injected = 0;
+        auto injectObserver = InjectFalseLocationStatusOnce(runtime, injected);
+
+        Ydb::Topic::DescribeConsumerRequest request2;
+        request2.set_path(path2);
+        request2.set_consumer("user");
+        request2.set_include_location(true);
+        auto result2 = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request2, CreateDescribeConsumerActor, path2);
+        UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
+        AssertStatus(result2, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult2 = GetResult<Ydb::Topic::DescribeConsumerResult>(result2);
+        UNIT_ASSERT(describeResult2.partitions(0).has_partition_location());
+    }
+}
+
+Y_UNIT_TEST(DescribeConsumerTimesOutWhenLocationStuck) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_timeout";
+    CreateTopic(runtime, path);
+
+    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (ev && ev->Get()->Ev &&
+                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                ev.Reset();
+            }
+        });
+
+    Ydb::Topic::DescribeConsumerRequest request;
+    request.set_path(path);
+    request.set_consumer("user");
+    request.set_include_location(true);
+
+    auto result = std::make_shared<TResultHolder<Ydb::Topic::DescribeConsumerResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
+    auto* ctx = new TRequestCtx<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        request, path, "/Root", result, edgeActor);
+
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribeConsumerActor(ctx)));
+
+    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
+
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(5));
+    UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
+    AssertStatus(result, Ydb::StatusIds::TIMEOUT, "Describe request timed out");
 }
 
 Y_UNIT_TEST(DescribeConsumerUnauthenticatedRejectedWhenRequired) {
@@ -552,6 +615,212 @@ Y_UNIT_TEST(DescribeConsumerUnauthenticatedRejectedWhenRequired) {
     auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
         runtime, request, CreateDescribeConsumerActor, path);
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_smoke";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::DescribeTopicRequest request;
+        request.set_path(path);
+        auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request, CreateDescribeTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeTopicResult>(result);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions_size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions(0).partition_id(), 0u);
+        UNIT_ASSERT(describeResult.partitions(0).active());
+        UNIT_ASSERT(!describeResult.partitions(0).has_partition_location());
+        UNIT_ASSERT(!describeResult.partitions(0).has_partition_stats());
+        UNIT_ASSERT(!describeResult.has_topic_stats());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.consumers_size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.consumers(0).name(), "user");
+        UNIT_ASSERT(!describeResult.consumers(0).has_consumer_stats());
+    }
+
+    {
+        Ydb::Topic::DescribeTopicRequest request;
+        request.set_path("/Root/not_a_topic");
+        auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request, CreateDescribeTopicActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(DescribeTopicWithLocationAndStats) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_loc_stats";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    {
+        Ydb::Topic::DescribeTopicRequest request;
+        request.set_path(path);
+        request.set_include_location(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request, CreateDescribeTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeTopicResult>(result);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions_size(), 2u);
+        UNIT_ASSERT(!describeResult.has_topic_stats());
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_location());
+            UNIT_ASSERT_GT(p.partition_location().node_id(), 0);
+            UNIT_ASSERT_GT(p.partition_location().generation(), 0);
+            UNIT_ASSERT(!p.has_partition_stats());
+        }
+    }
+
+    {
+        Ydb::Topic::DescribeTopicRequest request;
+        request.set_path(path);
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request, CreateDescribeTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeTopicResult>(result);
+        UNIT_ASSERT(describeResult.has_topic_stats());
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_stats());
+            UNIT_ASSERT_GT(p.partition_stats().partition_node_id(), 0);
+            UNIT_ASSERT(!p.has_partition_location());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.consumers_size(), 1u);
+        UNIT_ASSERT(describeResult.consumers(0).has_consumer_stats());
+        ui64 storeSum = 0;
+        for (const auto& p : describeResult.partitions()) {
+            storeSum += p.partition_stats().store_size_bytes();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.topic_stats().store_size_bytes(), storeSum);
+    }
+
+    {
+        Ydb::Topic::DescribeTopicRequest request;
+        request.set_path(path);
+        request.set_include_location(true);
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request, CreateDescribeTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeTopicResult>(result);
+        UNIT_ASSERT(describeResult.has_topic_stats());
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_location());
+            UNIT_ASSERT(p.has_partition_stats());
+            UNIT_ASSERT_VALUES_EQUAL(
+                p.partition_stats().partition_node_id(),
+                p.partition_location().node_id());
+        }
+    }
+}
+
+Y_UNIT_TEST(DescribeTopicRetriesOnLocationDeliveryProblem) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_retry";
+    CreateTopic(runtime, path);
+
+    size_t broken = 0;
+    auto breakObserver = BreakFirstLocationForward(runtime, broken);
+
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    request.set_include_location(true);
+    auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        runtime, request, CreateDescribeTopicActor, path);
+
+    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    const auto& describeResult = GetResult<Ydb::Topic::DescribeTopicResult>(result);
+    UNIT_ASSERT(describeResult.partitions(0).has_partition_location());
+
+    {
+        const TString path2 = "/Root/topic_describe_topic_false_status";
+        CreateTopic(runtime, path2);
+        size_t injected = 0;
+        auto injectObserver = InjectFalseLocationStatusOnce(runtime, injected);
+
+        Ydb::Topic::DescribeTopicRequest request2;
+        request2.set_path(path2);
+        request2.set_include_location(true);
+        auto result2 = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+            runtime, request2, CreateDescribeTopicActor, path2);
+        UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
+        AssertStatus(result2, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult2 = GetResult<Ydb::Topic::DescribeTopicResult>(result2);
+        UNIT_ASSERT(describeResult2.partitions(0).has_partition_location());
+    }
+}
+
+Y_UNIT_TEST(DescribeTopicTimesOutWhenLocationStuck) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_timeout";
+    CreateTopic(runtime, path);
+
+    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (ev && ev->Get()->Ev &&
+                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                ev.Reset();
+            }
+        });
+
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    request.set_include_location(true);
+
+    auto result = std::make_shared<TResultHolder<Ydb::Topic::DescribeTopicResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
+    auto* ctx = new TRequestCtx<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        request, path, "/Root", result, edgeActor);
+
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribeTopicActor(ctx)));
+
+    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
+
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(5));
+    UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
+    AssertStatus(result, Ydb::StatusIds::TIMEOUT, "Describe request timed out");
+}
+
+Y_UNIT_TEST(DescribeTopicUnauthenticatedRejectedWhenRequired) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_auth";
+    CreateTopic(runtime, path);
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        runtime, request, CreateDescribeTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(DescribeTopicInternalRequestAllowedWithoutToken) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_topic_internal";
+    CreateTopic(runtime, path);
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    auto result = std::make_shared<TResultHolder<Ydb::Topic::DescribeTopicResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
+    auto* ctx = new TInternalRequestCtx<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        request, path, "/Root", result, edgeActor);
+    runtime.Register(CreateDescribeTopicActor(ctx));
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(30));
+    UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
 Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {
@@ -653,6 +922,54 @@ Y_UNIT_TEST(PartitionsLocationUnauthenticatedRejectedWhenRequired) {
     auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
     UNIT_ASSERT(ev->Issues.ToString().Contains("Unauthenticated access is forbidden"));
+}
+
+Y_UNIT_TEST(DropTopicSuccessAndMissing) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_drop";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::DropTopicRequest request;
+        request.set_path(path);
+        auto result = DoActorRequest<Ydb::Topic::DropTopicRequest, Ydb::Topic::DropTopicResponse>(
+            runtime, request, CreateDropTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::DropTopicRequest request;
+        request.set_path(path);
+        auto result = DoActorRequest<Ydb::Topic::DropTopicRequest, Ydb::Topic::DropTopicResponse>(
+            runtime, request, CreateDropTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(AlterTopicSuccessAndMissing) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_alter";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.mutable_set_retention_period()->set_seconds(3600);
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path("/Root/missing_topic");
+        request.mutable_set_retention_period()->set_seconds(3600);
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
 }
 
 Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {

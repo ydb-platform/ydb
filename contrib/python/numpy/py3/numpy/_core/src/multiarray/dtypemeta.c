@@ -374,7 +374,7 @@ dtypemeta_initialize_struct_from_spec(
  * if the Py_TPFLAGS_HEAPTYPE flag is set (they are created from Python).
  * They are not for legacy DTypes or np.dtype itself.
  *
- * @param self
+ * @param dtype_class Pointer to the Python type object
  * @return nonzero if the object is garbage collected
  */
 static inline int
@@ -494,12 +494,14 @@ string_discover_descr_from_pyobject(
         itemsize = PyUnicode_GetLength(obj);
     }
     if (itemsize != -1) {
-        if (cls->type_num == NPY_UNICODE) {
-            itemsize *= 4;
-        }
-        if (itemsize > NPY_MAX_INT) {
+        if (itemsize > NPY_MAX_INT || (
+                cls->type_num == NPY_UNICODE && itemsize > NPY_MAX_INT / 4)) {
             PyErr_SetString(PyExc_TypeError,
                     "string too large to store inside array.");
+            return NULL;
+        }
+        if (cls->type_num == NPY_UNICODE) {
+            itemsize *= 4;
         }
         PyArray_Descr *res = PyArray_DescrNewFromType(cls->type_num);
         if (res == NULL) {
@@ -1247,6 +1249,12 @@ dtypemeta_wrap_legacy_descriptor(
         if (PyObject_CallFunction(
                 npy_runtime_imports._add_dtype_helper,
                 "Os", (PyObject *)dtype_class, alias) == NULL) {
+            return -1;
+        }
+    }
+    else {
+        // ensure the within dtype cast is populated for legacy user dtypes
+        if (PyArray_GetCastingImpl(dtype_class, dtype_class) == NULL) {
             return -1;
         }
     }

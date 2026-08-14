@@ -4,6 +4,8 @@
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
 
 TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, TIpPort port) {
@@ -89,7 +91,9 @@ protected:
         int err = 0;
         if (!Socket) {
             err = -1;
-            ALOG_WARN(HttpLog, "Failed to bind " << address << ":" << port);
+            YDB_LOG_WARN("Failed to bind",
+                {"address", address},
+                {"port", port});
         }
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
@@ -106,7 +110,7 @@ protected:
             }
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;
-                ALOG_WARN(HttpLog, "Failed to construct server security context");
+                YDB_LOG_WARN("Failed to construct server security context");
             }
             // Enable ALPN for HTTP/2 negotiation on secure endpoints
             if (Endpoint->SecureContext && Endpoint->AllowHttp2) {
@@ -116,13 +120,15 @@ protected:
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
             SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
-            ALOG_INFO(HttpLog, "Listening on " << schema << bindAddress->ToString());
+            YDB_LOG_INFO("Listening",
+                {"schema", schema},
+                {"bindAddress", bindAddress->ToString()});
             Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
             TBase::Become(&TAcceptorActor::StateListening);
             Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
             return;
         }
-        ALOG_WARN(HttpLog, "Failed to init - retrying...");
+        YDB_LOG_WARN("Failed to init - retrying...");
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 
@@ -153,9 +159,10 @@ protected:
                         continue; // we can try it again
                     }
                 } else {
-                    ALOG_WARN(HttpLog,
-                        "Accept failed on " << (Endpoint ? Endpoint->WorkerName : TString(""))
-                        << ": errno=" << acceptErrno << " (" << LastSystemErrorText(acceptErrno) << ")");
+                    YDB_LOG_WARN("Accept failed",
+                        {"workerName", (Endpoint ? Endpoint->WorkerName : TString(""))},
+                        {"errno", acceptErrno},
+                        {"error", LastSystemErrorText(acceptErrno)});
                     if (PollerToken) {
                         PollerToken->Request(true, false);
                     }

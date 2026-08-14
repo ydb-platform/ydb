@@ -815,45 +815,39 @@ std::optional<TBlockRange64> TBlocksDirtyMap::GetFreshRange(
     return DDiskStates[host].GetFreshRange();
 }
 
-NThreading::TFuture<void> TBlocksDirtyMap::GetRangeSyncStartTrigger(
-    THostIndex host,
-    TBlockRange64 range)
+TSyncHint TBlocksDirtyMap::BeginRangeSync(THostIndex host, TBlockRange64 range)
 {
-    TInflightDDiskSync sync{
-        .DestinationHost = host,
-        .SyncStartTrigger = NThreading::NewPromise<void>()};
+    TInflightDDiskSync inflightSync{.DestinationHost = host};
+
+    TSyncHint result{
+        .SyncId = ++InflightDDiskSyncIdGenerator,
+        .Host = host,
+        .Range = range,
+        .ReadyToStart = inflightSync.SyncStartTrigger.GetFuture()};
 
     if (!HasInflightFlush(host, range)) {
-        sync.SyncStartTrigger.SetValue();
+        inflightSync.SyncStartTrigger.SetValue();
     }
 
-    auto result = sync.SyncStartTrigger.GetFuture();
     InflightDDiskSyncMap.AddRange(
-        ++InflightDDiskSyncIdGenerator,
+        result.SyncId,
         range,
-        std::move(sync));
+        std::move(inflightSync));
 
     return result;
 }
 
-void TBlocksDirtyMap::RangeSynced(THostIndex host, TBlockRange64 range)
+void TBlocksDirtyMap::EndRangeSync(ui64 syncId, bool success)
 {
-    DDiskStates[host].RangeSynced(range);
+    auto inflightSync = InflightDDiskSyncMap.ExtractRange(syncId);
+    if (!inflightSync) {
+        return;
+    }
 
-    ui64 syncId = 0;
-    InflightDDiskSyncMap.EnumerateOverlapping(
-        range,
-        [&](TInflightDDiskSyncMap::TFindItem& item)
-        {
-            if (item.Value.DestinationHost == host && item.Range == range) {
-                syncId = item.Key;
-                return TInflightDDiskSyncMap::EEnumerateContinuation::Stop;
-            }
-
-            return TInflightDDiskSyncMap::EEnumerateContinuation::Continue;
-        });
-    Y_ABORT_UNLESS(syncId != 0);
-    InflightDDiskSyncMap.RemoveRange(syncId);
+    if (success) {
+        DDiskStates[inflightSync->Value.DestinationHost].RangeSynced(
+            inflightSync->Range);
+    }
 }
 
 void TBlocksDirtyMap::ClearRangeSyncs(THostIndex host)
@@ -1028,7 +1022,7 @@ void TBlocksDirtyMap::UnRegister(ui64 lsn, EQueueType queueType)
 
 void TBlocksDirtyMap::FlushCompleted(ui64 lsn, THostMask ddisks)
 {
-    AddToAheadAndBehind(lsn, ddisks);
+    AddToAheadAndBehindOnFlushCompleted(lsn, ddisks);
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -1274,7 +1268,9 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                  : TRangeLock(weak_from_this(), lsn));
 }
 
-void TBlocksDirtyMap::AddToAheadAndBehind(ui64 lsn, THostMask ddisks)
+void TBlocksDirtyMap::AddToAheadAndBehindOnFlushCompleted(
+    ui64 lsn,
+    THostMask ddisks)
 {
     // Check that one of the ddisks is lagging or aheading, in this case it
     // needs to be notified about the data flush to ddisk.

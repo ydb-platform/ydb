@@ -2418,8 +2418,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
             *freshRange);
         auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
-        dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, syncRange);
-        dirtyMap->RangeSynced(THostIndex{0}, syncRange);
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange64::MakeClosedInterval(256, totalBlocks - 1),
@@ -2435,8 +2435,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Sync the remaining blocks. The DDisk becomes fully operational and no
         // longer reports a fresh range.
         syncRange = TBlockRange64::MakeClosedInterval(256, totalBlocks - 1);
-        dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, syncRange);
-        dirtyMap->RangeSynced(THostIndex{0}, syncRange);
+        syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
         UNIT_ASSERT_EQUAL(std::nullopt, dirtyMap->GetFreshRange(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2464,8 +2464,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // With no overlapping inflight flush, the sync start trigger should be
         // ready immediately.
-        auto trigger = dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, range);
-        UNIT_ASSERT_VALUES_EQUAL(true, trigger.HasValue());
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, range);
+        UNIT_ASSERT_VALUES_EQUAL(true, syncHint.ReadyToStart.HasValue());
 
         // The sync should be registered as in-flight and ready to run.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2473,8 +2473,47 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintInflightSync());
 
         // Completing the sync removes it from the in-flight sync map.
-        dirtyMap->RangeSynced(THostIndex{0}, range);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintInflightSync());
+    }
+
+    Y_UNIT_TEST(ShouldNotAdvanceFreshRangeWhenRangeSyncFailed)
+    {
+        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // Make H0 completely fresh (nothing synced yet).
+        vchunkConfig.SetWatermark(THostIndex{0}, 0);
+
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            *dirtyMap->GetFreshRange(THostIndex{0}));
+
+        const auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+
+        // A failed sync must be removed from the in-flight sync map, but it
+        // must NOT advance the operational block count / shrink the fresh
+        // range.
+        dirtyMap->EndRangeSync(syncHint.SyncId, false);
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintInflightSync());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            *dirtyMap->GetFreshRange(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh+,0};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
     }
 }
 

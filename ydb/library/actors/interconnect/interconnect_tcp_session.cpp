@@ -103,6 +103,10 @@ namespace NActors {
         {}
 
         size_t Write(NInterconnect::TOutgoingStream& stream, size_t maxBytes) override {
+            if (!stream) {
+                return 0;
+            }
+
             static constexpr size_t MaxRdmaSendSge = 16;
 
             Y_ABORT_UNLESS(Session.RdmaQp);
@@ -994,65 +998,63 @@ namespace NActors {
     void TInterconnectSessionTCP::WriteData(IWriteStrategy& mainWriter) {
         ui64 written = 0;
 
-        if (OutgoingStream || OutOfBandStream) {
-            auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
-            size_t bytesToSendInMain = mainWriter.GetMaxBytesAtOnce();
+        auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
+        size_t bytesToSendInMain = mainWriter.GetMaxBytesAtOnce();
 
-            Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
+        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
+
+        if (OutOfBandStream) {
+            bytesToSendInMain = 0;
+
+            if (!ForcedWriteLength && OutgoingOffset) {
+                ForcedWriteLength = 1; // send at least one byte from current packet
+            }
+
+            // align send up to packet boundary
+            size_t offset = OutgoingOffset;
+            for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
+                Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
+                bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
+                ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
+            }
+        }
+
+        if (bytesToSendInMain) {
+            const size_t w = mainWriter.Write(OutgoingStream, bytesToSendInMain);
+            OutgoingStream.Advance(w);
+            written += w;
+
+            // adjust sending queue iterator
+            for (OutgoingOffset += w; OutgoingOffset && sendQueueIt->PacketSize <= OutgoingOffset; ++sendQueueIt, ++OutgoingIndex) {
+                OutgoingOffset -= sendQueueIt->PacketSize;
+            }
 
             if (OutOfBandStream) {
-                bytesToSendInMain = 0;
-
-                if (!ForcedWriteLength && OutgoingOffset) {
-                    ForcedWriteLength = 1; // send at least one byte from current packet
-                }
-
-                // align send up to packet boundary
-                size_t offset = OutgoingOffset;
-                for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
-                    Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
-                    bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
-                    ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
-                }
+                BytesAlignedForOutOfBand += w;
+                bytesToSendInMain -= w;
             }
 
-            if (bytesToSendInMain) {
-                const size_t w = mainWriter.Write(OutgoingStream, bytesToSendInMain);
-                OutgoingStream.Advance(w);
+            ForcedWriteLength = mainWriter.GetExpectedWriteLength();
+            if (!Socket) {
+                if (written) {
+                    Proxy->Metrics->AddTotalBytesWritten(written);
+                }
+                return;
+            }
+        }
+
+        if (!bytesToSendInMain && !ForcedWriteLength) {
+            if (const size_t w = mainWriter.Write(OutOfBandStream, mainWriter.GetMaxBytesAtOnce())) {
+                OutOfBandStream.Advance(w);
+                OutOfBandStream.DropFront(w);
+                OutOfBandBytesSent += w;
                 written += w;
-
-                // adjust sending queue iterator
-                for (OutgoingOffset += w; OutgoingOffset && sendQueueIt->PacketSize <= OutgoingOffset; ++sendQueueIt, ++OutgoingIndex) {
-                    OutgoingOffset -= sendQueueIt->PacketSize;
-                }
-
-                if (OutOfBandStream) {
-                    BytesAlignedForOutOfBand += w;
-                    bytesToSendInMain -= w;
-                }
-
-                ForcedWriteLength = mainWriter.GetExpectedWriteLength();
-                if (!Socket) {
-                    if (written) {
-                        Proxy->Metrics->AddTotalBytesWritten(written);
-                    }
-                    return;
-                }
             }
-
-            if (!bytesToSendInMain && !ForcedWriteLength) {
-                if (const size_t w = mainWriter.Write(OutOfBandStream, mainWriter.GetMaxBytesAtOnce())) {
-                    OutOfBandStream.Advance(w);
-                    OutOfBandStream.DropFront(w);
-                    OutOfBandBytesSent += w;
-                    written += w;
+            if (!Socket) {
+                if (written) {
+                    Proxy->Metrics->AddTotalBytesWritten(written);
                 }
-                if (!Socket) {
-                    if (written) {
-                        Proxy->Metrics->AddTotalBytesWritten(written);
-                    }
-                    return;
-                }
+                return;
             }
         }
 

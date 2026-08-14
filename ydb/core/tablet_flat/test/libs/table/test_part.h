@@ -116,7 +116,7 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             auto pageId = location.GetPageIndex();
             return Get(part, groupId.Index, pageId);

@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
                 Map[loc.Offset] = std::move(data);
             }
 
-            const TSharedData* TryGetPage(const TPart*, TPageLocation location, TGroupId) override
+            const TSharedData* TryGetPage(const TPart*, const TPageLocation& location, TGroupId) override
             {
                 auto it = Map.find(location.Offset);
                 return it != Map.end() ? &it->second : nullptr;

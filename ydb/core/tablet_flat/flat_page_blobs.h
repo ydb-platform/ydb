@@ -90,7 +90,7 @@ namespace NPage {
             return { size, { page, 0 }, { page, size } };
         }
 
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
             return Bounds(location.Offset.AsPageIndex());
         }
 
@@ -104,7 +104,7 @@ namespace NPage {
             return data && data.size() == Array.at(page).Bytes();
         }
 
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
             return data && data.size() == location.Size;
         }
 

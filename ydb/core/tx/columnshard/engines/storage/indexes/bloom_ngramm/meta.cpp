@@ -299,7 +299,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         TArrayPower2BitsStorage maxStorage(MaxBitsSize);
         VisitAllChunksWithBuilder(reader, GetDataExtractor(), ngramSize, builder, maxStorage);
         TString indexData = foldAndSerialize(std::move(maxStorage), MaxBitsSize);
-        if (!chunkSizeLimit || indexData.size() * CHAR_BIT <= clampBits) {
+        if (!chunkSizeLimit || indexData.size() <= *chunkSizeLimit) {
             return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
         }
 
@@ -330,7 +330,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 
     if (chunkSizeLimit && calcBitsSize(recordsCount) > clampBits) {
         ui32 maxRecordsPerChunk = 1;
-        while (maxRecordsPerChunk < recordsCount && calcBitsSize(maxRecordsPerChunk * 2) <= clampBits) {
+        while (maxRecordsPerChunk <= recordsCount / 2 && calcBitsSize(maxRecordsPerChunk * 2) <= clampBits) {
             maxRecordsPerChunk *= 2;
         }
         return buildBatched(maxRecordsPerChunk, [&](const auto& chunks, const ui32 begin, const ui32 end, const ui32 batchRecords) {

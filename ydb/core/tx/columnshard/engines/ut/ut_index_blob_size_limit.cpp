@@ -93,7 +93,10 @@ std::shared_ptr<arrow::RecordBatch> MakeDiverseBatch(const ui32 firstPk, const u
         TString value;
         value.reserve(valueLength);
         for (ui32 j = 0; j < valueLength; ++j) {
-            const ui64 mix = (ui64)pk * 2654435761ull + (ui64)j * 40503ull + (ui64)pk * j * 12289ull;
+            ui64 mix = (ui64)pk * 0x9E3779B97F4A7C15ull + (ui64)j * 0xD1B54A32D192ED03ull;
+            mix ^= mix >> 30;
+            mix *= 0xBF58476D1CE4E5B9ull;
+            mix ^= mix >> 27;
             value.append(alphabet[mix % alphabet.size()]);
         }
         UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());

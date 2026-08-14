@@ -218,10 +218,11 @@ private:
                 {"partitionSessionId", sessionKey.PartitionSessionId},
                 {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
                 {"TabletGeneration", ev->Get()->TabletGeneration});
-            GetOrCreatePending(sessionKey).Stages[ev->Get()->ReadKey.ReadId] = TPendingStage{
-                ev->Get()->TabletGeneration,
-                ev->Get()->Response
-            };
+            BufferPendingStage(
+                    sessionKey,
+                    ev->Get()->ReadKey.ReadId,
+                    ev->Get()->TabletGeneration,
+                    ev->Get()->Response);
             return;
         }
         StageToSession(sessionIter, ev->Get()->ReadKey.ReadId, ev->Get()->TabletGeneration, ev->Get()->Response);
@@ -252,7 +253,7 @@ private:
                 {"partitionSessionId", key.PartitionSessionId},
                 {"readId", readId},
                 {"generation", generation});
-            GetOrCreatePending(key).Publishes[readId] = generation;
+            BufferPendingPublish(key, readId, generation);
             return;
         }
 
@@ -262,13 +263,9 @@ private:
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
-        if (auto* pending = PendingBySession.Find(key)) {
-            pending->Stages.erase(ev->Get()->ReadKey.ReadId);
-            pending->Publishes.erase(ev->Get()->ReadKey.ReadId);
-            if (pending->Stages.empty() && pending->Publishes.empty()) {
-                PendingBySession.Erase(key);
-            }
-        }
+        const auto readId = ev->Get()->ReadKey.ReadId;
+        const auto generation = ev->Get()->TabletGeneration;
+        ForgetPending(key, readId, generation);
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown session ignored",
@@ -276,10 +273,9 @@ private:
             return;
         }
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget for session",
-            {"read", ev->Get()->ReadKey.ReadId},
+            {"read", readId},
             {"sessionId", key.SessionId});
 
-        const auto& generation = ev->Get()->TabletGeneration;
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
             return;
         }
@@ -441,24 +437,43 @@ private:
         }
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
+            // Register always inserts the session before flush; keep pending if that invariant breaks.
             return;
         }
 
+        const ui32 sessionGeneration = sessionIter->second.Generation;
         const auto& ctx = ActorContext();
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: flush pending stage/publish after register",
             {"sessionId", key.SessionId},
             {"partitionSessionId", key.PartitionSessionId},
+            {"sessionGeneration", sessionGeneration},
             {"stages", pending->Stages.size()},
             {"publishes", pending->Publishes.size()});
 
-        // Stage before Publish; maps are ordered by readId.
-        for (auto& [readId, stage] : pending->Stages) {
-            StageToSession(sessionIter, readId, stage.Generation, stage.Response);
+        // Apply only matching generation. Drop stale lower gens; keep higher gens for a later Register.
+        for (auto it = pending->Stages.begin(); it != pending->Stages.end(); ) {
+            if (it->second.Generation == sessionGeneration) {
+                StageToSession(sessionIter, it->first, it->second.Generation, it->second.Response);
+                it = pending->Stages.erase(it);
+            } else if (it->second.Generation < sessionGeneration) {
+                it = pending->Stages.erase(it);
+            } else {
+                ++it;
+            }
         }
-        for (const auto& [readId, generation] : pending->Publishes) {
-            PublishToSession(sessionIter, readId, generation);
+        for (auto it = pending->Publishes.begin(); it != pending->Publishes.end(); ) {
+            if (it->second == sessionGeneration) {
+                PublishToSession(sessionIter, it->first, it->second);
+                it = pending->Publishes.erase(it);
+            } else if (it->second < sessionGeneration) {
+                it = pending->Publishes.erase(it);
+            } else {
+                ++it;
+            }
         }
-        PendingBySession.Erase(key);
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
     }
 
     TPendingDirectReads& GetOrCreatePending(const TReadSessionKey& key) {
@@ -469,6 +484,65 @@ private:
             key, TPendingDirectReads{}, ActorContext().Now());
         Y_ABORT_UNLESS(inserted);
         return *inserted;
+    }
+
+    // DirectReadIds can repeat across tablet generations; keep the highest generation
+    // (first entry wins for same-generation duplicates). A lower-gen Publish for an
+    // overwritten Stage is dropped.
+    void BufferPendingStage(
+            const TReadSessionKey& key,
+            ui64 readId,
+            ui32 generation,
+            const std::shared_ptr<NKikimrClient::TResponse>& response)
+    {
+        auto& pending = GetOrCreatePending(key);
+        auto it = pending.Stages.find(readId);
+        if (it == pending.Stages.end()) {
+            pending.Stages.emplace(readId, TPendingStage{generation, response});
+            return;
+        }
+        if (generation <= it->second.Generation) {
+            return;
+        }
+        it->second = TPendingStage{generation, response};
+        auto publishIt = pending.Publishes.find(readId);
+        if (publishIt != pending.Publishes.end() && publishIt->second < generation) {
+            pending.Publishes.erase(publishIt);
+        }
+    }
+
+    void BufferPendingPublish(const TReadSessionKey& key, ui64 readId, ui32 generation) {
+        auto& pending = GetOrCreatePending(key);
+        auto stageIt = pending.Stages.find(readId);
+        if (stageIt != pending.Stages.end() && stageIt->second.Generation > generation) {
+            return;
+        }
+        auto it = pending.Publishes.find(readId);
+        if (it == pending.Publishes.end()) {
+            pending.Publishes.emplace(readId, generation);
+            return;
+        }
+        if (generation > it->second) {
+            it->second = generation;
+        }
+    }
+
+    void ForgetPending(const TReadSessionKey& key, ui64 readId, ui32 generation) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        auto stageIt = pending->Stages.find(readId);
+        if (stageIt != pending->Stages.end() && generation >= stageIt->second.Generation) {
+            pending->Stages.erase(stageIt);
+        }
+        auto publishIt = pending->Publishes.find(readId);
+        if (publishIt != pending->Publishes.end() && generation >= publishIt->second) {
+            pending->Publishes.erase(publishIt);
+        }
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
     }
 
     void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {

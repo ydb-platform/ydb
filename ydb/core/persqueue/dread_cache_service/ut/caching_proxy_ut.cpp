@@ -361,6 +361,108 @@ Y_UNIT_TEST(TestStaleDeregisterDoesNotDropNewerPending) {
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
 }
 
+// Same readId from a late lower generation must not overwrite a newer pending Stage/Publish.
+Y_UNIT_TEST(TestPendingKeepsHigherGenerationOnSameReadId) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 2, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 2)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 2)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 2));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
+
+// Stale lower-gen Forget must not drop newer pending Stage/Publish for the same readId.
+Y_UNIT_TEST(TestStaleForgetDoesNotDropNewerPending) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 2, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 2)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvForgetDirectRead({"session", 1, 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 2)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 2));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
+
+// Register of a lower generation must not discard pending Stage/Publish for a higher generation.
+Y_UNIT_TEST(TestFlushKeepsHigherGenerationPending) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 3, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 3)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 2)
+    );
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 2));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 3)
+    );
+    resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 3));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
+
 void AdvancePastDeadlineMapTtl(TTestActorRuntime* runtime) {
     // Default TTL is 5 minutes; wakeup period is 1 minute.
     for (int i = 0; i < 6; ++i) {

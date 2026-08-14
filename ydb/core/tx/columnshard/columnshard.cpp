@@ -343,6 +343,11 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
             Executor()->StartMoveDataVacuumFromOwner();
         }
     }
+    // If the executor-level vacuum has completed but blobs were still pending GC at that time,
+    // re-try the completion predicate on each wakeup until GC drains.
+    if (MoveDataState.Active && MoveDataState.VacuumCompleted) {
+        MoveDataCompleted(ctx);
+    }
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -684,7 +689,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
 
     if (HasIndex()) {
-        MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData();
+        MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
         if (MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() == 0) {
             // Nothing to move — trigger vacuum immediately.
             MoveDataState.VacuumStarted = true;
@@ -699,6 +704,14 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     if (!MoveDataState.Active) {
+        return;
+    }
+    // Record that the executor-level vacuum is done; further re-tries come from periodic wakeup.
+    MoveDataState.VacuumCompleted = true;
+
+    // Verify that no blobs in the target groups remain in pending GC queues.
+    if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+        LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
         return;
     }
     LOG_S_INFO("TColumnShard::MoveDataCompleted at tablet " << TabletID());

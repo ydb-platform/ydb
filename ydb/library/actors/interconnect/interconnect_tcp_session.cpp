@@ -831,18 +831,18 @@ namespace NActors {
                 break;
             }
             try {
-                auto packetSize = MakePacket(true);
-                if (!packetSize) {
+                // Break loop in case of prealocation failure
+                if (ui32 packetSize = MakePacket(true)) {
+                    bytesProduced += packetSize;
+                } else {
                     return;
                 }
-                bytesProduced += *packetSize;
             } catch (const TExSerializedEventTooLarge& ex) {
                 // terminate session if the event can't be serialized properly
                 YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Serialized event is too large",
                     {"marker", "ICS31"},
                     {"exType", ex.Type});
-                Terminate(TDisconnectReason::EventTooLarge());
-                return;
+                return Terminate(TDisconnectReason::EventTooLarge());
             }
         }
     }
@@ -996,6 +996,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::WriteData(IWriteStrategy& mainWriter) {
+        // total bytes written during this call
         ui64 written = 0;
 
         auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
@@ -1258,7 +1259,7 @@ namespace NActors {
         }
     }
 
-    std::optional<ui32> TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
+    ui32 TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
         NInterconnect::TOutgoingStream& stream = data ? OutgoingStream : OutOfBandStream;
 
 #ifndef NDEBUG
@@ -1281,7 +1282,7 @@ namespace NActors {
                 {"streamSize", stream.CalculateOutgoingSize()},
                 {"streamUnsent", stream.CalculateUnsentSize()});
             ReestablishConnectionWithHandshake(TDisconnectReason::RdmaError());
-            return std::nullopt;
+            return 0;
         }
 
         TTcpPacketOutTask packet(Params, stream, XdcStream, usePreallocatedInternalStream);

@@ -630,7 +630,7 @@ namespace NActors {
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        std::optional<ui32> MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);

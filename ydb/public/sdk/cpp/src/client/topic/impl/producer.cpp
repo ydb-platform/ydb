@@ -638,23 +638,11 @@ std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEve
 std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMessage() {
     std::lock_guard lock(Lock);
     if (Producer->MessagesWorker->IsMemoryUsageOK()) {
-        AddContinuationToken();
-        // Rotate atomically under Lock: hand the current promise to the caller (will be
-        // fulfilled outside the lock), install a fresh promise/future for future waiters.
-        auto firedPromise = std::move(EventsPromise);
-        EventsPromise = NThreading::NewPromise<void>();
-        EventsFuture = EventsPromise.GetFuture();
-        return firedPromise;
+        return std::nullopt;
     }
 
     Producer->Metrics.IncBufferFull();
     return std::nullopt;
-}
-
-void TProducer::TEventsWorker::AddContinuationToken() {
-    auto continuationToken = IssueContinuationToken();
-    TokensQueue.push_back(std::move(continuationToken));
-    Producer->Metrics.IncContinuationTokensSent();
 }
 
 bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
@@ -676,7 +664,6 @@ bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
 
 bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
     bool eventsTransferred = false;
-    bool shouldAddContinuationToken = false;
     std::unordered_map<std::uint32_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Producer->MessagesWorker;
@@ -692,14 +679,10 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         acksQueue.pop_front();
         return ackEvent;
     };
-    auto finishWithAck = [this, messagesWorker, &shouldAddContinuationToken](std::uint64_t seqNo) {
+    auto finishWithAck = [this, messagesWorker](std::uint64_t seqNo) {
         Producer->LastWrittenSeqNo = std::max(Producer->LastWrittenSeqNo, seqNo);
         Producer->MessagesWritten++;
-        bool wasMemoryUsageOk = messagesWorker->IsMemoryUsageOK();
         messagesWorker->HandleAck();
-        if (messagesWorker->IsMemoryUsageOK() && !wasMemoryUsageOk) {
-            shouldAddContinuationToken = true;
-        }
     };
 
     while (messagesWorker->HasInFlightMessages()) {
@@ -751,22 +734,7 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         }
     }
 
-    if (shouldAddContinuationToken) {
-        AddContinuationToken();
-    }
-
     return eventsTransferred;
-}
-
-std::optional<TContinuationToken> TProducer::TEventsWorker::GetContinuationToken() {
-    std::lock_guard lock(Lock);
-    if (TokensQueue.empty()) {
-        return std::nullopt;
-    }
-
-    auto continuationToken = std::move(TokensQueue.front());
-    TokensQueue.pop_front();
-    return std::move(continuationToken);
 }
 
 std::list<TWriteSessionEvent::TEvent>::iterator TProducer::TEventsWorker::AckQueueBegin(std::uint32_t partition) {
@@ -1328,6 +1296,10 @@ bool TProducer::TMessagesWorker::IsMemoryUsageOK() const {
     return MemoryUsage <= Producer->Settings.MaxMemoryUsage_ / 2;
 }
 
+bool TProducer::TMessagesWorker::CanAcceptNewMessage() const {
+    return IsMemoryUsageOK();
+}
+
 void TProducer::TMessagesWorker::AddMessage(
     const std::string& key,
     const std::string& choosePartitionKey,
@@ -1566,11 +1538,6 @@ void TProducer::TMetrics::AddWriteLag(std::uint64_t lagMs) {
     WriteLagMs.Add(lagMs);
 }
 
-void TProducer::TMetrics::IncContinuationTokensSent() {
-    std::lock_guard lock(Lock);
-    ContinuationTokensSent.Add(1);
-}
-
 void TProducer::TMetrics::IncBufferFull() {
     std::lock_guard lock(Lock);
     BufferFull.Add(1);
@@ -1598,14 +1565,12 @@ void TProducer::TMetrics::PrintMetrics() {
             << "max MainWorkerTimeMs: " << MainWorkerTimeMs.GetMax() << " ms, "
             << "max CycleTimeMs: " << CycleTimeMs.GetMax() << " ms, "
             << "max WriteLagMs: " << WriteLagMs.GetMax() << " ms, "
-            << "ContinuationTokensSent: " << ContinuationTokensSent.GetSum() << " tokens, "
             << "BufferFull: " << BufferFull.GetSum() << " times, "
             << "IncomingMessages: " << IncomingMessages.GetSum() << " messages, "
             << "OutgoingMessages: " << OutgoingMessages.GetSum() << " messages");
     MainWorkerTimeMs.Clear();
     CycleTimeMs.Clear();
     WriteLagMs.Clear();
-    ContinuationTokensSent.Clear();
     BufferFull.Clear();
     IncomingMessages.Clear();
     OutgoingMessages.Clear();
@@ -1735,8 +1700,6 @@ TProducer::TProducer(
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
-
-    EventsWorker->AddContinuationToken();
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
@@ -2128,11 +2091,10 @@ void TProducer::RunMainWorker(std::int64_t owner) {
     }
 }
 
-TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
+TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& message, bool checkMemory) {
     std::optional<NThreading::TPromise<void>> eventsPromise;
     {
         std::lock_guard lock(GlobalLock);
-        Metrics.IncIncomingMessages();
         if (Closed.load()) {
             auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
             return TWriteResult{
@@ -2141,6 +2103,14 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                 .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
             };
         }
+
+        if (checkMemory && !MessagesWorker->CanAcceptNewMessage()) {
+            return TWriteResult{
+                .Status = EWriteStatus::Timeout,
+            };
+        }
+
+        Metrics.IncIncomingMessages();
 
         if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
             || (!message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithSeqNo)) {
@@ -2201,42 +2171,27 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
-        if (Closed.load()) {
-            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
-            return TWriteResult{
-                .Status = EWriteStatus::Error,
-                .ErrorMessage = "producer is closed",
-                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
-            };
+        auto result = WriteInternal(IssueContinuationToken(), std::move(message), true);
+        if (!result.IsTimeout() || remainingTimeout == TDuration::Zero()) {
+            return result;
         }
 
-        auto continuationToken = EventsWorker->GetContinuationToken();
-        if (!continuationToken) {
-            if (remainingTimeout > TDuration::Zero()) {
-                auto toSleep = Min(sleepTimeMs, remainingTimeout);
-                Sleep(toSleep);
-                sleepTimeMs *= 2;
-                if (remainingTimeout > toSleep) {
-                    remainingTimeout -= toSleep;
-                    continue;
-                }
-
-                return TWriteResult{
-                    .Status = EWriteStatus::Timeout,
-                };
-            }
-
-            return TWriteResult{
-                .Status = EWriteStatus::Timeout,
-            };
+        auto toSleep = Min(sleepTimeMs, remainingTimeout);
+        Sleep(toSleep);
+        sleepTimeMs *= 2;
+        if (remainingTimeout > toSleep) {
+            remainingTimeout -= toSleep;
+            continue;
         }
 
-        return WriteInternal(std::move(*continuationToken), std::move(message));
+        return TWriteResult{
+            .Status = EWriteStatus::Timeout,
+        };
     }
 }
 
 void TProducer::Write(TContinuationToken&& continuationToken, TWriteMessage&& message) {
-    WriteInternal(std::move(continuationToken), std::move(message));
+    WriteInternal(std::move(continuationToken), std::move(message), false);
 }
 
 TWriteStats TProducer::GetWriteStats() {

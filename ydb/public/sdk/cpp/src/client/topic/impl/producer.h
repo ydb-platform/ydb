@@ -165,6 +165,7 @@ private:
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
         void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
+        bool CanAcceptNewMessage() const;
         bool IsMemoryUsageOK() const;
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
@@ -276,7 +277,6 @@ private:
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
-        std::optional<TContinuationToken> GetContinuationToken();
         std::optional<TSessionClosedEvent> GetSessionClosedEvent();
         bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
 
@@ -284,7 +284,6 @@ private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
         bool TransferEventsToOutputQueue();
-        void AddContinuationToken();
         bool AddSessionClosedIfNeeded();
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
@@ -294,7 +293,6 @@ private:
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
-        std::list<TContinuationToken> TokensQueue;
 
         using EventsIter = std::list<TWriteSessionEvent::TEvent>::iterator;
 
@@ -352,7 +350,6 @@ private:
         TMetricGauge MainWorkerTimeMs;
         TMetricGauge CycleTimeMs;
         TMetricGauge WriteLagMs;
-        TMetricGauge ContinuationTokensSent;
         TMetricGauge BufferFull;
         TMetricGauge IncomingMessages;
         TMetricGauge OutgoingMessages;
@@ -362,7 +359,6 @@ private:
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);
         void AddWriteLag(std::uint64_t lagMs);
-        void IncContinuationTokensSent();
         void IncBufferFull();
         void IncIncomingMessages();
         void IncOutgoingMessages();
@@ -393,7 +389,7 @@ private:
 
     void NextEpoch();
 
-    TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
+    TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message, bool checkMemory);
 
     bool IsFederation(const std::string& endpoint);
 

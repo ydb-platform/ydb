@@ -2042,6 +2042,54 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
+
+    Y_UNIT_TEST(Producer_ConcurrentZeroTimeoutWrites) {
+        constexpr size_t writersCount = 16;
+
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("concurrent_zero_timeout_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxMemoryUsage(10_MB);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+        std::atomic<bool> start = false;
+        std::vector<std::thread> threads;
+        std::vector<std::optional<TWriteResult>> results(writersCount);
+
+        threads.reserve(writersCount);
+        for (size_t i = 0; i < writersCount; ++i) {
+            threads.emplace_back([&, i] {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                results[i] = producer->Write(TWriteMessage(msgData));
+            });
+        }
+
+        start.store(true, std::memory_order_release);
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (const auto& result : results) {
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_C(result->IsQueued(), "Unexpected write status: " << static_cast<int>(result->Status));
+        }
+
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, writersCount);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

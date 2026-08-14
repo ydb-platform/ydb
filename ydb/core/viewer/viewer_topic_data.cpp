@@ -127,6 +127,7 @@ void TTopicData::SendPQReadRequest() {
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
     cmdRead->SetCanReadBatches(true);
+    cmdRead->SetReadToBlobEnd(false);
 
     auto req = MakeHolder<TEvPersQueue::TEvRequest>();
     req->Record.Swap(&request);

@@ -95,6 +95,7 @@ private:
         read.SetClientId(OFFLOAD_ACTOR_CLIENT_ID);
         read.SetTimeoutMs(READ_TIMEOUT_MS);
         read.SetBytes(READ_LIMIT_BYTES);
+        read.SetReadToBlobEnd(false);
 
         return request;
     }

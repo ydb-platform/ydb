@@ -202,6 +202,7 @@ private:
         read.SetClientId(Consumer);
         read.SetTimeoutMs(ReadTimeout.MilliSeconds());
         read.SetBytes(ReadLimitBytes);
+        read.SetReadToBlobEnd(false);
 
         return request;
     }

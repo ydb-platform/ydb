@@ -132,6 +132,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 read->SetOffset(offset);
                 read->SetCount(config.BatchSize);
                 read->SetClientId("user");
+                read->SetReadToBlobEnd(false);
                 TAutoPtr<NBus::TBusMessage> reply;
                 NBus::EMessageStatus status = config.SyncCall(request, reply);
                 Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);

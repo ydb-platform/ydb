@@ -3429,6 +3429,49 @@ Y_UNIT_TEST(TestPQRead) {
     });
 }
 
+Y_UNIT_TEST(TestPQReadOmittingReadToBlobEndFieldMatchesReadToBlobEnd) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+        PQTabletPrepare({}, {{"aaa", true}}, tc);
+
+        activeZone = false;
+        TVector<std::pair<ui64, TString>> data;
+
+        ui32 pp =  4 + 8 + 2 + 9 + 100 + 40;
+        TString tmp{1_MB - pp - 2, '-'};
+        char k = 0;
+        for (ui32 i = 0; i < 26_MB;) {
+            TString ss = "";
+            ss += k;
+            ss += tmp;
+            ss += char((i + 1) % 256);
+            ++k;
+            data.push_back({i + 1, ss});
+            i += ss.size() + pp;
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+        PQGetPartInfo(0, 26, tc);
+
+        // Size-limited reads: explicit false stops mid-blob (1 or 3 msgs).
+        // Absent field must match ReadToBlobEnd=true (drain the blob: 12 / 14 msgs).
+        CmdReadWithoutReadToBlobEnd(0, 3, 1000, 511_KB, 1, false, tc);
+        CmdRead(0, 3, 1000, 511_KB, 12, false, tc);
+        CmdReadOmittingReadToBlobEndField(0, 3, 1000, 511_KB, 12, false, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 9, 1000, 3_MB, 3, false, tc);
+        CmdRead(0, 9, 1000, 3_MB, 14, false, tc);
+        CmdReadOmittingReadToBlobEndField(0, 9, 1000, 3_MB, 14, false, tc);
+    });
+}
+
 Y_UNIT_TEST(TestPQReadWithoutReadToBlobEnd) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -3801,6 +3844,7 @@ Y_UNIT_TEST(TestReadSubscription) {
         read->SetClientId("user1");
         read->SetCount(5);
         read->SetBytes(1'000'000);
+        read->SetReadToBlobEnd(false);
         read->SetTimeoutMs(5000);
 
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -3820,6 +3864,7 @@ Y_UNIT_TEST(TestReadSubscription) {
         read->SetClientId("user1");
         read->SetCount(3);
         read->SetBytes(1'000'000);
+        read->SetReadToBlobEnd(false);
         read->SetTimeoutMs(5000);
 
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); //got read
@@ -3841,6 +3886,7 @@ Y_UNIT_TEST(TestReadSubscription) {
         read->SetClientId("user1");
         read->SetCount(55);
         read->SetBytes(1'000'000);
+        read->SetReadToBlobEnd(false);
         read->SetTimeoutMs(5000);
 
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); //got read
@@ -4250,6 +4296,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetClientId("user1");
             read->SetCount(1);
             read->SetBytes(1'000'000);
+            read->SetReadToBlobEnd(false);
             read->SetTimeoutMs(5000);
         }
 

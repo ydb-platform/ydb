@@ -119,6 +119,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         cmd.SetOffset(0);
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
+        cmd.SetReadToBlobEnd(false);
 
         auto req = MakeHolder<TEvPersQueue::TEvRequest>();
         req->Record = std::move(request);

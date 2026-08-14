@@ -1316,6 +1316,7 @@ public:
         read->SetCount(1000000);
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(maxBytes, FetchRequestBytesLeft));
+        read->SetReadToBlobEnd(false);
         read->SetReadTimestampMs(readTimestampMs);
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }

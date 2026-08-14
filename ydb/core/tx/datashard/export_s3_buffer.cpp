@@ -267,17 +267,26 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
-    size_t outputSize = Buffer.Size();
+    // Ready-to-upload size (compressed when Zstd is enabled). Used for MinBytes
+    // because S3 multipart rejects parts smaller than MinWriteBatchSize.
+    size_t readyOutputBytes = Buffer.Size();
     if (Compression) {
-        outputSize = Compression->GetReadyOutputBytes();
+        readyOutputBytes = Compression->GetReadyOutputBytes();
     }
     // Some formats (e.g. Parquet) keep encoded output inside the format itself
     // until a flush, so it is not yet reflected in Buffer/Compression.
-    outputSize += DataFormat->GetReadyOutputBytes();
-    if (outputSize < MinBytes) {
+    readyOutputBytes += DataFormat->GetReadyOutputBytes();
+    if (readyOutputBytes < MinBytes) {
         return false;
     }
-    return Rows >= RowsLimit || outputSize >= MaxBytes;
+
+    // MaxBytes must cap in-memory payload (pre-compression Buffer + format-
+    // internal bytes), not only compressed output. After #40202 MaxBytes was
+    // applied to readyOutputBytes; with Zstd that deferred flush until ~MaxBytes
+    // compressed while the uncompressed Buffer grew far beyond MaxBytes (OOM,
+    // KIKIMR-26744 / YDBREQUESTS-8386). Matches pre-#40202 Buffer.Size() check.
+    const size_t memoryBytes = Buffer.Size() + DataFormat->GetReadyOutputBytes();
+    return Rows >= RowsLimit || memoryBytes >= MaxBytes;
 }
 
 TString TS3Buffer::GetError() const {

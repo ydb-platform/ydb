@@ -201,6 +201,39 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
 
         TestMinBufferSize(dataFormat, minBufferSize);
     }
+
+    // Regression: with Zstd, MaxBytes must limit uncompressed in-memory size.
+    // If MaxBytes is applied only to compressed output, highly compressible rows
+    // keep the Buffer growing until compressed size hits MaxBytes → OOM.
+    Y_UNIT_TEST(MaxBytesCapsUncompressedSizeWithZstd) {
+        const ui64 maxBytes = 32'000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(10))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(1)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        ui64 flushes = 0;
+        for (ui32 i = 0; i < 20'000; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString(256, 'a')));
+            auto* buffer = Buffer(dataFormat);
+            if (!buffer->IsFilled()) {
+                continue;
+            }
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            UNIT_ASSERT(event);
+            ++flushes;
+            // One row may slightly overshoot MaxBytes; *3 leaves room without
+            // accepting the compressed-only MaxBytes bug (which grows much more).
+            UNIT_ASSERT_LE_C(stats.BytesRead, maxBytes * 3,
+                "BytesRead=" << stats.BytesRead << " maxBytes=" << maxBytes
+                << " iteration=" << i);
+        }
+        UNIT_ASSERT_GT_C(flushes, 0, "expected at least one flush under MaxBytes");
+    }
 }
 
 } // namespace NKikimr::NDataShard

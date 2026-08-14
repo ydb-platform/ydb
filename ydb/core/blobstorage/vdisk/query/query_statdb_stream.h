@@ -11,7 +11,7 @@
 
 namespace NKikimr {
 
-    // Accumulates complete tablets into a bounded response chunk while retaining
+    // Accumulates complete tablets into a bounded response batch while retaining
     // only one in-progress tablet and the small all-channel aggregate.
     class TLogoBlobIndexStatStreamAccumulator {
         class TChannelInfo {
@@ -84,8 +84,8 @@ namespace NKikimr {
         };
 
     public:
-        explicit TLogoBlobIndexStatStreamAccumulator(ui64 maxChunkBytes)
-            : MaxChunkBytes(Max<ui64>(maxChunkBytes, 1))
+        explicit TLogoBlobIndexStatStreamAccumulator(ui64 maxBatchBytes)
+            : MaxBatchBytes(Max<ui64>(maxBatchBytes, 1))
         {}
 
         void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
@@ -101,22 +101,22 @@ namespace NKikimr {
             AllChannels.Update(id, memRec);
         }
 
-        bool IsChunkReady() const {
-            return ChunkReady;
+        bool IsBatchReady() const {
+            return BatchReady;
         }
 
-        void ExtractChunk(NKikimrVDisk::LogoBlobIndexStat* output) {
+        void ExtractBatch(NKikimrVDisk::LogoBlobIndexStat* output) {
             Y_ABORT_UNLESS(output);
             output->Clear();
-            output->Swap(&Chunk);
-            ChunkBytes = 0;
-            ChunkReady = false;
+            output->Swap(&Batch);
+            BatchBytes = 0;
+            BatchReady = false;
         }
 
         void Finish() {
             Y_ABORT_UNLESS(!Finished);
             AppendCurrentTablet();
-            AllChannels.Finish(Chunk.mutable_channels());
+            AllChannels.Finish(Batch.mutable_channels());
             Finished = true;
         }
 
@@ -126,24 +126,24 @@ namespace NKikimr {
                 return;
             }
 
-            NKikimrVDisk::TabletInfo* output = Chunk.add_tablets();
+            NKikimrVDisk::TabletInfo* output = Batch.add_tablets();
             CurrentTablet->Finish(output);
             CurrentTablet.reset();
 
             const ui64 tabletSize = output->ByteSizeLong();
             // LogoBlobIndexStat.tablets is field 1, so its tag occupies one byte.
-            ChunkBytes += 1 + google::protobuf::io::CodedOutputStream::VarintSize64(tabletSize) + tabletSize;
-            ChunkReady = ChunkBytes >= MaxChunkBytes;
+            BatchBytes += 1 + google::protobuf::io::CodedOutputStream::VarintSize64(tabletSize) + tabletSize;
+            BatchReady = BatchBytes >= MaxBatchBytes;
         }
 
     private:
-        const ui64 MaxChunkBytes;
-        ui64 ChunkBytes = 0;
-        bool ChunkReady = false;
+        const ui64 MaxBatchBytes;
+        ui64 BatchBytes = 0;
+        bool BatchReady = false;
         bool Finished = false;
         std::optional<TTabletInfo> CurrentTablet;
         TAllChannels AllChannels;
-        NKikimrVDisk::LogoBlobIndexStat Chunk;
+        NKikimrVDisk::LogoBlobIndexStat Batch;
     };
 
 } // namespace NKikimr

@@ -126,7 +126,7 @@ message GetLogoBlobResponse {
 
 message GetLogoBlobIndexStatRequest {
     bool stream = 1; // false preserves the legacy single-response protocol
-    uint32 max_chunk_bytes = 2; // zero selects the VDisk default; the value is advisory
+    uint32 max_batch_bytes = 2; // zero selects the VDisk default; the value is advisory
 }
 
 message ChannelInfo {
@@ -156,6 +156,6 @@ message GetLogoBlobIndexStatResponse {
 }
 
 message GetLogoBlobIndexStatResponseAck {
-    uint64 sequence_id = 1;
-    bool cancel = 2; // terminate the stream instead of producing the next chunk
+    optional uint64 sequence_id = 1;
+    optional bool cancel = 2; // terminate the stream instead of producing the next batch
 }

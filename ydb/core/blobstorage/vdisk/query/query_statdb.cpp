@@ -438,23 +438,23 @@ namespace NKikimr {
             const ui64 SequenceId;
         };
 
-        static constexpr ui64 DefaultChunkBytes = 1 << 20;
-        static constexpr ui64 MinChunkBytes = 64 << 10;
+        static constexpr ui64 DefaultBatchBytes = 1 << 20;
+        static constexpr ui64 MinBatchBytes = 64 << 10;
         static constexpr TDuration AckTimeout = TDuration::Seconds(30);
 
         friend class TActorBootstrapped<TThis>;
 
-        static ui64 CalculateChunkBytes(
+        static ui64 CalculateBatchBytes(
                 const NKikimrVDisk::GetLogoBlobIndexStatRequest& request,
                 const TIntrusivePtr<THullCtx>& hullCtx)
         {
             const ui64 configuredMax = hullCtx->VCfg
                 ? Max<ui64>(hullCtx->VCfg->MaxResponseSize, 1)
-                : DefaultChunkBytes;
-            const ui64 configuredMin = Min(MinChunkBytes, configuredMax);
-            const ui64 requested = request.max_chunk_bytes()
-                ? request.max_chunk_bytes()
-                : Min(DefaultChunkBytes, configuredMax);
+                : DefaultBatchBytes;
+            const ui64 configuredMin = Min(MinBatchBytes, configuredMax);
+            const ui64 requested = request.max_batch_bytes()
+                ? request.max_batch_bytes()
+                : Min(DefaultBatchBytes, configuredMax);
             return Min(Max(requested, configuredMin), configuredMax);
         }
 
@@ -471,12 +471,12 @@ namespace NKikimr {
                 *Snapshot,
                 std::move(YieldedState),
                 YieldPolicy,
-                [this] { return Accumulator.IsChunkReady(); });
+                [this] { return Accumulator.IsBatchReady(); });
             ReleaseSnapshot();
 
             if (!YieldedState) {
                 ReplyAndDie();
-            } else if (Accumulator.IsChunkReady()) {
+            } else if (Accumulator.IsBatchReady()) {
                 ReplyAndWaitForAck();
             } else {
                 TThis::Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
@@ -515,9 +515,9 @@ namespace NKikimr {
                 nullptr);
         }
 
-        void SendChunk(bool hasMore, ui64 sequenceId) {
+        void SendBatch(bool hasMore, ui64 sequenceId) {
             auto response = MakeResponse();
-            Accumulator.ExtractChunk(response->Record.mutable_stat());
+            Accumulator.ExtractBatch(response->Record.mutable_stat());
             response->Record.set_has_more(hasMore);
             response->Record.set_sequence_id(sequenceId);
             SendVDiskResponse(
@@ -533,11 +533,11 @@ namespace NKikimr {
             OutstandingSequence = ++LastSentSequence;
             TThis::Become(&TThis::StateWaitAck);
             TThis::Schedule(AckTimeout, new TEvAckTimeout(OutstandingSequence));
-            SendChunk(true, OutstandingSequence);
+            SendBatch(true, OutstandingSequence);
         }
 
         void ReplyAndDie() {
-            SendChunk(false, ++LastSentSequence);
+            SendBatch(false, ++LastSentSequence);
             TThis::PassAway();
         }
 
@@ -551,9 +551,9 @@ namespace NKikimr {
             }
 
             const auto& record = ev->Get()->Record;
-            if (record.cancel()) {
+            if (record.has_cancel() && record.cancel()) {
                 TThis::PassAway();
-            } else if (record.sequence_id() > LastSentSequence) {
+            } else if (record.has_sequence_id() && record.sequence_id() > LastSentSequence) {
                 TThis::PassAway();
             }
         }
@@ -564,13 +564,18 @@ namespace NKikimr {
             }
 
             const auto& record = ev->Get()->Record;
-            if (record.cancel()) {
+            if (record.has_cancel() && record.cancel()) {
                 return TThis::PassAway();
             }
-            if (record.sequence_id() < OutstandingSequence) {
+            if (!record.has_sequence_id()) {
                 return;
             }
-            if (record.sequence_id() > OutstandingSequence) {
+
+            const ui64 sequenceId = record.sequence_id();
+            if (sequenceId < OutstandingSequence) {
+                return;
+            }
+            if (sequenceId > OutstandingSequence) {
                 return TThis::PassAway();
             }
 
@@ -585,15 +590,12 @@ namespace NKikimr {
             }
         }
 
-        void IgnoreAckTimeout(TEvAckTimeout::TPtr&) {
-        }
-
         STRICT_STFUNC(StateTraverse, {
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
             hFunc(TEvTakeHullSnapshotResult, Handle);
             hFunc(TAck, HandleAckWhileTraversing);
-            hFunc(TEvAckTimeout, IgnoreAckTimeout);
+            IgnoreFunc(TEvAckTimeout);
         })
 
         STRICT_STFUNC(StateWaitAck, {
@@ -604,7 +606,7 @@ namespace NKikimr {
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_STREAM_QUERY;
         }
 
         TLogoBlobIndexStatStreamActor(
@@ -619,7 +621,7 @@ namespace NKikimr {
             , Recipient(ev->Sender)
             , Cookie(ev->Cookie)
             , InitialResult(std::move(result))
-            , Accumulator(CalculateChunkBytes(ev->Get()->Record, hullCtx))
+            , Accumulator(CalculateBatchBytes(ev->Get()->Record, hullCtx))
         {}
 
         void PassAway() override {

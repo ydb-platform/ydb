@@ -54,6 +54,49 @@ struct TEvTestPrivate {
     };
 };
 
+// Tracks quota strictly - it is an error to free more bytes than were allocated (like the real
+// TChannelQuotaManager does with VERIFY) and to leave anything allocated at the end of the test.
+struct TTestQuotaManager : public IMemoryQuotaManager {
+
+    bool AllocateQuota(ui64 memorySize) override {
+        if (Quota.load() + static_cast<i64>(memorySize) > static_cast<i64>(Limit)) {
+            return false;
+        }
+        Quota += memorySize;
+        Allocated += memorySize;
+        return true;
+    }
+
+    void FreeQuota(ui64 memorySize) override {
+        if (Quota.fetch_sub(memorySize) < static_cast<i64>(memorySize)) {
+            Underflows++;
+        }
+        Freed += memorySize;
+    }
+
+    ui64 GetCurrentQuota() const override {
+        return Quota.load();
+    }
+
+    ui64 GetMaxMemorySize() const override {
+        return Limit;
+    }
+
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        return TStringBuilder() << "Quota=" << Quota.load() << ", Limit=" << Limit;
+    }
+
+    static constexpr ui64 Limit = 1ull << 30; // large enough to never be exceeded by the tests
+    std::atomic<i64> Quota = 0;
+    std::atomic<ui64> Allocated = 0;
+    std::atomic<ui64> Freed = 0;
+    std::atomic<ui64> Underflows = 0;
+};
+
 struct TWorkerSettings {
     int StartDelayMs = 10;
     int MessageCount = 0;
@@ -74,12 +117,14 @@ struct TFailureSettings {
 template <typename TDerived>
 class TWorkerActor : public NActors::TActor<TDerived> {
 public:
-    TWorkerActor(const TString& logPrefix, std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
+    TWorkerActor(const TString& logPrefix, std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings,
+        IMemoryQuotaManager::TPtr quotaManager)
         : NActors::TActor<TDerived>(&TWorkerActor::StateFunc)
         , LogPrefix(logPrefix)
         , Service(service)
         , ChannelId(channelId)
         , Settings(settings)
+        , QuotaManager(std::move(quotaManager))
     {}
 
     STFUNC(StateFunc) {
@@ -131,20 +176,22 @@ public:
     NActors::TActorId PeerId;
     NActors::TActorId RunnerId;
     TWorkerSettings Settings;
+    IMemoryQuotaManager::TPtr QuotaManager;
     int MessageIndex = 0;
     bool Started = false;
 };
 
 class TProducerActor : public TWorkerActor<TProducerActor> {
 public:
-    TProducerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
-        : TWorkerActor("PROD ", service, channelId, settings)
+    TProducerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings,
+        IMemoryQuotaManager::TPtr quotaManager)
+        : TWorkerActor("PROD ", service, channelId, settings, std::move(quotaManager))
     {}
 
     void Run() override {
         if (!Started) {
             TChannelFullInfo info(ChannelId, SelfId(), PeerId, 0, 1, TCollectStatsLevel::None);
-            Buffer = Service->GetOutputBuffer(info, nullptr, nullptr);
+            Buffer = Service->GetOutputBuffer(info, QuotaManager, nullptr);
             Started = true;
         }
         if (Buffer->IsFinished()) {
@@ -181,14 +228,15 @@ public:
 
 class TConsumerActor : public TWorkerActor<TConsumerActor> {
 public:
-    TConsumerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
-        : TWorkerActor("CONS ", service, channelId, settings)
+    TConsumerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings,
+        IMemoryQuotaManager::TPtr quotaManager)
+        : TWorkerActor("CONS ", service, channelId, settings, std::move(quotaManager))
     {}
 
     void Run() override {
         if (!Started) {
             TChannelFullInfo info(ChannelId, PeerId, SelfId(), 0, 1, TCollectStatsLevel::None);
-            Buffer = Service->GetInputBuffer(info, nullptr);
+            Buffer = Service->GetInputBuffer(info, QuotaManager);
             Started = true;
         }
         TDataChunk data;
@@ -247,15 +295,15 @@ struct TLoadTest {
         for (auto i = 0; i < Count; i ++) {
             auto channelId = i + 1;
             if ((i & 1) == 0) {
-                auto producer = Runtime->Register(new TProducerActor(Service0, channelId, ProducerSettings), NodeIndex0);
-                auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings), NodeIndex1);
+                auto producer = Runtime->Register(new TProducerActor(Service0, channelId, ProducerSettings, OutputQuotaManager), NodeIndex0);
+                auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings, InputQuotaManager), NodeIndex1);
                 Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
                 Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
                 Actors.insert(producer);
                 Actors.insert(consumer);
             } else {
-                auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings), NodeIndex1);
-                auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings), NodeIndex0);
+                auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings, OutputQuotaManager), NodeIndex1);
+                auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
                 Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
                 Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
                 Actors.insert(producer);
@@ -301,12 +349,36 @@ struct TLoadTest {
         UNIT_ASSERT_VALUES_EQUAL(ErrorCount, 0);
     }
 
+    // stops the actor system, all channel descriptors are destroyed and all quota is released here
+    virtual void Destroy() {
+        Service0.reset();
+        Service1.reset();
+        Runtime = nullptr;
+        Runner.reset();
+    }
+
+    virtual void CheckQuota() {
+        for (const auto& [name, quotaManager] : {
+            std::make_pair(TStringBuf("Output"), OutputQuotaManager),
+            std::make_pair(TStringBuf("Input"), InputQuotaManager)}) {
+            TStringBuilder details;
+            details << name << " quota: Quota=" << quotaManager->Quota.load()
+                << ", Allocated=" << quotaManager->Allocated.load()
+                << ", Freed=" << quotaManager->Freed.load()
+                << ", Underflows=" << quotaManager->Underflows.load();
+            UNIT_ASSERT_VALUES_EQUAL_C(quotaManager->Underflows.load(), 0, details);
+            UNIT_ASSERT_VALUES_EQUAL_C(quotaManager->Quota.load(), 0, details);
+        }
+    }
+
     virtual void Run() {
         Prepare();
         Init();
         Start();
         Wait();
         Check();
+        Destroy();
+        CheckQuota();
     }
 
     int Count = 1;
@@ -322,6 +394,8 @@ struct TLoadTest {
     NActors::TActorId Control1;
     TWorkerSettings ProducerSettings;
     TWorkerSettings ConsumerSettings;
+    std::shared_ptr<TTestQuotaManager> OutputQuotaManager = std::make_shared<TTestQuotaManager>();
+    std::shared_ptr<TTestQuotaManager> InputQuotaManager = std::make_shared<TTestQuotaManager>();
     THashSet<NActors::TActorId> Actors;
     int ErrorCount = 0;
     int FinishCount[2][2] = {{0, 0}, {0, 0}};
@@ -342,8 +416,8 @@ struct TReconTest : public TLoadTest {
                 auto producerSettings = ProducerSettings;
                 producerSettings.PauseMessageIndex = (channelId + producerSettings.MessageCount / 2) % producerSettings.MessageCount;
                 producerSettings.PauseDelayMs = 50;
-                auto producer = Runtime->Register(new TProducerActor(Service0, channelId, producerSettings), NodeIndex0);
-                auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings), NodeIndex1);
+                auto producer = Runtime->Register(new TProducerActor(Service0, channelId, producerSettings, OutputQuotaManager), NodeIndex0);
+                auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings, InputQuotaManager), NodeIndex1);
                 Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
                 Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
                 Actors.insert(producer);
@@ -352,8 +426,8 @@ struct TReconTest : public TLoadTest {
                 auto producerSettings = ProducerSettings;
                 producerSettings.PauseMessageIndex = channelId;
                 producerSettings.PauseDelayMs = 50;
-                auto producer = Runtime->Register(new TProducerActor(Service1, channelId, producerSettings), NodeIndex1);
-                auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings), NodeIndex0);
+                auto producer = Runtime->Register(new TProducerActor(Service1, channelId, producerSettings, OutputQuotaManager), NodeIndex1);
+                auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
                 Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
                 Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
                 Actors.insert(producer);

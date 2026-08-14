@@ -402,7 +402,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     }
 
     auto MakeCatchDiskStatuses = [](ui32 groupId, const THashSet<ui32>& phantomOnlyDomains,
-                                    const THashSet<ui32>& faultyDomains) {
+                                    const THashSet<ui32>& faultyDomains,
+                                    const THashSet<ui32>& readyFaultyDomains = {}) {
         return [=](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
                 auto* vdiskStatuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
@@ -426,6 +427,10 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
                         // this VDisk is REPLICATING with only phantom blobs remaining
                         status.SetOnlyPhantomsRemain(true);
                         status.SetStatus(NKikimrBlobStorage::EVDiskStatus::REPLICATING);
+                    } else if (readyFaultyDomains.contains(domain)) {
+                        // this VDisk remains available even though its PDisk is marked FAULTY
+                        status.SetOnlyPhantomsRemain(false);
+                        status.SetStatus(NKikimrBlobStorage::EVDiskStatus::READY);
                     } else if (faultyDomains.contains(domain)) {
                         // this VDisk's PDisk is FAULTY, so it doesn't report its status
                         return false;
@@ -461,6 +466,32 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
 
         UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (0, 1, 0) to be moved");
+    }
+
+    Y_UNIT_TEST(SelfHealDoesNotMoveReadyFaultyDiskWithPhantomsOnly) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        const ui32 groupId = env.GetGroups().at(0);
+        const TPDiskId originalPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+
+        ChangeDiskStatus(env, originalPDiskId, NKikimrBlobStorage::EDriveStatus::FAULTY,
+            NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
+
+        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0},
+            /*faultyDomains=*/{}, /*readyFaultyDomains=*/{1});
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        const TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+        UNIT_ASSERT_C(newPDiskId == originalPDiskId, "Expected ready VDisk (0, 1, 0) not to be moved");
     }
 
     Y_UNIT_TEST(SelfHealWithTwoFailedDisksAndOnePhantomOnly) {

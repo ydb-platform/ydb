@@ -48,8 +48,17 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+    bool ForcedMove = false;
 
 public:
+    bool GetForcedMove() const {
+        return ForcedMove;
+    }
+
+    void SetForcedMove() {
+        ForcedMove = true;
+    }
+
     TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
         const TString& currentTierName)
         : CurrentScheme(currentScheme)
@@ -102,6 +111,9 @@ public:
             return true;
         }
         if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+            return true;
+        }
+        if (ForcedMove) {
             return true;
         }
         AFL_VERIFY(false);

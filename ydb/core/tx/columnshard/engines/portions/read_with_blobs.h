@@ -47,7 +47,7 @@ public:
         const std::set<ui32>& seqColumns, const bool restoreAbsent = true) const;
     static std::optional<TWritePortionInfoWithBlobsResult> SyncPortion(TReadPortionInfoWithBlobs&& source, const ISnapshotSchema::TPtr& from,
         const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
-        std::shared_ptr<NColumnShard::TSplitterCounters> counters);
+        std::shared_ptr<NColumnShard::TSplitterCounters> counters, bool forcedMove = false);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 

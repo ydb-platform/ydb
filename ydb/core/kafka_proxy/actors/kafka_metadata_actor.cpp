@@ -88,14 +88,21 @@ private:
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
-        AFL_ENSURE(ev->Get()->Topics.size() == 1)("s", ev->Get()->Topics.size());
-        const auto& topicInfo = ev->Get()->Topics.begin()->second;
+        const auto it = ev->Get()->Topics.find(Path);
+        if (it == ev->Get()->Topics.end()) {
+            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected describer response");
+        }
+        const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
-            // Match previous Kafka mapping: missing topic → SCHEME_ERROR (auto-create).
-            const auto status = topicInfo.Status == NDescriber::EStatus::UNKNOWN_ERROR
-                ? Ydb::StatusIds::INTERNAL_ERROR
-                : Ydb::StatusIds::SCHEME_ERROR;
+            auto status = NDescriber::Convert(topicInfo.Status);
+            // Missing topic → SCHEME_ERROR so Kafka auto-create / UNKNOWN_TOPIC still work.
+            if (status == Ydb::StatusIds::NOT_FOUND) {
+                status = Ydb::StatusIds::SCHEME_ERROR;
+            }
             return ReplyError(status, NDescriber::Description(Path, topicInfo.Status));
+        }
+        if (!topicInfo.Self || !topicInfo.Info) {
+            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Incomplete describer response");
         }
 
         Response->PathId = topicInfo.Self->Info.GetPathId();

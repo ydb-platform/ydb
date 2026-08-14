@@ -200,23 +200,24 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
             runtime->DispatchEvents();
             auto ev = runtime->GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>();
             UNIT_ASSERT(ev);
-            UNIT_ASSERT(ev->Topics.contains(path));
-            return ev;
+            const auto it = ev->Topics.find(path);
+            UNIT_ASSERT(it != ev->Topics.end());
+            return it->second;
         };
 
-        auto ev = getDescribe();
-        const auto& info = ev->Topics.begin()->second;
+        auto info = getDescribe();
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(info.Status), static_cast<int>(NPQ::NDescriber::EStatus::SUCCESS));
         UNIT_ASSERT(info.Info);
+        UNIT_ASSERT(info.Self);
         UNIT_ASSERT_VALUES_EQUAL(info.Info->Description.PartitionsSize(), 15u);
         UNIT_ASSERT(info.Info->Description.GetBalancerTabletID() != 0);
         UNIT_ASSERT_GT(info.Self->Info.GetPathId(), 0);
         UNIT_ASSERT_GT(info.Self->Info.GetSchemeshardId(), 0);
 
         currentTopicName = "bad-topic";
-        ev = getDescribe();
+        info = getDescribe();
         UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(ev->Topics.begin()->second.Status),
+            static_cast<int>(info.Status),
             static_cast<int>(NPQ::NDescriber::EStatus::NOT_FOUND));
     }
     Y_UNIT_TEST(GetPartitionDescribe) {

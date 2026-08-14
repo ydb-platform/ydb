@@ -5,22 +5,37 @@ name: Label documentation PR
 # label using the GITHUB_TOKEN. The actual documentation build is intentionally
 # split out into `docs_build.yaml`, which runs in the fork-isolated
 # `pull_request` context.
+#
+# Do not rely on `paths:` alone: after a force-push/rebase GitHub can falsely
+# match `ydb/docs/**` against unrelated main commits. Always verify the PR
+# file list via the API (same approach as docs_build_rebuild.yaml).
 
 on:
   pull_request_target:
-    paths:
-      - 'ydb/docs/**'
+    types: [opened, synchronize, reopened]
 
 jobs:
   add-label:
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - name: Add documentation label
+      - name: Add documentation label if PR touches docs
         uses: actions/github-script@v8
         with:
           script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
+            if (!hasDocs) {
+              core.info('No ydb/docs/** changes; skipping documentation label');
+              return;
+            }
             await github.rest.issues.addLabels({
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,

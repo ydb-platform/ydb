@@ -80,7 +80,6 @@ class TestYdbTopicWorkload(StressFixture):
             self.database,
             suffix="-direct-batch",
             extra_args=[
-                "--num-workers", "1",
                 "--source-writer", "kafka-direct",
             ],
         )

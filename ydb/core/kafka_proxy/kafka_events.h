@@ -9,6 +9,7 @@
 #include "kafka_producer_instance_id.h"
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
+#include <util/generic/hash.h>
 
 using namespace NActors;
 

@@ -245,6 +245,20 @@ NActors::IActor* CreateTopicLocationActor(
     TString path,
     TString database,
     TString token);
+
+struct TTopicOffsetsSettings {
+    TString Path;
+    TString Database;
+    TString Token;
+    TVector<ui32> PartitionIds;
+    TVector<TString> Consumers;
+    bool RequireSelectRow = false;
+    bool RequireAuthentication = false;
+};
+
+NActors::IActor* CreateTopicOffsetsActor(
+    const NActors::TActorId& requester,
+    TTopicOffsetsSettings settings);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);

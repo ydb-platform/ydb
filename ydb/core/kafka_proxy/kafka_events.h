@@ -254,11 +254,25 @@ struct TEvKafka {
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {
     };
 
+struct PartitionConsumerOffset {
+    ui64 PartitionIndex = 0;
+    ui64 Offset = 0;
+    std::optional<TString> Metadata = std::nullopt;
+
+    PartitionConsumerOffset() = default;
+    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt)
+        : PartitionIndex(partitionIndex)
+        , Offset(offset)
+        , Metadata(metadata)
+    {}
+};
+
 struct TPartitionOffsetsInfo {
-    ui64 PartitionId;
-    ui64 Generation;
-    ui64 StartOffset;
-    ui64 EndOffset;
+    ui64 PartitionId = 0;
+    ui64 Generation = 0;
+    ui64 StartOffset = 0;
+    ui64 EndOffset = 0;
+    THashMap<TString, PartitionConsumerOffset> Consumers;
 };
 
 struct TGetOffsetsRequest : public NKikimr::NGRpcProxy::V1::TLocalRequestBase {
@@ -278,17 +292,6 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     {}
 
     TVector<TPartitionOffsetsInfo> Partitions;
-};
-
-struct PartitionConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    std::optional<TString> Metadata = std::nullopt;
-
-    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt) :
-                                                PartitionIndex(partitionIndex),
-                                                Offset(offset),
-                                                Metadata(metadata) {}
 };
 
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>

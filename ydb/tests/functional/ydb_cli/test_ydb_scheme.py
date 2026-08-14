@@ -252,7 +252,6 @@ class TestSecretSchemeDescribe:
             expected_version=1,
         )
 
-
     @pytest.mark.parametrize(
         "inherit_permissions",
         [

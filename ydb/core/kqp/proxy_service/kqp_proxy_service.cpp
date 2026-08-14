@@ -406,6 +406,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitAccessServiceService();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -516,6 +517,9 @@ public:
         if (DescribeResourceIdService) {
             Send(DescribeResourceIdService, new TEvents::TEvPoison());
         }
+        if (AccessServiceService) {
+            Send(AccessServiceService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -570,6 +574,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitAccessServiceService();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1719,7 +1724,8 @@ private:
             ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
             ResourcePoolsCache.GetClassifierViewFor(databaseId),
             databaseId,
-            std::move(context)
+            std::move(context),
+            *AppData()
         );
 
         ev->Get()->SetWmQueryClassifier(classifier);
@@ -2073,6 +2079,21 @@ private:
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
+    void InitAccessServiceService() {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || AccessServiceService) {
+            return;
+        }
+        try {
+            auto actor = CreateAccessServiceActor();
+            AccessServiceService = TActivationContext::Register(actor);
+            TActivationContext::ActorSystem()->RegisterLocalService(
+                MakeKqpAccessServiceId(), AccessServiceService);
+        } catch(const std::exception& ex) {
+            YDB_LOG_ERROR("Failed to start AccessService service actor",
+                    {"exception", ex.what()});
+        }
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -2135,6 +2156,7 @@ private:
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
+    TActorId AccessServiceService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

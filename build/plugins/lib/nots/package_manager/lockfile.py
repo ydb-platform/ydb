@@ -402,6 +402,17 @@ class Lockfile(object):
         self.data = PnpmLockfileHelper.ensure_v9(self.data)
         lf.data = PnpmLockfileHelper.ensure_v9(lf.data)
 
+        injected_directories = {}
+        for package_id, package_meta in lf.data.get("packages", {}).items():
+            resolution = package_meta.get("resolution", {})
+            if resolution.get("type") != "directory" or "directory" not in resolution:
+                continue
+
+            old_directory = resolution["directory"]
+            package_path = os.path.normpath(os.path.join(os.path.dirname(lf.path), old_directory))
+            new_directory = os.path.relpath(package_path, build_path)
+            injected_directories[package_id] = new_directory
+
         for importer, imports in lf.get_importers().items():
             importer_path = os.path.normpath(os.path.join(os.path.dirname(lf.path), importer))
             importer_rel_path = os.path.relpath(importer_path, build_path)
@@ -415,6 +426,8 @@ class Lockfile(object):
         packages = self.data.get("packages", {})
         for k, v in lf.data.get("packages", {}).items():
             if k not in packages:
+                if k in injected_directories:
+                    v["resolution"]["directory"] = injected_directories[k]
                 packages[k] = v
         self.data["packages"] = packages
 

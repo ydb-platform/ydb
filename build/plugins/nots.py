@@ -380,7 +380,7 @@ def _setup_prebuilder_resource(unit: ymake.Unit) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _SET_APPEND_WITH_DIRECTIVE(unit: ymake.Unit, var_name: str, directive: str, *values: tuple[str, ...]) -> None:
+def _SET_APPEND_WITH_DIRECTIVE(unit: ymake.Unit, var_name: str, directive: str, *values: str) -> None:
     wrapped = [f'${{{directive}:"{v}"}}' for v in values]
 
     __set_append(unit, var_name, " ".join(wrapped))
@@ -403,7 +403,7 @@ def _check_nodejs_version(unit: ymake.Unit, major: int) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: tuple[str, ...]) -> None:
+def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
     from lib.nots.package_manager import PackageManager
 
     pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
@@ -581,6 +581,15 @@ def _filter_inputs_by_rules_from_tsconfig(unit: ymake.Unit, tsconfig: 'TsConfig'
         all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
         filtered_files = tsconfig.filter_files(all_files)
         __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
+    _setup_eslint(unit)
+    _setup_tsc_typecheck(unit)
+    _setup_stylelint(unit)
+    _setup_biome(unit)
 
 
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
@@ -895,13 +904,6 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
-    unit.set(["_INJECT_PEERS", "yes"])
-    unit.set(["_INJECT_PEERS_ARG", "--inject-peers yes"])
-
-    in_package_json = _build_directives(["hide", "input"], ["package.json"])
-    out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
-
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
@@ -942,6 +944,7 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
         from lib.nots.package_manager.utils import b_rooted, s_rooted
@@ -975,15 +978,13 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
-    unit.set(["_INJECT_PEERS", "yes"])
-    unit.set(["_INJECT_PEERS_ARG", "--inject-peers yes"])
-
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
     pm = _create_pm(unit)
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
     unit.set(
@@ -1051,6 +1052,8 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
     normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
     normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+    if normalized_ts_outputs:
+        unit.set(["_TS_OUTPUTS_JOINED", "|".join(normalized_ts_outputs)])
 
     missing_outputs = []
     for output in normalized_ts_outputs:
@@ -1067,6 +1070,12 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
             f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
         )
+
+    after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
+    if after_build_command:
+        build_command = "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command)
+        unit.set(["_TS_BUILD_COMMAND", build_command])
+        unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(build_command.replace('"', '\\"'))])
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
@@ -1159,9 +1168,16 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
-        if not _use_hermetic_node_modules(unit):
-            from lib.nots.package_manager.utils import s_rooted
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import s_rooted
 
+        source_manifests = {
+            s_rooted(os.path.join(pm.module_path, constants.PACKAGE_JSON_FILENAME)),
+            s_rooted(os.path.join(pm.module_path, constants.PNPM_LOCKFILE_FILENAME)),
+        }
+        ins = [path for path in ins if path not in source_manifests]
+
+        if not _use_hermetic_node_modules(unit):
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
@@ -1334,14 +1350,14 @@ def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_FILES(unit: ymake.Unit, *files: tuple[str, ...]) -> None:
+def _TS_FILES(unit: ymake.Unit, *files: str) -> None:
     files = list(files)
     __on_ts_files(unit, files, files)
 
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: tuple[str, ...]) -> None:
+def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
     if destination == REQUIRED_MISSING:
         ymake.report_configure_error(
             "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"
@@ -1427,7 +1443,7 @@ def _ESCAPE_SPACES(unit: ymake.Unit, var_name: str) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_CONF_ERROR(unit: ymake.Unit, *messages: tuple[str, ...]) -> None:
+def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
     msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
     ymake.report_configure_error(msg)
 

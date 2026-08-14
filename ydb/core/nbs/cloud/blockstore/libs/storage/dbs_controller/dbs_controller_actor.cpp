@@ -153,6 +153,15 @@ STFUNC(TDbsControllerActor::StateWork)
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
         HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
         HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+        HFunc(
+            TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest,
+            HandleUpdateDDiskMapRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvGetNodesForPartitionRequest,
+            HandleGetNodesForPartitionRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest,
+            HandleGetPartitionsForNodeRequest);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

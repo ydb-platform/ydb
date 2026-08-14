@@ -25,13 +25,14 @@ TFlushRequestExecutor::TFlushRequestExecutor(
           GetCycleCount(),
           {{"t", "Flush"},
            {"src",
-            PrintHostAndNodeId(
-                route.SourceHostIndex,
-                directBlockGroup->GetNodeId(route.SourceHostIndex))},
+            THostAndNodeId{
+                .HostIndex = route.SourceHostIndex,
+                .NodeId = directBlockGroup->GetNodeId(route.SourceHostIndex)}},
            {"dst",
-            PrintHostAndNodeId(
-                route.DestinationHostIndex,
-                directBlockGroup->GetNodeId(route.DestinationHostIndex))}}))
+            THostAndNodeId{
+                .HostIndex = route.DestinationHostIndex,
+                .NodeId =
+                    directBlockGroup->GetNodeId(route.DestinationHostIndex)}}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
@@ -130,7 +131,7 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
                 LogTitle.GetWithTime().c_str(),
                 Hint.Segments[i].Lsn,
                 Hint.Segments[i].Range.Print().c_str(),
-                FormatError(response.Errors[i]).c_str());
+                FormatError(response.Errors[i]).Quote().c_str());
 
             flushFailed.push_back(Hint.Segments[i].Lsn);
         } else {

@@ -30,6 +30,7 @@ service ProfilesService {
   rpc Export(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
 }
 
+// Status: [Alpha]
 message ExportProfilesServiceRequest {
   // An array of ResourceProfiles.
   // For data coming from a single resource this array will typically contain one
@@ -42,6 +43,7 @@ message ExportProfilesServiceRequest {
   opentelemetry.proto.profiles.v1development.ProfilesDictionary dictionary = 2;
 }
 
+// Status: [Alpha]
 message ExportProfilesServiceResponse {
   // The details of a partially successful export request.
   //
@@ -61,6 +63,7 @@ message ExportProfilesServiceResponse {
   ExportProfilesPartialSuccess partial_success = 1;
 }
 
+// Status: [Alpha]
 message ExportProfilesPartialSuccess {
   // The number of rejected profiles.
   //

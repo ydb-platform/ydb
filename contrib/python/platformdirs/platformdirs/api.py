@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from typing import Literal
 
 
-class PlatformDirsABC(ABC):  # noqa: PLR0904
+class PlatformDirsABC(ABC):  # ruff:ignore[too-many-public-methods]
     """Abstract base class defining all platform directory properties, their :class:`~pathlib.Path` variants, and iterators.
 
     Platform-specific subclasses (e.g. :class:`~platformdirs.windows.Windows`, :class:`~platformdirs.macos.MacOS`,
@@ -21,16 +21,16 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
 
     """
 
-    def __init__(  # noqa: PLR0913, PLR0917
+    def __init__(  # ruff:ignore[too-many-arguments, too-many-positional-arguments]
         self,
         appname: str | None = None,
         appauthor: str | Literal[False] | None = None,
         version: str | None = None,
-        roaming: bool = False,  # noqa: FBT001, FBT002
-        multipath: bool = False,  # noqa: FBT001, FBT002
-        opinion: bool = True,  # noqa: FBT001, FBT002
-        ensure_exists: bool = False,  # noqa: FBT001, FBT002
-        use_site_for_root: bool = False,  # noqa: FBT001, FBT002
+        roaming: bool = False,  # ruff:ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument]
+        multipath: bool = False,  # ruff:ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument]
+        opinion: bool = True,  # ruff:ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument]
+        ensure_exists: bool = False,  # ruff:ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument]
+        use_site_for_root: bool = False,  # ruff:ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument]
     ) -> None:
         """Create a new platform directory.
 
@@ -106,7 +106,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
             params.append(self.appname)
             if self.version:
                 params.append(self.version)
-        path = os.path.join(base[0], *params)  # noqa: PTH118
+        path = os.path.join(base[0], *params)  # ruff:ignore[os-path-join]
         self._optionally_create_directory(path)
         return path
 

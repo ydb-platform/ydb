@@ -198,10 +198,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     bool useReduceFlow = State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW);
     bool useMapFlow = useReduceFlow;
 
-    const bool newPartsByKeys = bool(partByKey.Maybe<TCoPartitionsByKeys>());
+    const bool isPartitions = bool(partByKey.Maybe<TCoPartitionsByKeys>());
+    const bool isLPartitions = bool(partByKey.Maybe<TCoLPartitionsByKeys>());
 
     // Convert reduce output to stream
-    if (newPartsByKeys) {
+    if (isPartitions || isLPartitions) {
         if (useSystemColumns) {
             TNodeSet nodesToOptimize;
             TProcessedNodesSet processedNodes;
@@ -723,7 +724,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         }
     }
 
-    auto reducer = newPartsByKeys ?
+    auto reducer = isPartitions ?
         MakeJobLambda<true>(handlerLambdaCleanup.Cast(), useReduceFlow, ctx):
         MakeJobLambda<false>(handlerLambdaCleanup.Cast(), useReduceFlow, ctx);
 

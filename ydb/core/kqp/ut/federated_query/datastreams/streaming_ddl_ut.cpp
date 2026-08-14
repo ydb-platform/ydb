@@ -6,6 +6,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 #include <fmt/format.h>
 
@@ -19,9 +20,12 @@ using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
 using namespace NFederatedQueryTest;
+using namespace NYdb::NConsoleClient::NAi;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);
@@ -90,6 +94,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount << ", expected both to be 1";
+                return queryCount == 1 && runningCount == 1;
+            });
+        }
+
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
         ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
 
@@ -101,6 +115,34 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(2, 0);
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 1 && runningCount == 0;
+            });
+        }
+
+        const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            Cerr << "Issues: " << issuesJson << Endl;
+
+            TJsonParser issuesParser;
+            UNIT_ASSERT(issuesParser.Parse(issuesJson));
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 1);
+
+            issuesParser = issuesParser.GetKey("issues");
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 1);
+
+            issuesParser = issuesParser.GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("message").GetString(), "Request was canceled by user");
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("severity").GetValue().GetIntegerSafe(), static_cast<i64>(NYql::TSeverityIds::S_INFO));
+        });
     }
 
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
@@ -143,6 +185,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 0 && runningCount == 0;
+            });
+        }
     }
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
@@ -4282,6 +4334,61 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("count").GetUint64(), std::min(changesCount, static_cast<ui64>(4)));
             });
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
+        appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr ui32 partitionCount = 1000;
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1000";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1000 }}
+                ] @@;
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data FROM `{pq_source}`.`{input_topic}`
+                GROUP BY Data, HOP(CurrentUtcTimestamp(TableRow()), "PT10S", "PT10S", "PT10S");
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            bool hasIssues = false;
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                hasIssues = issuesJson.contains("Previous query retries") && issuesJson.contains("Not enough resources to execute query");
+                error = TStringBuilder() << "issues: " << issuesJson;
+
+                const auto status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+                if (!IsIn({"RUNNING", "SUSPENDED"}, status)) {
+                    UNIT_FAIL("Unexpected query status: " << status);
+                }
+            });
+
+            return hasIssues;
+        });
     }
 }
 

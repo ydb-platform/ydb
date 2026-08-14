@@ -1,10 +1,8 @@
 #pragma once
 #include "mkql_block_agg_factory.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockSomeFactory();
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

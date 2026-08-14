@@ -386,7 +386,7 @@ public:
     }
 
     static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
+        return sourceType == PqSource; // Now it is the only infinite source type. Others are finite.
     }
 
     void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {

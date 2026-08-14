@@ -31,7 +31,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-    const TCPULimits& cpuLimits)
+    const TCPULimits& cpuLimits, const bool useBatchPool)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
@@ -41,6 +41,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , LockNodeId(lockNodeId)
     , LockMode(lockMode)
     , CPULimits(cpuLimits)
+    , UseBatchPool(useBatchPool)
     , ComputeActorIds(std::move(computeActors))
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
@@ -572,6 +573,10 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     if (const auto cpuGroupThreadsLimit = CPULimits.GetCPUGroupThreadsLimitOptional()) {
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
+    }
+
+    if (UseBatchPool) {
+        ev->Record.SetUseBatchPool(true);
     }
 
     ev->Record.SetDataFormat(Meta.GetDataFormat());

@@ -16,6 +16,7 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/library/yql/udfs/statistics_internal
+    ydb/core/kqp/node_service
     ydb/core/protos
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
@@ -24,11 +25,9 @@ PEERDIR(
 )
 
 SRCS(
-    ut_analyze_datashard.cpp
-    ut_analyze_columnshard.cpp
+    ut_analyze.cpp
+    ut_traverse.cpp
     ut_analyze_op.cpp
-    ut_traverse_datashard.cpp
-    ut_traverse_columnshard.cpp
 )
 
 END()

@@ -8542,15 +8542,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_rint)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_rint_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8592,15 +8593,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_floor)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_floor_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8642,15 +8644,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_ceil)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_ceil_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8692,15 +8695,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_trunc)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_trunc_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8742,15 +8746,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sqrt)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_sqrt_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8792,15 +8797,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_absolute)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_absolute_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8842,15 +8848,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_square)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_square_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8892,15 +8899,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_reciprocal)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F32
     const int lsize = sizeof(npyv_lanetype_f32);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)) {
+    if (!npyv_loadable_stride_f32(src_step) || !npyv_storable_stride_f32(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_FLOAT_reciprocal_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8944,15 +8952,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_rint)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_rint_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -8994,15 +9003,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_floor)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_floor_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9044,15 +9054,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_ceil)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_ceil_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9094,15 +9105,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_trunc)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_trunc_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9144,15 +9156,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sqrt)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_sqrt_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9194,15 +9207,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_absolute)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_absolute_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9244,15 +9258,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_square)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_square_CONTIG_CONTIG(src, 1, dst, 1, len);
     }
@@ -9294,15 +9309,16 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_reciprocal)
     npy_intp len = dimensions[0];
 #if NPY_SIMD_F64
     const int lsize = sizeof(npyv_lanetype_f64);
-    assert(len <= 1 || (src_step % lsize == 0 && dst_step % lsize == 0));
+
     if (is_mem_overlap(src, src_step, dst, dst_step, len)) {
         goto no_unroll;
     }
-    const npy_intp ssrc = src_step / lsize;
-    const npy_intp sdst = dst_step / lsize;
-    if (!npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)) {
+    if (!npyv_loadable_stride_f64(src_step) || !npyv_storable_stride_f64(dst_step)) {
         goto no_unroll;
     }
+
+    const npy_intp ssrc = src_step / lsize;
+    const npy_intp sdst = dst_step / lsize;
     if (ssrc == 1 && sdst == 1) {
         simd_DOUBLE_reciprocal_CONTIG_CONTIG(src, 1, dst, 1, len);
     }

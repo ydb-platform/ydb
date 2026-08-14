@@ -42,7 +42,10 @@ def create_test_methods(chunk_size):
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(extra_feature_flags=[
+            "enable_topic_write_offset_delta_in_keys",
+            "enable_topic_messages_batching",
+        ])
 
     def _run_chunk(self, chunk_index, chunk_size):
         limit_memory_usage = os.environ.get("YDB_STRESS_TEST_LIMIT_MEMORY", "0").lower() in ['true', '1', 'y', 'yes']

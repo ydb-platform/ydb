@@ -492,14 +492,22 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     NJson::TJsonValue ReceiveOneMessage(THttpProxyTestMock& fixture, const TString& queueUrl, ui32 waitTimeSeconds = 1) {
-        auto json = fixture.ReceiveMessage({
-            {"QueueUrl", queueUrl},
-            {"WaitTimeSeconds", waitTimeSeconds},
-            {"VisibilityTimeout", 30},
-            {"MaxNumberOfMessages", 1},
-        });
-        UNIT_ASSERT_C(json["Messages"].IsArray() && !json["Messages"].GetArray().empty(), json.GetStringRobust());
-        return json["Messages"][0];
+        NJson::TJsonMap json;
+        for (int i = 0; i < 3; ++i) {
+            json = fixture.ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", waitTimeSeconds},
+                {"VisibilityTimeout", 30},
+                {"MaxNumberOfMessages", 1},
+            });
+            if (!json["Messages"].IsArray() || json["Messages"].GetArray().empty()) {
+                Cerr << "failed to receive message from " << queueUrl << ", attempt " << i << " : " << json.GetStringRobust() << Endl;
+                continue;
+            }
+            return json["Messages"][0];
+        }
+        UNIT_FAIL(TStringBuilder() << "failed to receive message: " << json.GetStringRobust());
+        return {};
     }
 
     struct TMixedTableAndTopicReceipts {

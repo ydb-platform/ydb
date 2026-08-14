@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/udf_value_test_support/dynumber.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
 #include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/minikql/udf_value_test_support/struct_type.h>
 
@@ -101,17 +102,25 @@ struct TTestTypeEqualTo<NYql::NUdf::TUnboxedValueComparatorStreamView<T>> {
 
 template <typename... TMembers>
 struct TTestTypeEqualTo<NTest::TStructType<TMembers...>> {
-    template <typename TOther>
-    bool operator()(const NTest::TStructType<TMembers...>& a, const TOther& b) const {
-        static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(b.Members)>> == sizeof...(TMembers),
-                      "Struct member count mismatch: members of the probe beyond the expected count "
-                      "would be silently left out of the comparison.");
+    template <typename... TOtherMembers>
+    bool operator()(const NTest::TStructType<TMembers...>& a,
+                    const NTest::TStructType<TOtherMembers...>& b) const {
+        static_assert(sizeof...(TMembers) == sizeof...(TOtherMembers), "Comparing structs with a different number of members");
         return [&]<size_t... Is>(std::index_sequence<Is...>) {
-            return (... && TTestTypeEqualTo<typename std::tuple_element_t<Is, std::tuple<TMembers...>>::TValueType>{}(
-                               std::get<Is>(a.Members).Value, std::get<Is>(b.Members).Value));
+            return (... && CompareMember<Is, TOtherMembers...>(a, b));
         }(std::index_sequence_for<TMembers...>{});
     }
     using is_transparent = void;
+
+private:
+    template <size_t Is, typename... TOtherMembers>
+    static bool CompareMember(const NTest::TStructType<TMembers...>& a,
+                              const NTest::TStructType<TOtherMembers...>& b) {
+        using TMember = std::tuple_element_t<Is, std::tuple<TMembers...>>;
+        constexpr size_t OtherIdx = NTest::TStructType<TOtherMembers...>::FindMemberIndexByName(TMember::MemberName());
+        return TTestTypeEqualTo<typename TMember::TValueType>{}(
+            std::get<Is>(a.Members).Value, std::get<OtherIdx>(b.Members).Value);
+    }
 };
 
 template <>
@@ -122,6 +131,15 @@ struct TTestTypeEqualTo<NTest::TTestDyNumber> {
         Y_ENSURE(lhsBytes, "Invalid DyNumber string: " << lhs.Value);
         Y_ENSURE(rhsBytes, "Invalid DyNumber string: " << rhs.Value);
         return *lhsBytes == *rhsBytes;
+    }
+};
+
+template <>
+struct TTestTypeEqualTo<NTest::TSingularVoid> {
+    bool operator()(const NTest::TSingularVoid& lhs, const NTest::TSingularVoid& rhs) const {
+        Y_UNUSED(lhs);
+        Y_UNUSED(rhs);
+        return true;
     }
 };
 

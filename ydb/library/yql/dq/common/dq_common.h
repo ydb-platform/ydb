@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 
+#include <util/generic/strbuf.h>
 #include <util/generic/variant.h>
 
 namespace NYql::NDq {
@@ -106,6 +107,13 @@ enum class EHashShuffleFuncType {
     ColumnShardHashV1 = 1     /* "ColumnShardHashV1" */,
 };
 
+enum class EShuffleMode {
+    Default = 0,
+    Off = 1,
+    Map = 2,
+    Hash = 3,
+};
+
 class TSpillingSettings {
 public:
     TSpillingSettings() = default;
@@ -130,6 +138,8 @@ public:
 private:
     const ui64 Mask = 0;
 };
+
+constexpr TStringBuf PqSource = "PqSource";
 
 } // namespace NYql::NDq
 

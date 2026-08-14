@@ -26,9 +26,9 @@ message TStorageConfig { // contents of storage metadata
     uint64 Generation = 1; // stored generation
     bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
     NKikimrConfig.TBlobStorageConfig BlobStorageConfig = 3; // NodeWardenServiceSet for static group is inside
-    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 9;
-    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 10;
-    NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 11;
+    NKikimrConfig.TStateStorageConfig StateStorageConfig = 9;
+    NKikimrConfig.TStateStorageConfig StateStorageBoardConfig = 10;
+    NKikimrConfig.TStateStorageConfig SchemeBoardConfig = 11;
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
@@ -174,9 +174,9 @@ message TStateStorageConfig {
         optional uint32 State = 2;
         optional string Location = 3;
     }
-    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+    optional NKikimrConfig.TStateStorageConfig StateStorageConfig = 1;
+    optional NKikimrConfig.TStateStorageConfig StateStorageBoardConfig = 2;
+    optional NKikimrConfig.TStateStorageConfig SchemeBoardConfig = 3;
     repeated TNodeState NodesState = 4;
 }
 
@@ -200,6 +200,11 @@ message TEvNodeConfigInvokeOnRoot {
         bool FromSelfHeal = 8;
         bool AllowUnusableDisks = 9;
         bool SettleOnlyOnOperationalDisks = 10;
+        // Placement policies forwarded to the static-group allocator.
+        bool PreferLessOccupiedRack = 11;
+        bool WithAttentionToReplication = 12;
+        bool UseSelfHealLocalPolicy = 13;
+        bool TryToRelocateBrokenDisksLocallyFirst = 14;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

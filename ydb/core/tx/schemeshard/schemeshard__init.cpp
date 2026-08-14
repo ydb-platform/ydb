@@ -5,6 +5,7 @@
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -1710,6 +1711,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             NKikimrSubDomains::EServerlessComputeResourcesModeShared
                         );
                     }
+
+                    domainInfo->SetTablesMetricsLevel(
+                        rowset.GetValueOrDefault<Schema::SubDomains::TablesMetricsLevel>(
+                            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+                        )
+                    );
                 }
 
                 if (!rowset.Next())
@@ -1780,6 +1787,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     } else if (Self->IsServerlessDomain(alter) || Self->IsServerlessDomainGlobal(pathId, alter)) {
                         alter->SetServerlessComputeResourcesMode(
                             NKikimrSubDomains::EServerlessComputeResourcesModeShared
+                        );
+                    }
+
+                    if (!path->IsRoot() || !Self->IsDomainSchemeShard) {
+                        alter->SetTablesMetricsLevel(
+                            rowset.GetValueOrDefault<Schema::SubDomainsAlterData::TablesMetricsLevel>(
+                                subdomainInfo->GetTablesMetricsLevel()
+                            )
                         );
                     }
 
@@ -2181,6 +2196,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
+                
+                const auto pathIt = Self->PathsById.find(pathId);
+                if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
+                    Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
+                    if (const auto& props = streamingQuery->Properties.GetProperties();
+                        props.contains("run") && props.at("run") == "true") {
+                        Self->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(1);
+                    }
+                }
 
                 if (!rowset.Next()) {
                     return false;

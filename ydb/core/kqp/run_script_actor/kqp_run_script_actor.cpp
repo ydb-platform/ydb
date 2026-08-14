@@ -264,7 +264,7 @@ private:
                 {"finished", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
                 {"logPrefix", LogPrefix()},
@@ -362,6 +362,12 @@ private:
                 .AlreadyStopped = alreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
+
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
+            {"logPrefix", LogPrefix()},
+            {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)},
+            {"issues", FinishInfo.Issues.ToOneLineString()},
+            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
     }
 
     void Finish() {
@@ -448,7 +454,8 @@ private:
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
                 {"logPrefix", LogPrefix()},
                 {"finishStatus", *FinishInfo.Status},
-                {"issues", FinishInfo.Issues.ToOneLineString()});
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
         }
     }
 

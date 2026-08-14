@@ -4,13 +4,13 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, PhoenixLogger, "Phoenix");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, PhoenixLogger, "Phoenix");
 
 ////////////////////////////////////////////////////////////////////////////////
 

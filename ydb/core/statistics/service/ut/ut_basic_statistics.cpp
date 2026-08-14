@@ -67,7 +67,11 @@ void WaitForStatsUpdateFromSchemeShard(
             txnCommitted = true;
         }
     });
-    runtime.WaitFor("stats update from SchemeShard", [&]{ return txnCommitted; });
+    // The SA may skip the DB write for an incomplete first stats report (no
+    // commit), so wait for either a commit or just the event being received.
+    runtime.WaitFor("stats update from SchemeShard", [&]{
+        return txnCommitted || statsUpdateSent;
+    });
 }
 
 void WaitForStatsPropagate(TTestActorRuntime& runtime, ui32 nodeIdx) {
@@ -242,20 +246,35 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         ui64 ssTabletId = pathId.OwnerId;
 
         // Block stats updates from one of the shards and pass others through.
+        // Datashards set TableLocalId/DatashardId at the top level of the record;
+        // column shards put them in the repeated Tables field. We handle both.
         std::optional<ui64> blockedShardId;
         THashSet<ui64> updatedShardIds;
         auto blockPredicate = [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            if (record.GetTableLocalId() != pathId.LocalPathId) {
+            // Resolve the datashard id for this event. For datashards it's the
+            // top-level field; for column shards it's in the matching Tables entry.
+            ui64 datashardId = 0;
+            if (record.GetTableLocalId() == pathId.LocalPathId) {
+                datashardId = record.GetDatashardId();
+            } else {
+                for (const auto& table : record.GetTables()) {
+                    if (table.GetTableLocalId() == pathId.LocalPathId) {
+                        datashardId = table.GetDatashardId();
+                        break;
+                    }
+                }
+            }
+            if (datashardId == 0) {
                 return false;
             }
             if (!blockedShardId) {
-                blockedShardId = record.GetDatashardId();
+                blockedShardId = datashardId;
                 return true;
-            } else if (blockedShardId == record.GetDatashardId()) {
+            } else if (blockedShardId == datashardId) {
                 return true;
             } else {
-                updatedShardIds.insert(record.GetDatashardId());
+                updatedShardIds.insert(datashardId);
                 return false;
             }
         };

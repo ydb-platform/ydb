@@ -170,7 +170,8 @@ public:
                 for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
                     const auto& input = stage.GetInputs(inputIndex);
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup ||
-                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve)
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve ||
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorSearch)
                     {
                         unknownAffectedShardCount = true;
                     }
@@ -976,7 +977,10 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-        ExecuteTasks();
+
+        if (!ExecuteTasks()) {
+            return;
+        }
 
         if (CheckExecutionComplete()) {
             return;
@@ -994,7 +998,7 @@ private:
         Become(&TKqpDataExecuter::ExecuteState);
     }
 
-    void ExecuteTasks() {
+    [[nodiscard]] bool ExecuteTasks() {
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
@@ -1008,7 +1012,7 @@ private:
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
         if (!isSubmitSuccessful) {
-            return;
+            return false;
         }
 
         YDB_LOG_INFO("Total tasks",
@@ -1039,6 +1043,8 @@ private:
             }
         }
         Planner->PropagateChannelsUpdates(updates);
+
+        return true;
     }
 
     void Shutdown() override {

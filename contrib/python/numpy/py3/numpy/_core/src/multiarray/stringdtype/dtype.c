@@ -17,6 +17,7 @@
 #include "gil_utils.h"
 #include "conversion_utils.h"
 #include "npy_import.h"
+#include "multiarraymodule.h"
 
 /*
  * Internal helper to create new instances
@@ -33,7 +34,6 @@ new_stringdtype_instance(PyObject *na_object, int coerce)
 
     char *default_string_buf = NULL;
     char *na_name_buf = NULL;
-    char array_owned = 0;
 
     npy_string_allocator *allocator = NpyString_new_allocator(PyMem_RawMalloc, PyMem_RawFree,
                                                               PyMem_RawRealloc);
@@ -138,7 +138,7 @@ fail:
     if (na_name_buf != NULL) {
         PyMem_RawFree(na_name_buf);
     }
-    if (allocator != NULL && array_owned != 2) {
+    if (allocator != NULL) {
         NpyString_free_allocator(allocator);
     }
     return NULL;
@@ -269,6 +269,15 @@ as_pystring(PyObject *scalar, int coerce)
                         "StringDType only allows string data when "
                         "string coercion is disabled.");
         return NULL;
+    }
+    else if (scalar_type == &PyBytes_Type) {
+        // assume UTF-8 encoding
+        char *buffer;
+        Py_ssize_t length;
+        if (PyBytes_AsStringAndSize(scalar, &buffer, &length) < 0) {
+            return NULL;
+        }
+        return PyUnicode_FromStringAndSize(buffer, length);
     }
     else {
         // attempt to coerce to str
@@ -624,11 +633,16 @@ PyArray_Descr *
 stringdtype_finalize_descr(PyArray_Descr *dtype)
 {
     PyArray_StringDTypeObject *sdtype = (PyArray_StringDTypeObject *)dtype;
+    // acquire the allocator lock in case the descriptor we want to finalize
+    // is shared between threads, see gh-28813
+    npy_string_allocator *allocator = NpyString_acquire_allocator(sdtype);
     if (sdtype->array_owned == 0) {
         sdtype->array_owned = 1;
+        NpyString_release_allocator(allocator);
         Py_INCREF(dtype);
         return dtype;
     }
+    NpyString_release_allocator(allocator);
     PyArray_StringDTypeObject *ret = (PyArray_StringDTypeObject *)new_stringdtype_instance(
             sdtype->na_object, sdtype->coerce);
     ret->array_owned = 1;
@@ -675,7 +689,7 @@ stringdtype_dealloc(PyArray_StringDTypeObject *self)
 {
     Py_XDECREF(self->na_object);
     // this can be null if an error happens while initializing an instance
-    if (self->allocator != NULL && self->array_owned != 2) {
+    if (self->allocator != NULL) {
         NpyString_free_allocator(self->allocator);
     }
     PyMem_RawFree((char *)self->na_name.buf);
@@ -708,8 +722,6 @@ stringdtype_repr(PyArray_StringDTypeObject *self)
     return ret;
 }
 
-static PyObject *_convert_to_stringdtype_kwargs = NULL;
-
 // implementation of __reduce__ magic method to reconstruct a StringDType
 // object from the serialized data in the pickle. Uses the python
 // _convert_to_stringdtype_kwargs for convenience because this isn't
@@ -717,19 +729,21 @@ static PyObject *_convert_to_stringdtype_kwargs = NULL;
 static PyObject *
 stringdtype__reduce__(PyArray_StringDTypeObject *self, PyObject *NPY_UNUSED(args))
 {
-    npy_cache_import("numpy._core._internal", "_convert_to_stringdtype_kwargs",
-                     &_convert_to_stringdtype_kwargs);
-
-    if (_convert_to_stringdtype_kwargs == NULL) {
+    if (npy_cache_import_runtime(
+                "numpy._core._internal", "_convert_to_stringdtype_kwargs",
+                &npy_runtime_imports._convert_to_stringdtype_kwargs) == -1) {
         return NULL;
     }
 
     if (self->na_object != NULL) {
-        return Py_BuildValue("O(iO)", _convert_to_stringdtype_kwargs,
-                             self->coerce, self->na_object);
+        return Py_BuildValue(
+                "O(iO)", npy_runtime_imports._convert_to_stringdtype_kwargs,
+                self->coerce, self->na_object);
     }
 
-    return Py_BuildValue("O(i)", _convert_to_stringdtype_kwargs, self->coerce);
+    return Py_BuildValue(
+            "O(i)", npy_runtime_imports._convert_to_stringdtype_kwargs,
+            self->coerce);
 }
 
 static PyMethodDef PyArray_StringDType_methods[] = {
@@ -843,14 +857,17 @@ init_string_dtype(void)
         return -1;
     }
 
-    PyArray_Descr *singleton =
-            NPY_DT_CALL_default_descr(&PyArray_StringDType);
+    PyArray_StringDTypeObject *singleton =
+            (PyArray_StringDTypeObject *)NPY_DT_CALL_default_descr(&PyArray_StringDType);
 
     if (singleton == NULL) {
         return -1;
     }
 
-    PyArray_StringDType.singleton = singleton;
+    // never associate the singleton with an array
+    singleton->array_owned = 1;
+
+    PyArray_StringDType.singleton = (PyArray_Descr *)singleton;
     PyArray_StringDType.type_num = NPY_VSTRING;
 
     for (int i = 0; PyArray_StringDType_casts[i] != NULL; i++) {

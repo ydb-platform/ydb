@@ -1014,6 +1014,9 @@
     "name": "DisableEmitUnionMerge"
   },
   {
+    "name": "DisableEvaluateExprCache"
+  },
+  {
     "name": "DisableExceptIntersectBefore202503"
   },
   {
@@ -1123,6 +1126,9 @@
   },
   {
     "name": "ErrorMsg"
+  },
+  {
+    "name": "EvaluateExprCache"
   },
   {
     "name": "ExceptIntersectBefore202503"

@@ -2182,6 +2182,128 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
         UNIT_ASSERT_EQUAL(true, dirtyMap->MakeFlushHint(1).Empty());
     }
+
+    // A host can be evacuated (disabled AND demoted out of the DDisk set)
+    // after a write was registered (pending) but before its successful write
+    // response arrives. WriteFinished must then drop all references to the
+    // evacuated host: release its PBuffer byte counters and exclude it from
+    // reads. Only demoted hosts (DisabledHosts \ DesiredDDisks) are dropped.
+    Y_UNIT_TEST(ShouldReleaseEvacuatedHostOnWriteFinished)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();   // {0,1,2}
+        const THostMask confirmed = MakePrimaryHosts();   // {0,1,2}
+
+        // Register a pending write across all three primary hosts.
+        dirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // Host 0 is evacuated after the write is registered but before the
+        // write response arrives. EvacuateHost disables host 0 and demotes it
+        // out of the DDisk set (promoting host 3 as replacement). The write is
+        // still pending (WriteRequested is empty), so UpdateConfig's
+        // RemoveHosts is a no-op and the inflight item survives.
+        vchunkConfig.EvacuateHost(0);
+        dirtyMap->UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // The write response finally arrives, confirming all three hosts,
+        // including the now-evacuated host 0.
+        dirtyMap->WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        // Quorum is still held by the two remaining hosts, so the inflight item
+        // survives.
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // References to the evacuated host 0 are dropped: its PBuffer byte
+        // counters are released ...
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap->GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+        // ... while the remaining hosts keep their data.
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap->GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+
+        // Reads only see the remaining confirmed hosts, never the evacuated
+        // one.
+        auto readHint =
+            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    // Contrast with evacuation: a host that is only temporarily disabled but
+    // still remains a desired DDisk must NOT have its references dropped on
+    // WriteFinished. The demoted set (DisabledHosts \ DesiredDDisks) is empty,
+    // so its PBuffer data is preserved (the host is expected to come back).
+    Y_UNIT_TEST(ShouldKeepTemporarilyDisabledDDiskOnWriteFinished)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();   // {0,1,2}
+        const THostMask confirmed = MakePrimaryHosts();   // {0,1,2}
+
+        // Register a pending write across all three primary hosts.
+        dirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // Host 0 is only temporarily disabled: it stays in the DDisk set, so
+        // DesiredDDisks is unchanged and UpdateConfig runs no RemoveHosts.
+        vchunkConfig.DisableHost(0);
+        dirtyMap->UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // The write response finally arrives, confirming all three hosts,
+        // including the temporarily-disabled host 0.
+        dirtyMap->WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // Host 0 is still a desired DDisk, so its references are preserved: its
+        // PBuffer data is kept, unlike the evacuation case.
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap->GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap->GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+
+        // Reads still exclude the disabled host from the hint mask, but the
+        // data remains on its PBuffer for when it comes back online.
+        auto readHint =
+            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // No flush is generated while a desired DDisk is still disabled.
+        UNIT_ASSERT_EQUAL(true, dirtyMap->MakeFlushHint(1).Empty());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

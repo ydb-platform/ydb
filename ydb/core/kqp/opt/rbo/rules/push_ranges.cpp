@@ -199,6 +199,64 @@ const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprT
     return changed ? ctx.MakeType<TStructExprType>(newItemTypes) : schemeType;
 }
 
+struct TPointPrefix {
+    TExprNode::TPtr Points;
+    const TStructExprType* PointsItemType = nullptr;
+    TVector<TString> Columns;
+    TMaybe<size_t> ExpectedMaxPoints;
+};
+
+TPointPrefix ExtractPointPrefix(size_t pointPrefixLen, const TExprNode::TPtr& lambda, const TStructExprType* schemeType,
+                               const THashSet<TString>& possibleKeys, const TVector<TString>& exposedKeyColumns,
+                               const TVector<TString>& physicalKeyColumns, const TPredicateExtractorSettings& baseSettings,
+                               TRBOContext& rboCtx) {
+    Y_ENSURE(exposedKeyColumns.size() == physicalKeyColumns.size());
+    pointPrefixLen = std::min(pointPrefixLen, exposedKeyColumns.size());
+    if (pointPrefixLen == 0) {
+        return {};
+    }
+
+    auto& ctx = rboCtx.ExprCtx;
+
+    auto settings = baseSettings;
+    settings.MergeAdjacentPointRanges = false;
+    settings.HaveNextValueCallable = false;
+    settings.MaxRanges = Nothing();
+
+    const TVector<TString> exposedPointColumns(exposedKeyColumns.begin(), exposedKeyColumns.begin() + pointPrefixLen);
+    TVector<TString> physicalPointColumns(physicalKeyColumns.begin(), physicalKeyColumns.begin() + pointPrefixLen);
+
+    THashSet<TString> keys = possibleKeys;
+    auto extractor = MakePredicateRangeExtractor(settings);
+    if (!extractor->Prepare(lambda, *schemeType, keys, ctx, rboCtx.TypeCtx)) {
+        return {};
+    }
+
+    const auto result = extractor->BuildComputeNode(exposedPointColumns, ctx, rboCtx.TypeCtx);
+    if (!result.ComputeNode || result.PointPrefixLen != pointPrefixLen) {
+        return {};
+    }
+
+    TVector<const TItemExprType*> items;
+    items.reserve(pointPrefixLen);
+    for (size_t i = 0; i < pointPrefixLen; ++i) {
+        const auto* columnType = schemeType->FindItemType(exposedPointColumns[i]);
+        if (!columnType) {
+            return {};
+        }
+        items.push_back(ctx.MakeType<TItemExprType>(physicalPointColumns[i], columnType));
+    }
+
+    TPointPrefix prefix;
+    prefix.Points = BuildPointsList(result, physicalPointColumns, ctx);
+    prefix.PointsItemType = ctx.MakeType<TStructExprType>(items);
+    prefix.Columns = std::move(physicalPointColumns);
+    prefix.ExpectedMaxPoints = result.ExpectedMaxRanges ? TMaybe<size_t>(*result.ExpectedMaxRanges) : TMaybe<size_t>();
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted points: " << KqpExprToPrettyString(*prefix.Points, ctx);
+    return prefix;
+}
+
 struct TIndexScore {
     bool SortMatchesAndNoResidual = false;
     bool PointCoversKey = false;
@@ -532,14 +590,12 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected non-covering index " << lookupIndexMeta->Name
                                      << " for a read of " << tablePath;
 
-        TOpRead::TRangeInfo rangeInfo {
+        TOpRead::TRangeInfo rangeInfo{
             .ComputeNode = lookupResult.ComputeNode,
             .KeyColumns = lookupKeyColumns,
             .UsedPrefixLen = lookupResult.UsedPrefixLen,
             .PointPrefixLen = lookupResult.PointPrefixLen,
-            .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges
-                ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges)
-                : TMaybe<size_t>(),
+            .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
 
         TVector<TInfoUnit> indexOutputIUs;
@@ -587,11 +643,23 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         .KeyColumns = chosenKeyColumns,
         .UsedPrefixLen = chosen.UsedPrefixLen,
         .PointPrefixLen = chosen.PointPrefixLen,
-        .ExpectedMaxRanges = chosen.ExpectedMaxRanges
-            ? TMaybe<size_t>(*chosen.ExpectedMaxRanges)
-            : TMaybe<size_t>(),
+        .ExpectedMaxRanges = chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>(),
     };
     const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->StorageType;
+
+    // Point lookup is only applicable to row storage tables.
+    if (storageType == NYql::EStorageType::RowStorage && chosen.PointPrefixLen > 0) {
+        const auto& chosenPhysicalKeyColumns = chosenIndexMeta ? chosenIndexMeta->KeyColumnNames : mainMeta.KeyColumnNames;
+        auto prefix = ExtractPointPrefix(chosen.PointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, chosenKeyColumns,
+                                         chosenPhysicalKeyColumns, settings, rboCtx);
+        if (prefix.Points) {
+            rangeInfo.Points = std::move(prefix.Points);
+            rangeInfo.PointsItemType = prefix.PointsItemType;
+            rangeInfo.PointColumns = std::move(prefix.Columns);
+            rangeInfo.ExpectedMaxPoints = prefix.ExpectedMaxPoints;
+        }
+    }
+
     const auto tableCallable = chosenIndexMeta ? BuildTableCallable(*chosenIndexMeta, read->Pos, ctx) : read->TableCallable;
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), storageType, tableCallable, read->OlapFilterLambda,

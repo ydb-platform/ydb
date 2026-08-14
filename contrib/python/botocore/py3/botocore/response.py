@@ -77,11 +77,9 @@ class StreamingBody(IOBase):
         try:
             set_socket_timeout(self._raw_stream, timeout)
         except AttributeError:
-            logger.error(
-                "Cannot access the socket object of "
-                "a streaming response.  It's possible "
-                "the interface has changed.",
-                exc_info=True,
+            logger.exception(
+                "Cannot access the socket object of a streaming response. "
+                "It's possible the interface has changed."
             )
             raise
 

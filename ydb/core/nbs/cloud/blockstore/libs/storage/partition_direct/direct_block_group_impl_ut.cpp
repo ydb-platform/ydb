@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            E_CANCELLED,
-            readyReadResponse.Error.GetCode());
+            true,
+            IsCanNotAcquireDataError(readyReadResponse.Error));
 
         const auto& hostStat = dbg->GetOracle()->GetHostStatistics(ddiskHost);
         const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
@@ -1015,7 +1015,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
 
-        // Drain OnConnectionEstablished (queues the reconnect) then the
+        // Drain OnConnectResponse (queues the reconnect) then the
         // reconnect itself (issues a fresh Connect).
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1084,7 +1084,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
 
-        // Drain OnConnectionEstablished (queues the reconnect) then the
+        // Drain OnConnectResponse (queues the reconnect) then the
         // reconnect itself (issues a fresh Connect).
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 1,
                 NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
         }
-        // Drain OnConnectionEstablished + queued reconnects, then the
+        // Drain OnConnectResponse + queued reconnects, then the
         // reconnects.
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1607,6 +1607,102 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
 
         // The disconnect rejects the in-flight read with a "Session broken"
         // error.
+        transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            transportPtr->GetNodeId());
+
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Same scenarios as TSessionsWithRealTransport, but with a fake IDirectSession
+// injected so datapath uses TICDirectStorageTransport's direct Send path.
+Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
+{
+    Y_UNIT_TEST_F(ShouldReadViaDirectSession, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // Ready-path Connect is actor-based, but readiness may already have
+        // issued datapath reads via the fake session. Snapshot and require the
+        // explicit read below to increase the counter.
+        const ui64 sentBefore =
+            transportPtr->GetFakeDirectSessionSentEventCount();
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    CreateTraceId());
+            });
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_GT(
+            transportPtr->GetFakeDirectSessionSentEventCount(),
+            sentBefore);
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldCancelActiveRequestsOnDirectSessionDisconnect,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        transportPtr->SetPendingReadFromDDisk(
+            EConnectionType::DDisk,
+            ddisks[0]);
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    CreateTraceId());
+            });
+
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!inFlightRead.HasValue());
+        UNIT_ASSERT_GT(transportPtr->GetFakeDirectSessionSentEventCount(), 0u);
+
         transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
         transportPtr->FireDisconnect(
             EConnectionType::DDisk,

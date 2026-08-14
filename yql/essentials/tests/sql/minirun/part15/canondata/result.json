@@ -1194,6 +1194,20 @@
             "uri": "https://{canondata_backend}/1777230/1de313d944cae10d4384ec6656e7270944aba259/resource.tar.gz#test.test_udf-generic_udf--Results_/results.txt"
         }
     ],
+    "test.test[udf-udf_callable_result_type--Debug]": [
+        {
+            "checksum": "ca84729416b228456c8691346d9fe253",
+            "size": 261,
+            "uri": "https://{canondata_backend}/1942100/f6994280d3f6e906c2ef540d98ccb8b147811bfa/resource.tar.gz#test.test_udf-udf_callable_result_type--Debug_/opt.yql"
+        }
+    ],
+    "test.test[udf-udf_callable_result_type--Results]": [
+        {
+            "checksum": "bae2eeee505e4691b0a40cd49df1c531",
+            "size": 716,
+            "uri": "https://{canondata_backend}/1942100/f6994280d3f6e906c2ef540d98ccb8b147811bfa/resource.tar.gz#test.test_udf-udf_callable_result_type--Results_/results.txt"
+        }
+    ],
     "test.test[union-union_mix-default.txt-Debug]": [
         {
             "checksum": "f98189d19a514e38c537ad2190945414",

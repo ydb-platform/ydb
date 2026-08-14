@@ -349,7 +349,6 @@ struct TRequestReadPQ {
         read->SetCount(Count);
         read->SetClientId(User);
         read->SetReadTimestampMs(ReadTimestampMs);
-        read->SetReadToBlobEnd(false);
         return request;
     }
 };

@@ -162,9 +162,12 @@ private:
         if (!sessionIter.IsEnd()) {
             MarkSessionRetired(key, sessionIter->second.Generation);
             ServerSessions.erase(sessionIter);
+            ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
         } else {
-            // Drop any Stage/Publish that arrived before Register for this dead binding.
-            PendingBySession.Erase(key);
+            // No server session (e.g. already Deregistered): still retire the key so late
+            // Stage/Publish cannot recreate PendingBySession. Generation is unknown here —
+            // use Max to block all gens until Register clears the tombstone.
+            MarkSessionRetired(key, Max<ui32>());
         }
     }
 

@@ -578,8 +578,8 @@ struct TGrpcDirectReadClient {
     }
 
     // Non-blocking-ish: pump until DirectReadResponse or deadline. Returns false on timeout.
-    // On timeout cancels the DirectRead stream and waits for the async Read to finish so it
-    // does not leak a pool thread or touch DirectStream during fixture teardown.
+    // On timeout cancels the DirectRead stream and waits up to 20s for the async Read to finish
+    // so it does not leak a pool thread or touch DirectStream during fixture teardown.
     // Async errors are rethrown (not masked as timeout).
     bool TryReadNextDataNoAck(NActors::TTestActorRuntime& runtime, TDuration timeout) {
         auto future = NThreading::Async([&] {
@@ -602,8 +602,12 @@ struct TGrpcDirectReadClient {
             if (DirectContext) {
                 DirectContext->TryCancel();
             }
-            while (!future.HasValue() && !future.HasException()) {
+            const TInstant cancelDeadline = TInstant::Now() + TDuration::Seconds(20);
+            while (TInstant::Now() < cancelDeadline && !future.HasValue() && !future.HasException()) {
                 runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+            }
+            if (!future.HasValue() && !future.HasException()) {
+                ythrow yexception() << "DirectRead cancel did not finish within 20s";
             }
         }
         future.TryRethrow();

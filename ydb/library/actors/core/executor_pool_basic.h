@@ -18,8 +18,6 @@
 
 #include <util/system/mutex.h>
 
-#include <queue>
-
 namespace NActors {
 
     class TExecutorPoolJail;
@@ -140,10 +138,8 @@ namespace NActors {
 
         TArrayHolder<NThreading::TPadded<TExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
-        TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
         TArrayHolder<TWaitingStats<ui64>> WaitingStats;
         TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
-        std::atomic<ui16> LocalQueueSize;
 
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
         TArrayHolder<NSchedulerQueue::TWriter> ScheduleWriters;
@@ -174,8 +170,6 @@ namespace NActors {
         IHarmonizer *Harmonizer = nullptr;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
-        ui16 MaxLocalQueueSize = 0;
-        ui16 MinLocalQueueSize = 0;
         bool SharedOnly = false;
 
         const i16 Priority = 0;
@@ -235,7 +229,6 @@ namespace NActors {
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -243,12 +236,6 @@ namespace NActors {
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
         void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
-        void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
-
-        void SetLocalQueueSize(ui16 size);
-        ui16 GetLocalQueueSize() const;
-        ui16 GetMaxLocalQueueSize() const;
-        ui16 GetMinLocalQueueSize() const;
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;

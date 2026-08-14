@@ -1,5 +1,6 @@
 import errno
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -49,6 +50,26 @@ def _stop_process_group(process, first_signal, grace_seconds):
         return process.communicate()
 
 
+def _command_with_affinity(command, cpu_affinity):
+    if cpu_affinity is None:
+        return command
+    if not hasattr(os, "sched_setaffinity"):
+        raise BenchmarkError("CPU affinity is not supported by this operating system")
+
+    affinity = tuple(sorted(frozenset(int(cpu) for cpu in cpu_affinity)))
+    if not affinity:
+        raise BenchmarkError("CPU affinity requires at least one CPU")
+    taskset = shutil.which("taskset")
+    if taskset is None:
+        raise BenchmarkError("cannot set CPU affinity: taskset is not installed or is not in PATH")
+
+    # taskset sets its own affinity and execs the benchmark.  This avoids
+    # running Python code through Popen(preexec_fn=...) after fork, which can
+    # deadlock when run_command is called by the web service's worker thread.
+    cpu_list = ",".join(str(cpu) for cpu in affinity)
+    return (taskset, "--cpu-list", cpu_list) + command
+
+
 def run_command(
     command,
     env_overrides,
@@ -57,6 +78,7 @@ def run_command(
     work_dir_hint=None,
     grace_seconds=2.0,
     cpu_affinity=None,
+    cancel_event=None,
 ):
     command = tuple(str(part) for part in command)
     environment = os.environ.copy()
@@ -64,20 +86,11 @@ def run_command(
     started_at = _utc_now()
     started_monotonic = time.monotonic()
 
-    preexec_fn = None
-    if cpu_affinity is not None:
-        if not hasattr(os, "sched_setaffinity"):
-            raise BenchmarkError("CPU affinity is not supported by this operating system")
-        affinity = frozenset(cpu_affinity)
-
-        def set_affinity():
-            os.sched_setaffinity(0, affinity)
-
-        preexec_fn = set_affinity
+    launch_command = _command_with_affinity(command, cpu_affinity)
 
     try:
         process = subprocess.Popen(
-            command,
+            launch_command,
             cwd=None if cwd is None else str(cwd),
             env=environment,
             stdout=subprocess.PIPE,
@@ -86,7 +99,6 @@ def run_command(
             encoding="utf-8",
             errors="replace",
             start_new_session=True,
-            preexec_fn=preexec_fn,
         )
     except OSError as error:
         if error.errno in (errno.EACCES, errno.EPERM):
@@ -105,10 +117,24 @@ def run_command(
     timed_out = False
     interrupted = False
     try:
-        stdout, stderr = process.communicate(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        stdout, stderr = _stop_process_group(process, signal.SIGTERM, grace_seconds)
+        # Polling keeps the existing timeout semantics while allowing the web
+        # application service to terminate a process after an idempotent cancel.
+        deadline = started_monotonic + timeout_seconds
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                interrupted = True
+                stdout, stderr = _stop_process_group(process, signal.SIGINT, grace_seconds)
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                stdout, stderr = _stop_process_group(process, signal.SIGTERM, grace_seconds)
+                break
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.2, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
     except KeyboardInterrupt:
         interrupted = True
         stdout, stderr = _stop_process_group(process, signal.SIGINT, grace_seconds)

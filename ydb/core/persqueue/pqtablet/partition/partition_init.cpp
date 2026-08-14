@@ -1217,11 +1217,9 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
-    if (MirroringEnabled(Config)) {
-        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
-    } else {
-        ManageWriteTimestampEstimate = IsLocalDC;
-    }
+    // SyncWriteTime was removed; mirrored partitions always use source write time
+    // and therefore never manage a local write-timestamp estimate.
+    ManageWriteTimestampEstimate = MirroringEnabled(Config) ? false : IsLocalDC;
 
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();

@@ -544,13 +544,22 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
         index->BuildIndexOptional(originalData, recordsCount, *this, chunkSizeLimit);
     if (indexChunkConclusion.IsFail()) {
-        return indexChunkConclusion;
+        // Index construction is best-effort: drop the index instead of propagating the failure to the
+        // compaction/actualization callers, which DetachResult and would crash (the #26733 symptom).
+        YDB_LOG_WARN("",
+            {"event", "index_build_failed"},
+            {"index_id", indexId},
+            {"index_name", index->GetIndexName()},
+            {"error", indexChunkConclusion.GetErrorMessage()});
+        return TConclusionStatus::Success();
     }
     if (indexChunkConclusion->empty()) {
         return TConclusionStatus::Success();
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
+    // ReuseIndexChunks likewise always returns Success (dropping an oversize chunk rather than failing), so
+    // AppendIndex never propagates a failure to the compaction/actualization DetachResult callers.
     return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
 }
 

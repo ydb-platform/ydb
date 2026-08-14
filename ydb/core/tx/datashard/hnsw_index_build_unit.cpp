@@ -239,6 +239,7 @@ protected:
             << " rows=" << keysAndVectors.size());
 
         LocalTid = table.LocalTid;
+        VectorColumnTag = vectorColumnTag;
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
                 std::move(keysAndVectors), std::move(memoryReservation)),
@@ -262,7 +263,8 @@ protected:
                 << " HNSW: eager build completed for localTid=" << LocalTid
                 << " size=" << result->Index->Size());
             DataShard.SetHnswIndex(LocalTid, result->Index,
-                std::move(result->MemoryReservation));
+                std::move(result->MemoryReservation), /* rowCountAtBuild */ 0,
+                VectorColumnTag);
         } else {
             // A failed build only costs acceleration, not correctness: reads
             // fall back to brute force.
@@ -289,6 +291,7 @@ public:
 
 private:
     ui32 LocalTid = 0;
+    ui32 VectorColumnTag = 0;
     mutable bool PageFault = false;
 };
 

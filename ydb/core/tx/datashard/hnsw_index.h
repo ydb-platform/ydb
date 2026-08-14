@@ -46,6 +46,14 @@ public:
     // going back to the flat table.
     bool GetVector(TStringBuf key, TString& result) const;
 
+    // Applies a posting-table change on top of the immutable HNSW graph.
+    // Updated vectors are searched exhaustively and shadow the graph entry;
+    // erased keys are filtered from graph results.
+    bool Upsert(TString key, TString vector);
+    void Erase(TStringBuf key);
+    bool HasDelta(TStringBuf key) const;
+    bool HasChanges() const;
+
     size_t Size() const;
     size_t Dimension() const;
 

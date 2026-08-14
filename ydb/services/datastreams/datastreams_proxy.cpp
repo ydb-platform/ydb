@@ -1507,7 +1507,6 @@ namespace NKikimr::NDataStreams::V1 {
         cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
         cmdRead->SetExternalOperation(true);
         cmdRead->SetCanReadBatches(true);
-        cmdRead->SetReadToBlobEnd(false);
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record.Swap(&request);

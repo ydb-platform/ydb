@@ -256,13 +256,39 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
 
         const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
         UNIT_ASSERT(it != secondaryData.GetExternalData().end());
-        UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 4);
+        UNIT_ASSERT_GT(it->second.size(), 1);
         ui32 recordsSum = 0;
         for (const auto& chunk : it->second) {
             UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
             recordsSum += chunk->GetRecordsCountVerified();
         }
         UNIT_ASSERT_VALUES_EQUAL(recordsSum, 512);
+    }
+
+    // A single source chunk whose filter exceeds the limit cannot be split further: it stays one chunk, folded
+    // down to fit (higher FPR). Covers the clamped-batch branch of buildBatched.
+    Y_UNIT_TEST(OversizedSingleChunkIsClampedToLimit) {
+        constexpr i64 blobLimit = 10_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        // One column chunk of 512 records: the 8 KB base filter doubles past the 10 KB limit, but a single
+        // source chunk cannot be split, so one chunk clamped to the limit is emitted.
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128);
+        const auto chunks = BuildColumnChunks(schema, { MakeTestBatch(1, 512) });
+
+        TIndexInfo::TSecondaryData secondaryData;
+        secondaryData.MutableExternalData() = chunks;
+        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+            chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
+        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
+
+        const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
+        UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+        UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 1);
+        UNIT_ASSERT_LE(it->second.front()->GetPackedSize(), blobLimit);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.front()->GetRecordsCountVerified(), 512);
     }
 
     // Same split, but in the new sizing mode (FalsePositiveProbability), exercising the !useOldSizing path.

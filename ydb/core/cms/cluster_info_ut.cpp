@@ -544,6 +544,89 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
     }
 
+    Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {
+        TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const ui64 tabletId = MakeBSControllerID();
+
+        auto makeCluster = [&]() {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            auto &t = *cluster->BootstrapConfig.AddTablet();
+            t.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+            t.AddNode(1);
+            return cluster;
+        };
+
+        // Dead leader — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Dead, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Created leader — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Created, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Active leader — running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+    }
+
+    Y_UNIT_TEST(SysTabletMultipleTypesOnSameNode) {
+        TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const ui64 bscTabletId = MakeBSControllerID();
+        const ui64 ssTabletId = 201;
+
+        auto makeCluster = [&]() {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            auto &bscTab = *cluster->BootstrapConfig.AddTablet();
+            bscTab.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+            bscTab.AddNode(1);
+            auto &ssTab = *cluster->BootstrapConfig.AddTablet();
+            ssTab.SetType(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+            ssTab.AddNode(1);
+            return cluster;
+        };
+
+        // BSController leader + SchemeShard follower → running (from BSController)
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // BSController follower + SchemeShard leader → running (from SchemeShard)
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Both followers — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+    }
+
     void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
                         const TSet<int> &expected)
     {

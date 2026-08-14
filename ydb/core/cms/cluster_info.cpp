@@ -21,6 +21,20 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
+namespace {
+
+bool IsSystemTablet(TTabletTypes::EType type) {
+    switch (type) {
+    case TTabletTypes::DataShard:
+    case TTabletTypes::KeyValue:
+        return false;
+    default:
+        return true;
+    }
+}
+
+} // namespace
+
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
@@ -430,6 +444,7 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         return;
 
     auto &node = NodeRef(nodeId);
+    NodeTabletsByNode.erase(nodeId);
     for (auto tablet : node.Tablets)
         Tablets.erase(tablet);
     node.Tablets.clear();
@@ -465,12 +480,14 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     if (!HasNode(nodeId))
         return;
 
-    TTabletInfo &tablet = Tablets[info.GetTabletId()];
+    TTabletInfo &tablet = NodeTabletsByNode[nodeId][info.GetTabletId()];
     tablet.TabletId = info.GetTabletId();
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
     tablet.Leader = info.GetLeader();
     tablet.NodeId = nodeId;
+
+    Tablets[info.GetTabletId()] = tablet;
 
     auto &node = NodeRef(nodeId);
     node.Tablets.insert(tablet.TabletId);
@@ -1029,6 +1046,42 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
     }
+
+    GenerateNodesWithRunningSystemTablet();
+}
+
+void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
+    NodesWithRunningSystemTablet.clear();
+
+    for (const auto &[nodeId, tablets] : NodeTabletsByNode) {
+        if (!HasNode(nodeId)) {
+            continue;
+        }
+
+        for (const auto &[_, tablet] : tablets) {
+            // Match by type intentionally: this also covers tenant system tablets.
+            if (tablet.Leader
+                && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+                && IsSystemTablet(tablet.Type))
+            {
+                NodesWithRunningSystemTablet.insert(nodeId);
+                break;
+            }
+        }
+    }
+}
+
+bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
+    return NodesWithRunningSystemTablet.contains(nodeId);
+}
+
+bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {
+    for (const auto *node : HostNodes(hostName)) {
+        if (NodeHasRunningSystemTablet(node->NodeId)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TClusterInfo::GenerateClusterNodesCheckers() {

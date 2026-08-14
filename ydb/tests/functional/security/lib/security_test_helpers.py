@@ -89,33 +89,29 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
-def describe_path_self(cluster, root_path, database_path, use_tls=False):
+# use_tls only picks the scheme, and token only decides whether the request is authenticated:
+# a cluster without authentication rejects a request with an Authorization header with 400,
+# and a cluster with authentication rejects a request without it with 401.
+def describe_path_self(cluster, root_path, database_path, use_tls=False, token=None):
     node = cluster.nodes[1]
-    if use_tls:
-        base_url = f'https://{node.host}:{node.mon_port}'
-        headers = {'Authorization': 'root@builtin'}
-        verify = False
-    else:
-        base_url = f'http://{node.host}:{node.mon_port}'
-        headers = {}
-        verify = True
+    scheme = 'https' if use_tls else 'http'
     response = requests.get(
-        base_url + '/viewer/json/describe',
+        f'{scheme}://{node.host}:{node.mon_port}/viewer/json/describe',
         params={'database': root_path, 'path': database_path},
-        headers=headers,
-        verify=verify,
+        headers={'Authorization': token} if token is not None else {},
+        verify=False,
         timeout=5,
     )
     response.raise_for_status()
     return response.json()['PathDescription']['Self']
 
 
-def get_tenant_schemeshard_id(cluster, root_path, database_path, use_tls=False):
-    return int(describe_path_self(cluster, root_path, database_path, use_tls)['SchemeshardId'])
+def get_tenant_schemeshard_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['SchemeshardId'])
 
 
-def get_tenant_path_id(cluster, root_path, database_path, use_tls=False):
-    return int(describe_path_self(cluster, root_path, database_path, use_tls)['PathId'])
+def get_tenant_path_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['PathId'])
 
 
 def get_nodelist_ids(base_url, database=None, token='root@builtin'):

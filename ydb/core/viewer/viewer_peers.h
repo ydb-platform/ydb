@@ -392,6 +392,12 @@ class TJsonPeers : public TViewerPipeClient {
 
     void ApplyFilter() {
         if (RestrictToDatabaseNodes) {
+            if (RestrictedNodeIds.empty()) {
+                YDB_LOG_INFO_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetUserSID()},
+                    {"database", Database});
+            }
             TPeerView peerView;
             for (TPeer* peer : PeerView) {
                 if (RestrictedNodeIds.count(peer->GetPeerId()) > 0) {

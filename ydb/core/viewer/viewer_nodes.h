@@ -1372,6 +1372,12 @@ public:
             AddEvent("Type Filter Applied");
         }
         if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            if (RestrictedNodeIds.empty()) {
+                YDB_LOG_INFO_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetUserSID()},
+                    {"database", Database});
+            }
             TNodeView nodeView;
             for (TNode* node : NodeView) {
                 if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {

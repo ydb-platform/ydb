@@ -1035,19 +1035,31 @@ bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
     return *StrictDatabaseOnlyRequest;
 }
 
+TString TViewerPipeClient::GetUserSID() const {
+    return NACLib::TUserToken(GetRequest().GetUserTokenObject()).GetUserSID();
+}
+
 bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds) {
     if (nodeIds.empty()) {
         return false;
     }
     // We can't validate the scope of the requested nodes without the database node list, and this
     // is an access check, so an unresolved database denies the request instead of letting it through.
+    const bool databaseNodesKnown = AreDatabaseNodesKnown();
     std::unordered_set<TNodeId> databaseNodes;
-    if (AreDatabaseNodesKnown()) {
+    if (databaseNodesKnown) {
         const auto nodes = GetDatabaseNodes();
         databaseNodes.insert(nodes.begin(), nodes.end());
     }
     for (const auto& nodeId : nodeIds) {
         if (!databaseNodes.count(nodeId)) {
+            YDB_LOG_INFO("Access denied: requested node is outside the database",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database},
+                {"outOfDatabaseNode", nodeId},
+                {"databaseNodeCount", databaseNodes.size()},
+                {"databaseNodesKnown", databaseNodesKnown});
             ReplyAndPassAway(
                 GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
                 "Access denied");

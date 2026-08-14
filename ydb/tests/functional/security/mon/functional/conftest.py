@@ -220,8 +220,8 @@ def tenant_database(ydb_cluster_with_extra_sids_controls):
 def tenant_describe_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
     cluster = ydb_cluster_with_extra_sids_controls
     return {
-        'path_id': get_tenant_path_id(cluster, tenant_database, tenant_database, use_tls=True),
-        'schemeshard_id': get_tenant_schemeshard_id(cluster, tenant_database, tenant_database, use_tls=True),
+        'path_id': get_tenant_path_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
+        'schemeshard_id': get_tenant_schemeshard_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
     }
 
 

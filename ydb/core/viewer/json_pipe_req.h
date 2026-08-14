@@ -354,6 +354,9 @@ protected:
     // to see the information about its own database only, never about the cluster.
     bool IsStrictDatabaseOnlyRequest();
 
+    // The SID of the user who sent the request, for logging of the denied requests.
+    TString GetUserSID() const;
+
     // Denies the request unless every given node belongs to the requested database. If the database
     // nodes are unknown, the request is denied too. Returns true if the response has been already sent.
     bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);

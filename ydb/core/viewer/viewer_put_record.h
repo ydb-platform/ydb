@@ -55,9 +55,6 @@ public:
         }
     }
     void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
         if (!PostData.Has("path") || !PostData.Has("message")) {
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "fields 'path' and 'message' are required and should not be empty"));
         }

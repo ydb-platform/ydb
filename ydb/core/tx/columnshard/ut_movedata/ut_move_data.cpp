@@ -1,6 +1,8 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -61,13 +63,15 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // starting from generation 5.  A blob written in generation 3 (still in group 100)
     // goes into BlobsToDelete.  HasBlobsForGroups({100}) must be true; ({200}) false.
     Y_UNIT_TEST(TestMoveDataBasic) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         constexpr ui64 kTabletId = 42;
         constexpr ui32 kOldGroup = 100;
         constexpr ui32 kNewGroup = 200;
         constexpr ui32 kReassignGen = 5;
 
         auto tabletInfo = CreateReassignedTabletInfo(
-            kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureMirror3, kOldGroup, kNewGroup, kReassignGen);
+            kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureNone, kOldGroup, kNewGroup, kReassignGen);
 
         // Generation 1 of the blob is resolved through TabletInfo::GroupFor to kOldGroup.
         UNIT_ASSERT_VALUES_EQUAL(tabletInfo->GroupFor(/*channel*/ 2, /*gen*/ 1), kOldGroup);
@@ -89,11 +93,13 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // TestMoveDataAlreadyClean: when the tablet was never reassigned (single group),
     // HasBlobsForGroups for a different group always returns false.
     Y_UNIT_TEST(TestMoveDataAlreadyClean) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         constexpr ui64 kTabletId = 43;
         constexpr ui32 kGroup = 111;
         constexpr ui32 kUnrelatedGroup = 999;
 
-        auto tabletInfo = CreateInitialTabletInfo(kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureMirror3, kGroup);
+        auto tabletInfo = CreateInitialTabletInfo(kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureNone, kGroup);
 
         NOlap::TBlobManager mgr(tabletInfo, /*currentGen*/ 1, NOlap::TTabletId(kTabletId));
 
@@ -112,10 +118,12 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // TestMoveDataIdempotent: calling HasBlobsForGroups multiple times without any
     // state change must return consistent results (no destructive side-effects).
     Y_UNIT_TEST(TestMoveDataIdempotent) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         constexpr ui64 kTabletId = 44;
         constexpr ui32 kGroup = 77;
 
-        auto tabletInfo = CreateInitialTabletInfo(kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureMirror3, kGroup);
+        auto tabletInfo = CreateInitialTabletInfo(kTabletId, TTabletTypes::ColumnShard, TBlobStorageGroupType::ErasureNone, kGroup);
 
         NOlap::TBlobManager mgr(tabletInfo, /*currentGen*/ 1, NOlap::TTabletId(kTabletId));
         auto blobId = MakeDsBlobId(kGroup, kTabletId, 1, 1, 2);

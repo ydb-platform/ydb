@@ -60,6 +60,7 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -1541,6 +1542,7 @@ class TDataShard
     // Reports the identity of this shard's primary user table to the node's tablet counters
     // aggregator, so detailed metrics can attribute the executor's counter deltas to a table.
     void SendTableInfoToCountersAggregator(const TActorContext &ctx);
+    void SendHnswCountersToAggregator(const TActorContext& ctx);
 
     TDuration GetTxCompleteLag()
     {
@@ -1849,6 +1851,15 @@ public:
             return it->second.Index;
         }
         return nullptr;
+    }
+
+    void RegisterHnswCacheLookup(ui32 localTid, bool hit) {
+        auto& entry = HnswIndexCache[localTid];
+        if (hit) {
+            ++entry.CacheHits;
+        } else {
+            ++entry.CacheMisses;
+        }
     }
 
     bool IsHnswIndexBuilding(ui32 localTid) const {
@@ -3093,8 +3104,11 @@ private:
         THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
         TInstant NextScanAttemptAt;
+        ui64 CacheHits = 0;
+        ui64 CacheMisses = 0;
     };
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
+    TIntrusivePtr<TEvTabletCounters::TInFlightCookie> HnswCounterEventsInFlight;
     inline static std::shared_ptr<THnswCacheMemoryTracker> VectorIndexHnswCacheMemoryTracker =
         std::make_shared<THnswCacheMemoryTracker>();
     TTransQueue TransQueue;

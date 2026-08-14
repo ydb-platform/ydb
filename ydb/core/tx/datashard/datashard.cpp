@@ -4102,12 +4102,77 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
             static_cast<ui32>(GetEffectiveMetricsLevel(*table))));
 }
 
+namespace {
+
+TString EncodeHnswCounterPath(TStringBuf path) {
+    static constexpr char Hex[] = "0123456789ABCDEF";
+    TString result;
+    result.reserve(path.size() * 3);
+    for (const unsigned char c : path) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '-' || c == '_'
+                || c == '.' || c == '~') {
+            result += static_cast<char>(c);
+        } else {
+            result += '%';
+            result += Hex[c >> 4];
+            result += Hex[c & 0x0f];
+        }
+    }
+    return result;
+}
+
+TString FormatHnswCounterPathId(const TPathId& pathId) {
+    return TStringBuilder() << pathId.OwnerId << ':' << pathId.LocalPathId;
+}
+
+} // anonymous namespace
+
+void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
+    if (HnswCounterEventsInFlight && HnswCounterEventsInFlight.RefCount() > 1) {
+        return;
+    }
+    if (!HnswCounterEventsInFlight) {
+        HnswCounterEventsInFlight = new TEvTabletCounters::TInFlightCookie;
+    }
+
+    for (const auto& [localTid, entry] : HnswIndexCache) {
+        const TUserTable* table = nullptr;
+        for (const auto& [_, candidate] : TableInfos) {
+            if (candidate->LocalTid == localTid) {
+                table = candidate.Get();
+                break;
+            }
+        }
+        if (!table || !table->VectorIndexTablePathId || !table->VectorIndexPathId
+                || table->VectorIndexTablePath.empty() || table->VectorIndexPath.empty()) {
+            continue;
+        }
+
+        const TString group = TStringBuilder()
+            << FormatHnswCounterPathId(table->VectorIndexTablePathId) << '/'
+            << EncodeHnswCounterPath(table->VectorIndexTablePath) << '/'
+            << FormatHnswCounterPathId(table->VectorIndexPathId) << '/'
+            << EncodeHnswCounterPath(table->VectorIndexPath);
+        TAutoPtr<TTabletLabeledCountersBase> counters(new TTabletLabeledCountersBase(
+            CreateProtobufTabletLabeledCounters<EHnswLabeledCounters_descriptor>(group, localTid)));
+        counters->GetCounters()[COUNTER_HNSW_CACHE_HITS].Set(entry.CacheHits);
+        counters->GetCounters()[COUNTER_HNSW_CACHE_MISSES].Set(entry.CacheMisses);
+
+        ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId()),
+            new TEvTabletCounters::TEvTabletAddLabeledCounters(
+                HnswCounterEventsInFlight, TabletID(), TTabletTypes::DataShard,
+                counters.Release()));
+    }
+}
+
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
     SendTableInfoToCountersAggregator(ctx);
+    SendHnswCountersToAggregator(ctx);
     CollectCpuUsage(ctx);
 
     if (CurrentKeySampler == EnabledKeySampler && ctx.Now() > StopKeyAccessSamplingAt) {

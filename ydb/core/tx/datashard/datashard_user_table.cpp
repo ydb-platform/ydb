@@ -333,6 +333,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    if (descr.HasVectorIndexTablePathId()) {
+        VectorIndexTablePathId = TPathId::FromProto(descr.GetVectorIndexTablePathId());
+        VectorIndexTablePath = descr.GetVectorIndexTablePath();
+        VectorIndexPathId = TPathId::FromProto(descr.GetVectorIndexPathId());
+        VectorIndexPath = descr.GetVectorIndexPath();
+    }
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -733,6 +739,13 @@ void TUserTable::ApplyAlter(
     }
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
+
+    if (delta.HasVectorIndexTablePathId()) {
+        schema.MutableVectorIndexTablePathId()->CopyFrom(delta.GetVectorIndexTablePathId());
+        schema.SetVectorIndexTablePath(delta.GetVectorIndexTablePath());
+        schema.MutableVectorIndexPathId()->CopyFrom(delta.GetVectorIndexPathId());
+        schema.SetVectorIndexPath(delta.GetVectorIndexPath());
+    }
 
     SetSchema(schema);
 }

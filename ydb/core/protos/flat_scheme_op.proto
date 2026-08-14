@@ -433,6 +433,10 @@ message TTableDescription {
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 55;
     optional string VectorIndexEmbeddingColumn = 56;
     optional uint32 VectorIndexEmbeddingColumnId = 57;
+    optional NKikimrProto.TPathID VectorIndexTablePathId = 58;
+    optional string VectorIndexTablePath = 59;
+    optional NKikimrProto.TPathID VectorIndexPathId = 60;
+    optional string VectorIndexPath = 61;
 }
 
 message TCompressionOptions {

@@ -674,9 +674,9 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         LOG_S_INFO("TColumnShard::Handle TEvMoveData: merge resend, newGroups="
                    << newGroupsAdded << " totalGroups=" << MoveDataState.TargetGroups.size() << " at tablet " << TabletID());
         if (newGroupsAdded && HasIndex()) {
-            // Restart actualization with the extended group set.
+            // Restart actualization with the extended group set. The vacuum leg is not restarted:
+            // its scope is local-DB cleanup, independent of which data groups are targeted.
             MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
-            MoveDataState.VacuumCompleted = false;
             MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
         }
         return;
@@ -688,7 +688,6 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         MoveDataState.TargetGroups.emplace(g);
     }
     MoveDataState.Active = true;
-    MoveDataState.VacuumStarted = true;   // vacuum starts immediately in parallel
     MoveDataState.VacuumCompleted = false;
 
     LOG_S_INFO(

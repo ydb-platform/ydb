@@ -496,6 +496,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui32 Count = 0;
     ui32 Size = 0;
     bool ReadToBlobEnd = true;
+    bool OmitReadToBlobEndField = false;
     ui32 ResCount = 0;
     bool Timeout = false;
     TVector<i32> Offsets;
@@ -582,6 +583,15 @@ void CmdRead(
     ui64* sizeLag = nullptr);
 
 void CmdReadWithoutReadToBlobEnd(
+    const ui32 partition,
+    const ui64 offset,
+    const ui32 count,
+    const ui32 size,
+    const ui32 resCount,
+    bool timeouted,
+    TTestContext& tc);
+
+void CmdReadOmittingReadToBlobEndField(
     const ui32 partition,
     const ui64 offset,
     const ui32 count,

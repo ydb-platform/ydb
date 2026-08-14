@@ -113,9 +113,12 @@ public:
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
-    // Returns true if any pending keep/delete blob belongs to one of the given BS groups.
+    // Returns true if any pending keep/delete/shared blob belongs to one of the given BS groups.
     // Only meaningful for the native blob-storage operator; other implementations return false.
-    virtual bool HasBlobsForGroups(const THashSet<ui32>& /*groups*/) const {
+    virtual bool HasBlobsForGroups(const THashSet<ui32>& groups) const {
+        if (SharedBlobs && SharedBlobs->HasBlobsForGroups(groups)) {
+            return true;
+        }
         return false;
     }
 

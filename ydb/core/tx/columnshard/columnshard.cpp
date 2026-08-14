@@ -335,16 +335,8 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 
-    // Check if MoveData rewriting is complete and vacuum can be started.
-    if (MoveDataState.Active && !MoveDataState.VacuumStarted && HasIndex()) {
-        if (MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() == 0) {
-            LOG_S_INFO("TColumnShard: MoveData rewriting done, starting vacuum at tablet " << TabletID());
-            MoveDataState.VacuumStarted = true;
-            Executor()->StartMoveDataVacuumFromOwner();
-        }
-    }
-    // If the executor-level vacuum has completed but blobs were still pending GC at that time,
-    // re-try the completion predicate on each wakeup until GC drains.
+    // When MoveData is active and vacuum has completed, retry the completion gate on
+    // every wakeup until both rewriting and GC queues are clean.
     if (MoveDataState.Active && MoveDataState.VacuumCompleted) {
         MoveDataCompleted(ctx);
     }
@@ -666,50 +658,62 @@ void TColumnShard::ScheduleExecutorStatistics() {
 void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetMoveDataEnabled()) {
-        // Feature disabled: hand off to base executor (immediate vacuum, no rewrite).
         TTabletExecutedFlat::Handle(ev);
-        return;
-    }
-    if (MoveDataState.Active) {
-        // Already running: silently ignore duplicates (Hive may retry).
-        LOG_S_WARN("TColumnShard::Handle TEvMoveData: already active, ignoring at " << TabletID());
         return;
     }
 
     const auto& record = ev->Get()->Record;
+
+    if (MoveDataState.Active) {
+        // Hive retry or re-assignment: merge groups and update sender.
+        MoveDataState.HiveSender = ev->Sender;
+        bool newGroupsAdded = false;
+        for (auto g : record.GetGroups()) {
+            newGroupsAdded |= MoveDataState.TargetGroups.emplace(g).second;
+        }
+        LOG_S_INFO("TColumnShard::Handle TEvMoveData: merge resend, newGroups="
+                   << newGroupsAdded << " totalGroups=" << MoveDataState.TargetGroups.size() << " at tablet " << TabletID());
+        if (newGroupsAdded && HasIndex()) {
+            // Restart actualization with the extended group set.
+            MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
+            MoveDataState.VacuumCompleted = false;
+            MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
+        }
+        return;
+    }
+
     MoveDataState.HiveSender = ev->Sender;
     MoveDataState.TargetGroups.clear();
     for (auto g : record.GetGroups()) {
         MoveDataState.TargetGroups.emplace(g);
     }
     MoveDataState.Active = true;
-    MoveDataState.VacuumStarted = false;
+    MoveDataState.VacuumStarted = true;   // vacuum starts immediately in parallel
+    MoveDataState.VacuumCompleted = false;
 
     LOG_S_INFO(
         "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
 
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
-        if (MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() == 0) {
-            // Nothing to move — trigger vacuum immediately.
-            MoveDataState.VacuumStarted = true;
-            Executor()->StartMoveDataVacuumFromOwner();
-        }
-    } else {
-        // No index yet — vacuum immediately.
-        MoveDataState.VacuumStarted = true;
-        Executor()->StartMoveDataVacuumFromOwner();
     }
+    // Start vacuum in parallel with rewriting (F5). TEvMoveDataResponse is gated on
+    // VacuumCompleted && GetMoveDataPortionsCount()==0 && !HasBlobsForGroups().
+    Executor()->StartMoveDataVacuumFromOwner();
 }
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     if (!MoveDataState.Active) {
         return;
     }
-    // Record that the executor-level vacuum is done; further re-tries come from periodic wakeup.
     MoveDataState.VacuumCompleted = true;
 
-    // Verify that no blobs in the target groups remain in pending GC queues.
+    // All three conditions must hold before responding to Hive:
+    //  1. Rewriting queue is empty (pending + confirmed portions).
+    //  2. No target-group blobs remain in keep/delete queues or shared-blob tables.
+    if (HasIndex() && MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() != 0) {
+        return;
+    }
     if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
         LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
         return;

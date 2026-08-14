@@ -13,14 +13,11 @@ namespace NKikimr::NOlap::NActualizer {
 
 namespace {
 
-// Receives loaded accessor results and forwards each portion to the actualizer for
-// DsGroup-based filtering (moves confirmed portions from Pending → PortionsToMove).
 class TMoveDataActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TMoveDataActualizer> MoveDataActualizer;
 
-    void DoApplyResult(
-        NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
+    void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs&) override {
         auto locked = MoveDataActualizer.lock();
         if (!locked) {
             return;
@@ -40,27 +37,7 @@ public:
 
 }   // namespace
 
-// ─── IActualizer interface ───────────────────────────────────────────────────
-
-void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
-    const ui64 portionId = info.GetPortionId();
-    if (!InitialPortionIds.contains(portionId)) {
-        return;
-    }
-    if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
-        return;
-    }
-    // Only consider default-tier portions — tiered data lives on external storage.
-    if (info.GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
-        return;
-    }
-    PendingPortionIds.emplace(portionId);
-}
-
-void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
-    InitialPortionIds.erase(portionId);
-    PendingPortionIds.erase(portionId);
-
+void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
     auto it = PortionAddress.find(portionId);
     if (it == PortionAddress.end()) {
         return;
@@ -74,12 +51,32 @@ void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
     PortionAddress.erase(it);
 }
 
+void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext&) {
+    const ui64 portionId = info.GetPortionId();
+    if (!InitialPortionIds.contains(portionId)) {
+        return;
+    }
+    if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
+        return;
+    }
+    if (info.GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
+        return;
+    }
+    PendingPortionIds.emplace(portionId);
+}
+
+void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
+    InitialPortionIds.erase(portionId);
+    PendingPortionIds.erase(portionId);
+    RemoveFromActiveQueue(portionId);
+}
+
 void TMoveDataActualizer::DoExtractTasks(
-    TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+    TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext&) {
     if (!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::MoveData)) {
         return;
     }
-    THashSet<ui64> portionsToRemove;
+    THashSet<ui64> submitted;
     for (auto& [address, portions] : PortionsToMove) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
             continue;
@@ -100,7 +97,7 @@ void TMoveDataActualizer::DoExtractTasks(
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
                     break;
                 case TTieringProcessContext::EAddPortionResult::SUCCESS:
-                    portionsToRemove.emplace(portionId);
+                    submitted.emplace(portionId);
                     break;
             }
             if (limitExceeded) {
@@ -111,20 +108,16 @@ void TMoveDataActualizer::DoExtractTasks(
             break;
         }
     }
-    for (auto& i : portionsToRemove) {
-        RemovePortion(i);
+    // Remove only from the active queue; keep InitialPortionIds so that if the
+    // change is aborted the portion can re-enter PendingPortionIds via DoAddPortion.
+    for (auto portionId : submitted) {
+        RemoveFromActiveQueue(portionId);
     }
 }
 
-// ─── Public interface ────────────────────────────────────────────────────────
-
-// Called by TMoveDataActualizationReply once blob metadata is available.
-// Checks whether the portion has any blob in the target groups; if yes, the
-// portion is promoted from PendingPortionIds to PortionsToMove.
 void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& accessor) {
     const ui64 portionId = accessor.GetPortionInfo().GetPortionId();
     if (!PendingPortionIds.erase(portionId)) {
-        // Already removed (e.g. portion was deleted between request and reply).
         return;
     }
     bool hasTargetBlob = false;
@@ -135,15 +128,13 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
         }
     }
     if (!hasTargetBlob) {
-        // No blobs in the target groups — this portion is already fully migrated.
         return;
     }
-    // The portion has blobs in the old groups: queue it for rewriting.
     auto portionSchema = accessor.GetPortionInfo().GetSchema(VersionedIndex);
     const TString tierName = accessor.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
-    auto storagesWrite = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
-    TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
+    auto storages = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
+    auto storagesCopy = storages;
+    TRWAddress address(std::move(storagesCopy), std::move(storages));
     AFL_VERIFY(PortionsToMove[address].emplace(portionId).second);
     AFL_VERIFY(PortionAddress.emplace(portionId, std::move(address)).second);
 }
@@ -153,15 +144,13 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     if (PendingPortionIds.empty()) {
         return {};
     }
-
     const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
 
-    for (auto& portionId : PendingPortionIds) {
+    for (auto portionId : PendingPortionIds) {
         auto it = portions.find(portionId);
         if (it == portions.end()) {
-            // Portion was removed; will be cleaned up via DoRemovePortion.
             continue;
         }
         if (!currentRequest) {
@@ -179,7 +168,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     return requests;
 }
 
-ui64 TMoveDataActualizer::GetPortionsToMoveCount() const {
+ui64 TMoveDataActualizer::GetMoveDataPortionsCount() const {
     ui64 total = PendingPortionIds.size();
     for (auto& [addr, portions] : PortionsToMove) {
         total += portions.size();
@@ -188,9 +177,6 @@ ui64 TMoveDataActualizer::GetPortionsToMoveCount() const {
 }
 
 void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
-    // Capture a fresh snapshot; only portions present NOW can be rewritten.
-    // Any portion added after this point is a newly written one and must be excluded
-    // to prevent infinite rewrite loops.
     InitialPortionIds.clear();
     PendingPortionIds.clear();
     PortionsToMove.clear();
@@ -205,10 +191,12 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
         }
         InitialPortionIds.emplace(portionId);
     }
-    // Re-add all captured portions; they go into PendingPortionIds pending
-    // accessor load (group validation).
-    for (auto& [portionId, portion] : externalContext.GetPortions()) {
-        AddPortion(portion, externalContext);
+    // F6: iterate InitialPortionIds and lookup in portions map (avoids full scan)
+    for (auto portionId : InitialPortionIds) {
+        auto it = externalContext.GetPortions().find(portionId);
+        if (it != externalContext.GetPortions().end()) {
+            AddPortion(it->second, externalContext);
+        }
     }
 }
 

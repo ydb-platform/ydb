@@ -52,6 +52,20 @@ public:
         return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
     }
 
+    bool HasBlobsForGroups(const THashSet<ui32>& groups) const {
+        for (auto& [blobId, _] : BorrowedBlobIds) {
+            if (groups.contains(blobId.GetDsGroup())) {
+                return true;
+            }
+        }
+        for (auto& [blobId, _] : SharedBlobIds) {
+            if (groups.contains(blobId.GetDsGroup())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
     }

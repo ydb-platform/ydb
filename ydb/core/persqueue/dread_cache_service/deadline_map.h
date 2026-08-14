@@ -11,12 +11,16 @@ namespace NKikimr::NPQ {
  *
  * TValue must expose a public TInstant Deadline field.
  *
- * - Insert sets Deadline = now + ttl once and enqueues (key, deadline).
+ * TTL is fixed (DefaultTtl). The expiry queue relies on nondecreasing deadlines
+ * for Insert/FindOrInsert with a nondecreasing `now` (FIFO Expire is correct then).
+ * TouchDeadline may enqueue a later deadline; older queue entries become stale.
+ *
+ * - Insert sets Deadline = now + DefaultTtl once and enqueues (key, deadline).
  *   Returns false if the key already exists (existing entry is unchanged).
  * - FindOrInsert returns a reference to the existing entry, or inserts and
  *   returns the new one. Does not overwrite value/deadline on hit.
- * - TouchDeadline moves Deadline forward (max with now+ttl) and enqueues again;
- *   older queue entries become stale and are skipped on Expire.
+ * - TouchDeadline moves Deadline forward (max with now + DefaultTtl) and enqueues
+ *   again; older queue entries are skipped on Expire.
  * - Erase removes only from the map; queue entries are dropped lazily.
  * - Expire pops queue while front.Deadline <= now; erases the map entry only when
  *   HashMap[key].Deadline == front.Deadline.
@@ -36,12 +40,12 @@ public:
         return Map.FindPtr(key);
     }
 
-    // Inserts a new key. Sets Deadline = now + ttl. Returns false if key exists.
-    bool Insert(const TKey& key, TValue value, TInstant now, TDuration ttl = DefaultTtl) {
+    // Inserts a new key. Sets Deadline = now + DefaultTtl. Returns false if key exists.
+    bool Insert(const TKey& key, TValue value, TInstant now) {
         if (Map.FindPtr(key)) {
             return false;
         }
-        value.Deadline = now + ttl;
+        value.Deadline = now + DefaultTtl;
         const TInstant deadline = value.Deadline;
         auto [it, inserted] = Map.emplace(key, std::move(value));
         if (!inserted) {
@@ -51,12 +55,12 @@ public:
         return true;
     }
 
-    // Returns existing entry, or inserts value with Deadline = now + ttl.
-    TValue& FindOrInsert(const TKey& key, TValue value, TInstant now, TDuration ttl = DefaultTtl) {
+    // Returns existing entry, or inserts value with Deadline = now + DefaultTtl.
+    TValue& FindOrInsert(const TKey& key, TValue value, TInstant now) {
         if (TValue* existing = Find(key)) {
             return *existing;
         }
-        value.Deadline = now + ttl;
+        value.Deadline = now + DefaultTtl;
         const TInstant deadline = value.Deadline;
         auto [it, inserted] = Map.emplace(key, std::move(value));
         if (!inserted) {
@@ -66,13 +70,13 @@ public:
         return it->second;
     }
 
-    // Moves Deadline forward to Max(old, now + ttl). Returns false if key is missing.
-    bool TouchDeadline(const TKey& key, TInstant now, TDuration ttl = DefaultTtl) {
+    // Moves Deadline forward to Max(old, now + DefaultTtl). Returns false if key is missing.
+    bool TouchDeadline(const TKey& key, TInstant now) {
         TValue* value = Find(key);
         if (!value) {
             return false;
         }
-        const TInstant next = now + ttl;
+        const TInstant next = now + DefaultTtl;
         if (next <= value->Deadline) {
             return true;
         }

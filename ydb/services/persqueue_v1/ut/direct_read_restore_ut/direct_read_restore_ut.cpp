@@ -1189,11 +1189,10 @@ protected:
             Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
             Sleep(TDuration::MilliSeconds(50));
         }
-        // Best-effort: Flush-before-Stage hang can wedge DirectRead Close under UseRealThreads=false.
-        if (stop.HasValue() || stop.HasException()) {
-            stop.TryRethrow();
-            stop.GetValueSync();
-        }
+        UNIT_ASSERT_C(stop.HasValue() || stop.HasException(),
+            "SDK sparse stop did not finish in time");
+        stop.TryRethrow();
+        stop.GetValueSync();
         reader.reset();
         driver.reset();
     }
@@ -1512,7 +1511,12 @@ Y_UNIT_TEST(SdkHangWhenPublishFlushedBeforeMatchingStage) {
         "Stage(M) and failed Publish with no staged payload; later Stage left the read "
         "staged/unpublished; session stayed open with unread topic data but no further DataReceived");
 
-    StopSdkSparse(driver, reader);
+    // Do not StopSdkSparse here: after PQRB+PQ reboot with held Deregister, Close/Stop can block
+    // under UseRealThreads=false even when DataReceived recovered. Drop hooks and let fixture
+    // TearDownGrpcAndServer shut down gRPC/server (same as before this test existed).
+    Env.DropHooks();
+    reader.reset();
+    driver.reset();
 }
 
 // LOGBROKER-10590: forget-first after nested pipe restart with RestoredDirectReadId==0

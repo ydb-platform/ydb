@@ -226,6 +226,7 @@ private:
             return;
         }
         StageToSession(sessionIter, ev->Get()->ReadKey.ReadId, ev->Get()->TabletGeneration, ev->Get()->Response);
+        TryApplyPendingPublish(sessionKey, ev->Get()->ReadKey.ReadId);
     }
 
     void HandlePublish(TEvPQ::TEvPublishDirectRead::TPtr& ev) {
@@ -257,7 +258,7 @@ private:
             return;
         }
 
-        PublishToSession(iter, readId, generation);
+        Y_UNUSED(PublishToSession(iter, readId, generation));
     }
 
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
@@ -401,20 +402,22 @@ private:
             {"session", sessionIter->first.SessionId});
     }
 
-    void PublishToSession(TSessionsMap::iterator iter, ui64 readId, ui32 generation) {
+    // Returns true if the read was published (or already published). False if generation
+    // mismatches or there is no staged payload for readId yet.
+    [[nodiscard]] bool PublishToSession(TSessionsMap::iterator iter, ui64 readId, ui32 generation) {
         const auto& ctx = ActorContext();
         if (iter.IsEnd()) {
-            return;
+            return false;
         }
         if (iter->second.Generation != generation)
-            return;
+            return false;
 
         auto stagedIter = iter->second.StagedReads.find(readId);
         if (stagedIter == iter->second.StagedReads.end()) {
             YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
                 {"readId", readId},
                 {"sessionId", iter->first.SessionId});
-            return;
+            return false;
         }
         auto inserted = iter->second.Reads.insert(std::make_pair(readId, stagedIter->second)).second;
         if (inserted) {
@@ -428,6 +431,7 @@ private:
         iter->second.StagedReads.erase(stagedIter);
 
         SendNextReadToClient(iter);
+        return true;
     }
 
     void FlushPendingDirectReads(const TReadSessionKey& key) {
@@ -463,14 +467,49 @@ private:
         }
         for (auto it = pending->Publishes.begin(); it != pending->Publishes.end(); ) {
             if (it->second == sessionGeneration) {
-                PublishToSession(sessionIter, it->first, it->second);
-                it = pending->Publishes.erase(it);
+                // Keep Publish if Stage for this gen is not staged yet (may arrive after Register).
+                if (sessionIter->second.StagedReads.contains(it->first)
+                        && PublishToSession(sessionIter, it->first, it->second)) {
+                    it = pending->Publishes.erase(it);
+                } else {
+                    ++it;
+                }
             } else if (it->second < sessionGeneration) {
                 it = pending->Publishes.erase(it);
             } else {
                 ++it;
             }
         }
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
+    }
+
+    // If a Publish was buffered before its Stage (or Stage was dropped as stale lower-gen),
+    // apply it once the matching Stage lands on a registered session.
+    void TryApplyPendingPublish(const TReadSessionKey& key, ui64 readId) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        auto sessionIter = ServerSessions.find(key);
+        if (sessionIter.IsEnd()) {
+            return;
+        }
+        auto publishIt = pending->Publishes.find(readId);
+        if (publishIt == pending->Publishes.end()) {
+            return;
+        }
+        if (publishIt->second != sessionIter->second.Generation) {
+            return;
+        }
+        if (!sessionIter->second.StagedReads.contains(readId)) {
+            return;
+        }
+        if (!PublishToSession(sessionIter, readId, publishIt->second)) {
+            return;
+        }
+        pending->Publishes.erase(publishIt);
         if (pending->Stages.empty() && pending->Publishes.empty()) {
             PendingBySession.Erase(key);
         }
@@ -509,8 +548,14 @@ private:
     void BufferPendingPublish(const TReadSessionKey& key, ui64 readId, ui32 generation) {
         auto& pending = GetOrCreatePending(key);
         auto stageIt = pending.Stages.find(readId);
-        if (stageIt != pending.Stages.end() && stageIt->second.Generation > generation) {
-            return;
+        if (stageIt != pending.Stages.end()) {
+            if (stageIt->second.Generation > generation) {
+                return;
+            }
+            // Publish for a newer generation invalidates a stale Stage of an older generation.
+            if (stageIt->second.Generation < generation) {
+                pending.Stages.erase(stageIt);
+            }
         }
         auto it = pending.Publishes.find(readId);
         if (it == pending.Publishes.end()) {

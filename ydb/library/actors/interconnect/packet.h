@@ -59,7 +59,9 @@ struct TTcpPacketBuf {
     static constexpr ui64 PingResponseMask = 0x4000000000000000ULL;
     static constexpr ui64 ClockMask = 0x2000000000000000ULL;
 
-    static constexpr size_t PacketDataLen = 4096 * 2 - 96 - sizeof(TTcpPacketHeader_v2);
+    // Maximum serialized size of one main-channel IC packet, including its header.
+    static constexpr size_t FullPacketSize = 4096 * 2 - 96;
+    static constexpr size_t PacketDataLen = FullPacketSize - sizeof(TTcpPacketHeader_v2);
 };
 
 struct TEventData {

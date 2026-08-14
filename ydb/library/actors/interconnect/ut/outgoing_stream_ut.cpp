@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
         NInterconnect::TOutgoingStream mainStream(memPool);
         NInterconnect::TOutgoingStream xdcStream;
 
-        UNIT_ASSERT(mainStream.PreallocateForWriting(sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen));
+        UNIT_ASSERT(mainStream.PreallocateForWriting(TTcpPacketBuf::FullPacketSize));
 
         TSessionParams params;
         params.AllowRdmaSendReceive = true;

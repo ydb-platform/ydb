@@ -12,7 +12,7 @@
 
 namespace NActors {
     NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept {
-        const int rdmaReceiveBufSize = sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen;
+        const int rdmaReceiveBufSize = TTcpPacketBuf::FullPacketSize;
         return {
             -1,
             maxWr,

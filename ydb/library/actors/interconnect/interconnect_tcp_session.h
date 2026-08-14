@@ -275,8 +275,8 @@ namespace NActors {
             hFunc(TEvPollerReady, Handle)
             hFunc(TEvPollerRegisterResult, Handle)
             hFunc(NInterconnect::NRdma::TEvRdmaReadDone, Handle)
-            hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, Handle)
-            cFunc(EvResumeReceiveData, ReceiveData)
+            hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, ReceiveDataMainChannelRdma)
+            cFunc(EvResumeReceiveData, ReceiveDataTCP)
             cFunc(TEvInterconnect::TEvCloseInputSession::EventType, CloseInputSession)
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
             cFunc(TEvConfirmUpdate::EventType, HandleConfirmUpdate)
@@ -361,9 +361,9 @@ namespace NActors {
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void HandleConfirmUpdate();
         void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
-        void Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
-        void ReceiveData();
-        void ReceiveData(bool readMainChannel);
+        void ReceiveDataMainChannelRdma(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
+        void ReceiveDataTCP();
+        void ReceiveDataTCP(bool readMainChannel);
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
@@ -613,8 +613,20 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
-        void WriteDataTcp(bool writeMainChannel);
-        void WriteDataRdma();
+
+        class IWriteStrategy {
+        public:
+            virtual ~IWriteStrategy() = default;
+            virtual size_t Write(NInterconnect::TOutgoingStream& stream, size_t maxBytes) = 0;
+            virtual size_t GetMaxBytesAtOnce() const = 0;
+            virtual size_t GetExpectedWriteLength() const = 0;
+            virtual bool IsWriteBlocked() const = 0;
+        };
+
+        class TTcpWriteStrategy;
+        class TRdmaWriteStrategy;
+
+        void WriteData(IWriteStrategy& mainWriter);
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 

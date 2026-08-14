@@ -371,7 +371,7 @@ namespace NActors {
 
     void TInputSessionTCP::CloseInputSession() {
         CloseInputSessionRequested = true;
-        ReceiveData(true);
+        ReceiveDataTCP(true);
     }
 
     void TInputSessionTCP::Handle(TEvPollerReady::TPtr ev) {
@@ -394,7 +394,7 @@ namespace NActors {
             Metrics->IncSpuriousReadWakeups();
         }
 
-        ReceiveData(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
 
         if (Params.Encryption && writeBlocked && ev->Sender != SessionId) {
             Send(SessionId, ev->Release().Release());
@@ -408,7 +408,7 @@ namespace NActors {
         } else if (msg->Socket == XdcSocket) {
             XdcPollerToken = std::move(msg->PollerToken);
         }
-        ReceiveData(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
     }
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
@@ -425,7 +425,7 @@ namespace NActors {
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
     }
 
-    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
+    void TInputSessionTCP::ReceiveDataMainChannelRdma(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
         if (!ev->Get()->IsSuccess()) {
             YDB_LOG_ERROR("RDMA RECEIVE failed",
                 {"marker", "ICRDMA"},
@@ -443,14 +443,14 @@ namespace NActors {
             LastReceiveTimestamp = TActivationContext::Monotonic();
         }
 
-        ReceiveData(false);
+        ReceiveDataTCP(false);
     }
 
-    void TInputSessionTCP::ReceiveData() {
-        ReceiveData(!UseRdmaSendReceiveTransport());
+    void TInputSessionTCP::ReceiveDataTCP() {
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport());
     }
 
-    void TInputSessionTCP::ReceiveData(bool readMainChannel) {
+    void TInputSessionTCP::ReceiveDataTCP(bool readMainChannel) {
         ReadMainChannelRequested |= readMainChannel;
 
         TTimeLimit limit(GetMaxCyclesPerEvent());
@@ -1530,7 +1530,7 @@ namespace NActors {
     void TInputSessionTCP::HandleCheckDeadPeer() {
         const TMonotonic now = TActivationContext::Monotonic();
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {
-            ReceiveData();
+            ReceiveDataTCP();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};

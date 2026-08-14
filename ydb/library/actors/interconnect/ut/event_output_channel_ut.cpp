@@ -304,7 +304,7 @@ public:
         NInterconnect::TOutgoingStream xdcStream;
         if (!CompleteSerializer) {
             Y_ABORT_UNLESS(mainStream.PreallocateForWriting(
-                sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen));
+                TTcpPacketBuf::FullPacketSize));
         }
         TTcpPacketOutTask task(params, mainStream, xdcStream, !CompleteSerializer);
 

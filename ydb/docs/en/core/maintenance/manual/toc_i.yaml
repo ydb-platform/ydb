@@ -9,7 +9,7 @@ items:
   href: scrubbing.md
 - name: Working with SelfHeal
   href: selfheal.md
-- name: Decommissioning a cluster part
+- name: Data Center Decommissioning
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Decommissioning groups using virtual groups
   href: virtual_storage_groups_decommit.md

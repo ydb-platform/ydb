@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include "kafka_metadata_service.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -331,6 +332,14 @@ void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const 
             {LogPrefix()},
             {"status", EErrorCode_Name(pqError)},
             {"reason", ev->Get()->Record.GetErrorReason()});
+        ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(
+            1,
+            BuildLabels(
+                Context,
+                "",
+                GetTopicNameWithoutDb(Context->DatabasePath, requestInfo->second.TopicName),
+                "api.kafka.offset_commit.ignored_out_of_range",
+                "")));
         AddPartitionResponse(NONE_ERROR, requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
         return;
     }

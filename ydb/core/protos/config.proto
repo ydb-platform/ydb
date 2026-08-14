@@ -1824,6 +1824,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 100000,
             DefaultValue: 2000 }];
+        optional uint64 HullCompEmergencyMaxSsts = 53 [(ControlOptions) = {
+            Description: "Maximum number of SSTables in one Emergency compaction job. Zero disables the Emergency compaction strategy.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 8 }];
+        optional uint64 HullCompEmergencyChunkReserve = 54 [(ControlOptions) = {
+            Description: "Index chunks reserved for fresh/huge/synclog and subtracted from the Emergency free-chunk budget.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 1 }];
+        optional uint64 HullCompEmergencyEnableAtColor = 55 [(ControlOptions) = {
+            Description: "Enable Emergency compaction mode when local PDisk space color is at least this value (0=GREEN, 10=CYAN, 15=LIGHT_YELLOW, 20=YELLOW, 30=LIGHT_ORANGE, 35=PRE_ORANGE, 40=ORANGE, 50=RED, 60=BLACK).",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 15 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -2904,6 +2919,7 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional uint64 NodePortionsCountLimit = 73;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

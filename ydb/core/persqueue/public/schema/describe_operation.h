@@ -28,6 +28,7 @@ struct TPartitionDescribeInfo {
     Ydb::Topic::PartitionLocation Location;
     Ydb::Topic::DescribeConsumerResult::PartitionInfo Stats;
     NKikimrPQ::TReadSessionsInfoResponse::TPartitionInfo ReadSession;
+    absl::flat_hash_map<TString, Ydb::Topic::Consumer::ConsumerStats> Consumers;
 };
 
 struct TEvDescribeOperationResponse

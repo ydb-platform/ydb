@@ -513,9 +513,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         // AND of predicates from two different indexed columns
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
-            "json_idx_text",  "TestTable");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
+        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
             "json_idx_extra", "TestTable");
 
         // OR of predicates from two different indexed columns
@@ -544,6 +542,41 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             "JSON_EXISTS(Text, '$.a') OR JSON_VALUE(Extra, '$.x' RETURNING Int64) == 10",
             "json_idx_extra", "TestTable");
+    }
+
+    Y_UNIT_TEST(Prefixed) {
+        auto kikimr = KikimrJsonPrefix(true);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text JsonDocument,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO TestTable (Key, UserId, Text) VALUES
+                    (1, 100, JsonDocument('{"k1": "v1"}')),
+                    (2, 100, JsonDocument('{"k2": "v2"}')),
+                    (3, 200, JsonDocument('{"k1": "v1"}')),
+                    (4, 200, JsonDocument('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Predicate on Text -> must use json_idx_text, not json_idx_extra.
+        ValidateAutoSelect(db, "UserId=100 AND JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
     }
 }
 

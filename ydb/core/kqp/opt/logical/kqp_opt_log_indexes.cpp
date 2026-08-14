@@ -2306,69 +2306,47 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         return node;
     }
 
-    THashSet<TString> jsonIndexedColumns;
+    TString selectedIndex;
+    std::expected<TJsonIndexSettings, TIssue> expectedSettings;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
         if (indexInfo.Type != TIndexDescription::EType::GlobalJson && indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
-
         if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
             continue;
         }
 
-        if (indexInfo.KeyColumns.size() > 1) {
-            // FIXME: Prefixed indexes are not supported in auto-selection yet
-            continue;
-        }
-
+        THashSet<TString> jsonIndexedColumns;
         jsonIndexedColumns.insert(indexInfo.KeyColumns.back());
-    }
 
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
-    if (!expectedSettings.has_value()) {
-        return node;
-    }
-
-    const TString& columnName = expectedSettings->ColumnName;
-
-    std::optional<TString> selectedIndex;
-    for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type != TIndexDescription::EType::GlobalJson && indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
-            continue;
-        }
-
-        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
-            continue;
-        }
-
+        TVector<TString> prefixColumns;
         if (indexInfo.KeyColumns.size() > 1) {
-            continue;
+            prefixColumns.assign(indexInfo.KeyColumns.begin(), indexInfo.KeyColumns.end() - 1);
         }
 
-        if (indexInfo.KeyColumns.back() == columnName) {
+        expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns, prefixColumns, {});
+        if (expectedSettings.has_value()) {
             selectedIndex = indexInfo.Name;
             break;
         }
     }
 
-    if (!selectedIndex.has_value()) {
+    if (!expectedSettings.has_value()) {
         return node;
     }
 
-    const auto& jsonIndexSettings = expectedSettings.value();
-
     // clang-format off
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(expectedSettings->ColumnName).Done())
         .Done();
 
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
-        .Index(Build<TCoAtom>(ctx, node.Pos()).Value(selectedIndex.value()).Done())
+        .Index(Build<TCoAtom>(ctx, node.Pos()).Value(selectedIndex).Done())
         .Columns(read.Columns())
         .Query<TExprList>().Build()
         .QueryColumns(searchColumns.Ptr())
-        .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
+        .Settings(expectedSettings->Settings.BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TCoFlatMap>(ctx, node.Pos())

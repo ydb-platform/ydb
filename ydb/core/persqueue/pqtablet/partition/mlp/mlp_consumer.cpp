@@ -1004,6 +1004,21 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    // FIFO: readability is bounded by the number of distinct unlocked message groups, not by the raw
+    // unprocessed count (messages whose group head is in flight are Unprocessed but not readable). When
+    // most in-flight groups are locked, few groups are available to hand out in parallel, so fetch
+    // aggressively toward MaxMessages to pull in heads of new groups and maximize group diversity.
+    if (Config.GetKeepMessageOrder()) {
+        const size_t inflightGroups = metrics.InflightMessageGroupCount;
+        const size_t lockedGroups = metrics.LockedMessageGroupCount;
+        const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
+        // Target number of readable groups we want available for parallel processing.
+        const size_t targetReadableGroups = std::max<size_t>(Storage->MinMessages, lockedGroups * 2);
+        if (readableGroups < targetReadableGroups) {
+            maxMessages = Storage->MaxMessages;
+        }
+        maxMessages = Storage->MaxMessages;
+    }
 
     return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);
 }

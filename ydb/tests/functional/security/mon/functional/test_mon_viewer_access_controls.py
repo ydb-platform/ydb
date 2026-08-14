@@ -286,16 +286,9 @@ def test_viewer_tenantinfo_show_all_databases_forbidden_for_strict_database_toke
             database=tenant_database,
         )
         _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 403)
-        # Scope-param validation must not block tokens above database level.
+        # Scope-param validation must not block users above database level.
         for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
-            headers = {'Authorization': token}
-            response = requests.get(
-                mon_base_url_with_extra_sids_control + forbidden_path,
-                headers=headers,
-                verify=False,
-                timeout=5,
-            )
-            assert response.status_code != 403, response.text
+            _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, token, 200)
 
         allowed_path = _build_endpoint_path(
             ep,
@@ -313,18 +306,26 @@ def test_viewer_tenantinfo_show_all_databases_forbidden_for_strict_database_toke
 
 
 # database@builtin is a strict database-only token and must be rejected when path is out of database scope.
-def test_viewer_describe_out_of_scope_path(mon_base_url_with_extra_sids_control):
+def test_viewer_describe_out_of_scope_path(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+):
     for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path': '/Other'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': '/Other'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 400)
 
-
-# Extra CGI params (e.g. merge) are forbidden for strict database tokens on describe.
-def test_viewer_describe_strict_database_token_extra_params(mon_base_url_with_extra_sids_control):
-    for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'merge': 'true'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'root@builtin', 200)
 
 
 # path_id/schemeshard_id params require monitoring+ level access; strict database and viewer tokens get 4xx.

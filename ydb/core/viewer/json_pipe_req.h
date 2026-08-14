@@ -18,6 +18,8 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <unordered_set>
+
 namespace NKikimr::NViewer {
 
 using namespace NKikimr;

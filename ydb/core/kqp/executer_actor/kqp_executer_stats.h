@@ -5,7 +5,7 @@
 
 #include "kqp_tasks_graph.h"
 
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -416,7 +416,7 @@ private:
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
-        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode, bool moveComputeStats);
+        Ydb::Table::QueryStatsCollection::Mode exportMode);
 public:
     THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
@@ -456,16 +456,13 @@ public:
 
     bool CollectStatsByLongTasks = false;
 
-    bool CollectUserFacingTaskStats = false;
-    TUserFacingTraceTaskStats UserFacingTaskStats;
-    std::unordered_map<ui32, TUserFacingStageAgg> UserFacingStageAggs;
-    TUserFacingBufferLookupStats UserFacingBufferLookup;
+    bool CollectTraceDiagnostics = false;
+    std::unordered_map<ui32, TStageTraceSnapshot> TraceStages;
+    TBufferLookupDiagnostics BufferLookupDiagnostics;
 
-    // The response export moves compute stats; the trace snapshot must copy them first.
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
-        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
-    void CopyExecStats(NYql::NDqProto::TDqExecutionStats& stats,
-        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
+        Ydb::Table::QueryStatsCollection::Mode exportMode);
+    void ExportTraceSnapshot(TExecutionTraceSnapshot& snapshot);
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)

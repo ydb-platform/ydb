@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -336,8 +336,8 @@ public:
     }
 
     void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
-        if (Settings.CollectUserFacingShards) {
-            UserFacingShardReads.OnStart(shardId);
+        if (Settings.CollectDiagnostics) {
+            ShardReadDiagnostics.OnStart(shardId);
         }
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
@@ -441,8 +441,8 @@ public:
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
 
-        if (Settings.CollectUserFacingShards) {
-            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
+        if (Settings.CollectDiagnostics) {
+            ShardReadDiagnostics.OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
                 record.HasNodeId() ? record.GetNodeId() : 0,
                 record.GetStatus().GetCode(), record.GetFinished());
         }
@@ -818,8 +818,8 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        if (Settings.CollectUserFacingShards) {
-            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+        if (Settings.CollectDiagnostics) {
+            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         if (LookupActorSpan) {
@@ -847,7 +847,7 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
 
-        if (BrokenLocksCount > 0 || !UserFacingShardReads.Empty()) {
+        if (BrokenLocksCount > 0 || !ShardReadDiagnostics.Empty()) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (stats->HasExtra()) {
                 stats->GetExtra().UnpackTo(&extraStats);
@@ -856,7 +856,7 @@ public:
                 extraStats.MutableLockStats()->SetBrokenAsVictim(
                     extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
             }
-            UserFacingShardReads.Export(extraStats, 0);
+            ShardReadDiagnostics.Export(extraStats, 0);
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;
         }
@@ -884,7 +884,7 @@ private:
     THashMap<ui64, TLookupState> CookieToLookupState;
     THashMap<ui64, TShardState> ShardToState;
     THashMap<ui64, TReadState> ReadIdToState;
-    TUserFacingShardReadCollector UserFacingShardReads;
+    TShardReadDiagnosticsCollector ShardReadDiagnostics;
 
     ui64 ReadId = 0;
 

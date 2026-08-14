@@ -911,9 +911,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        MarkCompileStart();
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
+        SendCompileServiceRequest(ev.release());
     }
 
     // Ignore later script compilations so the window cannot stretch across executions.
@@ -930,6 +928,12 @@ public:
         }
     }
 
+    void SendCompileServiceRequest(IEventBase* request) {
+        MarkCompileStart();
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request, 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+    }
+
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
         auto txCtx = GetTxContextForCompilation();
@@ -939,8 +943,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
+        SendCompileServiceRequest(ev.release());
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -968,8 +971,7 @@ public:
 
             auto txCtx = GetTxContextForCompilation();
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx);
-            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                QueryState->KqpSessionSpan.GetTraceId());
+            SendCompileServiceRequest(ev.release());
             return;
         }
 
@@ -996,8 +998,7 @@ public:
                 if (!QueryState->HasTxControl()) {
                     YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE || QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN);
                     auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
-                    Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                        QueryState->KqpSessionSpan.GetTraceId());
+                    SendCompileServiceRequest(ev.release());
                 } else {
                     NYql::TIssues issues;
                     ReplyQueryError(
@@ -1060,9 +1061,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        MarkCompileStart();
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
+        SendCompileServiceRequest(request.release());
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev) {
@@ -2370,7 +2369,7 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
-                .CollectUserFacingShards = QueryState && QueryState->UserFacingTraceId
+                .CollectDiagnostics = QueryState && QueryState->UserFacingTraceId
                     && QueryState->UserFacingTraceId.GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Diagnostic,
             };
 
@@ -2801,9 +2800,8 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
-            auto& userTrace = QueryState->QueryStats.UserFacingTraces.emplace_back();
-            if (ev->UserFacingTraceData) {
-                userTrace = std::move(*ev->UserFacingTraceData);
+            if (ev->ExecutionTrace) {
+                QueryState->QueryStats.ExecutionTraces.push_back(std::move(*ev->ExecutionTrace));
             }
         }
 

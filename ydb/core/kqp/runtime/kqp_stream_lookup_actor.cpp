@@ -1,6 +1,6 @@
 #include "kqp_stream_lookup_actor.h"
 
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -189,7 +189,7 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !UserFacingShardReads.Empty()) {
+            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !ShardReadDiagnostics.Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -198,7 +198,7 @@ public:
                     extraStats.MutableLockStats()->SetBrokenAsVictim(
                         extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 }
-                UserFacingShardReads.Export(extraStats, TotalRetryAttempts);
+                ShardReadDiagnostics.Export(extraStats, TotalRetryAttempts);
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -675,7 +675,7 @@ private:
             if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
                 retryAttempts = it->second.RetryAttempts;
             }
-            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), retryAttempts, 0,
+            ShardReadDiagnostics.OnFinish(shardId, record.GetRowCount(), retryAttempts, 0,
                 record.GetStatus().GetCode(), record.GetFinished());
         }
 
@@ -1205,7 +1205,7 @@ private:
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
         if (IngressStats.CollectFull()) {
-            UserFacingShardReads.OnStart(shardId);
+            ShardReadDiagnostics.OnStart(shardId);
         }
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
@@ -1433,7 +1433,7 @@ private:
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
         if (IngressStats.CollectFull()) {
-            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         NYql::TIssue issue(message);
@@ -1484,7 +1484,7 @@ private:
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
     size_t TotalRetryAttempts = 0;
-    TUserFacingShardReadCollector UserFacingShardReads;
+    TShardReadDiagnosticsCollector ShardReadDiagnostics;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
     NKqpProto::EIsolationLevel IsolationLevel;

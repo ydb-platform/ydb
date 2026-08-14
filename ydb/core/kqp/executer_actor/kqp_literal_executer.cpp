@@ -300,7 +300,7 @@ public:
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
-            Stats->ExportExecStats(*response.MutableResult()->MutableStats());
+            Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {

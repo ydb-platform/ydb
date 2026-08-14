@@ -224,11 +224,11 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
+            this->BeginExecutionPhase(EExecutionPhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->CollectUserFacingShards = UserFacingTraceData
+            event->CollectDiagnostics = ExecutionTrace
                 && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
             Send<ESendingType::Tail>(
                 BufferActorId,
@@ -266,7 +266,7 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
+            this->BeginExecutionPhase(EExecutionPhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -328,13 +328,8 @@ public:
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
-        if (UserFacingTraceData) {
-            auto& tl = UserFacingTraceData->Timeline;
-            tl.Phase(EUserFacingTracePhase::CommitPrepareShards) = ev->Get()->CommitPrepareShards;
-            tl.Phase(EUserFacingTracePhase::CommitCoordinator) = ev->Get()->CommitCoordinator;
-            tl.Phase(EUserFacingTracePhase::CommitApplyShards) = ev->Get()->CommitApplyShards;
-            UserFacingTraceData->ShardCommitAcks = std::move(ev->Get()->ShardCommitAcks);
-            UserFacingTraceData->ShardCommitAcksTruncated = ev->Get()->ShardCommitAcksTruncated;
+        if (ExecutionTrace) {
+            ExecutionTrace->Commit = std::move(ev->Get()->CommitDiagnostics);
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
@@ -915,7 +910,7 @@ private:
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
             // Start before sending so nested snapshot work inherits the phase trace id.
-            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EUserFacingTracePhase::Snapshot, NWilson::EFlags::NONE);
+            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EExecutionPhase::Snapshot, NWilson::EFlags::NONE);
 
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
@@ -985,7 +980,7 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-        this->BeginUserFacingPhase(EUserFacingTracePhase::RunTasks);
+        this->BeginExecutionPhase(EExecutionPhase::RunTasks);
         if (!ExecuteTasks()) {
             return;
         }

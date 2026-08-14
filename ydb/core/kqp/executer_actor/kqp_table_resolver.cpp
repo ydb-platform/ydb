@@ -544,8 +544,8 @@ private:
 private:
     const TActorId Owner;
     const ui64 TxId;
-    TUserFacingTraceTimeline::TWindow NavigateWindow;
-    TUserFacingTraceTimeline::TWindow ResolveKeysWindow;
+    TTimeWindow NavigateWindow;
+    TTimeWindow ResolveKeysWindow;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;

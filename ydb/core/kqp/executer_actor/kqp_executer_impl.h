@@ -3,7 +3,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -162,8 +162,8 @@ public:
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        // Trace collection may be deeper, but response export still uses Request.StatsMode.
-        CollectionStatsMode = Max(Request.StatsMode, Request.UserFacingTraceCollectionMode);
+        ResponseStatsMode = Request.StatsMode;
+        CollectionStatsMode = Max(ResponseStatsMode, Request.UserFacingTraceCollectionMode);
         TasksGraph.GetMeta().StatsMode = CollectionStatsMode;
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
@@ -176,23 +176,9 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(CollectionStatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
-        const bool collectUserTrace =
-            Request.UserFacingTraceCollectionMode != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
-        Stats->CollectUserFacingTaskStats = collectUserTrace;
 
         StartTime = TAppData::TimeProvider->Now();
-        if (collectUserTrace) {
-            UserFacingTraceData = std::make_unique<TUserFacingTraceExecutionData>();
-            if constexpr (ExecType == EExecType::Data) {
-                UserFacingTraceData->ExecuterActorType = "TKqpDataExecuter";
-                UserFacingTraceData->ComputeActorType = "TKqpComputeActor";
-            } else {
-                UserFacingTraceData->ExecuterActorType = "TKqpScanExecuter";
-                UserFacingTraceData->ComputeActorType = "TKqpScanComputeActor";
-            }
-            // Wilson span timestamps use wall clock rather than the simulated runtime clock.
-            UserFacingTraceData->Timeline.Execute.Start = TInstant::Now();
-        }
+        InitializeExecutionTrace();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -252,9 +238,9 @@ protected:
             ExecuterStateSpan.EndOk();
         }
 
-        if (UserFacingTraceData) {
-            UserFacingTraceData->Timeline.Phase(EUserFacingTracePhase::ResolveMetadata) = reply.NavigateWindow;
-            UserFacingTraceData->Timeline.Phase(EUserFacingTracePhase::ResolvePartitioning) = reply.ResolveKeysWindow;
+        if (ExecutionTrace) {
+            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolveMetadata) = reply.NavigateWindow;
+            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolvePartitioning) = reply.ResolveKeysWindow;
         }
 
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
@@ -352,7 +338,7 @@ protected:
                 {"ctx", *GetUserRequestContext()},
                 {"shardIdsCount", shardIds.size()},
                 {"traceId", TraceId()});
-            ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve", EUserFacingTracePhase::ResolveShards);
+            ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve", EExecutionPhase::ResolveShards);
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -923,7 +909,7 @@ protected:
             Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
-            if (CollectBasicStats(Request.StatsMode)) {
+            if (CollectBasicStats(ResponseStatsMode)) {
                 ui64 cycleCount = GetCycleCountFast();
 
                 if (Stats->DeadlockedStageId) {
@@ -938,7 +924,7 @@ protected:
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
                         auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                        Stats->ExportExecStats(execStats, Request.StatsMode);
+                        Stats->ExportExecStats(execStats, ResponseStatsMode);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
                             auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
@@ -1047,7 +1033,7 @@ protected:
         auto view = cgi.Get("view");
         if (view == "plan") {
             NYql::NDqProto::TDqExecutionStats execStats;
-            Stats->ExportExecStats(execStats);
+            Stats->ExportExecStats(execStats, CollectionStatsMode);
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
@@ -1244,7 +1230,7 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EUserFacingTracePhase::ResolveTables);
+        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EExecutionPhase::ResolveTables);
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
@@ -1903,26 +1889,56 @@ protected:
     }
 
 protected:
-    NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EUserFacingTracePhase userPhase,
+    void InitializeExecutionTrace() {
+        const bool collect =
+            Request.UserFacingTraceCollectionMode != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        Stats->CollectTraceDiagnostics = collect;
+        if (!collect) {
+            return;
+        }
+
+        ExecutionTrace = std::make_unique<TExecutionTraceSnapshot>();
+        if constexpr (ExecType == EExecType::Data) {
+            ExecutionTrace->ExecuterActorType = "TKqpDataExecuter";
+            ExecutionTrace->ComputeActorType = "TKqpComputeActor";
+        } else {
+            ExecutionTrace->ExecuterActorType = "TKqpScanExecuter";
+            ExecutionTrace->ComputeActorType = "TKqpScanComputeActor";
+        }
+        ExecutionTrace->Timeline.Execute.Start = TInstant::Now();
+    }
+
+    void ExportExecutionTrace() {
+        if (!ExecutionTrace) {
+            return;
+        }
+
+        EndExecutionPhase();
+        ExecutionTrace->Timeline.Execute.End = TInstant::Now();
+        Stats->ExportTraceSnapshot(*ExecutionTrace);
+        ResponseEv->ExecutionTrace = std::move(ExecutionTrace);
+    }
+
+    NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EExecutionPhase phase,
             NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
-        BeginUserFacingPhase(userPhase);
+        BeginExecutionPhase(phase);
         return ExecuterSpan.CreateChild(devVerbosity, devName, flags);
     }
 
     // Starting a phase closes the previous window; the last one closes at response fill.
-    void BeginUserFacingPhase(EUserFacingTracePhase phase) {
-        EndUserFacingPhase();
-        if (UserFacingTraceData) {
-            CurrentUserFacingPhase = phase;
-            UserFacingTraceData->Timeline.Phase(phase).Start = TInstant::Now();
+    void BeginExecutionPhase(EExecutionPhase phase) {
+        EndExecutionPhase();
+        if (ExecutionTrace) {
+            CurrentExecutionPhase = phase;
+            ExecutionTrace->Timeline.Phase(phase).Start = TInstant::Now();
         }
     }
 
-    void EndUserFacingPhase() {
-        if (UserFacingTraceData && CurrentUserFacingPhase != EUserFacingTracePhase::Count) {
-            UserFacingTraceData->Timeline.Phase(CurrentUserFacingPhase).End = TInstant::Now();
+    void EndExecutionPhase() {
+        if (ExecutionTrace && CurrentExecutionPhase != EExecutionPhase::Count) {
+            ExecutionTrace->Timeline.Phase(CurrentExecutionPhase).End = TInstant::Now();
         }
-        CurrentUserFacingPhase = EUserFacingTracePhase::Count;
+        CurrentExecutionPhase = EExecutionPhase::Count;
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -1955,27 +1971,10 @@ protected:
 
             {
                 ui64 cycleCount = GetCycleCountFast();
-                if (UserFacingTraceData) {
-                    EndUserFacingPhase();
-                    UserFacingTraceData->Timeline.Execute.End = TInstant::Now();
-                    for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-                        // ExportExecStats numbers stages using the first transaction only.
-                        if (stageId.TxId == 0 && stageInfo.Meta.TablePath) {
-                            UserFacingTraceData->StageHints.emplace(stageId.StageId,
-                                TUserFacingStageHint{stageInfo.Meta.TablePath, stageInfo.Meta.HasWrites()});
-                        }
-                    }
-                    // Copy before the destructive response export below.
-                    Stats->CopyExecStats(UserFacingTraceData->ExecStats);
-                    UserFacingTraceData->TaskStats = std::move(Stats->UserFacingTaskStats);
-                    UserFacingTraceData->StageAggs = std::move(Stats->UserFacingStageAggs);
-                    UserFacingTraceData->BufferLookup = std::move(Stats->UserFacingBufferLookup);
-                    ResponseEv->UserFacingTraceData = std::move(UserFacingTraceData);
-                }
+                ExportExecutionTrace();
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), ResponseStatsMode);
 
-                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
-
-                if (CollectFullStats(Request.StatsMode)) {
+                if (CollectFullStats(ResponseStatsMode)) {
                     ui64 jsonSize = 0;
 
                     response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
@@ -2231,8 +2230,9 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
-    std::unique_ptr<TUserFacingTraceExecutionData> UserFacingTraceData;
-    EUserFacingTracePhase CurrentUserFacingPhase = EUserFacingTracePhase::Count;
+    std::unique_ptr<TExecutionTraceSnapshot> ExecutionTrace;
+    EExecutionPhase CurrentExecutionPhase = EExecutionPhase::Count;
+    Ydb::Table::QueryStatsCollection::Mode ResponseStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     Ydb::Table::QueryStatsCollection::Mode CollectionStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 

@@ -1,7 +1,7 @@
 #pragma  once
 
 #include <ydb/core/kqp/common/compilation/result.h>
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
@@ -20,7 +20,7 @@ struct TKqpQueryStats {
     ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
-    std::vector<TUserFacingTraceExecutionData> UserFacingTraces;
+    std::vector<TExecutionTraceSnapshot> ExecutionTraces;
 
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;

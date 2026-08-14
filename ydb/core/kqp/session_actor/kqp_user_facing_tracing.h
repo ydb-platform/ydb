@@ -1,12 +1,16 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 
 #include <util/generic/string.h>
 
 namespace NKikimr::NKqp {
 
 class TKqpQueryState;
+
+constexpr size_t MaxUserFacingSpansPerQuery = 1000;
+
+TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& parent);
 
 class TUserFacingSpanBudget {
 public:
@@ -39,8 +43,6 @@ public:
     void Drop(size_t count = 1) {
         Dropped_ += count;
     }
-
-    ui64 TaskDurationCutoffMs = 0;
 
 private:
     size_t Remaining_;

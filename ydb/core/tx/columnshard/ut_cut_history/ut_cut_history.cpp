@@ -115,6 +115,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         UNIT_ASSERT(cutter);
 
@@ -144,6 +145,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
 
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
@@ -169,6 +171,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -191,6 +194,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { CurrentGen, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -209,6 +213,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 3;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 3, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -224,6 +229,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        bm->InitHistoryCutter(bm, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 

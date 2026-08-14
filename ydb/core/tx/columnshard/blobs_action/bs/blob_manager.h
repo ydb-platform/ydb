@@ -252,9 +252,11 @@ public:
 
     // Access to the cut history cutter (null if not initialized).
     NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
+    const NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter() const;
 
     // Called by TColumnShard after boot to wire up the cutter.
-    void InitHistoryCutter(const TActorId& tabletActorId);
+    // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).
+    void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self, const TActorId& tabletActorId);
 
 private:
     // Forward-declared to avoid circular include; defined in blob_manager.cpp.

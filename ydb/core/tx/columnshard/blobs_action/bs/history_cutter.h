@@ -50,8 +50,8 @@ enum class ECutState {
 // Owned by TBlobManager; accessed from TColumnShard for nomination and sweep callbacks.
 class THistoryCutterWrapper {
 public:
-    THistoryCutterWrapper(
-        const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen, NOlap::TBlobManager* manager, const TActorId& tabletActorId);
+    THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen,
+        const std::weak_ptr<NOlap::TBlobManager>& manager, const TActorId& tabletActorId);
 
     void SetLauncherActorId(const TActorId& id) {
         LauncherActorId = id;
@@ -127,7 +127,7 @@ private:
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 CurrentGen;
-    NOlap::TBlobManager* Manager;   // not owned
+    std::weak_ptr<NOlap::TBlobManager> Manager;
     TActorId TabletActorId;
     TActorId LauncherActorId;
 

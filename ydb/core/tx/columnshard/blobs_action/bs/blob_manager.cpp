@@ -8,6 +8,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
@@ -156,16 +158,20 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 {
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
-    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, this, TActorId{});
 }
 
 TBlobManager::~TBlobManager() = default;
 
-void TBlobManager::InitHistoryCutter(const TActorId& tabletActorId) {
-    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, this, tabletActorId);
+void TBlobManager::InitHistoryCutter(const std::shared_ptr<TBlobManager>& self, const TActorId& tabletActorId) {
+    AFL_VERIFY(self.get() == this);
+    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, self, tabletActorId);
 }
 
 NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCutter() {
+    return HistoryCutter.get();
+}
+
+const NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCutter() const {
     return HistoryCutter.get();
 }
 
@@ -571,27 +577,14 @@ void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
 }
 
 bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
-    // BlobsToKeep is a sorted set — we can scan only the relevant portion.
-    // TBlobsByGenStep::Blobs is private; iterate via the set (no public begin/end on range).
-    // We walk BlobsToDelete and BlobsToDeleteDelayed via their public begin/end.
-    const auto checkTabletsByBlob = [&](const TTabletsByBlob& m) {
-        for (const auto& [blobId, _] : m) {
-            const TLogoBlobID& lid = blobId.GetLogoBlobId();
-            if (lid.Channel() == channel && lid.Generation() >= fromGen && lid.Generation() < nextFromGen) {
-                return false;
-            }
-        }
-        return true;
+    const auto hasNoBlobsInRange = [&](const TTabletsByBlob& blobs) {
+        return FindIf(blobs, [&](const auto& item) {
+            const TLogoBlobID& logoBlobId = item.first.GetLogoBlobId();
+            return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;
+        }) == blobs.end();
     };
-    if (!checkTabletsByBlob(BlobsToDelete)) {
-        return false;
-    }
-    if (!checkTabletsByBlob(BlobsToDeleteDelayed)) {
-        return false;
-    }
-    // BlobsToKeep: use a lambda via ExtractTo — but that's destructive.
-    // Instead expose a const scan via HasBlobForChannelRange.
-    return BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);
+    return hasNoBlobsInRange(BlobsToDelete) && hasNoBlobsInRange(BlobsToDeleteDelayed) &&
+           BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);
 }
 
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {

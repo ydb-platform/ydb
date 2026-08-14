@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT_VALUES_EQUAL(index->Size(), 2u);
     }
 
-    Y_UNIT_TEST(AppliesPostingTableChanges) {
+    Y_UNIT_TEST(InsertAfterBuildParticipatesInSearch) {
         auto settings = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
@@ -256,24 +256,124 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         auto index = THnswIndex::Build(settings, data, /* maxMemoryBytes */ 0, error);
         UNIT_ASSERT_C(index, error);
 
-        UNIT_ASSERT(index->Upsert("b", SerializeFloatVector({0.1f, 0.1f})));
-        UNIT_ASSERT(index->Upsert("c", SerializeFloatVector({0.2f, 0.2f})));
-        index->Erase("a");
+        const TString inserted = SerializeFloatVector({0.1f, 0.1f});
+        UNIT_ASSERT(index->Upsert("c", inserted));
+        UNIT_ASSERT(index->HasChanges());
+        UNIT_ASSERT(index->HasDelta("c"));
 
         TString vector;
-        UNIT_ASSERT(!index->GetVector("a", vector));
-        UNIT_ASSERT(index->GetVector("b", vector));
-        UNIT_ASSERT_VALUES_EQUAL(vector, SerializeFloatVector({0.1f, 0.1f}));
+        UNIT_ASSERT(index->GetVector("c", vector));
+        UNIT_ASSERT_VALUES_EQUAL(vector, inserted);
 
-        // The immutable graph can still yield erased keys. DataShard validates
-        // all candidates against MVCC before producing rows.
-        const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 2);
+        const auto result = index->Search(inserted, 1);
+        UNIT_ASSERT(!result.Results.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "c");
+        UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, 0.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(UpdateAfterBuildUsesNewVector) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({0.0f, 0.0f})},
+            {"b", SerializeFloatVector({10.0f, 10.0f})},
+        };
+        TString error;
+        auto index = THnswIndex::Build(settings, data, 0, error);
+        UNIT_ASSERT_C(index, error);
+
+        const TString updated = SerializeFloatVector({0.1f, 0.1f});
+        UNIT_ASSERT(index->Upsert("b", updated));
+        UNIT_ASSERT(index->HasDelta("b"));
+
+        TString vector;
+        UNIT_ASSERT(index->GetVector("b", vector));
+        UNIT_ASSERT_VALUES_EQUAL(vector, updated);
+        const auto result = index->Search(updated, 1);
+        UNIT_ASSERT(!result.Results.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "b");
+        UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, 0.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(DeleteExistingRowAfterBuildHidesVector) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({0.0f, 0.0f})},
+            {"b", SerializeFloatVector({10.0f, 10.0f})},
+        };
+        TString error;
+        auto index = THnswIndex::Build(settings, data, 0, error);
+        UNIT_ASSERT_C(index, error);
+
+        index->Erase("a");
+        UNIT_ASSERT(index->HasChanges());
+        UNIT_ASSERT(index->HasDelta("a"));
+        TString vector;
+        UNIT_ASSERT(!index->GetVector("a", vector));
+
+        // The immutable graph retains erased keys. DataShard subsequently
+        // validates every candidate against the MVCC-visible posting table.
+        const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 1);
         THashSet<TString> keys;
         for (const auto& [key, _] : result.Results) {
             keys.insert(key);
         }
+        UNIT_ASSERT(keys.contains("a"));
         UNIT_ASSERT(keys.contains("b"));
-        UNIT_ASSERT(keys.contains("c"));
+    }
+
+    Y_UNIT_TEST(DeleteInsertedRowAfterBuildRemovesDeltaCandidate) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({0.0f, 0.0f})},
+            {"b", SerializeFloatVector({10.0f, 10.0f})},
+        };
+        TString error;
+        auto index = THnswIndex::Build(settings, data, 0, error);
+        UNIT_ASSERT_C(index, error);
+
+        UNIT_ASSERT(index->Upsert("c", SerializeFloatVector({0.1f, 0.1f})));
+        index->Erase("c");
+        TString vector;
+        UNIT_ASSERT(!index->GetVector("c", vector));
+        const auto result = index->Search(SerializeFloatVector({0.1f, 0.1f}), 1);
+        for (const auto& [key, _] : result.Results) {
+            UNIT_ASSERT_VALUES_UNEQUAL(key, "c");
+        }
+    }
+
+    Y_UNIT_TEST(ReinsertDeletedRowAfterBuildUsesLatestVector) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({0.0f, 0.0f})},
+            {"b", SerializeFloatVector({10.0f, 10.0f})},
+        };
+        TString error;
+        auto index = THnswIndex::Build(settings, data, 0, error);
+        UNIT_ASSERT_C(index, error);
+
+        index->Erase("a");
+        const TString reinserted = SerializeFloatVector({5.0f, 5.0f});
+        UNIT_ASSERT(index->Upsert("a", reinserted));
+        TString vector;
+        UNIT_ASSERT(index->GetVector("a", vector));
+        UNIT_ASSERT_VALUES_EQUAL(vector, reinserted);
+
+        const auto result = index->Search(reinserted, 1);
+        UNIT_ASSERT(!result.Results.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "a");
+        UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, 0.0, 1e-6);
     }
 }
 

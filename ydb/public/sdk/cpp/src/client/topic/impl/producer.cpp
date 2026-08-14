@@ -1791,19 +1791,23 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 }
 
 TProducer::~TProducer() {
-    auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-    if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
-        handlersExecutor->Stop();
-    }
+    try {
+        auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
+        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+            handlersExecutor->Stop();
+        }
 
-    if (MainWorkerState.load() == Idle) {
-        ShutdownPromise.TrySetValue();
-    }
+        if (MainWorkerState.load() == Idle) {
+            ShutdownPromise.TrySetValue();
+        }
 
-    // Bounded wait to avoid hanging the destructor indefinitely if
-    // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
-    // or the state machine never reaches Idle).
-    ShutdownFuture.Wait(TDuration::Seconds(30));
+        // Bounded wait to avoid hanging the destructor indefinitely if
+        // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
+        // or the state machine never reaches Idle).
+        ShutdownFuture.Wait(TDuration::Seconds(30));
+    } catch (...) {
+        // Destructors must not throw.
+    }
 }
 
 NThreading::TFuture<void> TProducer::WaitEvent() {

@@ -218,8 +218,14 @@ protected:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(SourceIdx);
-        AFL_VERIFY(sourceIdx == *SourceIdx);
+        // When PortionId is set it is the stable identity across TTxScan continuations;
+        // SourceIdx may be stale and must not be compared (same as IDeprecatedSimpleScanCursor).
+        if (!PortionId) {
+            AFL_VERIFY(SourceIdx);
+            AFL_VERIFY(sourceIdx == *SourceIdx);
+        } else {
+            Y_UNUSED(sourceIdx);
+        }
         if (indexStart >= RecordIndex) {
             return true;
         }

@@ -1640,6 +1640,7 @@ public:
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
+        ui32 DataColumnCount = 0;
         bool NeedWriteProjection = true;
         EPathWriteType PathType = EPathWriteType::MainTable;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
@@ -2393,6 +2394,7 @@ private:
         if (IsCompactPathType(info.PathType)) {
             auto projection = CreateFulltextTokenizeProjection(
                 info.ColumnTypes,
+                info.DataColumnCount,
                 info.PathType == EPathWriteType::FulltextCompactRelevance,
                 added,
                 info.FulltextSettings,
@@ -3120,14 +3122,14 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-    bool NeedLookup;
+    bool NeedLookup = false;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
-    i64 Priority;
-    bool IsOlap;
+    i64 Priority = 0;
+    bool IsOlap = false;
     THashSet<TStringBuf> DefaultColumns;
-    bool SkipMissingRows;
+    bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
     EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
 
@@ -3135,12 +3137,12 @@ struct TWriteSettings {
         TTableId TableId;
         TString TablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
-        ui32 KeyPrefixSize;
+        ui32 KeyPrefixSize = 0;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-        bool IsUniq;
+        bool IsUniq = false;
         NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
-        bool NeedDeleteOldRows;
+        bool NeedDeleteOldRows = false;
         NKqpProto::EKqpFullTextIndexType IndexType;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
         TTableId DocsTableId;
@@ -3152,11 +3154,12 @@ struct TWriteSettings {
         TTableId StatsTableId;
         TString StatsTablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> StatsColumns;
+        ui32 DataColumnCount = 0;
     };
 
     std::vector<TIndex> Indexes;
 
-    bool EnableStreamWrite;
+    bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
 };
 
@@ -3772,6 +3775,7 @@ public:
                             /* preferAdditionalInputColumns */ true),
                 .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 .ColumnTypes = BuildColumnTypes(indexSettings.Columns),
+                .DataColumnCount = indexSettings.DataColumnCount,
                 .NeedWriteProjection = true,
                 .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
                 .FulltextSettings = indexSettings.FulltextSettings,
@@ -6280,6 +6284,7 @@ private:
                     .FulltextSettings = (indexSettings.HasFulltextSettings()
                         ? indexSettings.GetFulltextSettings()
                         : Ydb::Table::FulltextIndexSettings()),
+                    .DataColumnCount = indexSettings.GetDataColumnCount(),
                 });
                 if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
                     auto& idx = ev->Settings->Indexes.back();

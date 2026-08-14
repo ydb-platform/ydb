@@ -88,8 +88,8 @@ private:
 
 }   // anonymous namespace
 
-THistoryCutterWrapper::THistoryCutterWrapper(
-    const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui32 currentGen, NOlap::TBlobManager* manager, const TActorId& tabletActorId)
+THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui32 currentGen,
+    const std::weak_ptr<NOlap::TBlobManager>& manager, const TActorId& tabletActorId)
     : TabletInfo(tabletInfo)
     , CurrentGen(currentGen)
     , Manager(manager)
@@ -145,7 +145,11 @@ bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
     if (!nextGen) {
         return false;
     }
-    return Manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen);
+    const auto manager = Manager.lock();
+    if (!manager) {
+        return false;
+    }
+    return manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen);
 }
 
 bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const {

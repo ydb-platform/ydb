@@ -625,7 +625,6 @@ For example:
 sleep_between_rounds: 2s
 check_fail_model: true
 random_seed: 42
-max_node_restarts_per_minute: 3
 
 actions:
   wipe_vdisk:
@@ -646,6 +645,10 @@ Each entry in `actions` is selected by its relative positive `weight`, which def
 than once with different weights, filters, or CMS settings. Supported actions are `wipe_vdisk`, `evict_vdisk`,
 `set_read_only`, `restart_node`, `change_pdisk_key`, `restart_pdisk`, `obliterate_pdisk`, `kill_tablet`, `switch_pile`,
 `disconnect_pile`, and `disconnect_socket`.
+
+Node restarts are unlimited by default. Set `max_node_restarts_per_minute` to apply a rolling aggregate rate limit across
+all `restart_node` configurations. Tenant filters match the single tenant path of each dynamic node; serverless databases
+are out of scope.
 
 Field and enum names are case-insensitive and separators are ignored, so names such as `WipeVDisk`, `wipe_vdisk`, and
 `wipe-vdisk` are equivalent. Durations use protobuf duration syntax, for example `0.5s`, `2s`, or `1.5s`. Unknown fields,

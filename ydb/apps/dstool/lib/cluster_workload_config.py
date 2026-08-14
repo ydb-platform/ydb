@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 import math
 import re
-from typing import FrozenSet, Optional, Tuple
+from typing import FrozenSet, List, Optional
 
 import yaml
 from google.protobuf import json_format
@@ -12,7 +12,6 @@ import ydb.apps.dstool.protos.cluster_workload_pb2 as cluster_workload
 
 
 DEFAULT_SLEEP_BETWEEN_ROUNDS_SECONDS = 1.0
-DEFAULT_MAX_NODE_RESTARTS_PER_MINUTE = 3
 DEFAULT_WEIGHT = 1.0
 DEFAULT_RESTART_SIGNAL = 'KILL'
 
@@ -63,7 +62,7 @@ class NodeFilter:
     exclude_tenants: Optional[FrozenSet[str]] = None
     only_tenants: Optional[FrozenSet[str]] = None
 
-    def matches(self, node_id, node_type, tenants):
+    def matches(self, node_id, node_type, tenant):
         if self.exclude_node_ids is not None and node_id in self.exclude_node_ids:
             return False
         if self.only_node_ids is not None and node_id not in self.only_node_ids:
@@ -75,12 +74,11 @@ class NodeFilter:
 
         has_tenant_filter = self.exclude_tenants is not None or self.only_tenants is not None
         if has_tenant_filter:
-            if node_type != NodeType.DYNAMIC:
+            if node_type != NodeType.DYNAMIC or tenant is None:
                 return False
-            tenant_set = set(tenants)
-            if self.exclude_tenants is not None and tenant_set.intersection(self.exclude_tenants):
+            if self.exclude_tenants is not None and tenant in self.exclude_tenants:
                 return False
-            if self.only_tenants is not None and not tenant_set.intersection(self.only_tenants):
+            if self.only_tenants is not None and tenant not in self.only_tenants:
                 return False
 
         return True
@@ -152,17 +150,17 @@ class KillTabletActionConfig:
 
 @dataclass(frozen=True)
 class ClusterWorkloadActions:
-    wipe_vdisk: Tuple[DiskActionConfig, ...]
-    evict_vdisk: Tuple[DiskActionConfig, ...]
-    set_read_only: Tuple[ReadOnlyActionConfig, ...]
-    restart_node: Tuple[RestartNodeActionConfig, ...]
-    change_pdisk_key: Tuple[DiskActionConfig, ...]
-    restart_pdisk: Tuple[DiskActionConfig, ...]
-    obliterate_pdisk: Tuple[DiskActionConfig, ...]
-    kill_tablet: Tuple[KillTabletActionConfig, ...]
-    switch_pile: Tuple[SwitchPileActionConfig, ...]
-    disconnect_pile: Tuple[DisconnectPileActionConfig, ...]
-    disconnect_socket: Tuple[DisconnectSocketActionConfig, ...]
+    wipe_vdisk: List[DiskActionConfig]
+    evict_vdisk: List[DiskActionConfig]
+    set_read_only: List[ReadOnlyActionConfig]
+    restart_node: List[RestartNodeActionConfig]
+    change_pdisk_key: List[DiskActionConfig]
+    restart_pdisk: List[DiskActionConfig]
+    obliterate_pdisk: List[DiskActionConfig]
+    kill_tablet: List[KillTabletActionConfig]
+    switch_pile: List[SwitchPileActionConfig]
+    disconnect_pile: List[DisconnectPileActionConfig]
+    disconnect_socket: List[DisconnectSocketActionConfig]
 
 
 @dataclass(frozen=True)
@@ -170,7 +168,7 @@ class ClusterWorkloadConfig:
     sleep_between_rounds: float
     check_fail_model: bool
     random_seed: Optional[int]
-    max_node_restarts_per_minute: int
+    max_node_restarts_per_minute: Optional[int]
     actions: ClusterWorkloadActions
 
     @classmethod
@@ -190,20 +188,23 @@ class ClusterWorkloadConfig:
             max_node_restarts_per_minute=(
                 proto.MaxNodeRestartsPerMinute
                 if proto.HasField('MaxNodeRestartsPerMinute')
-                else DEFAULT_MAX_NODE_RESTARTS_PER_MINUTE
+                else None
             ),
             actions=ClusterWorkloadActions(
-                wipe_vdisk=tuple(_disk_action_from_proto(action) for action in actions.WipeVDisk),
-                evict_vdisk=tuple(_disk_action_from_proto(action) for action in actions.EvictVDisk),
-                set_read_only=tuple(_read_only_action_from_proto(action) for action in actions.SetReadOnly),
-                restart_node=tuple(_restart_node_action_from_proto(action) for action in actions.RestartNode),
-                change_pdisk_key=tuple(_disk_action_from_proto(action) for action in actions.ChangePDiskKey),
-                restart_pdisk=tuple(_disk_action_from_proto(action) for action in actions.RestartPDisk),
-                obliterate_pdisk=tuple(_disk_action_from_proto(action) for action in actions.ObliteratePDisk),
-                kill_tablet=tuple(_kill_tablet_action_from_proto(action) for action in actions.KillTablet),
-                switch_pile=tuple(_switch_pile_action_from_proto(action) for action in actions.SwitchPile),
-                disconnect_pile=tuple(_disconnect_pile_action_from_proto(action) for action in actions.DisconnectPile),
-                disconnect_socket=tuple(_disconnect_socket_action_from_proto(action) for action in actions.DisconnectSocket),
+                wipe_vdisk=[_disk_action_from_proto(action) for action in actions.WipeVDisk],
+                evict_vdisk=[_disk_action_from_proto(action) for action in actions.EvictVDisk],
+                set_read_only=[_read_only_action_from_proto(action) for action in actions.SetReadOnly],
+                restart_node=[_restart_node_action_from_proto(action) for action in actions.RestartNode],
+                change_pdisk_key=[_disk_action_from_proto(action) for action in actions.ChangePDiskKey],
+                restart_pdisk=[_disk_action_from_proto(action) for action in actions.RestartPDisk],
+                obliterate_pdisk=[_disk_action_from_proto(action) for action in actions.ObliteratePDisk],
+                kill_tablet=[_kill_tablet_action_from_proto(action) for action in actions.KillTablet],
+                switch_pile=[_switch_pile_action_from_proto(action) for action in actions.SwitchPile],
+                disconnect_pile=[_disconnect_pile_action_from_proto(action) for action in actions.DisconnectPile],
+                disconnect_socket=[
+                    _disconnect_socket_action_from_proto(action)
+                    for action in actions.DisconnectSocket
+                ],
             ),
         )
 
@@ -659,15 +660,31 @@ def _validate_weight(action, path):
         raise ValueError('%s.weight must be a finite positive value' % path)
 
 
-_TERMINATING_SIGNAL_NAMES = frozenset((
-    'INT', 'QUIT', 'ILL', 'TRAP', 'ABRT', 'BUS', 'FPE', 'KILL', 'USR1',
-    'SEGV', 'USR2', 'ALRM', 'TERM', 'STKFLT', 'XCPU', 'XFSZ', 'VTALRM',
-    'PROF', 'POLL', 'IO', 'PWR', 'SYS',
-))
-_TERMINATING_SIGNAL_NUMBERS = frozenset((
-    2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16,
-    24, 25, 26, 27, 29, 30, 31,
-))
+_LINUX_TERMINATING_SIGNALS = {
+    'INT': 2,
+    'QUIT': 3,
+    'ILL': 4,
+    'TRAP': 5,
+    'ABRT': 6,
+    'BUS': 7,
+    'FPE': 8,
+    'KILL': 9,
+    'USR1': 10,
+    'SEGV': 11,
+    'USR2': 12,
+    'ALRM': 14,
+    'TERM': 15,
+    'STKFLT': 16,
+    'XCPU': 24,
+    'XFSZ': 25,
+    'VTALRM': 26,
+    'PROF': 27,
+    'POLL': 29,
+    'IO': 29,
+    'PWR': 30,
+    'SYS': 31,
+}
+_TERMINATING_SIGNAL_NUMBERS = frozenset(_LINUX_TERMINATING_SIGNALS.values())
 _LINUX_REALTIME_SIGNAL_MIN = 34
 _LINUX_REALTIME_SIGNAL_MAX = 64
 
@@ -694,17 +711,9 @@ def _restart_signal_number(value):
             else:
                 signal_number = _LINUX_REALTIME_SIGNAL_MAX + (offset if operator == '+' else -offset)
         else:
-            if signal_name not in _TERMINATING_SIGNAL_NAMES:
+            signal_number = _LINUX_TERMINATING_SIGNALS.get(signal_name)
+            if signal_number is None:
                 return None
-            # Linux signal numbers used by the remote nodes. The named set and
-            # number set above intentionally stay small enough to map directly.
-            signal_number = {
-                'INT': 2, 'QUIT': 3, 'ILL': 4, 'TRAP': 5, 'ABRT': 6,
-                'BUS': 7, 'FPE': 8, 'KILL': 9, 'USR1': 10, 'SEGV': 11,
-                'USR2': 12, 'ALRM': 14, 'TERM': 15, 'STKFLT': 16,
-                'XCPU': 24, 'XFSZ': 25, 'VTALRM': 26, 'PROF': 27,
-                'POLL': 29, 'IO': 29, 'PWR': 30, 'SYS': 31,
-            }[signal_name]
     return signal_number if _is_terminating_signal_number(signal_number) else None
 
 
@@ -930,7 +939,6 @@ def _legacy_proto_from_args(args):
     proto = cluster_workload.TClusterWorkloadConfig()
     _set_duration(proto.SleepBetweenRounds, args.sleep_before_rounds)
     proto.CheckFailModel = not args.no_fail_model_check
-    proto.MaxNodeRestartsPerMinute = DEFAULT_MAX_NODE_RESTARTS_PER_MINUTE
     actions = proto.Actions
 
     if not args.disable_wipes:

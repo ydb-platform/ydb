@@ -67,6 +67,7 @@ actions:
     assert config.max_node_restarts_per_minute == 7
 
     assert len(config.actions.wipe_vdisk) == 1
+    assert isinstance(config.actions.wipe_vdisk, list)
     assert config.actions.wipe_vdisk[0].weight == 2.5
     assert (
         config.actions.wipe_vdisk[0].ask_cms.availability_mode
@@ -107,10 +108,7 @@ actions:
     assert config.sleep_between_rounds == workload_config.DEFAULT_SLEEP_BETWEEN_ROUNDS_SECONDS
     assert not config.check_fail_model
     assert config.random_seed is None
-    assert (
-        config.max_node_restarts_per_minute
-        == workload_config.DEFAULT_MAX_NODE_RESTARTS_PER_MINUTE
-    )
+    assert config.max_node_restarts_per_minute is None
     assert config.actions.disconnect_socket[0].weight == workload_config.DEFAULT_WEIGHT
     assert not config.actions.disconnect_socket[0].symmetrical
 
@@ -524,6 +522,7 @@ def test_legacy_defaults_are_translated_to_config():
     assert len(config.actions.restart_node) == 1
     assert config.sleep_between_rounds == 1
     assert config.check_fail_model
+    assert config.max_node_restarts_per_minute is None
 
 
 def test_invalid_legacy_values_are_validated():
@@ -544,9 +543,10 @@ def test_node_filter_combines_id_type_and_tenant_filters():
         only_tenants=frozenset(['/Root/database']),
     )
 
-    assert node_filter.matches(2, workload_config.NodeType.DYNAMIC, ['/Root/database'])
-    assert not node_filter.matches(1, workload_config.NodeType.STORAGE, ['/Root/database'])
-    assert not node_filter.matches(3, workload_config.NodeType.DYNAMIC, ['/Root/other'])
+    assert node_filter.matches(2, workload_config.NodeType.DYNAMIC, '/Root/database')
+    assert not node_filter.matches(1, workload_config.NodeType.STORAGE, '/Root/database')
+    assert not node_filter.matches(3, workload_config.NodeType.DYNAMIC, '/Root/other')
+    assert not node_filter.matches(3, workload_config.NodeType.DYNAMIC, None)
 
 
 def test_tablet_filter_combines_id_and_type_filters():

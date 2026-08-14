@@ -4,6 +4,7 @@ import random
 import secrets
 import subprocess
 import sys
+import threading
 import time
 
 import ydb.apps.dstool.lib.cluster_workload_config as workload_config
@@ -15,6 +16,50 @@ from google.protobuf import text_format
 
 
 description = 'Create workload to stress failure model'
+
+
+class _PendingNodeRestarts:
+    def __init__(self):
+        self._node_ids = set()
+        self._lock = threading.Lock()
+
+    def add(self, node_id):
+        with self._lock:
+            if node_id in self._node_ids:
+                return False
+            self._node_ids.add(node_id)
+            return True
+
+    def discard(self, node_id):
+        with self._lock:
+            self._node_ids.discard(node_id)
+
+    def __contains__(self, node_id):
+        with self._lock:
+            return node_id in self._node_ids
+
+
+class _ActionBecameIneligible(RuntimeError):
+    pass
+
+
+def _ensure_action_eligible(eligible, target):
+    if not eligible:
+        raise _ActionBecameIneligible('%s is no longer eligible' % target)
+
+
+def _apply_cms_bsc_allowances(request, action_config):
+    cms = action_config.ask_cms
+    if cms is None:
+        return request
+
+    mode = cms.availability_mode
+    if mode > workload_config.CmsAvailabilityMode.MAX_AVAILABILITY:
+        request.IgnoreDegradedGroupsChecks = True
+    if mode == workload_config.CmsAvailabilityMode.FORCE_RESTART:
+        request.IgnoreGroupFailModelChecks = True
+        request.IgnoreDisintegratedGroupsChecks = True
+    return request
 
 
 def add_options(p):
@@ -181,28 +226,22 @@ def _restart_node_process(
     host,
     pid,
     signal_number,
-    keep_down_for,
     record_disruption,
 ):
-    if keep_down_for:
-        # Suspending the process is already a node disruption and must count
-        # towards the rolling restart limit even if the later restart or
-        # viewer-based recovery check fails.
-        subprocess.check_call(['ssh', host, 'sudo', 'kill', '-STOP', pid])
-        record_disruption()
-        try:
-            time.sleep(keep_down_for)
-            subprocess.check_call([
-                'ssh',
-                host,
-                'sudo',
-                'kill',
-                '-' + signal_number,
-                pid,
-            ])
-        finally:
-            subprocess.call(['ssh', host, 'sudo', 'kill', '-CONT', pid])
-    else:
+    subprocess.check_call([
+        'ssh',
+        host,
+        'sudo',
+        'kill',
+        '-' + signal_number,
+        pid,
+    ])
+    record_disruption()
+    _wait_for_node_restart(node_id, previous_start_time)
+
+
+def _terminate_suspended_node_process(host, pid, signal_number):
+    try:
         subprocess.check_call([
             'ssh',
             host,
@@ -211,8 +250,78 @@ def _restart_node_process(
             '-' + signal_number,
             pid,
         ])
-        record_disruption()
+    finally:
+        # A terminating signal can be handled by the process.  Always resume
+        # it so that it can either handle that signal or continue running when
+        # the signal delivery failed.
+        subprocess.call(['ssh', host, 'sudo', 'kill', '-CONT', pid])
+
+
+def _finish_suspended_node_restart(
+    node_id,
+    previous_start_time,
+    host,
+    pid,
+    signal_number,
+    keep_down_for,
+):
+    time.sleep(keep_down_for)
+    _terminate_suspended_node_process(host, pid, signal_number)
     _wait_for_node_restart(node_id, previous_start_time)
+
+
+def _start_kept_down_node_restart(
+    node_id,
+    previous_start_time,
+    host,
+    pid,
+    signal_number,
+    keep_down_for,
+    record_disruption,
+    report_error,
+    on_complete,
+):
+    """Suspend a node now and finish its restart on a background thread."""
+    subprocess.check_call(['ssh', host, 'sudo', 'kill', '-STOP', pid])
+    try:
+        # STOP is already a disruption; record it before returning control to
+        # the action stream.
+        record_disruption()
+
+        def worker():
+            try:
+                _finish_suspended_node_restart(
+                    node_id,
+                    previous_start_time,
+                    host,
+                    pid,
+                    signal_number,
+                    keep_down_for,
+                )
+            except Exception as error:
+                # Exceptions on a thread do not flow through the main action
+                # loop.  Report them explicitly and let the workload continue.
+                report_error(error)
+            finally:
+                on_complete()
+
+        thread = threading.Thread(
+            target=worker,
+            name='dstool-restart-node-%d' % node_id,
+            # A non-daemon worker is intentional: normal process shutdown must
+            # not strand a remotely STOPped YDB process.
+            daemon=False,
+        )
+        thread.start()
+        return thread
+    except Exception:
+        # If the worker cannot be started after STOP was delivered, recover
+        # synchronously rather than leaving the process suspended indefinitely.
+        try:
+            _terminate_suspended_node_process(host, pid, signal_number)
+        finally:
+            on_complete()
+        raise
 
 
 def _wait_for_node_storage(
@@ -324,6 +433,7 @@ def do(args):
     rng = random.Random(config.random_seed)
 
     recent_restarts = []
+    pending_node_restarts = _PendingNodeRestarts()
     config_retries = None
 
     has_tablet_actions = bool(actions.kill_tablet)
@@ -398,10 +508,18 @@ def do(args):
             for node_id, node in sysinfo.items()
             if 'StartTime' in node
         }
-        node_tenants = {}
+        node_tenant = {}
         for node_id, node in sysinfo.items():
-            tenants = node.get('Tenants', ())
-            node_tenants[node_id] = (tenants,) if isinstance(tenants, str) else tenants
+            tenant_paths = node.get('Tenants', ())
+            if isinstance(tenant_paths, str):
+                node_tenant[node_id] = tenant_paths
+            elif len(tenant_paths) == 1:
+                node_tenant[node_id] = tenant_paths[0]
+            else:
+                # Dynamic nodes with zero or multiple tenant paths belong to
+                # serverless layouts, which this workload intentionally does
+                # not target.
+                node_tenant[node_id] = None
 
         node_types = {
             node.NodeId: (
@@ -414,6 +532,8 @@ def do(args):
                 common.kikimr_bsconfig.NT_STATIC,
                 common.kikimr_bsconfig.NT_DYNAMIC,
             )
+            if node.Type != common.kikimr_bsconfig.NT_DYNAMIC
+            or node_tenant.get(node.NodeId) is not None
         }
         pdisk_map = {
             (pdisk.NodeId, pdisk.PDiskId): pdisk
@@ -424,8 +544,14 @@ def do(args):
             pdisks_by_node[pdisk.NodeId].append(pdisk)
         config_retries = None
 
-        for vslot in base_config.VSlot:
-            assert not vslot.Ready or vslot.Status == 'READY'
+        if any(vslot.Ready and vslot.Status != 'READY' for vslot in base_config.VSlot):
+            common.print_if_not_quiet(
+                args,
+                'BaseConfig is changing; waiting for the next round...',
+                file=sys.stdout,
+            )
+            time.sleep(sleep_between_rounds)
+            continue
 
         vslot_readonly = {
             common.get_vslot_id(vslot.VSlotId)
@@ -458,6 +584,8 @@ def do(args):
                 continue
 
         def can_act_on_vslot(node_id, pdisk_id=None, vslot_id=None):
+            if node_id in pending_node_restarts:
+                return False
             if not check_fail_model:
                 return True
 
@@ -473,6 +601,7 @@ def do(args):
                     content = {
                         common.get_vdisk_id_short(vslot): (
                             not match(current_vslot_id)
+                            and current_vslot_id[0] not in pending_node_restarts
                             and _vslot_is_writable_and_healthy(
                                 current_vslot_id,
                                 vslot,
@@ -490,6 +619,8 @@ def do(args):
             return True
 
         def can_act_on_pdisk(node_id, pdisk_id):
+            if node_id in pending_node_restarts:
+                return False
             if not check_fail_model:
                 return True
 
@@ -504,6 +635,7 @@ def do(args):
                     content = {
                         common.get_vdisk_id_short(vslot): (
                             not match(current_vslot_id)
+                            and current_vslot_id[0] not in pending_node_restarts
                             and _vslot_is_writable_and_healthy(
                                 current_vslot_id,
                                 vslot,
@@ -564,6 +696,10 @@ def do(args):
                 raise RuntimeError('CMS permission was not granted: %s' % error)
 
         def do_restart(node_id, action_config):
+            _ensure_action_eligible(
+                can_act_on_vslot(node_id),
+                'node %d' % node_id,
+            )
             node = sysinfo[node_id]
             keep_down_for = action_config.keep_down_for
             ask_cms(action_config, node_id, duration_seconds=max(60, keep_down_for))
@@ -571,22 +707,51 @@ def do(args):
             pid = str(node['PID'])
             host = node['Host']
             signal_number = str(workload_config.restart_signal_number(action_config.signal))
+            if keep_down_for:
+                if not pending_node_restarts.add(node_id):
+                    return
+                try:
+                    _start_kept_down_node_restart(
+                        node_id,
+                        start_time_map[node_id],
+                        host,
+                        pid,
+                        signal_number,
+                        keep_down_for,
+                        lambda: recent_restarts.append(datetime.now(timezone.utc)),
+                        lambda error: common.print_if_not_quiet(
+                            args,
+                            'Failed to complete kept-down restart for node %d: %s'
+                            % (node_id, error),
+                            file=sys.stderr,
+                        ),
+                        lambda: pending_node_restarts.discard(node_id),
+                    )
+                except Exception:
+                    # The helper also calls on_complete when setup fails, but
+                    # discard here keeps this invariant local and idempotent.
+                    pending_node_restarts.discard(node_id)
+                    raise
+                return
+
             _restart_node_process(
                 node_id,
                 start_time_map[node_id],
                 host,
                 pid,
                 signal_number,
-                keep_down_for,
                 lambda: recent_restarts.append(datetime.now(timezone.utc)),
             )
 
         def do_restart_pdisk(node_id, pdisk_id, action_config):
-            assert can_act_on_pdisk(node_id, pdisk_id)
+            _ensure_action_eligible(
+                can_act_on_pdisk(node_id, pdisk_id),
+                'PDisk %d:%d' % (node_id, pdisk_id),
+            )
             ask_cms(action_config, node_id, pdisk_id)
-            request = common.kikimr_bsconfig.TConfigRequest(
-                Rollback=args.dry_run,
-                IgnoreDegradedGroupsChecks=True,
+            request = _apply_cms_bsc_allowances(
+                common.kikimr_bsconfig.TConfigRequest(Rollback=args.dry_run),
+                action_config,
             )
             command = request.Command.add().RestartPDisk
             command.TargetPDiskId.NodeId = node_id
@@ -599,11 +764,15 @@ def do(args):
                 raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
 
         def do_readonly_pdisk(node_id, pdisk_id, read_only, action_config):
-            assert not read_only or can_act_on_pdisk(node_id, pdisk_id)
+            if read_only:
+                _ensure_action_eligible(
+                    can_act_on_pdisk(node_id, pdisk_id),
+                    'PDisk %d:%d' % (node_id, pdisk_id),
+                )
             ask_cms(action_config, node_id, pdisk_id)
-            request = common.kikimr_bsconfig.TConfigRequest(
-                Rollback=args.dry_run,
-                IgnoreDegradedGroupsChecks=True,
+            request = _apply_cms_bsc_allowances(
+                common.kikimr_bsconfig.TConfigRequest(Rollback=args.dry_run),
+                action_config,
             )
             command = request.Command.add().SetPDiskReadOnly
             command.TargetPDiskId.NodeId = node_id
@@ -617,12 +786,15 @@ def do(args):
                 raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
 
         def do_evict(vslot_id, action_config):
-            assert can_act_on_vslot(*vslot_id)
+            _ensure_action_eligible(
+                can_act_on_vslot(*vslot_id),
+                'VSlot %s' % (vslot_id,),
+            )
             ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
-                request = common.kikimr_bsconfig.TConfigRequest(
-                    Rollback=args.dry_run,
-                    IgnoreDegradedGroupsChecks=True,
+                request = _apply_cms_bsc_allowances(
+                    common.kikimr_bsconfig.TConfigRequest(Rollback=args.dry_run),
+                    action_config,
                 )
                 vslot = vslot_map[vslot_id]
                 command = request.Command.add().ReassignGroupDisk
@@ -643,10 +815,14 @@ def do(args):
 
         def do_wipe(vslot, action_config):
             vslot_id = common.get_vslot_id(vslot.VSlotId)
-            assert can_act_on_vslot(*vslot_id)
+            _ensure_action_eligible(
+                can_act_on_vslot(*vslot_id),
+                'VSlot %s' % (vslot_id,),
+            )
             ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
                 request = common.create_wipe_request(args, vslot)
+                _apply_cms_bsc_allowances(request, action_config)
                 response = common.invoke_bsc_request(request)
                 if not response.Success:
                     raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
@@ -656,10 +832,15 @@ def do(args):
         def do_readonly_vdisk(vslot, action_config):
             read_only = action_config.read_only
             vslot_id = common.get_vslot_id(vslot.VSlotId)
-            assert not read_only or can_act_on_vslot(*vslot_id)
+            if read_only:
+                _ensure_action_eligible(
+                    can_act_on_vslot(*vslot_id),
+                    'VSlot %s' % (vslot_id,),
+                )
             ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
                 request = common.create_readonly_request(args, vslot, read_only)
+                _apply_cms_bsc_allowances(request, action_config)
                 response = common.invoke_bsc_request(request)
                 if not response.Success:
                     raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
@@ -667,7 +848,10 @@ def do(args):
                 raise RuntimeError('Failed to perform readonly request: %s' % error) from error
 
         def do_add_pdisk_key(node_id, action_config):
-            assert can_act_on_vslot(node_id)
+            _ensure_action_eligible(
+                can_act_on_vslot(node_id),
+                'node %d' % node_id,
+            )
             # PDisk keys are loaded only at process startup. This action owns
             # the required restart so a key-change-only workload still performs
             # a complete re-encryption cycle.
@@ -715,7 +899,10 @@ def do(args):
             # completed rotation cannot make an encrypted disk unreadable.
 
         def do_obliterate_pdisk(node_id, pdisk_id, action_config):
-            assert can_act_on_pdisk(node_id, pdisk_id)
+            _ensure_action_eligible(
+                can_act_on_pdisk(node_id, pdisk_id),
+                'PDisk %d:%d' % (node_id, pdisk_id),
+            )
             ask_cms(action_config, node_id, pdisk_id, duration_seconds=600)
             pdisk = pdisk_map[(node_id, pdisk_id)]
             expected_vslot_ids = tuple(
@@ -724,8 +911,9 @@ def do(args):
                 if vslot.VSlotId.NodeId == node_id
                 and vslot.VSlotId.PDiskId == pdisk_id
             )
-            stop_request = common.kikimr_bsconfig.TConfigRequest(
-                IgnoreDegradedGroupsChecks=True,
+            stop_request = _apply_cms_bsc_allowances(
+                common.kikimr_bsconfig.TConfigRequest(),
+                action_config,
             )
             stop_command = stop_request.Command.add().StopPDisk
             stop_command.TargetPDiskId.NodeId = node_id
@@ -747,8 +935,9 @@ def do(args):
                     pdisk.Path,
                 ])
             finally:
-                restart_request = common.kikimr_bsconfig.TConfigRequest(
-                    IgnoreDegradedGroupsChecks=True,
+                restart_request = _apply_cms_bsc_allowances(
+                    common.kikimr_bsconfig.TConfigRequest(),
+                    action_config,
                 )
                 restart_command = restart_request.Command.add().RestartPDisk
                 restart_command.TargetPDiskId.NodeId = node_id
@@ -956,19 +1145,26 @@ def do(args):
             ]
             _add_possible_action(possible_actions, action_config, 'obliterate-pdisk', choices)
 
-        if start_time_map and len(recent_restarts) < max_node_restarts_per_minute:
+        if (
+            start_time_map
+            and (
+                max_node_restarts_per_minute is None
+                or len(recent_restarts) < max_node_restarts_per_minute
+            )
+        ):
             for action_config in actions.restart_node:
                 eligible_nodes = [
                     node_id
                     for node_id in sorted(start_time_map, key=start_time_map.__getitem__)
                     if node_id in node_types
+                    and node_id not in pending_node_restarts
                     and bool(sysinfo[node_id].get('Host'))
                     and 'PID' in sysinfo[node_id]
                     if can_act_on_vslot(node_id)
                     and action_config.node_filter.matches(
                         node_id,
                         node_types[node_id],
-                        node_tenants.get(node_id, ()),
+                        node_tenant.get(node_id),
                     )
                 ]
                 choices = [
@@ -1081,20 +1277,22 @@ def do(args):
                 node_id
                 for node_id in node_id_to_endpoints
                 if node_id in sysinfo and node_id in node_types
+                and node_id not in pending_node_restarts
                 and action_config.source.matches(
                     node_id,
                     node_types[node_id],
-                    node_tenants.get(node_id, ()),
+                    node_tenant.get(node_id),
                 )
             ]
             target_nodes = [
                 node_id
                 for node_id in node_id_to_endpoints
                 if node_id in sysinfo and node_id in node_types
+                and node_id not in pending_node_restarts
                 and action_config.target.matches(
                     node_id,
                     node_types[node_id],
-                    node_tenants.get(node_id, ()),
+                    node_tenant.get(node_id),
                 )
             ]
             choices = [
@@ -1122,6 +1320,12 @@ def do(args):
 
         try:
             action[0](rng, *action[1:])
+        except _ActionBecameIneligible as error:
+            common.print_if_not_quiet(
+                args,
+                'Skipped action %s: %s' % (action_name, error),
+                file=sys.stderr,
+            )
         except Exception as error:
             common.print_if_not_quiet(
                 args,

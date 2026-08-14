@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import threading
 
 import pytest
 
@@ -48,11 +49,211 @@ def test_restart_attempt_is_recorded_before_recovery_wait(monkeypatch):
             'node-one',
             '123',
             '9',
-            0,
             lambda: attempts.append('recorded'),
         )
 
     assert attempts == ['recorded']
+
+
+def test_kept_down_restart_returns_while_worker_is_pending(monkeypatch):
+    stop_calls = []
+    disruptions = []
+    errors = []
+    completions = []
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+
+    monkeypatch.setattr(
+        workload_run.subprocess,
+        'check_call',
+        lambda command: stop_calls.append(command),
+    )
+
+    def finish_restart(*args):
+        worker_started.set()
+        assert release_worker.wait(5)
+
+    monkeypatch.setattr(
+        workload_run,
+        '_finish_suspended_node_restart',
+        finish_restart,
+    )
+
+    thread = workload_run._start_kept_down_node_restart(
+        1,
+        100,
+        'node-one',
+        '123',
+        '9',
+        30,
+        lambda: disruptions.append('recorded'),
+        errors.append,
+        lambda: completions.append('complete'),
+    )
+
+    assert worker_started.wait(5)
+    assert thread.is_alive()
+    assert stop_calls == [['ssh', 'node-one', 'sudo', 'kill', '-STOP', '123']]
+    assert disruptions == ['recorded']
+    assert completions == []
+
+    release_worker.set()
+    thread.join(5)
+    assert not thread.is_alive()
+    assert errors == []
+    assert completions == ['complete']
+
+
+def test_kept_down_restart_worker_reports_failure_and_completes(monkeypatch):
+    monkeypatch.setattr(workload_run.subprocess, 'check_call', lambda command: None)
+    monkeypatch.setattr(
+        workload_run,
+        '_finish_suspended_node_restart',
+        lambda *args: (_ for _ in ()).throw(RuntimeError('restart failed')),
+    )
+    errors = []
+    completions = []
+
+    thread = workload_run._start_kept_down_node_restart(
+        1,
+        100,
+        'node-one',
+        '123',
+        '9',
+        30,
+        lambda: None,
+        errors.append,
+        lambda: completions.append('complete'),
+    )
+    thread.join(5)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert str(errors[0]) == 'restart failed'
+    assert completions == ['complete']
+
+
+def test_finish_suspended_restart_terminates_resumes_and_waits(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        workload_run.time,
+        'sleep',
+        lambda seconds: events.append(('sleep', seconds)),
+    )
+    monkeypatch.setattr(
+        workload_run.subprocess,
+        'check_call',
+        lambda command: events.append(('check_call', command)),
+    )
+    monkeypatch.setattr(
+        workload_run.subprocess,
+        'call',
+        lambda command: events.append(('call', command)),
+    )
+    monkeypatch.setattr(
+        workload_run,
+        '_wait_for_node_restart',
+        lambda node_id, start_time: events.append(('wait', node_id, start_time)),
+    )
+
+    workload_run._finish_suspended_node_restart(
+        1,
+        100,
+        'node-one',
+        '123',
+        '15',
+        30,
+    )
+
+    assert events == [
+        ('sleep', 30),
+        ('check_call', ['ssh', 'node-one', 'sudo', 'kill', '-15', '123']),
+        ('call', ['ssh', 'node-one', 'sudo', 'kill', '-CONT', '123']),
+        ('wait', 1, 100),
+    ]
+
+
+def test_terminating_signal_failure_still_resumes_suspended_node(monkeypatch):
+    calls = []
+
+    def fail_signal(command):
+        calls.append(command)
+        raise RuntimeError('signal failed')
+
+    monkeypatch.setattr(workload_run.subprocess, 'check_call', fail_signal)
+    monkeypatch.setattr(
+        workload_run.subprocess,
+        'call',
+        lambda command: calls.append(command),
+    )
+
+    with pytest.raises(RuntimeError, match='signal failed'):
+        workload_run._terminate_suspended_node_process('node-one', '123', '15')
+
+    assert calls[-1] == ['ssh', 'node-one', 'sudo', 'kill', '-CONT', '123']
+
+
+def test_pending_node_restarts_prevent_duplicate_registration():
+    pending = workload_run._PendingNodeRestarts()
+
+    assert pending.add(1)
+    assert not pending.add(1)
+    assert 1 in pending
+    pending.discard(1)
+    assert 1 not in pending
+
+
+@pytest.mark.parametrize(
+    'mode, expected_flags',
+    [
+        (None, (False, False, False)),
+        (
+            workload_run.workload_config.CmsAvailabilityMode.MAX_AVAILABILITY,
+            (False, False, False),
+        ),
+        (
+            workload_run.workload_config.CmsAvailabilityMode.KEEP_AVAILABLE,
+            (True, False, False),
+        ),
+        (
+            workload_run.workload_config.CmsAvailabilityMode.SMART_AVAILABILITY,
+            (True, False, False),
+        ),
+        (
+            workload_run.workload_config.CmsAvailabilityMode.FORCE_RESTART,
+            (True, True, True),
+        ),
+    ],
+)
+def test_cms_availability_mode_controls_only_matching_bsc_allowances(
+    mode,
+    expected_flags,
+):
+    request = common.kikimr_bsconfig.TConfigRequest()
+    action_config = SimpleNamespace(
+        ask_cms=(
+            None
+            if mode is None
+            else SimpleNamespace(availability_mode=mode)
+        ),
+    )
+
+    result = workload_run._apply_cms_bsc_allowances(request, action_config)
+
+    assert result is request
+    assert (
+        request.IgnoreDegradedGroupsChecks,
+        request.IgnoreGroupFailModelChecks,
+        request.IgnoreDisintegratedGroupsChecks,
+    ) == expected_flags
+    assert not request.IgnoreGroupSanityChecks
+    assert not request.IgnoreVSlotQuotaCheck
+    assert not request.IgnoreGroupReserve
+
+
+def test_ineligible_runtime_action_is_skipped_explicitly():
+    with pytest.raises(workload_run._ActionBecameIneligible, match='no longer eligible'):
+        workload_run._ensure_action_eligible(False, 'VSlot (1, 2, 3)')
 
 
 def test_pdisk_key_config_is_valid_textproto_without_shell_escaping():

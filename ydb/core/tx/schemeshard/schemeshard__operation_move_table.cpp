@@ -845,6 +845,15 @@ public:
             }
         }
 
+        if (srcPath->IsColumnTable()) {
+            const auto& srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
+            if (!srcTable->GetUsedTiers().empty()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot move a table with configured tiering to external storage.");
+                return result;
+            }
+        }
+
         TPath dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
         TPath dstParent = dstPath.Parent();
 

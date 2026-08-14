@@ -58,7 +58,7 @@
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -2054,10 +2054,10 @@ class TReadsState {
 public:
 
     explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix,
-        TUserFacingShardReadCollector* userFacingShardReads)
+        TShardReadDiagnosticsCollector* shardReadDiagnostics)
         : Counters(counters)
         , LogPrefix(logPrefix)
-        , UserFacingShardReads(userFacingShardReads)
+        , ShardReadDiagnostics(shardReadDiagnostics)
     {}
 
     ui64 GetNextReadId() {
@@ -2114,8 +2114,8 @@ public:
         auto& record = request->Record;
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
-        if (UserFacingShardReads) {
-            UserFacingShardReads->OnStart(shardId);
+        if (ShardReadDiagnostics) {
+            ShardReadDiagnostics->OnStart(shardId);
         }
 
         YDB_LOG_DEBUG("Sending EvRead request from full text source",
@@ -2210,7 +2210,7 @@ public:
     }
 
 private:
-    TUserFacingShardReadCollector* UserFacingShardReads;
+    TShardReadDiagnosticsCollector* ShardReadDiagnostics;
 };
 
 /**
@@ -2573,7 +2573,7 @@ private:
     absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> RowIdResolveItems;
 
     // Read infrastructure.
-    TUserFacingShardReadCollector UserFacingShardReads;
+    TShardReadDiagnosticsCollector ShardReadDiagnostics;
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TReadItemsQueue<TWordStatePtr> WordsReadingQueue;      // Dict table lookups
@@ -2936,7 +2936,7 @@ public:
         , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix,
-            NYql::NDq::StatsLevelCollectFull(statsLevel) ? &UserFacingShardReads : nullptr)
+            NYql::NDq::StatsLevelCollectFull(statsLevel) ? &ShardReadDiagnostics : nullptr)
         , DocsReadingQueue(this->SelfId(), ReadsState)
         , WordsReadingQueue(this->SelfId(), ReadsState)
     {
@@ -3033,7 +3033,7 @@ public:
         const NYql::TIssues& subIssues = {})
     {
         if (IngressStats.CollectFull()) {
-            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         NYql::TIssue issue(message);
@@ -3559,12 +3559,12 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
-            if (!UserFacingShardReads.Empty()) {
+            if (!ShardReadDiagnostics.Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                UserFacingShardReads.Export(extraStats, 0);
+                ShardReadDiagnostics.Export(extraStats, 0);
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -3711,7 +3711,7 @@ public:
             {"brokenTxLocks", borkenTxlocks});
 
         if (IngressStats.CollectFull()) {
-            UserFacingShardReads.OnFinish(readInfo.ShardId, record.GetRowCount(),
+            ShardReadDiagnostics.OnFinish(readInfo.ShardId, record.GetRowCount(),
                 ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0,
                 record.GetStatus().GetCode(), record.GetFinished());
         }

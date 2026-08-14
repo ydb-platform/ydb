@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -22,7 +22,7 @@ struct TEvKqpBuffer {
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
     ui64 TxId;
-    bool CollectUserFacingShards = false;
+    bool CollectDiagnostics = false;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
@@ -47,11 +47,7 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
 
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
     std::optional<TCommitTimestamp> CommitTimestamp;
-    TUserFacingTraceTimeline::TWindow CommitPrepareShards;
-    TUserFacingTraceTimeline::TWindow CommitCoordinator;
-    TUserFacingTraceTimeline::TWindow CommitApplyShards;
-    std::vector<TUserFacingShardCommitAck> ShardCommitAcks;
-    size_t ShardCommitAcksTruncated = 0;
+    TCommitDiagnostics CommitDiagnostics;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

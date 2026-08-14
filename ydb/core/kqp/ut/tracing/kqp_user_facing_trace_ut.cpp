@@ -223,9 +223,14 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(execute->get().BFSFindOne("Run"), "user Run phase missing");
         auto prepare = execute->get().FindOne("Prepare");
         UNIT_ASSERT_C(prepare, "user Prepare group missing");
-        auto resolveTables = prepare->get().BFSFindOne("ResolveTables");
-        UNIT_ASSERT_C(resolveTables, "ResolveTables not under Prepare");
-        UNIT_ASSERT_C(resolveTables->get().FindOne("Partitioning"), "Partitioning not under ResolveTables");
+        auto resolveTables = prepare->get().BFSFindOne("Resolve tables");
+        UNIT_ASSERT_C(resolveTables, "Resolve tables not under Prepare");
+        UNIT_ASSERT_C(resolveTables->get().FindOne("Partitioning"), "Partitioning not under Resolve tables");
+        const auto* resolveTablesSpan = FindSpan(*userUploader, "Resolve tables");
+        UNIT_ASSERT(resolveTablesSpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*resolveTablesSpan, "ydb.phase")->value().string_value(),
+            "ResolveTables");
 
         auto compile = session->get().FindOne("Compile");
         UNIT_ASSERT_C(compile, "user Compile phase missing");
@@ -293,6 +298,43 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
     }
 
+    Y_UNIT_TEST(WideReadRetainsBoundedDiagnostics) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 16, false);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(runtime, sender, "SELECT * FROM `/Root/table-1`;",
+            /*devTracing*/ false, /*userTracing*/ true);
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+
+        std::unordered_map<TString, size_t> tasksByStage;
+        std::unordered_map<TString, size_t> shardsByTask;
+        bool diagnosticsTruncated = false;
+        for (const auto& span : userUploader->Spans) {
+            if (FindAttribute(span, "ydb.task_id")) {
+                ++tasksByStage[span.parent_span_id()];
+            }
+            if (TStringBuf(span.name()).StartsWith("Read from shard ")) {
+                ++shardsByTask[span.parent_span_id()];
+            }
+            diagnosticsTruncated = diagnosticsTruncated
+                || FindAttribute(span, "ydb.tasks_truncated")
+                || FindAttribute(span, "ydb.shards_truncated");
+        }
+        UNIT_ASSERT_C(diagnosticsTruncated, "wide read did not report truncated diagnostics");
+        for (const auto& [_, count] : tasksByStage) {
+            UNIT_ASSERT_C(count <= NKqp::MaxInterestingTasksPerStage,
+                "stage exported too many task diagnostics: " << count);
+        }
+        for (const auto& [_, count] : shardsByTask) {
+            UNIT_ASSERT_C(count <= NKqp::MaxInterestingShardsPerTask,
+                "task exported too many shard diagnostics: " << count);
+        }
+        AssertChildSpansAreWithinParents(*userUploader);
+    }
+
     Y_UNIT_TEST(LocalCompileCacheHitHasNoCompileSpans) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
@@ -315,6 +357,57 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "compile service span emitted for a local cache hit");
         UNIT_ASSERT_C(!FindSpan(*userUploader, "Compile query"),
             "compile actor span emitted for a cache hit");
+        AssertChildSpansAreWithinParents(*userUploader);
+    }
+
+    Y_UNIT_TEST(StaleCacheRecompileIsIncludedInCompileSpan) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        const TString query = "SELECT * FROM `/Root/table-1` WHERE key = 1u;";
+        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ false,
+            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+        ExecSQL(runtime, sender, "ALTER TABLE `/Root/table-1` ADD COLUMN extra Uint64;",
+            /*devTracing*/ false, /*userTracing*/ false, Ydb::StatusIds::SUCCESS,
+            {}, 0, /*dml*/ false);
+
+        std::atomic<size_t> recompileRequests = 0;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvRecompileRequest::EventType) {
+                ++recompileRequests;
+            }
+            return previousFilter ? previousFilter(runtimeBase, ev) : false;
+        };
+        previousFilter = runtime.SetEventFilter(filter);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ true,
+            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+        runtime.SetEventFilter(std::move(previousFilter));
+
+        UNIT_ASSERT_VALUES_EQUAL(recompileRequests.load(), 1u);
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        UNIT_ASSERT_C(FindSpan(*userUploader, "Compile"),
+            "stale cache recompilation is missing from Compile");
+        AssertChildSpansAreWithinParents(*userUploader);
+    }
+
+    Y_UNIT_TEST(MultiStatementQueryUsesScriptRootName) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1, false);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(runtime, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);
+            DELETE FROM `/Root/table-2` WHERE key = 2u;
+        )", /*devTracing*/ false, /*userTracing*/ true);
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "EXECUTE SCRIPT"),
+            "multi-statement query kept the first operation as its root name");
         AssertChildSpansAreWithinParents(*userUploader);
     }
 
@@ -409,8 +502,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
-        UNIT_ASSERT_C(FindSpan(*userUploader, "ApplyShards"),
-            "immediate commit ApplyShards span missing");
+        UNIT_ASSERT_C(FindSpan(*userUploader, "Apply commit"),
+            "immediate commit Apply commit span missing");
         const TFakeWilsonUploader::TOtelSpan* shardSpan = nullptr;
         for (const auto& span : userUploader->Spans) {
             if (TStringBuf(span.name()).StartsWith("Commit shard ")) {
@@ -461,7 +554,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(!lowBudget.Admit(TComponentTracingLevels::TQueryProcessor::Detailed));
         UNIT_ASSERT_VALUES_EQUAL(lowBudget.Dropped(), 0u);
 
-        const NKqp::TUserFacingTraceTimeline::TWindow parent{
+        const NKqp::TTimeWindow parent{
             TInstant::Seconds(100), TInstant::Seconds(110)};
         const auto corrected = NKqp::FitUserFacingRemoteWindow({
             TInstant::Seconds(3700), TInstant::Seconds(3702)}, parent);
@@ -470,15 +563,18 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(corrected.Start >= parent.Start);
         UNIT_ASSERT(corrected.End <= parent.End);
 
-        NKqp::TUserFacingShardReadCollector collector;
-        for (ui64 shardId = 1; shardId <= NKqp::MaxUserFacingShardReadsPerTask + 1; ++shardId) {
+        NKqp::TShardReadDiagnosticsCollector collector;
+        for (ui64 shardId = 1; shardId <= NKqp::MaxShardReadDiagnostics + 1; ++shardId) {
             collector.OnStart(shardId);
         }
         collector.OnFinish(1, 0, 2, 7, Ydb::StatusIds::ABORTED, true);
         NKqpProto::TKqpTaskExtraStats stats;
         collector.Export(stats, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.ShardReadsSize(), NKqp::MaxUserFacingShardReadsPerTask);
+        UNIT_ASSERT_VALUES_EQUAL(stats.ShardReadsSize(), NKqp::MaxShardReadDiagnostics);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReadsTruncated(), 1u);
+        for (size_t i = 0; i < NKqp::MaxShardReadDiagnostics; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReads(i).GetShardId(), i + 1);
+        }
         bool errorFound = false;
         for (const auto& shard : stats.GetShardReads()) {
             if (shard.GetShardId() == 1) {

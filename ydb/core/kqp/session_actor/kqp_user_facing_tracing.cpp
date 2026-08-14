@@ -2,7 +2,7 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
-#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
@@ -20,6 +20,31 @@
 // Renders the user-facing trace at reply time from collected timings and stats.
 
 namespace NKikimr::NKqp {
+
+TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& parent) {
+    if (window.Start == TInstant::Zero() || window.End < window.Start) {
+        return {};
+    }
+    if (window.End == window.Start) {
+        window.End += TDuration::MicroSeconds(1);
+    }
+    if (!parent) {
+        return window;
+    }
+    const TDuration duration = window.End - window.Start;
+    const TDuration parentDuration = parent.End - parent.Start;
+    if (duration >= parentDuration) {
+        return parent;
+    }
+    if (window.Start < parent.Start) {
+        window.Start = parent.Start;
+        window.End = window.Start + duration;
+    } else if (window.End > parent.End) {
+        window.End = parent.End;
+        window.Start = window.End - duration;
+    }
+    return window;
+}
 
 namespace {
 
@@ -87,60 +112,37 @@ TString ShardDisplayName(const TStringBuf action, ui64 shardId) {
     return name;
 }
 
-constexpr size_t MaxNodesInStageAttribute = 32;
-constexpr size_t PhaseSpanEstimatePerExecution = 12;
-
-struct TStageSignals {
-    ui64 WaitUs = 0;
-    ui64 SpilledBytes = 0;
-    double Skew = 0.0;
-};
-
-TStageSignals CollectStageSignals(const NYql::NDqProto::TDqStageStats& stage) {
-    TStageSignals signals;
-    signals.WaitUs = stage.GetWaitInputTimeUs().GetSum() + stage.GetWaitOutputTimeUs().GetSum();
-    signals.SpilledBytes = stage.GetSpillingComputeBytes().GetSum() + stage.GetSpillingChannelBytes().GetSum();
-    const auto& taskDur = stage.GetDurationUs();
-    if (stage.GetTotalTasksCount() > 1 && taskDur.GetCnt() > 0 && taskDur.GetSum() > 0) {
-        const double avg = static_cast<double>(taskDur.GetSum()) / taskDur.GetCnt();
-        if (avg > 0 && taskDur.GetMax() > avg) {
-            signals.Skew = static_cast<double>(taskDur.GetMax()) / avg;
-        }
-    }
-    return signals;
-}
-
 struct TStageDescription {
     TString Name;
     TString Verb;
 };
 
-TStageDescription DescribeStage(const NYql::NDqProto::TDqStageStats& stage,
-        const TUserFacingStageHint* hint) {
-    if (stage.OperatorJoinSize() > 0) {
-        return {"Join", "Join"};
+TStageDescription DescribeStage(const TStageTraceSnapshot& stage) {
+    TString verb;
+    switch (stage.Operation) {
+        case EStageOperation::Read:
+            verb = "Read";
+            break;
+        case EStageOperation::Write:
+            verb = "Write";
+            break;
+        case EStageOperation::Join:
+            return {"Join", "Join"};
+        case EStageOperation::Aggregate:
+            return {"Aggregate", "Aggregate"};
+        case EStageOperation::Filter:
+            return {"Filter", "Filter"};
+        case EStageOperation::Compute:
+            return {TStringBuilder() << "Step " << stage.StageId, "Compute"};
     }
-    if (stage.OperatorAggregationSize() > 0) {
-        return {"Aggregate", "Aggregate"};
-    }
-    if (stage.OperatorFilterSize() > 0) {
-        return {"Filter", "Filter"};
-    }
-    if (stage.TablesSize() > 0) {
-        const auto& table = stage.GetTables(0);
-        const TString verb = table.GetWriteRows().GetSum() > 0 ? "Write" : "Read";
-        return {TStringBuilder() << verb << " " << table.GetTablePath(), verb};
-    }
-    if (hint && hint->TablePath) {
-        const TString verb = hint->IsWrite ? "Write" : "Read";
-        return {TStringBuilder() << verb << " " << hint->TablePath, verb};
-    }
-    return {TStringBuilder() << "Step " << stage.GetStageId(), "Compute"};
+    return stage.TablePath
+        ? TStageDescription{TStringBuilder() << verb << " " << stage.TablePath, verb}
+        : TStageDescription{verb, verb};
 }
 
 void EmitShardReadSpans(const NWilson::TTraceId& parent,
         const std::vector<NKqpProto::TKqpShardReadStats>& shards,
-        const TUserFacingTraceTimeline::TWindow& parentBounds, TSpanBudget& budget) {
+        const TTimeWindow& parentBounds, TSpanBudget& budget) {
     for (const auto& shard : shards) {
         if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
             continue;
@@ -188,41 +190,11 @@ void EmitShardReadSpans(const NWilson::TTraceId& parent,
     }
 }
 
-TUserFacingTraceTimeline::TWindow GetTaskBounds(const TUserFacingTaskSnapshot& task,
-        const TUserFacingTraceTimeline::TWindow& parentBounds,
-        ui64 fallbackStartMs = 0) {
-    ui64 startMs = task.StartTimeMs ? task.StartTimeMs
-        : task.CreateTimeMs ? task.CreateTimeMs
-        : fallbackStartMs;
-    ui64 finishMs = task.FinishTimeMs;
-    for (const auto& shard : task.ShardReads) {
-        if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
-            continue;
-        }
-        startMs = startMs ? Min(startMs, shard.GetStartTimeMs()) : shard.GetStartTimeMs();
-        finishMs = Max(finishMs, shard.GetFinishTimeMs());
-    }
-    if (!startMs || finishMs < startMs) {
-        return {};
-    }
-    return FitUserFacingRemoteWindow({
-        .Start = TInstant::MilliSeconds(startMs),
-        .End = TInstant::MilliSeconds(finishMs),
-    }, parentBounds);
-}
-
-// Remote wall clocks only position spans approximately. Their same-node durations are
-// retained and translated into the local Run window when clocks disagree.
 void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVerb,
-        const TString& actorType, const std::unordered_map<ui64, TUserFacingTaskSnapshot>& tasks,
-        const TUserFacingTraceTimeline::TWindow& runBounds, ui64 stageStartMs,
-        TSpanBudget& budget) {
-    for (const auto& [taskId, task] : tasks) {
-        if (budget.TaskDurationCutoffMs && task.DurationMs() < budget.TaskDurationCutoffMs) {
-            budget.Drop();
-            continue;
-        }
-        const auto bounds = GetTaskBounds(task, runBounds, stageStartMs);
+        const TString& actorType, const std::vector<TTaskTraceSnapshot>& tasks,
+        const TTimeWindow& stageBounds, TSpanBudget& budget) {
+    for (const auto& task : tasks) {
+        const auto bounds = FitUserFacingRemoteWindow(task.Window, stageBounds);
         if (!bounds) {
             continue;
         }
@@ -245,20 +217,18 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         }
         span.Attribute("ydb.input_rows", static_cast<i64>(task.InputRows));
         span.Attribute("ydb.output_rows", static_cast<i64>(task.OutputRows));
-        span.Attribute("ydb.duration_us", static_cast<i64>(task.DurationMs() * 1000));
-        if (task.CreateTimeMs && task.StartTimeMs > task.CreateTimeMs) {
-            span.Attribute("ydb.queue_delay_us",
-                static_cast<i64>((task.StartTimeMs - task.CreateTimeMs) * 1000));
+        span.Attribute("ydb.duration_us", static_cast<i64>(task.DurationUs()));
+        if (task.QueueDelayUs > 0) {
+            span.Attribute("ydb.queue_delay_us", static_cast<i64>(task.QueueDelayUs));
         }
-        if (task.ComputeCpuTimeUs > 0) {
-            span.Attribute("ydb.compute_cpu_us", static_cast<i64>(task.ComputeCpuTimeUs));
+        if (task.ComputeCpuUs > 0) {
+            span.Attribute("ydb.compute_cpu_us", static_cast<i64>(task.ComputeCpuUs));
         }
-        if (task.BuildCpuTimeUs > 0) {
-            span.Attribute("ydb.build_cpu_us", static_cast<i64>(task.BuildCpuTimeUs));
+        if (task.BuildCpuUs > 0) {
+            span.Attribute("ydb.build_cpu_us", static_cast<i64>(task.BuildCpuUs));
         }
-        const ui64 waitUs = task.WaitInputTimeUs + task.WaitOutputTimeUs;
-        if (waitUs > 0) {
-            span.Attribute("ydb.wait_us", static_cast<i64>(waitUs));
+        if (task.WaitUs > 0) {
+            span.Attribute("ydb.wait_us", static_cast<i64>(task.WaitUs));
         }
         if (task.SpilledBytes > 0) {
             span.Attribute("ydb.spilled_bytes", static_cast<i64>(task.SpilledBytes));
@@ -266,29 +236,19 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         if (task.ReadRetries > 0) {
             span.Attribute("ydb.read_retries", static_cast<i64>(task.ReadRetries));
         }
-        EmitShardReadSpans(span.GetTraceId(), task.ShardReads, bounds, budget);
-        if (task.ShardReadsTruncated > 0) {
-            span.Attribute("ydb.shards_truncated", static_cast<i64>(task.ShardReadsTruncated));
+        EmitShardReadSpans(span.GetTraceId(), task.Shards, bounds, budget);
+        if (task.ShardsTruncated > 0) {
+            span.Attribute("ydb.shards_truncated", static_cast<i64>(task.ShardsTruncated));
         }
         span.End();
     }
 }
 
-TUserFacingTraceTimeline::TWindow GetStageBounds(const NYql::NDqProto::TDqStageStats& stage,
-    const std::unordered_map<ui64, TUserFacingTaskSnapshot>* tasks,
-    const TUserFacingTraceTimeline::TWindow& runBounds);
-
-void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecutionData& trace,
-        const TUserFacingTraceTimeline::TWindow& runBounds, TSpanBudget& budget) {
-    const NYql::NDqProto::TDqExecutionStats& stats = trace.ExecStats;
-    const TUserFacingTraceTaskStats& taskStats = trace.TaskStats;
-    for (const auto& stage : stats.GetStages()) {
-        const auto hintIt = trace.StageHints.find(stage.GetStageId());
-        const TUserFacingStageHint* hint = hintIt != trace.StageHints.end() ? &hintIt->second : nullptr;
-        const TStageDescription description = DescribeStage(stage, hint);
-        const auto stageTasksIt = taskStats.find(stage.GetStageId());
-        const auto* stageTasks = stageTasksIt == taskStats.end() ? nullptr : &stageTasksIt->second;
-        const auto stageBounds = GetStageBounds(stage, stageTasks, runBounds);
+void EmitStageSpans(const NWilson::TTraceId& parent, const TExecutionTraceSnapshot& trace,
+        const TTimeWindow& runBounds, TSpanBudget& budget) {
+    for (const auto& stage : trace.Stages) {
+        const TStageDescription description = DescribeStage(stage);
+        const auto stageBounds = stage.Window ? FitUserFacingRemoteWindow(stage.Window, runBounds) : runBounds;
         if (!stageBounds) {
             continue;
         }
@@ -303,64 +263,51 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
         if (!span) {
             continue;
         }
-        span.Attribute("ydb.stage_id", static_cast<i64>(stage.GetStageId()));
+        span.Attribute("ydb.stage_id", static_cast<i64>(stage.StageId));
         span.Attribute("ydb.actor.type", trace.ComputeActorType);
         span.Attribute("ydb.timing_source", TString("compute_actor_stats"));
-        span.Attribute("ydb.tasks", static_cast<i64>(stage.GetTotalTasksCount()));
-        span.Attribute("ydb.cpu_us", static_cast<i64>(stage.GetCpuTimeUs().GetSum()));
-        span.Attribute("ydb.input_rows", static_cast<i64>(stage.GetInputRows().GetSum()));
-        span.Attribute("ydb.output_rows", static_cast<i64>(stage.GetOutputRows().GetSum()));
-
-        const TStageSignals signals = CollectStageSignals(stage);
-        if (signals.WaitUs > 0) {
-            span.Attribute("ydb.wait_us", static_cast<i64>(signals.WaitUs));
+        span.Attribute("ydb.tasks", static_cast<i64>(stage.Tasks));
+        span.Attribute("ydb.cpu_us", static_cast<i64>(stage.CpuUs));
+        span.Attribute("ydb.input_rows", static_cast<i64>(stage.InputRows));
+        span.Attribute("ydb.output_rows", static_cast<i64>(stage.OutputRows));
+        if (stage.WaitUs > 0) {
+            span.Attribute("ydb.wait_us", static_cast<i64>(stage.WaitUs));
         }
-        if (signals.SpilledBytes > 0) {
-            span.Attribute("ydb.spilled_bytes", static_cast<i64>(signals.SpilledBytes));
+        if (stage.SpilledBytes > 0) {
+            span.Attribute("ydb.spilled_bytes", static_cast<i64>(stage.SpilledBytes));
         }
-        const auto& taskDur = stage.GetDurationUs();
-        if (taskDur.GetCnt() > 0 && taskDur.GetSum() > 0) {
-            span.Attribute("ydb.task_duration_min_us", static_cast<i64>(taskDur.GetMin()));
-            span.Attribute("ydb.task_duration_avg_us", static_cast<i64>(taskDur.GetSum() / taskDur.GetCnt()));
-            span.Attribute("ydb.task_duration_max_us", static_cast<i64>(taskDur.GetMax()));
+        if (stage.Durations.Count > 0) {
+            span.Attribute("ydb.task_duration_min_us", static_cast<i64>(stage.Durations.MinUs));
+            span.Attribute("ydb.task_duration_avg_us",
+                static_cast<i64>(stage.Durations.SumUs / stage.Durations.Count));
+            span.Attribute("ydb.task_duration_max_us", static_cast<i64>(stage.Durations.MaxUs));
         }
-        if (signals.Skew > 0) {
-            span.Attribute("ydb.task_skew", signals.Skew);
+        if (stage.Durations.Count > 1 && stage.Durations.SumUs > 0) {
+            const double average = static_cast<double>(stage.Durations.SumUs) / stage.Durations.Count;
+            if (stage.Durations.MaxUs > average) {
+                span.Attribute("ydb.task_skew", static_cast<double>(stage.Durations.MaxUs) / average);
+            }
         }
-        if (const auto aggIt = trace.StageAggs.find(stage.GetStageId()); aggIt != trace.StageAggs.end()) {
-            const auto* agg = &aggIt->second;
-            if (!agg->TasksByNode.empty()) {
-                std::vector<std::pair<ui32, ui32>> nodes(agg->TasksByNode.begin(), agg->TasksByNode.end());
-                std::sort(nodes.begin(), nodes.end(),
-                    [](const auto& a, const auto& b) { return a.second > b.second; });
-                TStringBuilder byNode;
-                size_t shown = 0;
-                for (const auto& [nodeId, count] : nodes) {
-                    if (shown == MaxNodesInStageAttribute) {
-                        byNode << ",+" << nodes.size() - shown << " nodes";
-                        break;
-                    }
-                    if (shown++ > 0) {
-                        byNode << ",";
-                    }
-                    byNode << nodeId << ":" << count;
+        if (!stage.TasksByNode.empty()) {
+            TStringBuilder byNode;
+            for (size_t i = 0; i < stage.TasksByNode.size(); ++i) {
+                if (i > 0) {
+                    byNode << ",";
                 }
-                span.Attribute("ydb.tasks_by_node", TString(byNode));
+                byNode << stage.TasksByNode[i].first << ":" << stage.TasksByNode[i].second;
             }
-            if (stage.GetTotalTasksCount() > 1 && agg->MaxDurationMs > 0) {
-                span.Attribute("ydb.slowest_task_node", static_cast<i64>(agg->MaxDurationNode));
-                span.Attribute("ydb.fastest_task_node", static_cast<i64>(agg->MinDurationNode));
-            }
+            span.Attribute("ydb.tasks_by_node", TString(byNode));
         }
-        if (stageTasks) {
-            if (stageTasks->size() >= MaxUserFacingTraceTasksPerStage
-                    && stage.GetTotalTasksCount() > stageTasks->size()) {
-                span.Attribute("ydb.tasks_truncated",
-                    static_cast<i64>(stage.GetTotalTasksCount() - stageTasks->size()));
-            }
-            EmitTaskSpans(span.GetTraceId(), description.Verb, trace.ComputeActorType, *stageTasks,
-                runBounds, stageBounds.Start.MilliSeconds(), budget);
+        if (stage.Tasks > 1 && stage.Durations.Count > 0) {
+            span.Attribute("ydb.slowest_task_node", static_cast<i64>(stage.SlowestTaskNode));
+            span.Attribute("ydb.fastest_task_node", static_cast<i64>(stage.FastestTaskNode));
         }
+        if (stage.Tasks > stage.InterestingTasks.size()) {
+            span.Attribute("ydb.tasks_truncated",
+                static_cast<i64>(stage.Tasks - stage.InterestingTasks.size()));
+        }
+        EmitTaskSpans(span.GetTraceId(), description.Verb, trace.ComputeActorType,
+            stage.InterestingTasks, stageBounds, budget);
         span.End();
     }
 }
@@ -368,7 +315,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
 void EmitProxySpans(const NWilson::TTraceId& parentId, const TKqpQueryState& state,
         TSpanBudget& budget) {
     const auto& hops = state.ProxyRequestHops;
-    std::vector<TUserFacingTraceTimeline::TWindow> windows(hops.size());
+    std::vector<TTimeWindow> windows(hops.size());
     TInstant cursor = state.StartTime;
     for (int i = static_cast<int>(hops.size()) - 1; i >= 0; --i) {
         const TDuration duration = TDuration::MicroSeconds(hops[i].GetDurationUs());
@@ -411,39 +358,10 @@ TInstant GetProxyTimelineStart(const TKqpQueryState& state) {
     return state.ProxyRequestStartTime;
 }
 
-TUserFacingTraceTimeline::TWindow GetStageBounds(const NYql::NDqProto::TDqStageStats& stage,
-        const std::unordered_map<ui64, TUserFacingTaskSnapshot>* tasks,
-        const TUserFacingTraceTimeline::TWindow& runBounds) {
-    TUserFacingTraceTimeline::TWindow result;
-    if (tasks && !tasks->empty()) {
-        for (const auto& [taskId, task] : *tasks) {
-            Y_UNUSED(taskId);
-            const auto taskBounds = GetTaskBounds(task, runBounds);
-            if (!taskBounds) {
-                continue;
-            }
-            result.Start = result.Start == TInstant::Zero()
-                ? taskBounds.Start : Min(result.Start, taskBounds.Start);
-            result.End = Max(result.End, taskBounds.End);
-        }
-        return result;
-    }
-    if (stage.GetBaseTimeMs() && stage.GetFinishTimeMs().GetMax() >= stage.GetStartTimeMs().GetMin()) {
-        return FitUserFacingRemoteWindow({
-            TInstant::MilliSeconds(stage.GetBaseTimeMs() + stage.GetStartTimeMs().GetMin()),
-            TInstant::MilliSeconds(stage.GetBaseTimeMs() + stage.GetFinishTimeMs().GetMax()),
-        }, runBounds);
-    }
-    return {};
-}
-
-TUserFacingTraceTimeline::TWindow GetStageBounds(const TUserFacingTraceExecutionData& trace,
-        const TUserFacingTraceTimeline::TWindow& runBounds) {
-    TUserFacingTraceTimeline::TWindow result;
-    for (const auto& stage : trace.ExecStats.GetStages()) {
-        const auto tasksIt = trace.TaskStats.find(stage.GetStageId());
-        const auto* tasks = tasksIt == trace.TaskStats.end() ? nullptr : &tasksIt->second;
-        const auto stageBounds = GetStageBounds(stage, tasks, runBounds);
+TTimeWindow GetStageBounds(const TExecutionTraceSnapshot& trace, const TTimeWindow& runBounds) {
+    TTimeWindow result;
+    for (const auto& stage : trace.Stages) {
+        const auto stageBounds = FitUserFacingRemoteWindow(stage.Window, runBounds);
         if (!stageBounds) {
             continue;
         }
@@ -455,10 +373,10 @@ TUserFacingTraceTimeline::TWindow GetStageBounds(const TUserFacingTraceExecution
 }
 
 void EmitBufferLookupSpan(const NWilson::TTraceId& parent,
-        const TUserFacingBufferLookupStats& lookup,
-        const TUserFacingTraceTimeline::TWindow& executeBounds, TSpanBudget& budget) {
-    TUserFacingTraceTimeline::TWindow bounds;
-    for (const auto& shard : lookup.ShardReads) {
+        const TBufferLookupDiagnostics& lookup,
+        const TTimeWindow& executeBounds, TSpanBudget& budget) {
+    TTimeWindow bounds;
+    for (const auto& shard : lookup.Shards) {
         if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
             continue;
         }
@@ -486,16 +404,16 @@ void EmitBufferLookupSpan(const NWilson::TTraceId& parent,
     }
     span.Attribute("ydb.actor.type", TString("TKqpBufferLookupActor"));
     span.Attribute("ydb.code.component", TString("KqpBufferLookup"));
-    EmitShardReadSpans(span.GetTraceId(), lookup.ShardReads, bounds, budget);
-    if (lookup.ShardReadsTruncated > 0) {
-        span.Attribute("ydb.shards_truncated", static_cast<i64>(lookup.ShardReadsTruncated));
+    EmitShardReadSpans(span.GetTraceId(), lookup.Shards, bounds, budget);
+    if (lookup.ShardsTruncated > 0) {
+        span.Attribute("ydb.shards_truncated", static_cast<i64>(lookup.ShardsTruncated));
     }
     span.End();
 }
 
-void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExecutionData& trace,
+void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnapshot& trace,
         TSpanBudget& budget) {
-    const TUserFacingTraceTimeline& tl = trace.Timeline;
+    const TExecutionTimeline& tl = trace.Timeline;
     TInstant executeStart = tl.Execute.Start;
     TInstant executeEnd = tl.Execute.End;
     NWilson::TSpan executeSpan = MakePhase(rootId, executeStart, executeEnd, "Execute", {},
@@ -507,18 +425,19 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
     const NWilson::TTraceId executeId = executeSpan.GetTraceId();
 
     struct TPhaseName {
-        EUserFacingTracePhase Phase;
-        const char* Name;
+        EExecutionPhase Phase;
+        const char* DisplayName;
+        const char* MachineName;
     };
     static constexpr TPhaseName preparePhases[] = {
-        {EUserFacingTracePhase::ResolveTables, "ResolveTables"},
-        {EUserFacingTracePhase::ResolveShards, "ResolveShards"},
-        {EUserFacingTracePhase::Snapshot, "Snapshot"},
+        {EExecutionPhase::ResolveTables, "Resolve tables", "ResolveTables"},
+        {EExecutionPhase::ResolveShards, "Locate shards", "ResolveShards"},
+        {EExecutionPhase::Snapshot, "Acquire snapshot", "Snapshot"},
     };
     TInstant prepareStart = TInstant::Max();
     TInstant prepareEnd = TInstant::Zero();
-    for (const auto& [phase, name] : preparePhases) {
-        if (const auto& window = tl.Phase(phase)) {
+    for (const auto& phaseInfo : preparePhases) {
+        if (const auto& window = tl.Phase(phaseInfo.Phase)) {
             prepareStart = Min(prepareStart, window.Start);
             prepareEnd = Max(prepareEnd, window.End);
         }
@@ -526,23 +445,25 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
     if (NWilson::TSpan prepareSpan = MakePhase(executeId, prepareStart, prepareEnd, "Prepare", {},
             &budget, TQueryLevels::Detailed)) {
         prepareSpan.Attribute("ydb.code.component", TString("KqpExecuter.Prepare"));
-        for (const auto& [phase, name] : preparePhases) {
+        for (const auto& [phase, displayName, machineName] : preparePhases) {
             const auto& window = tl.Phase(phase);
             if (!window) {
                 continue;
             }
-            if (phase == EUserFacingTracePhase::ResolveTables) {
+            if (phase == EExecutionPhase::ResolveTables) {
                 // Resolve windows can overlap.
-                if (NWilson::TSpan rt = MakePhase(prepareSpan.GetTraceId(), window.Start, window.End, name, {},
+                if (NWilson::TSpan rt = MakePhase(prepareSpan.GetTraceId(), window.Start, window.End, displayName, {
+                        {"ydb.phase", TString(machineName)},
+                    },
                         &budget, TQueryLevels::Detailed)) {
                     rt.Attribute("ydb.actor.type", TString("TKqpTableResolver"));
-                    if (const auto& w = tl.Phase(EUserFacingTracePhase::ResolveMetadata)) {
+                    if (const auto& w = tl.Phase(EExecutionPhase::ResolveMetadata)) {
                         EmitPhase(rt.GetTraceId(), w.Start, w.End, "Metadata", {
                             {"ydb.actor.type", TString("TKqpTableResolver")},
                             {"ydb.peer.actor.type", TString("SchemeCache")},
                         }, &budget, TQueryLevels::Detailed);
                     }
-                    if (const auto& w = tl.Phase(EUserFacingTracePhase::ResolvePartitioning)) {
+                    if (const auto& w = tl.Phase(EExecutionPhase::ResolvePartitioning)) {
                         EmitPhase(rt.GetTraceId(), w.Start, w.End, "Partitioning", {
                             {"ydb.actor.type", TString("TKqpTableResolver")},
                             {"ydb.peer.actor.type", TString("SchemeCache")},
@@ -550,12 +471,14 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
                     }
                     rt.End();
                 }
-            } else if (phase == EUserFacingTracePhase::ResolveShards) {
-                EmitPhase(prepareSpan.GetTraceId(), window.Start, window.End, name, {
+            } else if (phase == EExecutionPhase::ResolveShards) {
+                EmitPhase(prepareSpan.GetTraceId(), window.Start, window.End, displayName, {
+                    {"ydb.phase", TString(machineName)},
                     {"ydb.actor.type", TString("TKqpShardsResolver")},
                 }, &budget, TQueryLevels::Detailed);
             } else {
-                EmitPhase(prepareSpan.GetTraceId(), window.Start, window.End, name, {
+                EmitPhase(prepareSpan.GetTraceId(), window.Start, window.End, displayName, {
+                    {"ydb.phase", TString(machineName)},
                     {"ydb.actor.type", TString("TKqpDataExecuter")},
                     {"ydb.peer.actor.type", TString("TLongTxService")},
                 }, &budget, TQueryLevels::Detailed);
@@ -564,7 +487,7 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         prepareSpan.End();
     }
 
-    TUserFacingTraceTimeline::TWindow runBounds = tl.Phase(EUserFacingTracePhase::RunTasks);
+    TTimeWindow runBounds = tl.Phase(EExecutionPhase::RunTasks);
     if (!runBounds) {
         runBounds = tl.Execute;
     }
@@ -586,18 +509,20 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan.End();
     }
     EmitBufferLookupSpan(executeId, trace.BufferLookup, tl.Execute, budget);
-    if (const auto& commit = tl.Phase(EUserFacingTracePhase::Commit)) {
+    if (const auto& commit = tl.Phase(EExecutionPhase::Commit)) {
         // Per-shard children end at each acknowledgement, exposing commit stragglers.
         if (NWilson::TSpan commitSpan = MakePhase(executeId, commit.Start, commit.End, "Commit", {},
                 &budget, TQueryLevels::Basic)) {
             commitSpan.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
-            const auto& acks = trace.ShardCommitAcks;
-            if (trace.ShardCommitAcksTruncated > 0) {
+            const auto& acks = trace.Commit.Shards;
+            if (trace.Commit.ShardsTruncated > 0) {
                 commitSpan.Attribute("ydb.shards_truncated",
-                    static_cast<i64>(trace.ShardCommitAcksTruncated));
+                    static_cast<i64>(trace.Commit.ShardsTruncated));
             }
-            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitPrepareShards)) {
-                if (NWilson::TSpan prep = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "PrepareShards", {},
+            if (const auto& w = trace.Commit.PrepareShards) {
+                if (NWilson::TSpan prep = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "Prepare shards", {
+                        {"ydb.phase", TString("CommitPrepareShards")},
+                    },
                         &budget, TQueryLevels::Detailed)) {
                     prep.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
                     prep.Attribute("ydb.peer.actor.type", TString("DataShard"));
@@ -615,14 +540,16 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
                     prep.End();
                 }
             }
-            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitCoordinator)) {
+            if (const auto& w = trace.Commit.Coordinator) {
                 EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "Coordinator", {
                     {"ydb.actor.type", TString("TKqpBufferWriteActor")},
                     {"ydb.peer.actor.type", TString("TxCoordinator")},
                 }, &budget, TQueryLevels::Detailed);
             }
-            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitApplyShards)) {
-                if (NWilson::TSpan apply = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "ApplyShards", {},
+            if (const auto& w = trace.Commit.ApplyShards) {
+                if (NWilson::TSpan apply = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "Apply commit", {
+                        {"ydb.phase", TString("CommitApplyShards")},
+                    },
                         &budget, TQueryLevels::Detailed)) {
                     apply.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
                     apply.Attribute("ydb.peer.actor.type", TString("DataShard"));
@@ -663,13 +590,15 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
             bytesRead += table.GetReadBytes();
         }
     }
-    for (const auto& trace : state.QueryStats.UserFacingTraces) {
-        cpuUs += trace.ExecStats.GetCpuTimeUs();
-        for (const auto& stage : trace.ExecStats.GetStages()) {
-            const TStageSignals signals = CollectStageSignals(stage);
-            waitUs += signals.WaitUs;
-            spilledBytes += signals.SpilledBytes;
-            maxSkew = Max(maxSkew, signals.Skew);
+    for (const auto& trace : state.QueryStats.ExecutionTraces) {
+        cpuUs += trace.CpuUs;
+        for (const auto& stage : trace.Stages) {
+            waitUs += stage.WaitUs;
+            spilledBytes += stage.SpilledBytes;
+            if (stage.Durations.Count > 1 && stage.Durations.SumUs > 0) {
+                const double average = static_cast<double>(stage.Durations.SumUs) / stage.Durations.Count;
+                maxSkew = Max(maxSkew, static_cast<double>(stage.Durations.MaxUs) / average);
+            }
         }
     }
 
@@ -774,46 +703,12 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
         userSpan.Attribute("ydb.compile.cache_hit", true);
     }
 
-    // Keep the slowest tasks after reserving an estimate for their parent spans.
-    {
-        size_t fixedSpans = 0;
-        std::vector<ui64> taskDurations;
-        for (const auto& trace : state.QueryStats.UserFacingTraces) {
-            fixedSpans += PhaseSpanEstimatePerExecution + trace.ExecStats.StagesSize()
-                + 2 * trace.ShardCommitAcks.size();
-            fixedSpans += !trace.BufferLookup.ShardReads.empty();
-            for (const auto& [stageId, tasks] : trace.TaskStats) {
-                for (const auto& [taskId, task] : tasks) {
-                    taskDurations.push_back(task.DurationMs());
-                }
-            }
-        }
-        const size_t taskBudget = budget.Remaining() > fixedSpans
-            ? budget.Remaining() - fixedSpans : 0;
-        if (taskDurations.size() > taskBudget) {
-            auto nth = taskDurations.begin() + taskBudget;
-            std::nth_element(taskDurations.begin(), nth, taskDurations.end(), std::greater<ui64>());
-            // Exclude tasks tied at the cutoff to avoid overshooting the budget.
-            budget.TaskDurationCutoffMs = *nth + 1;
-        }
-    }
-    for (const auto& trace : state.QueryStats.UserFacingTraces) {
+    for (const auto& trace : state.QueryStats.ExecutionTraces) {
         RenderExecution(parentId, trace, budget);
     }
     if (budget.Dropped() > 0) {
         userSpan.Attribute("ydb.spans_truncated", static_cast<i64>(budget.Dropped()));
     }
-}
-
-// Across scripts, scheme work outranks writes and writes outrank reads.
-int RootNameRank(const TString& name) {
-    if (!name) {
-        return 0;
-    }
-    if (name == "DDL") {
-        return 3;
-    }
-    return name.StartsWith("SELECT") ? 1 : 2;
 }
 
 } // namespace
@@ -823,12 +718,17 @@ void UpdateUserFacingRootSpanName(TKqpQueryState& state) {
         return;
     }
     const TString candidate = DescribeUserFacingQuery(state);
+    if (!candidate) {
+        return;
+    }
     if (candidate == "EXECUTE SCRIPT") {
         state.UserFacingRootName = candidate;
         return;
     }
-    if (RootNameRank(candidate) > RootNameRank(state.UserFacingRootName)) {
+    if (!state.UserFacingRootName) {
         state.UserFacingRootName = candidate;
+    } else if (state.UserFacingRootName != candidate) {
+        state.UserFacingRootName = "EXECUTE SCRIPT";
     }
 }
 

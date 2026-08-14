@@ -658,7 +658,7 @@ private:
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
             .UserCtx = UserCtx,
-            .CollectUserFacingShards = Request.UserFacingTraceCollectionMode
+            .CollectDiagnostics = Request.UserFacingTraceCollectionMode
                 >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL,
         };
 

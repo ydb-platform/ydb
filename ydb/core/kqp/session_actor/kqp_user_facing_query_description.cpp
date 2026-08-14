@@ -80,10 +80,10 @@ TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
         }
     }
     if (writeVerb) {
-        if (mixedWriteVerbs) {
-            return "WRITE";
+        if (mixedWriteVerbs || multiWrite) {
+            return "EXECUTE SCRIPT";
         }
-        return multiWrite || !writeTable
+        return !writeTable
             ? writeVerb : TStringBuilder() << writeVerb << " " << writeTable;
     }
     if (hasReads || query.ResultBindingsSize() > 0) {

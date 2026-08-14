@@ -68,7 +68,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
 
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "false") == "true":
         extra_feature_flags.add("enable_access_service_v2_interface")
     else:
         disabled_feature_flags.append("enable_access_service_v2_interface")

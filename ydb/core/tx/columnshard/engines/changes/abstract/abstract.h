@@ -51,11 +51,11 @@ private:
     bool ForcedMove = false;
 
 public:
-    bool GetForcedMove() const {
+    bool GetForcedMove() const noexcept {
         return ForcedMove;
     }
 
-    void SetForcedMove() {
+    void SetForcedMove() noexcept {
         ForcedMove = true;
     }
 

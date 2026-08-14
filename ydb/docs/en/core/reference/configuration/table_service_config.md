@@ -140,8 +140,6 @@ Where:
 - `spilling_service_id`: unique instance identifier (a GUID) created once during [Spilling Service](../../contributor/spilling-service.md) initialization when the ydbd process starts
 - `username`: OS username under which the `ydbd` process runs
 
-The username comes last because it may contain `-`: the other parts have a fixed shape, so the username is unambiguously read as the whole remainder of the name.
-
 Spilling files are stored inside each such directory.
 
 Example of a full path to a spilling directory:
@@ -171,7 +169,7 @@ All OS users that run database nodes need read and write access to `root`: a nod
 
 {% note warning %}
 
-If spilling is enabled but the `root` directory is missing or not writable, the database node does not start: the Spilling Service makes 2 retries with a 1 second interval, after which the `ydbd` process terminates abnormally. Make sure that `root` exists and is accessible on all database nodes before enabling spilling.
+If spilling is enabled but the `root` directory is missing or not writable, the database node does not start. Make sure that `root` exists and is accessible on all database nodes before enabling spilling.
 
 {% endnote %}
 

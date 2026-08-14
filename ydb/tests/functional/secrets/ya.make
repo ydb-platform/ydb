@@ -27,6 +27,7 @@ PEERDIR(
     contrib/python/boto3
     contrib/python/requests
     ydb/tests/functional/secrets/lib
+    ydb/tests/functional/security/lib
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/library/flavours

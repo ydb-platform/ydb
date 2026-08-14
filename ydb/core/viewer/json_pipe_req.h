@@ -18,6 +18,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <span>
 #include <unordered_set>
 
 namespace NKikimr::NViewer {
@@ -50,6 +51,7 @@ protected:
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
+    std::optional<bool> StrictDatabaseOnlyRequest; // lazily calculated by IsStrictDatabaseOnlyRequest()
     bool UseCache = false;
     bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
@@ -348,9 +350,13 @@ protected:
     bool IsDatabaseRequest() const;
     bool AreDatabaseNodesKnown() const;
 
-    // Denies the request if any of the given nodes doesn't belong to the requested database,
-    // or if the database nodes are unknown. Returns true if the response has been already sent.
-    bool ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds);
+    // True for a token whose highest access level is EAccessLevel::Database: such a user is allowed
+    // to see the information about its own database only, never about the cluster.
+    bool IsStrictDatabaseOnlyRequest();
+
+    // Denies the request unless every given node belongs to the requested database. If the database
+    // nodes are unknown, the request is denied too. Returns true if the response has been already sent.
+    bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);
 
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);

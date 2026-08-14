@@ -11,9 +11,9 @@ from ydb.tests.functional.security.lib.security_test_helpers import get_foreign_
 from ydb.tests.functional.security.lib.security_test_helpers import get_nodelist_ids
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_path_id
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
-from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_storage_group_id
-from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_storage_disk_location
+from ydb.tests.functional.security.lib.security_test_helpers import get_storage_ids
 from ydb.tests.functional.security.lib.security_test_helpers import get_unknown_node_id
+from ydb.tests.functional.security.lib.security_test_helpers import wait_for_storage_ids
 from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -237,16 +237,18 @@ def foreign_node_id(ydb_cluster_with_extra_sids_controls, tenant_database):
     return get_foreign_node_id_for_database(base_url, tenant_database)
 
 
+# Storage groups of the tenant database and the nodes/pdisks they live on.
 @pytest.fixture(scope='module')
-def tenant_storage_group_id(ydb_cluster_with_extra_sids_controls, tenant_database):
+def tenant_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
     base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
-    return get_tenant_storage_group_id(base_url, tenant_database)
+    return wait_for_storage_ids(base_url, tenant_database)
 
 
+# The same for the whole cluster, so that a test can pick an id outside the tenant database.
 @pytest.fixture(scope='module')
-def tenant_storage_disk_location(ydb_cluster_with_extra_sids_controls, tenant_database):
+def cluster_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_storage_ids):
     base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
-    return get_tenant_storage_disk_location(base_url, tenant_database)
+    return get_storage_ids(base_url)
 
 
 @pytest.fixture(scope='module')

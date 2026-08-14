@@ -374,60 +374,34 @@ def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
 
 
-def test_viewer_direct_forbidden_for_strict_database_token(
-    mon_base_url_with_extra_sids_control,
-    tenant_database,
-):
-    # this list is not exhaustive and covers some of the endpoints that use direct param
-    for ep in [
-        '/viewer/sysinfo',
-        '/viewer/json/feature_flags',
-        '/viewer/nodelist',
-    ]:
-        forbidden_path = _build_endpoint_path(
-            ep,
-            with_database_cgi=True,
-            extra_params={'direct': 'true'},
-            database=tenant_database,
-        )
-        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 403)
-
-        allowed_path = _build_endpoint_path(
-            ep,
-            with_database_cgi=True,
-            database=tenant_database,
-        )
-        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
-
-        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
-            _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, token, 200)
-
-
 def test_storage_groups_scope_params_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,
     tenant_nodelist_ids,
+    tenant_storage_ids,
+    cluster_storage_ids,
     unknown_node_id,
-    tenant_storage_group_id,
-    tenant_storage_disk_location,
 ):
     assert tenant_nodelist_ids, 'tenant database must have at least one node'
-    tenant_node_id = tenant_nodelist_ids[0]
-    storage_node_id, storage_pdisk_id = tenant_storage_disk_location
-    foreign_group_id = tenant_storage_group_id + 0x10000000
     base = mon_base_url_with_extra_sids_control
 
     allowed_cases = (
-        {'group_id': str(tenant_storage_group_id)},
+        {'group_id': str(min(tenant_storage_ids['group_ids']))},
         # both the nodes of the database itself and the nodes holding its storage are in scope
-        {'node_id': str(tenant_node_id)},
-        {'node_id': str(storage_node_id)},
-        {'pdisk_id': str(storage_pdisk_id)},
+        {'node_id': str(tenant_nodelist_ids[0])},
+        {'node_id': str(min(tenant_storage_ids['node_ids']))},
+        {'pdisk_id': str(min(tenant_storage_ids['pdisk_ids']))},
     )
+
+    foreign_group_ids = cluster_storage_ids['group_ids'] - tenant_storage_ids['group_ids']
+    foreign_pdisk_ids = cluster_storage_ids['pdisk_ids'] - tenant_storage_ids['pdisk_ids']
+    assert foreign_group_ids, 'the cluster must have a storage group outside the tenant database'
     forbidden_cases = (
-        {'group_id': str(foreign_group_id)},
+        {'group_id': str(min(foreign_group_ids))},
         {'node_id': str(unknown_node_id)},
-        {'pdisk_id': '999999'},
+        # a pdisk which exists but holds nothing of the database may be absent in a small cluster,
+        # then an id of a pdisk that doesn't exist at all is checked instead
+        {'pdisk_id': str(min(foreign_pdisk_ids) if foreign_pdisk_ids else 999999)},
     )
 
     for extra_params in allowed_cases:

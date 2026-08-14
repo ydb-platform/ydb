@@ -140,10 +140,12 @@ def get_foreign_node_id_for_database(base_url, database, token='root@builtin'):
     return min(foreign_nodes)
 
 
-def get_storage_groups(base_url, database, token='root@builtin', timeout=30, **params):
+def get_storage_groups(base_url, database=None, token='root@builtin', timeout=30, **params):
+    if database is not None:
+        params = {'database': database, **params}
     response = requests.get(
         base_url + '/storage/groups',
-        params={'database': database, **params},
+        params=params,
         headers={'Authorization': token},
         verify=False,
         timeout=timeout,
@@ -152,58 +154,43 @@ def get_storage_groups(base_url, database, token='root@builtin', timeout=30, **p
     return response.json()
 
 
-def get_tenant_storage_group_id(base_url, database, token='root@builtin', timeout_seconds=60):
-    last_data = {}
+def get_storage_ids(base_url, database=None, token='root@builtin', timeout=60):
+    """Ids covered by the storage groups of the given database, or of the whole cluster
+    when database is None: the groups themselves and the nodes/pdisks holding their vdisks."""
+    data = get_storage_groups(
+        base_url,
+        database,
+        token,
+        fields_required='GroupId,VDisk,PDisk,NodeId,PDiskId',
+        timeout=timeout,
+    )
+    ids = {'group_ids': set(), 'node_ids': set(), 'pdisk_ids': set()}
+    for group in data.get('StorageGroups') or []:
+        ids['group_ids'].add(int(group['GroupId']))
+        for vdisk in group.get('VDisks') or []:
+            # PDiskId is reported as "<node_id>-<pdisk_id>"
+            pdisk_id_str = str((vdisk.get('PDisk') or {}).get('PDiskId') or '')
+            if '-' in pdisk_id_str:
+                node_id_str, _, local_pdisk_id_str = pdisk_id_str.partition('-')
+                ids['node_ids'].add(int(node_id_str))
+                ids['pdisk_ids'].add(int(local_pdisk_id_str))
+    return ids
+
+
+def wait_for_storage_ids(base_url, database, token='root@builtin', timeout_seconds=60):
+    """Same as get_storage_ids, but waits until the database gets its storage groups."""
+    last = {}
 
     def ready():
-        data = get_storage_groups(
-            base_url,
-            database,
-            token,
-            fields_required='GroupId,PoolName',
-        )
-        last_data['data'] = data
-        groups = data.get('StorageGroups') or []
-        return bool(groups)
+        last['ids'] = get_storage_ids(base_url, database, token)
+        return bool(last['ids']['node_ids'])
 
     if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
         raise AssertionError(
-            f'no storage groups for database={database} after {timeout_seconds}s; '
-            f'last={last_data.get("data")}'
+            f'no storage groups with disks for database={database} after {timeout_seconds}s; '
+            f'last={last.get("ids")}'
         )
-    return int(last_data['data']['StorageGroups'][0]['GroupId'])
-
-
-def get_tenant_storage_disk_location(base_url, database, token='root@builtin', timeout_seconds=60):
-    """Returns (node_id, pdisk_id) of a pdisk holding a vdisk of the database storage groups."""
-    last_data = {}
-
-    def ready():
-        data = get_storage_groups(
-            base_url,
-            database,
-            token,
-            fields_required='GroupId,VDisk,PDisk,NodeId,PDiskId',
-            timeout=60,
-        )
-        last_data['data'] = data
-        for group in data.get('StorageGroups') or []:
-            for vdisk in group.get('VDisks') or []:
-                pdisk = vdisk.get('PDisk') or {}
-                # PDiskId is reported as "<node_id>-<pdisk_id>"
-                pdisk_id_str = str(pdisk.get('PDiskId') or '')
-                if '-' in pdisk_id_str:
-                    node_id_str, _, local_pdisk_id_str = pdisk_id_str.partition('-')
-                    last_data['location'] = (int(node_id_str), int(local_pdisk_id_str))
-                    return True
-        return False
-
-    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
-        raise AssertionError(
-            f'no pdisk id found for database={database} after {timeout_seconds}s; '
-            f'last={last_data.get("data")}'
-        )
-    return last_data['location']
+    return last['ids']
 
 
 def get_unknown_node_id(base_url, token='root@builtin'):

@@ -2,7 +2,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
-#include <ydb/core/base/auth.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -153,19 +152,43 @@ public:
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvPDiskStateResponse>> PDiskStateResponse;
     ui64 PDiskStateRequestsInFlight = 0;
 
+    // A set of ids requested by a query param. The pending part is consumed (cleared) as soon as
+    // the corresponding filter has been applied to the group view, while the requested part stays
+    // intact - it's needed to validate that the request doesn't reach out of the database.
+    template<typename TId>
+    struct TIdsFilter {
+        std::unordered_set<TId> Requested; // as they came from the query params
+        std::unordered_set<TId> Pending; // not applied to the group view yet
+
+        void Parse(const TString& value) {
+            SplitIds(value, ',', Pending);
+            Requested = Pending;
+        }
+
+        bool RequestedAnything() const {
+            return !Requested.empty();
+        }
+
+        bool IsPending() const {
+            return !Pending.empty();
+        }
+
+        bool IsPending(const TId& id) const {
+            return Pending.count(id) != 0;
+        }
+
+        void Applied() {
+            Pending.clear();
+        }
+    };
+
     TString Filter;
-    std::unordered_set<TString> DatabaseStoragePools; // pre-filter, cleared once it has been applied
-    std::unordered_set<TString> DatabaseStoragePoolNames; // the same pools, kept for the scope validation
+    std::unordered_set<TString> DatabaseStoragePools; // storage pools of the requested database
+    bool DatabaseStoragePoolsApplied = false; // the pre-filter by DatabaseStoragePools is already applied
     std::unordered_set<TString> FilterStoragePools;
-    // Filter* sets may be cleared while applying filters, so the initially requested ids
-    // are kept separately - they are needed to validate the scope of the request.
-    std::unordered_set<TGroupId> FilterGroupIds;
-    std::unordered_set<TNodeId> FilterNodeIds;
-    std::unordered_set<ui32> FilterPDiskIds;
-    std::unordered_set<TGroupId> InitialFilterGroupIds;
-    std::unordered_set<TNodeId> InitialFilterNodeIds;
-    std::unordered_set<ui32> InitialFilterPDiskIds;
-    bool StrictDatabaseOnlyToken = false;
+    TIdsFilter<TGroupId> FilterGroupIds;
+    TIdsFilter<TNodeId> FilterNodeIds;
+    TIdsFilter<ui32> FilterPDiskIds;
 
     enum class EWith {
         Everything,
@@ -842,25 +865,22 @@ public:
         if (!filterStoragePool.empty()) {
             FilterStoragePools.emplace(filterStoragePool);
         }
-        SplitIds(Params.Get("node_id"), ',', FilterNodeIds);
-        SplitIds(Params.Get("pdisk_id"), ',', FilterPDiskIds);
-        SplitIds(Params.Get("group_id"), ',', FilterGroupIds);
-        InitialFilterNodeIds = FilterNodeIds;
-        InitialFilterPDiskIds = FilterPDiskIds;
-        InitialFilterGroupIds = FilterGroupIds;
+        FilterNodeIds.Parse(Params.Get("node_id"));
+        FilterPDiskIds.Parse(Params.Get("pdisk_id"));
+        FilterGroupIds.Parse(Params.Get("group_id"));
         if (!FilterStoragePools.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
         }
-        if (!FilterNodeIds.empty()) {
+        if (FilterNodeIds.IsPending()) {
             FieldsRequired.set(+EGroupFields::NodeId);
             NeedFilter = true;
         }
-        if (!FilterPDiskIds.empty()) {
+        if (FilterPDiskIds.IsPending()) {
             FieldsRequired.set(+EGroupFields::PDiskId);
             NeedFilter = true;
         }
-        if (!FilterGroupIds.empty()) {
+        if (FilterGroupIds.IsPending()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
         }
@@ -947,7 +967,6 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()));
         if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
             // fields that are not available for database users
             FieldsRequired.reset(+EGroupFields::NodeId);
@@ -967,14 +986,14 @@ public:
         // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
         // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
         // These fields are not added to FieldsRequested, so they are not rendered in the response.
-        if (StrictDatabaseOnlyToken) {
-            if (!InitialFilterGroupIds.empty() || !InitialFilterNodeIds.empty() || !InitialFilterPDiskIds.empty()) {
+        if (IsStrictDatabaseOnlyRequest()) {
+            if (FilterGroupIds.RequestedAnything() || FilterNodeIds.RequestedAnything() || FilterPDiskIds.RequestedAnything()) {
                 FieldsRequired.set(+EGroupFields::PoolName);
             }
-            if (!InitialFilterNodeIds.empty()) {
+            if (FilterNodeIds.RequestedAnything()) {
                 FieldsRequired.set(+EGroupFields::NodeId);
             }
-            if (!InitialFilterPDiskIds.empty()) {
+            if (FilterPDiskIds.RequestedAnything()) {
                 FieldsRequired.set(+EGroupFields::PDiskId);
             }
         }
@@ -1037,16 +1056,19 @@ public:
                 scope.NodeIds.insert(nodeId);
             }
         }
-        if (DatabaseStoragePoolNames.empty() || !FieldsAvailable.test(+EGroupFields::PoolName)) {
+        if (DatabaseStoragePools.empty() || !FieldsAvailable.test(+EGroupFields::PoolName)) {
             return scope; // we don't know which groups belong to the database
         }
         for (const TGroup& group : GroupData) {
-            if (DatabaseStoragePoolNames.count(group.PoolName)) {
+            if (DatabaseStoragePools.count(group.PoolName)) {
                 scope.GroupIds.insert(group.GroupId);
             }
         }
-        // VSlotsByVSlotId is filled from the BS Controller vslots response and holds every vslot
-        // of the cluster, so - unlike TGroup::VDisks - it's not affected by the applied filters.
+        // The disks of a group could also be taken from TGroup::VDisks, but GroupView (and hence
+        // the groups whose VDisks are filled in) shrinks every time a filter is applied, so by the
+        // time we get here the disks of a group filtered out by, say, "with=space" would be missing
+        // and its node would look foreign. VSlotsByVSlotId is a plain index over the BS Controller
+        // vslots response: it holds every vslot of the cluster and no filter ever touches it.
         for (const auto& [vslotId, info] : VSlotsByVSlotId) {
             if (info && scope.GroupIds.count(info->GetGroupId())) {
                 scope.NodeIds.insert(vslotId.NodeId);
@@ -1058,8 +1080,8 @@ public:
 
     // Strict database-only users must not be able to address storage objects outside their database.
     // Returns true if the response has been already sent.
-    bool ReplyAndPassAwayIfStorageIdsAreOutOfDatabase() {
-        if (InitialFilterGroupIds.empty() && InitialFilterNodeIds.empty() && InitialFilterPDiskIds.empty()) {
+    bool DenyRequestIfStorageIdsAreOutOfDatabase() {
+        if (!FilterGroupIds.RequestedAnything() && !FilterNodeIds.RequestedAnything() && !FilterPDiskIds.RequestedAnything()) {
             return false;
         }
         const TDatabaseStorageScope scope = GetDatabaseStorageScope();
@@ -1072,11 +1094,11 @@ public:
             return false;
         };
         TStringBuf objects;
-        if (outOfScope(InitialFilterGroupIds, scope.GroupIds)) {
+        if (outOfScope(FilterGroupIds.Requested, scope.GroupIds)) {
             objects = "storage groups";
-        } else if (outOfScope(InitialFilterNodeIds, scope.NodeIds)) {
+        } else if (outOfScope(FilterNodeIds.Requested, scope.NodeIds)) {
             objects = "nodes";
-        } else if (outOfScope(InitialFilterPDiskIds, scope.PDiskIds)) {
+        } else if (outOfScope(FilterPDiskIds.Requested, scope.PDiskIds)) {
             objects = "PDisk identifiers";
         } else {
             return false;
@@ -1090,7 +1112,7 @@ public:
 
     void ApplyFilter() {
         // database pre-filter, affects TotalGroups count
-        if (!DatabaseStoragePools.empty()) {
+        if (!DatabaseStoragePools.empty() && !DatabaseStoragePoolsApplied) {
             if (FieldsAvailable.test(+EGroupFields::PoolName)) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
@@ -1099,7 +1121,7 @@ public:
                     }
                 }
                 GroupView.swap(groupView);
-                DatabaseStoragePools.clear();
+                DatabaseStoragePoolsApplied = true;
                 FoundGroups = TotalGroups = GroupView.size();
                 GroupsByGroupId.clear();
             } else {
@@ -1107,16 +1129,16 @@ public:
             }
         }
         // group id pre-filter, affects TotalGroups count
-        if (!FilterGroupIds.empty()) {
+        if (FilterGroupIds.IsPending()) {
             TGroupView groupView;
             for (TGroup* group : GroupView) {
-                if (FilterGroupIds.count(group->GroupId)) {
+                if (FilterGroupIds.IsPending(group->GroupId)) {
                     groupView.push_back(group);
                 }
             }
             GroupView.swap(groupView);
             FoundGroups = TotalGroups = GroupView.size();
-            FilterGroupIds.clear();
+            FilterGroupIds.Applied();
             GroupsByGroupId.clear();
         }
         // storage pool pre-filter, affects TotalGroups count
@@ -1137,12 +1159,12 @@ public:
             }
         }
         // node_id + pdisk_id pre-filter, affects TotalGroups count
-        if (!FilterNodeIds.empty() && !FilterPDiskIds.empty()) {
+        if (FilterNodeIds.IsPending() && FilterPDiskIds.IsPending()) {
             if (FieldsAvailable.test(+EGroupFields::NodeId) && FieldsAvailable.test(+EGroupFields::PDiskId)) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
                     for (const auto& vdisk : group->VDisks) {
-                        if (FilterNodeIds.count(vdisk.VSlotId.NodeId) && FilterPDiskIds.count(vdisk.VSlotId.PDiskId)) {
+                        if (FilterNodeIds.IsPending(vdisk.VSlotId.NodeId) && FilterPDiskIds.IsPending(vdisk.VSlotId.PDiskId)) {
                             groupView.push_back(group);
                             break;
                         }
@@ -1150,20 +1172,20 @@ public:
                 }
                 GroupView.swap(groupView);
                 FoundGroups = TotalGroups = GroupView.size();
-                FilterNodeIds.clear();
-                FilterPDiskIds.clear();
+                FilterNodeIds.Applied();
+                FilterPDiskIds.Applied();
                 GroupsByGroupId.clear();
             } else {
                 return;
             }
         }
         // node_id pre-filter, affects TotalGroups count
-        if (!FilterNodeIds.empty()) {
+        if (FilterNodeIds.IsPending()) {
             if (FieldsAvailable.test(+EGroupFields::NodeId)) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
                     for (const auto& vdisk : group->VDisks) {
-                        if (FilterNodeIds.count(vdisk.VSlotId.NodeId)) {
+                        if (FilterNodeIds.IsPending(vdisk.VSlotId.NodeId)) {
                             groupView.push_back(group);
                             break;
                         }
@@ -1171,19 +1193,19 @@ public:
                 }
                 GroupView.swap(groupView);
                 FoundGroups = TotalGroups = GroupView.size();
-                FilterNodeIds.clear();
+                FilterNodeIds.Applied();
                 GroupsByGroupId.clear();
             } else {
                 return;
             }
         }
         // pdisk_id pre-filter, affects TotalGroups count
-        if (!FilterPDiskIds.empty()) {
+        if (FilterPDiskIds.IsPending()) {
             if (FieldsAvailable.test(+EGroupFields::PDiskId)) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
                     for (const auto& vdisk : group->VDisks) {
-                        if (FilterPDiskIds.count(vdisk.VSlotId.PDiskId)) {
+                        if (FilterPDiskIds.IsPending(vdisk.VSlotId.PDiskId)) {
                             groupView.push_back(group);
                             break;
                         }
@@ -1191,7 +1213,7 @@ public:
                 }
                 GroupView.swap(groupView);
                 FoundGroups = TotalGroups = GroupView.size();
-                FilterPDiskIds.clear();
+                FilterPDiskIds.Applied();
                 GroupsByGroupId.clear();
             } else {
                 return;
@@ -1256,7 +1278,7 @@ public:
                 FilterGroup.clear();
                 GroupsByGroupId.clear();
             }
-            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
+            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || FilterNodeIds.IsPending() || FilterPDiskIds.IsPending() || FilterGroupIds.IsPending() || !FilterGroup.empty();
             FoundGroups = GroupView.size();
         }
     }
@@ -1527,10 +1549,10 @@ public:
         if (!FilterStoragePools.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PoolName)) {
             return true;
         }
-        if (!FilterNodeIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::NodeId)) {
+        if (FilterNodeIds.IsPending() && NeedToWaitForFieldBeforeHive(EGroupFields::NodeId)) {
             return true;
         }
-        if (!FilterPDiskIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PDiskId)) {
+        if (FilterPDiskIds.IsPending() && NeedToWaitForFieldBeforeHive(EGroupFields::PDiskId)) {
             return true;
         }
         if (With == EWith::MissingDisks && NeedToWaitForFieldBeforeHive(EGroupFields::MissingDisks)) {
@@ -1797,7 +1819,6 @@ public:
                     for (const auto& storagePool : domainDescription->Description.GetStoragePools()) {
                         TString storagePoolName = storagePool.GetName();
                         DatabaseStoragePools.emplace(storagePoolName);
-                        DatabaseStoragePoolNames.emplace(storagePoolName);
                     }
                     NeedFilter = true;
                 }
@@ -2399,7 +2420,7 @@ public:
 
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
-        if (StrictDatabaseOnlyToken && ReplyAndPassAwayIfStorageIdsAreOutOfDatabase()) {
+        if (IsStrictDatabaseOnlyRequest() && DenyRequestIfStorageIdsAreOutOfDatabase()) {
             return;
         }
         ApplyEverything();

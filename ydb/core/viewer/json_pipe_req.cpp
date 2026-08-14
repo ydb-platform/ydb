@@ -1028,26 +1028,30 @@ bool TViewerPipeClient::AreDatabaseNodesKnown() const {
         (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk());
 }
 
-bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds) {
+bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
+    if (!StrictDatabaseOnlyRequest) {
+        StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
+    }
+    return *StrictDatabaseOnlyRequest;
+}
+
+bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds) {
     if (nodeIds.empty()) {
         return false;
     }
-    auto accessDenied = [this]() {
-        ReplyAndPassAway(
-            GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
-            "Access denied");
-        return true;
-    };
-    if (!AreDatabaseNodesKnown()) {
-        // We can't validate the scope of the requested nodes, and this is an access check,
-        // so we deny the request instead of silently letting it through.
-        return accessDenied();
+    // We can't validate the scope of the requested nodes without the database node list, and this
+    // is an access check, so an unresolved database denies the request instead of letting it through.
+    std::unordered_set<TNodeId> databaseNodes;
+    if (AreDatabaseNodesKnown()) {
+        const auto nodes = GetDatabaseNodes();
+        databaseNodes.insert(nodes.begin(), nodes.end());
     }
-    const auto databaseNodes = GetDatabaseNodes();
-    const auto nodesSet = std::unordered_set<TNodeId>(databaseNodes.begin(), databaseNodes.end());
     for (const auto& nodeId : nodeIds) {
-        if (!nodesSet.count(nodeId)) {
-            return accessDenied();
+        if (!databaseNodes.count(nodeId)) {
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
+                "Access denied");
+            return true;
         }
     }
     return false;
@@ -1383,14 +1387,6 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
     }
     auto request = GetRequest();
-    if (Params.Has("direct") && FromStringWithDefault<bool>(Params.Get("direct"), false) &&
-        IsStrictDatabaseOnlyToken(AppData(), TString(request.GetUserTokenObject()))
-    ) {
-        ReplyAndPassAway(
-            GETHTTPACCESSDENIED("text/plain", "Direct requests are not allowed for database-scoped access"),
-            "Access denied");
-        return true;
-    }
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;

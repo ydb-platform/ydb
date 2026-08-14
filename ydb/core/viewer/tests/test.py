@@ -812,10 +812,7 @@ class TestViewer(object):
             'database': cls.dedicated_db,
             'fields_required': 'VDisk,PDisk,NodeId,PDiskId',
         }
-        probe_visibility = pdisk_visibility(cls.get_viewer("/storage/groups", {
-            **params,
-            'with': 'all',
-        }))
+        probe_visibility = pdisk_visibility(cls.get_viewer("/storage/groups", params))
         pdisk_id = next((entry['PDiskId'] for entry in probe_visibility if entry['HasPDisk']), None)
         request_params = {
             **params,

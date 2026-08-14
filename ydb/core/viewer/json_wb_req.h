@@ -27,7 +27,6 @@ public:
     using TBase::Event;
     using TBase::ReplyAndPassAway;
     TJsonSettings JsonSettings;
-    bool StrictDatabaseOnlyToken = false;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -47,22 +46,21 @@ public:
         return nodeIds;
     }
 
-    // Strict database-only tokens are allowed to request the nodes of their database only.
+    // Strict database-only users are allowed to ask the nodes of their database only.
     // Must be called after NeedToRedirect(), otherwise the database nodes are not resolved yet.
     // Returns true if the response has been already sent.
-    bool ReplyAndPassAwayIfNodeIdsAreOutOfDatabase() {
-        StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(TBase::GetRequest().GetUserTokenObject()));
-        if (!StrictDatabaseOnlyToken) {
+    bool DenyRequestIfNodeIdsAreOutOfDatabase() {
+        if (!TBase::IsStrictDatabaseOnlyRequest()) {
             return false;
         }
-        return TBase::ReplyAndPassAwayIfNodesAreOutOfDatabase(GetNodeIdsFromParams());
+        return TBase::DenyRequestIfNodesAreOutOfDatabase(GetNodeIdsFromParams());
     }
 
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
             return;
         }
-        if (ReplyAndPassAwayIfNodeIdsAreOutOfDatabase()) {
+        if (DenyRequestIfNodeIdsAreOutOfDatabase()) {
             return;
         }
         std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
@@ -95,9 +93,9 @@ public:
                     return ReplyAndPassAway();
                 }
             }
-            if (StrictDatabaseOnlyToken && TBase::RequestSettings.FilterNodeIds.empty()) {
-                // For StrictDatabaseOnlyToken if a database has no registered nodes,
-                // we report 200 with an empty response, not with a cluster nodes.
+            if (TBase::RequestSettings.FilterNodeIds.empty() && TBase::IsStrictDatabaseOnlyRequest()) {
+                // If a database has no registered nodes, a strict database-only user gets
+                // 200 with an empty response, not the nodes of the whole cluster.
                 return ReplyAndPassAway();
             }
         }

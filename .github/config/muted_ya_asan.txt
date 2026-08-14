@@ -530,6 +530,7 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidIndexRef
 ydb/core/kqp/ut/view TCreateAndDropViewTest.ParsingSecurityInvoker
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
+ydb/core/mind/hive/ut THiveTest.TestCheckSubHiveMigrationWithReboots
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldSuicideOnPoisonByBlockedGeneration
@@ -946,6 +947,7 @@ ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[requ
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_healthcheck_authentication-no_schema_grants]
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_healthcheck_authentication-with_schema_grants]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v1-std]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
@@ -1114,6 +1116,7 @@ ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestToolsOpenAI.test_doc
 ydb/tests/olap data_read_correctness.py.TestDataReadPerformanceNoIntersections.test
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_to_compression[zstd_20_compression-algorithm=zstd,level=20]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
+ydb/tests/olap/column_compression/alter py3test.[*/*] chunk
 ydb/tests/olap/s3_import py3test.[*/*] chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export
@@ -1139,6 +1142,7 @@ ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.te
 ydb/tests/tools/kqprun/tests py3test.sole chunk
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_rename_selected_cluster_config_updates_state
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_selecting_agents_overview_card_opens_agents_tab
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine

@@ -647,8 +647,8 @@ private:
 
     void SetupMetadata();
     bool SetupTtl();
-    void SetupCleanupPortions();
-    void SetupCleanupTables();
+    void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
+    void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();
     void SetupGC();
 

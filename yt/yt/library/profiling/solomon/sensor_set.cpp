@@ -55,8 +55,8 @@ void TSensorSet::ValidateOptions(const TSensorOptions& options)
 {
     if (!Options_.IsCompatibleWith(options)) {
         OnError(TError("Conflicting sensor settings")
-            << TErrorAttribute("current", ToString(Options_))
-            << TErrorAttribute("provided", ToString(options)));
+            .With("current", ToString(Options_))
+            .With("provided", ToString(options)));
     }
 }
 
@@ -327,7 +327,7 @@ int TSensorSet::ReadSensorValues(
 {
     if (!Error_.IsOK()) {
         THROW_ERROR_EXCEPTION("Broken sensor")
-            << Error_;
+            .With(Error_);
     }
 
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
@@ -405,8 +405,8 @@ void TSensorSet::InitializeType(ESensorType type)
 
     if (Type_ && *Type_ != type) {
         OnError(TError("Conflicting sensor types")
-            << TErrorAttribute("expected", *Type_)
-            << TErrorAttribute("provided", type));
+            .With("expected", *Type_)
+            .With("provided", type));
     }
 
     if (!Type_) {

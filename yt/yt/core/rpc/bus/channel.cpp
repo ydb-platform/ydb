@@ -841,7 +841,7 @@ private:
                         responseHandler,
                         TStringBuf("Request serialization failed"),
                         TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                            << requestMessageOrError);
+                            .With(requestMessageOrError));
                     return;
                 }
 
@@ -1150,7 +1150,7 @@ private:
                     responseHandler,
                     TStringBuf("Request acknowledgment failed"),
                     TError(NRpc::EErrorCode::TransportError, "Request acknowledgment failed")
-                        << error);
+                        .With(error));
             }
         }
 
@@ -1171,7 +1171,7 @@ private:
 
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
-                    << TErrorAttribute("timeout", *requestControl->GetTimeout());
+                    .With("timeout", *requestControl->GetTimeout());
             }
 
             if (!HasTracingAttributes(detailedError)) {

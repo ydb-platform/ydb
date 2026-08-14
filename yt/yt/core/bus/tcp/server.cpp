@@ -384,7 +384,7 @@ protected:
                     CloseServerSocket();
 
                     THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
-                        << ex;
+                        .With(ex);
                 } else {
                     YT_TLOG_WARNING("Error binding socket, starting retry")
                         .With("Attempt", attempt + 1)

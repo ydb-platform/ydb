@@ -13,7 +13,12 @@ namespace {
 TVector<TBlockRange64> Collect(const TBlockRangeField& field)
 {
     TVector<TBlockRange64> result;
-    field.Enumerate([&](TBlockRange64 r) { result.push_back(r); });
+    field.Enumerate(
+        [&](TBlockRange64 r)
+        {
+            result.push_back(r);
+            return TBlockRangeField::EEnumerateContinuation::Continue;
+        });
     return result;
 }
 
@@ -315,6 +320,29 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldTest)
         UNIT_ASSERT_VALUES_EQUAL(3u, v.size());
         UNIT_ASSERT(v[0].Start < v[1].Start);
         UNIT_ASSERT(v[1].Start < v[2].Start);
+    }
+
+    Y_UNIT_TEST(EnumerateStopsAtCondition)
+    {
+        TBlockRangeField f;
+        f.Add(R(0, 5));
+        f.Add(R(10, 15));
+        f.Add(R(20, 25));
+
+        TVector<TBlockRange64> seen;
+        f.Enumerate(
+            [&](TBlockRange64 r)
+            {
+                seen.push_back(r);
+                return r.Start >= 10
+                           ? TBlockRangeField::EEnumerateContinuation::Stop
+                           : TBlockRangeField::EEnumerateContinuation::Continue;
+            });
+
+        // Visits first two ranges, then stops on the second.
+        UNIT_ASSERT_VALUES_EQUAL(2u, seen.size());
+        UNIT_ASSERT_VALUES_EQUAL(R(0, 5), seen[0]);
+        UNIT_ASSERT_VALUES_EQUAL(R(10, 15), seen[1]);
     }
 }
 

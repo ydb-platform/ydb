@@ -953,16 +953,16 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
         if (realmId) {
             // TODO(gritukan): Stop wrapping error one day.
             auto innerError = TError(NRpc::EErrorCode::NoSuchRealm, "Request realm is unknown")
-                << TErrorAttribute("service", serviceName)
-                << TErrorAttribute("realm_id", realmId);
+                .With("service", serviceName)
+                .With("realm_id", realmId);
             THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
-                << innerError;
+                .With(innerError);
         } else {
             THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
-                << TErrorAttribute("service", serviceName)
-                << TErrorAttribute("realm_id", realmId);
+                .With("service", serviceName)
+                .With("realm_id", realmId);
         }
     }
     auto& serviceMap = serviceMapIt->second;
@@ -970,8 +970,8 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     if (serviceIt == serviceMap.end()) {
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
-            << TErrorAttribute("service", serviceName)
-            << TErrorAttribute("realm_id", realmId);
+            .With("service", serviceName)
+            .With("realm_id", realmId);
     }
 
     return serviceIt->second;

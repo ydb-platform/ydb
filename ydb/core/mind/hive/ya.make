@@ -101,6 +101,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base

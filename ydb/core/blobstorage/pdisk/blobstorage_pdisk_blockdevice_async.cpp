@@ -442,6 +442,23 @@ class TRealBlockDevice : public IBlockDevice {
             , PCtx(device.PCtx)
         {}
 
+        // Whether the merged (cross-source) overestimation metric should be published
+        // via the legacy DeviceOverestimationRatio/DeviceNonperformanceMs sensors.
+        // Backed by an ICB control (default: enabled) so it can be toggled at runtime,
+        // without a cluster restart, in case the merged metric misbehaves.
+        bool UseDeviceOverestimationRatioMerged() const {
+            if (PCtx && PCtx->ActorSystem) {
+                if (auto *appData = PCtx->ActorSystem->AppData<TAppData>()) {
+                    if (appData->Icb) {
+                        if (auto control = appData->Icb->PDiskControls.UseDeviceOverestimationRatioMerged.AtomicLoad()) {
+                            return control->Get() != 0;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
         void FillCompletionAction(TCompletionAction *action, IAsyncIoOperation *op, EIoResult result) {
             action->TraceId = std::move(*op->GetTraceIdPtr());
             action->SetResult(result);
@@ -574,8 +591,6 @@ class TRealBlockDevice : public IBlockDevice {
                 ui64 estimated = (*Device.Mon.DeviceEstimatedCostNs - PrevEstimatedCostNs);
                 ui64 actual = (*Device.Mon.DeviceActualCostNs - PrevActualCostNs + OverestimationActualCostBiasNs);
                 const TOverestimationRatioResult ratioResult = ComputeOverestimationRatio(estimated, actual);
-                *Device.Mon.DeviceOverestimationRatio = ratioResult.OverestimationRatio;
-                *Device.Mon.DeviceNonperformanceMs = ratioResult.NonperformanceMs;
 
                 PrevEstimatedCostNs = *Device.Mon.DeviceEstimatedCostNs;
                 PrevActualCostNs = *Device.Mon.DeviceActualCostNs;
@@ -600,6 +615,18 @@ class TRealBlockDevice : public IBlockDevice {
                 // pure per-window sums, matching windowResult's own semantics.
                 MergedEstimatedNs = 0;
                 MergedActualNs = 0;
+
+                // The DeviceOverestimationRatio/DeviceNonperformanceMs sensors are the
+                // ones referenced by dashboards/alerts. By default (ICB control enabled)
+                // we publish the merged (cross-source) metric there instead of the
+                // legacy PDisk-only computation, since it accounts for IO_URING sources
+                // (DDisk / PersistentBuffer) sharing the same physical device. Disabling
+                // the control (no cluster restart required) reverts to the old behavior
+                // in case the new metric misbehaves.
+                const TOverestimationRatioResult& publishedResult = SelectPublishedOverestimationResult(
+                        UseDeviceOverestimationRatioMerged(), ratioResult, mergedRatioResult);
+                *Device.Mon.DeviceOverestimationRatio = publishedResult.OverestimationRatio;
+                *Device.Mon.DeviceNonperformanceMs = publishedResult.NonperformanceMs;
             }
 
             PrevEventGotAtCycle = eventGotAtCycle;

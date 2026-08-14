@@ -443,7 +443,8 @@ public:
 
         if (Settings.CollectUserFacingShards) {
             UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
-                record.HasNodeId() ? record.GetNodeId() : 0);
+                record.HasNodeId() ? record.GetNodeId() : 0,
+                record.GetStatus().GetCode(), record.GetFinished());
         }
 
         auto& shardState = ShardToState.at(shardId);
@@ -817,6 +818,10 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
+        if (Settings.CollectUserFacingShards) {
+            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         if (LookupActorSpan) {
             LookupActorSpan.EndError(message);
         }

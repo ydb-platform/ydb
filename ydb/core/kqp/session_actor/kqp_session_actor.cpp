@@ -1719,8 +1719,8 @@ public:
                 const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
                 using TLevels = TComponentTracingLevels::TQueryProcessor;
                 request.UserFacingTraceCollectionMode =
-                      level >= TLevels::Basic ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
-                     :                           Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                      level >= TLevels::Detailed ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
+                     :                              Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
             }
             request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
@@ -2371,7 +2371,7 @@ public:
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
                 .CollectUserFacingShards = QueryState && QueryState->UserFacingTraceId
-                    && QueryState->UserFacingTraceId.GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Basic,
+                    && QueryState->UserFacingTraceId.GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Diagnostic,
             };
 
             settings.UserCtx = CreateUserContext();

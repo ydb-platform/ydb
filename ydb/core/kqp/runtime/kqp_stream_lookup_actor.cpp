@@ -675,7 +675,8 @@ private:
             if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
                 retryAttempts = it->second.RetryAttempts;
             }
-            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), retryAttempts);
+            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), retryAttempts, 0,
+                record.GetStatus().GetCode(), record.GetFinished());
         }
 
         TStringBuilder txLocks;
@@ -1431,6 +1432,10 @@ private:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        if (IngressStats.CollectFull()) {
+            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));

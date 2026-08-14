@@ -5,6 +5,7 @@ package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 message TKqpStatsCompile {
     bool FromCache = 1;
@@ -70,6 +71,8 @@ message TKqpShardReadStats {
     uint64 Rows = 5;
     uint32 NodeId = 6;
     ETiming Timing = 7;
+    Ydb.StatusIds.StatusCode Status = 8;
+    bool Finished = 9;
 }
 
 // extra for NYql.NDqProto.TDqTaskStats

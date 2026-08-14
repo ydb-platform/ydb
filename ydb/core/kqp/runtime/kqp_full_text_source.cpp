@@ -2996,6 +2996,10 @@ public:
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
+        if (IngressStats.CollectFull()) {
+            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         NYql::TIssue issue(message);
         for (const auto& subIssue : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
@@ -3640,14 +3644,15 @@ public:
             {"txLocks", txLocks},
             {"brokenTxLocks", borkenTxlocks});
 
+        if (IngressStats.CollectFull()) {
+            UserFacingShardReads.OnFinish(readInfo.ShardId, record.GetRowCount(),
+                ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0,
+                record.GetStatus().GetCode(), record.GetFinished());
+        }
+
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);
             return;
-        }
-
-        if (IngressStats.CollectFull()) {
-            UserFacingShardReads.OnFinish(readInfo.ShardId, record.GetRowCount(),
-                ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0);
         }
 
         auto& msg = *ev->Get();

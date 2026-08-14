@@ -1044,7 +1044,8 @@ public:
         if (IngressStats.CollectFull()) {
             UserFacingShardReads.OnFinish(Reads[id].Shard->TabletId, record.GetRowCount(),
                 Reads[id].Shard->RetryAttempt,
-                Reads[id].Shard->NodeId ? *Reads[id].Shard->NodeId : 0);
+                Reads[id].Shard->NodeId ? *Reads[id].Shard->NodeId : 0,
+                record.GetStatus().GetCode(), record.GetFinished());
         }
 
         TStringBuilder txLocks;
@@ -1633,6 +1634,10 @@ public:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        if (IngressStats.CollectFull()) {
+            UserFacingShardReads.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));

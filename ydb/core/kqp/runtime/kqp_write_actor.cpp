@@ -4615,6 +4615,7 @@ public:
         Counters->BufferActorImmediateCommits->Inc();
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        UserFacingCommitApplyShards.Start = OperationStartTime;
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
@@ -5799,9 +5800,16 @@ public:
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
         if (CollectUserFacingShards && preparedInfo.ShardId) {
-            auto& ack = UserFacingShardAcks[preparedInfo.ShardId];
-            ack.ShardId = preparedInfo.ShardId;
-            ack.PreparedAt = TInstant::Now();
+            if (auto it = UserFacingShardAcks.find(preparedInfo.ShardId); it != UserFacingShardAcks.end()) {
+                it->second.PreparedAt = TInstant::Now();
+            } else if (UserFacingShardAcks.size() < MaxUserFacingCommitShards) {
+                UserFacingShardAcks.emplace(preparedInfo.ShardId, TUserFacingShardCommitAck{
+                    .ShardId = preparedInfo.ShardId,
+                    .PreparedAt = TInstant::Now(),
+                });
+            } else {
+                ++UserFacingShardAcksTruncated;
+            }
         }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
@@ -5841,9 +5849,16 @@ public:
                 ("shardId", shardId);
         }
         if (CollectUserFacingShards && shardId) {
-            auto& ack = UserFacingShardAcks[shardId];
-            ack.ShardId = shardId;
-            ack.CommittedAt = TInstant::Now();
+            if (auto it = UserFacingShardAcks.find(shardId); it != UserFacingShardAcks.end()) {
+                it->second.CommittedAt = TInstant::Now();
+            } else if (UserFacingShardAcks.size() < MaxUserFacingCommitShards) {
+                UserFacingShardAcks.emplace(shardId, TUserFacingShardCommitAck{
+                    .ShardId = shardId,
+                    .CommittedAt = TInstant::Now(),
+                });
+            } else {
+                ++UserFacingShardAcksTruncated;
+            }
         }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
@@ -5862,10 +5877,8 @@ public:
             result->CommitPrepareShards = UserFacingCommitPrepareShards;
             result->CommitCoordinator = UserFacingCommitCoordinator;
             result->CommitApplyShards = UserFacingCommitApplyShards;
+            result->ShardCommitAcksTruncated = UserFacingShardAcksTruncated;
             for (const auto& [shardId, ack] : UserFacingShardAcks) {
-                if (result->ShardCommitAcks.size() >= MaxUserFacingShardReadsPerTask) {
-                    break;
-                }
                 result->ShardCommitAcks.push_back(ack);
             }
             Send<ESendingType::Tail>(ExecuterActorId, result.release());
@@ -6270,6 +6283,7 @@ private:
     std::optional<TCommitTimestamp> CommitTimestamp;
     bool CollectUserFacingShards = false;
     std::unordered_map<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
+    size_t UserFacingShardAcksTruncated = 0;
     TUserFacingTraceTimeline::TWindow UserFacingCommitPrepareShards;
     TUserFacingTraceTimeline::TWindow UserFacingCommitCoordinator;
     TUserFacingTraceTimeline::TWindow UserFacingCommitApplyShards;

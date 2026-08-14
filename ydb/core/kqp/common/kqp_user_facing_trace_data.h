@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <util/datetime/base.h>
@@ -60,8 +61,10 @@ inline TUserFacingTaskSnapshot MakeUserFacingTaskSnapshot(const NYql::NDqProto::
         NKqpProto::TKqpTaskExtraStats extra;
         if (task.GetExtra().UnpackTo(&extra)) {
             s.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
-            s.ShardReads.assign(extra.GetShardReads().begin(), extra.GetShardReads().end());
-            s.ShardReadsTruncated = extra.GetShardReadsTruncated();
+            const size_t count = Min<size_t>(extra.GetShardReads().size(), MaxUserFacingShardReadsPerTask);
+            s.ShardReads.assign(extra.GetShardReads().begin(), extra.GetShardReads().begin() + count);
+            s.ShardReadsTruncated = extra.GetShardReadsTruncated()
+                + extra.GetShardReads().size() - count;
         }
     }
     for (const auto& source : task.GetSources()) {
@@ -93,19 +96,35 @@ constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
 class TUserFacingShardReadCollector {
 public:
     void OnStart(ui64 shardId) {
-        auto& shard = Reads[shardId];
+        auto it = Reads.find(shardId);
+        if (it == Reads.end()) {
+            if (Reads.size() >= MaxUserFacingShardReadsPerTask) {
+                ++Dropped;
+                return;
+            }
+            it = Reads.emplace(shardId, NKqpProto::TKqpShardReadStats{}).first;
+        }
+        auto& shard = it->second;
         shard.SetShardId(shardId);
         if (!shard.GetStartTimeMs()) {
             shard.SetStartTimeMs(TInstant::Now().MilliSeconds());
         }
     }
 
-    void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0) {
-        auto& shard = Reads[shardId];
+    void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0,
+            Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+            bool finished = true) {
+        auto it = Reads.find(shardId);
+        if (it == Reads.end()) {
+            return;
+        }
+        auto& shard = it->second;
         shard.SetShardId(shardId);
         shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
         shard.SetRows(shard.GetRows() + rows);
         shard.SetRetries(Max(shard.GetRetries(), retries));
+        shard.SetStatus(status);
+        shard.SetFinished(finished || status != Ydb::StatusIds::SUCCESS);
         if (nodeId) {
             shard.SetNodeId(nodeId);
         }
@@ -113,6 +132,18 @@ public:
 
     bool Empty() const {
         return Reads.empty();
+    }
+
+    void OnError(Ydb::StatusIds::StatusCode status) {
+        const ui64 nowMs = TInstant::Now().MilliSeconds();
+        for (auto& [shardId, shard] : Reads) {
+            Y_UNUSED(shardId);
+            if (!shard.GetFinished()) {
+                shard.SetFinishTimeMs(nowMs);
+                shard.SetStatus(status);
+                shard.SetFinished(true);
+            }
+        }
     }
 
     void Export(NKqpProto::TKqpTaskExtraStats& extraStats, ui32 totalRetries) const {
@@ -131,14 +162,19 @@ public:
             extraStats.SetShardReadsTruncated(
                 extraStats.GetShardReadsTruncated() + Reads.size() - exported);
         }
+        if (Dropped > 0) {
+            extraStats.SetShardReadsTruncated(extraStats.GetShardReadsTruncated() + Dropped);
+        }
     }
 
 private:
     std::unordered_map<ui64, NKqpProto::TKqpShardReadStats> Reads;
+    size_t Dropped = 0;
 };
 
 // Tasks compete globally by duration for the budget left after phases and stages.
 constexpr size_t MaxUserFacingSpansPerQuery = 5000;
+constexpr size_t MaxUserFacingCommitShards = 64;
 
 enum class EUserFacingTracePhase : size_t {
     ResolveTables = 0,
@@ -176,6 +212,33 @@ struct TUserFacingTraceTimeline {
     }
 };
 
+inline TUserFacingTraceTimeline::TWindow FitUserFacingRemoteWindow(
+        TUserFacingTraceTimeline::TWindow window,
+        const TUserFacingTraceTimeline::TWindow& parent) {
+    if (window.Start == TInstant::Zero() || window.End < window.Start) {
+        return {};
+    }
+    if (window.End == window.Start) {
+        window.End += TDuration::MicroSeconds(1);
+    }
+    if (!parent) {
+        return window;
+    }
+    const TDuration duration = window.End - window.Start;
+    const TDuration parentDuration = parent.End - parent.Start;
+    if (duration >= parentDuration) {
+        return parent;
+    }
+    if (window.Start < parent.Start) {
+        window.Start = parent.Start;
+        window.End = window.Start + duration;
+    } else if (window.End > parent.End) {
+        window.End = parent.End;
+        window.Start = window.End - duration;
+    }
+    return window;
+}
+
 struct TUserFacingShardCommitAck {
     ui64 ShardId = 0;
     TInstant PreparedAt;
@@ -210,6 +273,7 @@ struct TUserFacingTraceExecutionData {
     std::unordered_map<ui32, TUserFacingStageAgg> StageAggs;
     TUserFacingBufferLookupStats BufferLookup;
     std::vector<TUserFacingShardCommitAck> ShardCommitAcks;
+    size_t ShardCommitAcksTruncated = 0;
     // Unlike response stats, this snapshot is exported at the tracing collection depth.
     NYql::NDqProto::TDqExecutionStats ExecStats;
 };

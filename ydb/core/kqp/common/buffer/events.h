@@ -51,6 +51,7 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
     TUserFacingTraceTimeline::TWindow CommitCoordinator;
     TUserFacingTraceTimeline::TWindow CommitApplyShards;
     std::vector<TUserFacingShardCommitAck> ShardCommitAcks;
+    size_t ShardCommitAcksTruncated = 0;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

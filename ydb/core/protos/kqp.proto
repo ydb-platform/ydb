@@ -255,8 +255,8 @@ message TRlPath {
 message TProxyRequestHop {
     optional uint32 NodeId = 1;
     optional uint32 TargetNodeId = 2;
-    optional uint64 StartTimeUs = 3;
-    optional uint64 EndTimeUs = 4;
+    optional uint64 DurationUs = 3;
+    reserved 4;
 }
 
 message TEvQueryRequest {
@@ -271,7 +271,7 @@ message TEvQueryRequest {
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
     optional NActorsProto.TTraceId UserFacingTraceId = 10;
-    optional uint64 ProxyRequestStartTimeUs = 11;
+    reserved 11;
     repeated TProxyRequestHop ProxyRequestHops = 12;
 }
 

@@ -164,10 +164,10 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
         "Unexpected prepared query version: " << compiledVersion);
 
     PreparedQuery = CompileResult->PreparedQuery;
-    UpdateUserFacingRootSpanName(*this);
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }
+    UpdateUserFacingRootSpanName(*this);
     for (const auto& param : PreparedQuery->GetParameters()) {
         const auto& ast = CompileResult->GetAst();
         if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {
@@ -331,7 +331,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks, static_cast<bool>(UserFacingTraceId));
+        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks);
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
@@ -376,7 +376,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, static_cast<bool>(UserFacingTraceId));
+        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks);
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {

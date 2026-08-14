@@ -10,5 +10,6 @@ enum class ETableReadType {
 };
 
 bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType);
+const char* GetTableSinkModeVerb(NKikimrKqp::TKqpTableSinkSettings::EType mode);
 
 } // namespace NKikimr::NKqp

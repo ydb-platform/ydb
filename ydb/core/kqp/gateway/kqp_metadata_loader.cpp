@@ -17,6 +17,8 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <functional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
@@ -103,14 +105,17 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
     std::shared_ptr<TUserFacingCompileDependencyCollector> collector = {},
     EUserFacingCompileDependency dependency = EUserFacingCompileDependency::SchemeCache,
-    TString target = {})
+    TString target = {},
+    std::function<EUserFacingCompileStatus(const TResponse&)> extractStatus = {})
 {
     auto promise = NewPromise<TResult>();
     const TInstant start = TInstant::Now();
     auto tracedCallback = [callback = std::move(callback), collector = std::move(collector), dependency,
-            target = std::move(target), start](TPromise<TResult> promise, TResponse&& response) mutable {
+            target = std::move(target), extractStatus = std::move(extractStatus), start]
+            (TPromise<TResult> promise, TResponse&& response) mutable {
         if (collector) {
-            collector->Record(dependency, std::move(target), start, TInstant::Now());
+            collector->Record(dependency, std::move(target), start, TInstant::Now(),
+                extractStatus ? extractStatus(response) : EUserFacingCompileStatus::Unknown);
         }
         callback(std::move(promise), std::move(response));
     };
@@ -1449,7 +1454,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 promise.SetValue(ResultFromException<TResult>(e));
             }
         },
-        UserFacingCompileCollector, EUserFacingCompileDependency::SchemeCache, table
+        UserFacingCompileCollector, EUserFacingCompileDependency::SchemeCache, table,
+        [](const TResponse& response) {
+            if (!response.Request || response.Request->ResultSet.empty()) {
+                return EUserFacingCompileStatus::Error;
+            }
+            for (const auto& entry : response.Request->ResultSet) {
+                if (entry.Status != EStatus::Ok) {
+                    return EUserFacingCompileStatus::Error;
+                }
+            }
+            return EUserFacingCompileStatus::Ok;
+        }
     );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
@@ -1500,7 +1516,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->DataSize = s.BytesSize;
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
-        }, collector, EUserFacingCompileDependency::StatisticsService, table);
+        }, collector, EUserFacingCompileDependency::StatisticsService, table,
+        [](const NStat::TEvStatistics::TEvGetStatisticsResult& response) {
+            return response.Success && !response.StatResponses.empty()
+                ? EUserFacingCompileStatus::Ok : EUserFacingCompileStatus::Error;
+        });
     });
 }
 

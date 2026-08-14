@@ -67,8 +67,7 @@ public:
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
-        bool usePessimisticLocks,
-        bool collectUserFacingTrace)
+        bool usePessimisticLocks)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -89,6 +88,7 @@ public:
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
+        , UserFacingCompileCollector(std::make_shared<TUserFacingCompileDependencyCollector>())
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
@@ -97,9 +97,6 @@ public:
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
-        if (collectUserFacingTrace) {
-            UserFacingCompileCollector = std::make_shared<TUserFacingCompileDependencyCollector>();
-        }
         Config = BuildConfiguration(tableServiceConfig);
         PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
@@ -779,8 +776,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks,
-    bool collectUserFacingTrace)
+    bool usePessimisticLocks)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -788,7 +784,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks, collectUserFacingTrace);
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
 }
 
 } // namespace NKikimr::NKqp

@@ -427,6 +427,17 @@ public:
 
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
+
+    // CutHistory hooks.
+    virtual bool IsCSCutHistoryEnabled() const {
+        return false;
+    }
+
+    virtual void OnHistoryEntryNominated(const ui32 /*channel*/, const ui32 /*fromGeneration*/) {
+    }
+
+    virtual void OnHistoryEntryCut(const ui32 /*channel*/, const ui32 /*fromGeneration*/) {
+    }
 };
 
 class IKqpController {

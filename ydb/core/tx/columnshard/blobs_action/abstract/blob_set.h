@@ -83,6 +83,16 @@ public:
         return TGenStep(*Blobs.begin());
     }
 
+    // Returns true if no blob in the set has the given channel and generation in [fromGen, nextFromGen).
+    bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const {
+        for (const auto& blob : Blobs) {
+            if (blob.Channel() == channel && blob.Generation() >= fromGen && blob.Generation() < nextFromGen) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     template <class TActor>
         requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
     bool ExtractTo(const TGenStep& lessOrEqualThan, const ui32 countLimit, const TActor& actor) {

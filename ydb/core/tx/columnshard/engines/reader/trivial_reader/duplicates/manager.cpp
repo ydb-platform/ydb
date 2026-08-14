@@ -70,8 +70,12 @@ void TDuplicateManager::AbortAndPassAway(const TString& error) {
         TryFinishAbort();
         return;
     }
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_abort")("self", SelfId().ToString())("error", error)(
+        "merge_inflight", BordersFlowController.IsMergeInflight())("fetch_inflight", InflightExecutors)("filter_requests_inflight",
+        InflightFilterRequests)("pending_executors", PendingExecutors.size())("pending_filter_requests", PendingFilterRequests.size())(
+        "pending_next_after_merge", PendingNextAfterMerge.size())("borders", BordersFlowController.DebugString());
     AbortionFlag->Inc();
-    // Do not clear IsInflight: an in-flight TMergeBorders still owns the progressive merge state.
+    // Do not clear IsInflight: an in-flight TMergeBorders still owns the progressive filter state.
     BordersFlowController.AbortPendingMerges();
     PendingExecutors.clear();
     for (auto& ev : PendingFilterRequests) {
@@ -125,12 +129,11 @@ TDuplicateManager::TDuplicateManager(
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
-    , BordersFlowController(std::make_shared<TMergeContext>(Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
-                                GetFetchingColumns(), AbortionFlag),
-          TMergeRuntimeState(std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
-              context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
+    , BordersFlowController(
+          std::make_shared<TMergeContext>(Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
+              GetFetchingColumns(), AbortionFlag, PKSchema, IIndexInfo::GetSnapshotColumnNames(),
               GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
-              GetVersionBatch(TSnapshot::Max(), 0))), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+              GetVersionBatch(TSnapshot::Max(), 0)), TMergeRuntimeState(), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , HangTracker(inflightTimeout)
 {
@@ -234,7 +237,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         return;
     }
 
-    // Do not mutate BordersFlowController (Next) while a merge task owns progressive merge state.
+    // Do not mutate BordersFlowController (Next) while a merge task owns progressive filter state.
     if (BordersFlowController.IsMergeInflight()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
             "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")(
@@ -349,6 +352,10 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     auto& event = *ev->Get();
     AFL_VERIFY(event.MergeState.has_value());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_merge_result")("self", SelfId().ToString())(
+        "ok", event.Result.IsSuccess())("error", event.Result.IsSuccess() ? TString() : event.Result.GetErrorMessage())(
+        "state", event.MergeState->DebugString())("aborting", IsAborting())("filters", event.ReadyFilters.size())(
+        "borders", BordersFlowController.DebugString());
     BordersFlowController.ReturnMergeState(std::move(*event.MergeState));
     event.MergeState.reset();
     if (IsAborting()) {

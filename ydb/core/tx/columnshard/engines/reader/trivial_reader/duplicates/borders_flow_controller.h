@@ -20,7 +20,7 @@ private:
     };
 
     std::shared_ptr<TMergeContext> MergeContext;
-    // Present when no merge task owns the progressive Merger/FiltersBuilder.
+    // Present when no merge task owns the progressive FiltersBuilder/OpenBatches.
     std::optional<TMergeRuntimeState> IdleMergeState;
     std::map<NCommon::TReplaceKeyAdapter, TBorderInfo> Borders;
     std::set<NCommon::TReplaceKeyAdapter> WaitingBorders;
@@ -49,7 +49,7 @@ public:
     void Enqueue(const TEvBordersConstructionResult::TPtr& event);
 
     // Drop queued merges only. Keep IsInflight if a merge task is already on the conveyor
-    // so AbortAndPassAway cannot start another merge against the progressive merge state.
+    // so AbortAndPassAway cannot start another merge against the progressive filter state.
     void AbortPendingMerges();
 
     void OnReadyMergeBorders(const bool allowDrain = true);

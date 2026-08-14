@@ -10,21 +10,28 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-// Immutable-ish config shared by the controller and merge tasks (no Merger / FiltersBuilder).
+// Immutable-ish config shared by the controller and merge tasks (no FiltersBuilder / OpenBatches).
 struct TMergeContext {
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     bool IsReversed;
     std::shared_ptr<TPortionStore> Portions;
     std::map<ui32, std::shared_ptr<arrow::Field>> FetchingColumns;
     std::shared_ptr<const TAtomicCounter> AbortionFlag;
+    std::shared_ptr<arrow::Schema> PKSchema;
+    std::vector<std::string> VersionColumnNames;
+    NArrow::NMerger::TCursor MaxVersion;
+    NArrow::NMerger::TCursor MinUncommittedVersion;
 
     TMergeContext(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed,
         const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns,
-        const std::shared_ptr<const TAtomicCounter>& abortionFlag);
+        const std::shared_ptr<const TAtomicCounter>& abortionFlag, std::shared_ptr<arrow::Schema> pkSchema,
+        std::vector<std::string> versionColumnNames, NArrow::NMerger::TCursor maxVersion, NArrow::NMerger::TCursor minUncommittedVersion);
 
     bool IsAborted() const {
         return AbortionFlag && AbortionFlag->Val();
     }
+
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> MakeMerger() const;
 };
 
 class TMergeBorders: public NConveyor::ITask {
@@ -34,6 +41,7 @@ private:
     TMergeRuntimeState State;
     TEvBordersConstructionResult::TPtr Event;
     std::vector<NArrow::TSimpleRow> ReadyBorders;
+    ui64 TaskId = 0;
 
 private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;

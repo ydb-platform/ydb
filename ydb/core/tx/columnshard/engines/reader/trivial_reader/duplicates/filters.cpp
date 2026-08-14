@@ -98,6 +98,12 @@ void TFiltersBuilder::AddSource(const ui64 portionId, ui64 rowsCount) {
     AFL_VERIFY(Filters.emplace(portionId, TFilterInfo{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
 }
 
+ui32 TFiltersBuilder::GetProcessedRows(const ui64 portionId) const {
+    auto it = Filters.find(portionId);
+    AFL_VERIFY(it != Filters.end())("portionId", portionId);
+    return it->second.Filter.GetRecordsCount().value_or(0);
+}
+
 ui64 TFiltersBuilder::CountSources() const {
     return Filters.size();
 }

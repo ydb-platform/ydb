@@ -228,14 +228,25 @@ protected:
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
-            return false;
+        // SourceIdx is assigned per scan as constructors are popped from the heap.
+        // Concurrent inserts (uncommitted written portions) shift that index across
+        // TTxScan continuations, so resume must key off PortionId when it is present.
+        if (PortionId) {
+            if (*PortionId != entity.GetDeprecatedPortionId()) {
+                return false;
+            }
+        } else {
+            AFL_VERIFY(SourceIdx);
+            if (*SourceIdx != entity.GetEntityId()) {
+                return false;
+            }
         }
         if (!entity.GetEntityRecordsCount()) {
             usage = false;
         } else {
-            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
+            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount())(
+                                        "portion_id", PortionId.value_or(0))("entity_portion", entity.GetDeprecatedPortionId())(
+                                        "source_idx", SourceIdx.value_or(0))("entity_id", entity.GetEntityId());
             usage = RecordIndex < entity.GetEntityRecordsCount();
         }
         return true;

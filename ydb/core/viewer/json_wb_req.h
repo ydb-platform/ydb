@@ -27,6 +27,7 @@ public:
     using TBase::Event;
     using TBase::ReplyAndPassAway;
     TJsonSettings JsonSettings;
+    bool StrictDatabaseOnlyToken = false;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -36,22 +37,35 @@ public:
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
+    std::vector<TNodeId> GetNodeIdsFromParams() const {
         std::vector<TNodeId> nodeIds;
         SplitIds(TBase::Params.Get("node_id"), ',', nodeIds);
         std::replace(nodeIds.begin(),
                      nodeIds.end(),
                      (TNodeId)0,
                      TlsActivationContext->ActorSystem()->NodeId);
+        return nodeIds;
+    }
 
-        const bool strictDatabaseToken =
-            IsStrictDatabaseOnlyToken(AppData(), TString(TBase::GetRequest().GetUserTokenObject()));
-        if (strictDatabaseToken && TBase::ReplyAndPassAwayIfNodesAreOutOfDatabase(nodeIds)) {
+    // Strict database-only tokens are allowed to request the nodes of their database only.
+    // Must be called after NeedToRedirect(), otherwise the database nodes are not resolved yet.
+    // Returns true if the response has been already sent.
+    bool ReplyAndPassAwayIfNodeIdsAreOutOfDatabase() {
+        StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(TBase::GetRequest().GetUserTokenObject()));
+        if (!StrictDatabaseOnlyToken) {
+            return false;
+        }
+        return TBase::ReplyAndPassAwayIfNodesAreOutOfDatabase(GetNodeIdsFromParams());
+    }
+
+    void Bootstrap() override {
+        if (TBase::NeedToRedirect()) {
             return;
         }
+        if (ReplyAndPassAwayIfNodeIdsAreOutOfDatabase()) {
+            return;
+        }
+        std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {
                 TBase::RequestSettings.FilterNodeIds = nodeIds;
@@ -81,8 +95,8 @@ public:
                     return ReplyAndPassAway();
                 }
             }
-            if (strictDatabaseToken && TBase::RequestSettings.FilterNodeIds.empty()) {
-                // For strictDatabaseToken if a database has no registered nodes,
+            if (StrictDatabaseOnlyToken && TBase::RequestSettings.FilterNodeIds.empty()) {
+                // For StrictDatabaseOnlyToken if a database has no registered nodes,
                 // we report 200 with an empty response, not with a cluster nodes.
                 return ReplyAndPassAway();
             }

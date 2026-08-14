@@ -1023,31 +1023,31 @@ bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
+bool TViewerPipeClient::AreDatabaseNodesKnown() const {
+    return (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) ||
+        (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk());
+}
+
 bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds) {
-    return ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl({nodeIds.begin(), nodeIds.end()});
-}
-
-bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::unordered_set<TNodeId>& nodeIds) {
-    return ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(nodeIds);
-}
-
-bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::unordered_set<TNodeId>& nodeIds) {
     if (nodeIds.empty()) {
         return false;
     }
-    if (!IsDatabaseRequest()) {
-        // GetDatabaseNodes() can return real database nodes only when IsDatabaseRequest() is true,
-        // otherwise it will return 0 – sentinel for the current node.
-        return false;
+    auto accessDenied = [this]() {
+        ReplyAndPassAway(
+            GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
+            "Access denied");
+        return true;
+    };
+    if (!AreDatabaseNodesKnown()) {
+        // We can't validate the scope of the requested nodes, and this is an access check,
+        // so we deny the request instead of silently letting it through.
+        return accessDenied();
     }
     const auto databaseNodes = GetDatabaseNodes();
     const auto nodesSet = std::unordered_set<TNodeId>(databaseNodes.begin(), databaseNodes.end());
     for (const auto& nodeId : nodeIds) {
         if (!nodesSet.count(nodeId)) {
-            ReplyAndPassAway(
-                GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
-                "Access denied");
-            return true;
+            return accessDenied();
         }
     }
     return false;

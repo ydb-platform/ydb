@@ -154,12 +154,17 @@ public:
     ui64 PDiskStateRequestsInFlight = 0;
 
     TString Filter;
-    std::unordered_set<TString> DatabaseStoragePools;
+    std::unordered_set<TString> DatabaseStoragePools; // pre-filter, cleared once it has been applied
+    std::unordered_set<TString> DatabaseStoragePoolNames; // the same pools, kept for the scope validation
     std::unordered_set<TString> FilterStoragePools;
+    // Filter* sets may be cleared while applying filters, so the initially requested ids
+    // are kept separately - they are needed to validate the scope of the request.
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
-    std::unordered_set<ui32> FilterPDiskIds; // may be cleared while applying filters
-    std::unordered_set<ui32> InitialFilterPDiskIds; // copy of initially sent FilterPDiskIds
+    std::unordered_set<ui32> FilterPDiskIds;
+    std::unordered_set<TGroupId> InitialFilterGroupIds;
+    std::unordered_set<TNodeId> InitialFilterNodeIds;
+    std::unordered_set<ui32> InitialFilterPDiskIds;
     bool StrictDatabaseOnlyToken = false;
 
     enum class EWith {
@@ -840,7 +845,9 @@ public:
         SplitIds(Params.Get("node_id"), ',', FilterNodeIds);
         SplitIds(Params.Get("pdisk_id"), ',', FilterPDiskIds);
         SplitIds(Params.Get("group_id"), ',', FilterGroupIds);
+        InitialFilterNodeIds = FilterNodeIds;
         InitialFilterPDiskIds = FilterPDiskIds;
+        InitialFilterGroupIds = FilterGroupIds;
         if (!FilterStoragePools.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
@@ -941,11 +948,6 @@ public:
             return;
         }
         StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()));
-        if (StrictDatabaseOnlyToken) {
-            if (ReplyAndPassAwayIfNodesAreOutOfDatabase(FilterNodeIds)) {
-                return;
-            }
-        }
         if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
             // fields that are not available for database users
             FieldsRequired.reset(+EGroupFields::NodeId);
@@ -962,10 +964,19 @@ public:
                 }
             }
         }
-        // Database-only users normally don't fetch PDiskId (see CheckAccessViewer above).
-        // If pdisk_id was passed, we need to request PDiskId from BSC to validate parameters scope.
-        if (StrictDatabaseOnlyToken && !InitialFilterPDiskIds.empty()) {
-            FieldsRequired.set(+EGroupFields::PDiskId);
+        // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
+        // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
+        // These fields are not added to FieldsRequested, so they are not rendered in the response.
+        if (StrictDatabaseOnlyToken) {
+            if (!InitialFilterGroupIds.empty() || !InitialFilterNodeIds.empty() || !InitialFilterPDiskIds.empty()) {
+                FieldsRequired.set(+EGroupFields::PoolName);
+            }
+            if (!InitialFilterNodeIds.empty()) {
+                FieldsRequired.set(+EGroupFields::NodeId);
+            }
+            if (!InitialFilterPDiskIds.empty()) {
+                FieldsRequired.set(+EGroupFields::PDiskId);
+            }
         }
         if (Database) {
             if (!DatabaseNavigateResponse) {
@@ -1007,64 +1018,77 @@ public:
         }
     }
 
-    bool ReplyAndPassAwayIfGroupsAreOutOfDatabase() {
-        std::unordered_set<TGroupId> allowedGroupIds;
-        for (TGroup* group : GroupView) {
-            allowedGroupIds.insert(group->GroupId);
-        }
-        for (TGroupId groupId : FilterGroupIds) {
-            if (!allowedGroupIds.contains(groupId)) {
-                TBase::ReplyAndPassAway(
-                    GETHTTPACCESSDENIED("text/plain",
-                        "Some requested storage groups are outside the specified database"),
-                    "Access denied");
-                return true;
+    // Storage objects that belong to the requested database: its groups, the nodes and the pdisks
+    // holding the vdisks of those groups, plus the nodes of the database itself.
+    // It's built from the raw BS Controller data, so it doesn't depend on the user-provided filters
+    // and on the order in which the responses arrive. An id which is missing here is either out of
+    // the database, or we have no data to prove it belongs to the database - in both cases the
+    // request of a strict database-only user is denied.
+    struct TDatabaseStorageScope {
+        std::unordered_set<TGroupId> GroupIds;
+        std::unordered_set<TNodeId> NodeIds;
+        std::unordered_set<ui32> PDiskIds;
+    };
+
+    TDatabaseStorageScope GetDatabaseStorageScope() {
+        TDatabaseStorageScope scope;
+        if (AreDatabaseNodesKnown()) {
+            for (TNodeId nodeId : GetDatabaseNodes()) {
+                scope.NodeIds.insert(nodeId);
             }
         }
-        return false;
+        if (DatabaseStoragePoolNames.empty() || !FieldsAvailable.test(+EGroupFields::PoolName)) {
+            return scope; // we don't know which groups belong to the database
+        }
+        for (const TGroup& group : GroupData) {
+            if (DatabaseStoragePoolNames.count(group.PoolName)) {
+                scope.GroupIds.insert(group.GroupId);
+            }
+        }
+        // VSlotsByVSlotId is filled from the BS Controller vslots response and holds every vslot
+        // of the cluster, so - unlike TGroup::VDisks - it's not affected by the applied filters.
+        for (const auto& [vslotId, info] : VSlotsByVSlotId) {
+            if (info && scope.GroupIds.count(info->GetGroupId())) {
+                scope.NodeIds.insert(vslotId.NodeId);
+                scope.PDiskIds.insert(vslotId.PDiskId);
+            }
+        }
+        return scope;
     }
 
-    bool ReplyAndPassAwayIfPDisksAreOutOfDatabase() {
-        // Scope validation needs PDisk data from BS Controller; defer until it arrives.
-        if (!AreBSControllerRequestsDone() || !FieldsAvailable.test(+EGroupFields::PDiskId)) {
+    // Strict database-only users must not be able to address storage objects outside their database.
+    // Returns true if the response has been already sent.
+    bool ReplyAndPassAwayIfStorageIdsAreOutOfDatabase() {
+        if (InitialFilterGroupIds.empty() && InitialFilterNodeIds.empty() && InitialFilterPDiskIds.empty()) {
             return false;
         }
-
-        std::unordered_set<ui32> allowedPDiskIds;
-        for (TGroup* group : GroupView) {
-            for (const auto& vdisk : group->VDisks) {
-                allowedPDiskIds.insert(vdisk.VSlotId.PDiskId);
-            }
-        }
-        if (allowedPDiskIds.empty() && !VSlotsByVSlotId.empty()) {
-            std::unordered_set<TGroupId> allowedGroupIds;
-            for (TGroup* group : GroupView) {
-                allowedGroupIds.insert(group->GroupId);
-            }
-            for (const auto& [vslotId, info] : VSlotsByVSlotId) {
-                if (info && allowedGroupIds.count(info->GetGroupId())) {
-                    allowedPDiskIds.insert(vslotId.PDiskId);
+        const TDatabaseStorageScope scope = GetDatabaseStorageScope();
+        auto outOfScope = [](const auto& requested, const auto& allowed) {
+            for (const auto& id : requested) {
+                if (!allowed.count(id)) {
+                    return true;
                 }
             }
+            return false;
+        };
+        TStringBuf objects;
+        if (outOfScope(InitialFilterGroupIds, scope.GroupIds)) {
+            objects = "storage groups";
+        } else if (outOfScope(InitialFilterNodeIds, scope.NodeIds)) {
+            objects = "nodes";
+        } else if (outOfScope(InitialFilterPDiskIds, scope.PDiskIds)) {
+            objects = "PDisk identifiers";
+        } else {
+            return false;
         }
-        if (allowedPDiskIds.empty()) {
-            TBase::ReplyAndPassAway(
-                GETHTTPACCESSDENIED("text/plain", "Some requested PDisk identifiers are outside the specified database"),
-                "Access denied");
-            return true;
-        }
-        for (ui32 pdiskId : InitialFilterPDiskIds) {
-            if (!allowedPDiskIds.contains(pdiskId)) {
-                TBase::ReplyAndPassAway(
-                    GETHTTPACCESSDENIED("text/plain", "Some requested PDisk identifiers are outside the specified database"),
-                    "Access denied");
-                return true;
-            }
-        }
-        return false;
+        TBase::ReplyAndPassAway(
+            GETHTTPACCESSDENIED("text/plain", TStringBuilder()
+                << "Some requested " << objects << " are outside the specified database"),
+            "Access denied");
+        return true;
     }
 
-    bool ApplyFilterAndCheckAccess() {
+    void ApplyFilter() {
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty()) {
             if (FieldsAvailable.test(+EGroupFields::PoolName)) {
@@ -1079,13 +1103,7 @@ public:
                 FoundGroups = TotalGroups = GroupView.size();
                 GroupsByGroupId.clear();
             } else {
-                return true;
-            }
-        }
-        if (StrictDatabaseOnlyToken && IsDatabaseRequest()) {
-            // We don't want to provide a possibility for strict database users to get groups outside the database.
-            if (!FilterGroupIds.empty() && ReplyAndPassAwayIfGroupsAreOutOfDatabase()) {
-                return false;
+                return;
             }
         }
         // group id pre-filter, affects TotalGroups count
@@ -1115,7 +1133,7 @@ public:
                 FilterStoragePools.clear();
                 GroupsByGroupId.clear();
             } else {
-                return true;
+                return;
             }
         }
         // node_id + pdisk_id pre-filter, affects TotalGroups count
@@ -1136,7 +1154,7 @@ public:
                 FilterPDiskIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return true;
+                return;
             }
         }
         // node_id pre-filter, affects TotalGroups count
@@ -1156,7 +1174,7 @@ public:
                 FilterNodeIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return true;
+                return;
             }
         }
         // pdisk_id pre-filter, affects TotalGroups count
@@ -1176,7 +1194,7 @@ public:
                 FilterPDiskIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return true;
+                return;
             }
         }
         if (NeedFilter) {
@@ -1241,7 +1259,6 @@ public:
             NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
             FoundGroups = GroupView.size();
         }
-        return true;
     }
 
     void GroupCollection() {
@@ -1409,20 +1426,11 @@ public:
         }
     }
 
-    bool ApplyEverything() {
-        if (!ApplyFilterAndCheckAccess()) {
-            return false;
-        }
-        if (StrictDatabaseOnlyToken && IsDatabaseRequest()) {
-            // We don't want to provide a possibility for strict database users to get pdisks outside the database.
-            if (!InitialFilterPDiskIds.empty() && ReplyAndPassAwayIfPDisksAreOutOfDatabase()) {
-                return false;
-            }
-        }
+    void ApplyEverything() {
+        ApplyFilter();
         ApplyGroup();
         ApplySort();
         ApplyLimit();
-        return true;
     }
 
     bool CollectedHiveData = false;
@@ -1789,6 +1797,7 @@ public:
                     for (const auto& storagePool : domainDescription->Description.GetStoragePools()) {
                         TString storagePoolName = storagePool.GetName();
                         DatabaseStoragePools.emplace(storagePoolName);
+                        DatabaseStoragePoolNames.emplace(storagePoolName);
                     }
                     NeedFilter = true;
                 }
@@ -2390,9 +2399,10 @@ public:
 
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
-        if (!ApplyEverything()) {
+        if (StrictDatabaseOnlyToken && ReplyAndPassAwayIfStorageIdsAreOutOfDatabase()) {
             return;
         }
+        ApplyEverything();
         ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));

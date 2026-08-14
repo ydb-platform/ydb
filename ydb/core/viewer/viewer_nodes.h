@@ -129,6 +129,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TString> FilterStoragePools;
     std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
     std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
+    bool RestrictToDatabaseNodes = false; // the filter by RestrictedNodeIds is required, even if the set is empty
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -1170,6 +1171,9 @@ public:
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
             RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            // The filter must be applied even when the database has no nodes at all,
+            // otherwise a database user would get the nodes of the whole cluster.
+            RestrictToDatabaseNodes = true;
             NeedFilter = true;
         }
 
@@ -1367,7 +1371,7 @@ public:
             InvalidateNodes();
             AddEvent("Type Filter Applied");
         }
-        if (!RestrictedNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
+        if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
             TNodeView nodeView;
             for (TNode* node : NodeView) {
                 if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
@@ -1378,6 +1382,7 @@ public:
             FoundNodes = TotalNodes = NodeView.size();
             InvalidateNodes();
             RestrictedNodeIds.clear();
+            RestrictToDatabaseNodes = false;
             AddEvent("Restricted Filter Applied");
         }
 
@@ -1490,7 +1495,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
             FoundNodes = NodeView.size();
         }
     }

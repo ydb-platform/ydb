@@ -341,11 +341,16 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
+
+    // Returns real database nodes only when the database (or the shared database for serverless)
+    // endpoints lookup has succeeded, otherwise it returns 0 - a sentinel for the current node.
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+    bool AreDatabaseNodesKnown() const;
 
+    // Denies the request if any of the given nodes doesn't belong to the requested database,
+    // or if the database nodes are unknown. Returns true if the response has been already sent.
     bool ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds);
-    bool ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::unordered_set<TNodeId>& nodeIds);
 
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
@@ -367,8 +372,6 @@ protected:
 
     void ClosePipes();
     i32 FailPipeConnect(TTabletId tabletId);
-
-    bool ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::unordered_set<TNodeId>& nodeIds);
 
     bool IsLastRequest() const {
         return DataRequests == 1;

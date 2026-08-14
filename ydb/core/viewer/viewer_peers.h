@@ -52,6 +52,7 @@ class TJsonPeers : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> PeersViewerResponse;
 
     std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
+    bool RestrictToDatabaseNodes = false; // the filter by RestrictedNodeIds is required, even if the set is empty
     TNodeId NodeId = 0;
     std::optional<std::size_t> Offset;
     std::optional<std::size_t> Limit;
@@ -351,6 +352,9 @@ class TJsonPeers : public TViewerPipeClient {
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
             RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            // The filter must be applied even when the database has no nodes at all,
+            // otherwise a database user would get the peers of the whole cluster.
+            RestrictToDatabaseNodes = true;
             NeedFilter = true;
         }
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
@@ -387,7 +391,7 @@ class TJsonPeers : public TViewerPipeClient {
     }
 
     void ApplyFilter() {
-        if (!RestrictedNodeIds.empty()) {
+        if (RestrictToDatabaseNodes) {
             TPeerView peerView;
             for (TPeer* peer : PeerView) {
                 if (RestrictedNodeIds.count(peer->GetPeerId()) > 0) {
@@ -398,6 +402,7 @@ class TJsonPeers : public TViewerPipeClient {
             FoundPeers = TotalPeers = PeerView.size();
             InvalidatePeers();
             RestrictedNodeIds.clear();
+            RestrictToDatabaseNodes = false;
             AddEvent("Restricted Filter Applied");
         }
 

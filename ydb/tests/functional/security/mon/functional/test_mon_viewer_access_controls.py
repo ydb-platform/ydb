@@ -407,23 +407,26 @@ def test_storage_groups_scope_params_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,
     tenant_nodelist_ids,
-    foreign_node_id,
+    unknown_node_id,
     tenant_storage_group_id,
-    tenant_storage_pdisk_id,
+    tenant_storage_disk_location,
 ):
     assert tenant_nodelist_ids, 'tenant database must have at least one node'
     tenant_node_id = tenant_nodelist_ids[0]
+    storage_node_id, storage_pdisk_id = tenant_storage_disk_location
     foreign_group_id = tenant_storage_group_id + 0x10000000
     base = mon_base_url_with_extra_sids_control
 
     allowed_cases = (
         {'group_id': str(tenant_storage_group_id)},
+        # both the nodes of the database itself and the nodes holding its storage are in scope
         {'node_id': str(tenant_node_id)},
-        {'pdisk_id': str(tenant_storage_pdisk_id)},
+        {'node_id': str(storage_node_id)},
+        {'pdisk_id': str(storage_pdisk_id)},
     )
     forbidden_cases = (
         {'group_id': str(foreign_group_id)},
-        {'node_id': str(foreign_node_id)},
+        {'node_id': str(unknown_node_id)},
         {'pdisk_id': '999999'},
     )
 
@@ -481,3 +484,33 @@ def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
         # Foreign node_id is filtered out by database scope which results with OK (200) empty response, not 4xx.
         for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
             _assert_status(mon_base_url_with_extra_sids_control, foreign_path, token, 200)
+
+
+# /viewer/tabletinfo with the "path" param asks SchemeShard first and builds the whiteboard request
+# only after the describe response, so the node_id scope check has its own code path there.
+def test_viewer_tabletinfo_path_with_node_id_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    base = mon_base_url_with_extra_sids_control
+    for ep in ['/viewer/tabletinfo', '/viewer/json/tabletinfo']:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(base, forbidden_path, 'database@builtin', 403)
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base, forbidden_path, token, 200)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(tenant_nodelist_ids[0])},
+            database=tenant_database,
+        )
+        _assert_status(base, allowed_path, 'database@builtin', 200)

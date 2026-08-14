@@ -12,7 +12,8 @@ from ydb.tests.functional.security.lib.security_test_helpers import get_nodelist
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_path_id
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_storage_group_id
-from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_storage_pdisk_id
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_storage_disk_location
+from ydb.tests.functional.security.lib.security_test_helpers import get_unknown_node_id
 from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -243,9 +244,15 @@ def tenant_storage_group_id(ydb_cluster_with_extra_sids_controls, tenant_databas
 
 
 @pytest.fixture(scope='module')
-def tenant_storage_pdisk_id(ydb_cluster_with_extra_sids_controls, tenant_database):
+def tenant_storage_disk_location(ydb_cluster_with_extra_sids_controls, tenant_database):
     base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
-    return get_tenant_storage_pdisk_id(base_url, tenant_database)
+    return get_tenant_storage_disk_location(base_url, tenant_database)
+
+
+@pytest.fixture(scope='module')
+def unknown_node_id(ydb_cluster_with_extra_sids_controls):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_unknown_node_id(base_url)
 
 
 @pytest.fixture

@@ -174,7 +174,8 @@ def get_tenant_storage_group_id(base_url, database, token='root@builtin', timeou
     return int(last_data['data']['StorageGroups'][0]['GroupId'])
 
 
-def get_tenant_storage_pdisk_id(base_url, database, token='root@builtin', timeout_seconds=60):
+def get_tenant_storage_disk_location(base_url, database, token='root@builtin', timeout_seconds=60):
+    """Returns (node_id, pdisk_id) of a pdisk holding a vdisk of the database storage groups."""
     last_data = {}
 
     def ready():
@@ -183,16 +184,17 @@ def get_tenant_storage_pdisk_id(base_url, database, token='root@builtin', timeou
             database,
             token,
             fields_required='GroupId,VDisk,PDisk,NodeId,PDiskId',
-            **{'with': 'all'},
             timeout=60,
         )
         last_data['data'] = data
         for group in data.get('StorageGroups') or []:
             for vdisk in group.get('VDisks') or []:
                 pdisk = vdisk.get('PDisk') or {}
+                # PDiskId is reported as "<node_id>-<pdisk_id>"
                 pdisk_id_str = str(pdisk.get('PDiskId') or '')
                 if '-' in pdisk_id_str:
-                    last_data['pdisk_id'] = int(pdisk_id_str.split('-', 1)[1])
+                    node_id_str, _, local_pdisk_id_str = pdisk_id_str.partition('-')
+                    last_data['location'] = (int(node_id_str), int(local_pdisk_id_str))
                     return True
         return False
 
@@ -201,7 +203,12 @@ def get_tenant_storage_pdisk_id(base_url, database, token='root@builtin', timeou
             f'no pdisk id found for database={database} after {timeout_seconds}s; '
             f'last={last_data.get("data")}'
         )
-    return last_data['pdisk_id']
+    return last_data['location']
+
+
+def get_unknown_node_id(base_url, token='root@builtin'):
+    """Returns a node id that does not exist in the cluster at all."""
+    return max(get_nodelist_ids(base_url, token=token)) + 100
 
 
 def wait_for_viewer_ready(

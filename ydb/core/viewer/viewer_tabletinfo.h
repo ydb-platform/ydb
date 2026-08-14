@@ -89,6 +89,11 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        // The check is done here, before the describe request below, because in the "path" branch
+        // TBase::Bootstrap() (and its node_id scope check) is reached only after the describe response.
+        if (TBase::ReplyAndPassAwayIfNodeIdsAreOutOfDatabase()) {
+            return;
+        }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             TPathId domainRoot;
             if (AppData()) {
@@ -339,6 +344,11 @@ public:
         }
         if (!Tablets.empty()) {
             TBase::Bootstrap();
+            if (ReplySent) {
+                // TBase::Bootstrap() has already replied (e.g. the database has no nodes to ask),
+                // so the whiteboard request has not been built.
+                return;
+            }
             for (auto tablet : Tablets) {
                 Request->Record.AddFilterTabletId(tablet.first);
             }

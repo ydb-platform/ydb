@@ -107,16 +107,11 @@ TString GetNormalizedDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& co
 
 THashSet<TString> CollectDLQTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database,
-    std::optional<ui64> modificationVersion
+    const TString& database
 ) {
     THashSet<TString> result;
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (modificationVersion && consumer.GetModificationVersion() != *modificationVersion) {
-            continue;
-        }
-
         const auto dlq = GetNormalizedDLQTopicPath(consumer, database);
         if (!dlq.empty()) {
             result.insert(dlq);

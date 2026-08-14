@@ -93,6 +93,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     };
 
     TVector<TPathToResolve> ResolveForACL;
+    bool ResolvingChangedDlqTargets = false;
 
     std::optional<NACLib::TUserToken> UserToken;
     bool CheckAdministrator = false;
@@ -822,7 +823,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void AddDlqTopicsResolveForACL(
         const NKikimrSchemeOp::TModifyScheme& pbModifyScheme,
-        const NKikimrPQ::TPQTabletConfig& config
+        const NKikimrPQ::TPQTabletConfig& config,
+        const THashSet<TString>& skipPaths = {}
     ) {
         if (pbModifyScheme.GetInternal()) {
             return;
@@ -830,18 +832,78 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         const auto dlqPaths = NPQ::CollectDLQTopicPaths(
             config,
-            GetRequestProto().GetDatabaseName(),
-            config.GetTopicConfigVersion()
+            GetRequestProto().GetDatabaseName()
         );
         for (const auto& dlqPath : dlqPaths) {
+            if (skipPaths.contains(dlqPath)) {
+                continue;
+            }
+            auto pathParts = SplitPath(dlqPath);
+            if (pathParts.empty()) {
+                continue;
+            }
             auto toResolve = TPathToResolve(pbModifyScheme);
-            toResolve.Path = SplitPath(dlqPath);
+            toResolve.Path = std::move(pathParts);
             toResolve.RequireAnyOfAccess = {
                 NACLib::EAccessRights::AlterSchema,
                 NACLib::EAccessRights::UpdateRow,
             };
             ResolveForACL.push_back(std::move(toResolve));
         }
+    }
+
+    // Alter must not trust client-supplied ModificationVersion. Diff new MOVE DLQ
+    // paths against the stored topic config; sqs:// is not a scheme path and is skipped.
+    bool TryResolveChangedDlqTargets(
+        const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet,
+        const TActorContext& ctx
+    ) {
+        if (ResolvingChangedDlqTargets) {
+            return false;
+        }
+
+        const TString database = GetRequestProto().GetDatabaseName();
+        const size_t countBefore = ResolveForACL.size();
+
+        for (size_t i = 0; i < countBefore; ++i) {
+            const auto& modifyScheme = ResolveForACL[i].ModifyScheme;
+            if (modifyScheme.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup
+                || !modifyScheme.GetAlterPersQueueGroup().HasPQTabletConfig())
+            {
+                continue;
+            }
+
+            THashSet<TString> oldDlqPaths;
+            const auto& entry = resolveSet[i];
+            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && entry.PQGroupInfo) {
+                oldDlqPaths = NPQ::CollectDLQTopicPaths(
+                    entry.PQGroupInfo->Description.GetPQTabletConfig(),
+                    database
+                );
+            }
+
+            AddDlqTopicsResolveForACL(
+                modifyScheme,
+                modifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
+                oldDlqPaths
+            );
+        }
+
+        if (ResolveForACL.size() == countBefore) {
+            return false;
+        }
+
+        ResolvingChangedDlqTargets = true;
+        auto resolveRequest = ResolveRequestForACL();
+        if (!resolveRequest) {
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+            TxProxyMon->ResolveKeySetWrongRequest->Inc();
+            Die(ctx);
+            return true;
+        }
+
+        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest));
+        return true;
     }
 
     bool ExtractResolveForACL(NKikimrSchemeOp::TModifyScheme& pbModifyScheme) {
@@ -929,13 +991,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
-
-            if (pbModifyScheme.GetAlterPersQueueGroup().HasPQTabletConfig()) {
-                AddDlqTopicsResolveForACL(
-                    pbModifyScheme,
-                    pbModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig()
-                );
-            }
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
@@ -1875,6 +1930,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             if (!CheckDocApi(navigate->ResultSet, ctx)) {
                 return Die(ctx);
             }
+        }
+
+        if (TryResolveChangedDlqTargets(navigate->ResultSet, ctx)) {
+            return;
         }
 
         SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());

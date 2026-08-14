@@ -6,8 +6,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 
-#include <optional>
-
 namespace NKikimrPQ {
 
 class TPQConfig;
@@ -37,8 +35,7 @@ TString GetNormalizedDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& co
 
 THashSet<TString> CollectDLQTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database,
-    std::optional<ui64> modificationVersion = std::nullopt
+    const TString& database
 );
 
 } // namespace NPQ

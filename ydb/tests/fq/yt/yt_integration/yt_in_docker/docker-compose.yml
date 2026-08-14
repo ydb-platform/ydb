@@ -1,0 +1,17 @@
+services:
+  yt:
+    build: .
+    restart: "no"
+    ports:
+      - "80"
+      - "8443"
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
+    healthcheck:
+      test: ["CMD-SHELL", "yt --proxy localhost:80 ping || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s

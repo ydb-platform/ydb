@@ -160,6 +160,7 @@ public:
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterPDiskIds; // may be cleared while applying filters
     std::unordered_set<ui32> InitialFilterPDiskIds; // copy of initially sent FilterPDiskIds
+    bool StrictDatabaseOnlyToken = false;
 
     enum class EWith {
         Everything,
@@ -939,6 +940,7 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()));
         if (ReplyAndPassAwayIfNodesAreOutOfDatabase(FilterNodeIds)) {
             return;
         }
@@ -960,9 +962,7 @@ public:
         }
         // Database-only users normally don't fetch PDiskId (see CheckAccessViewer above).
         // If pdisk_id was passed, we need to request PDiskId from BSC to validate parameters scope.
-        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) &&
-            !InitialFilterPDiskIds.empty()
-        ) {
+        if (StrictDatabaseOnlyToken && !InitialFilterPDiskIds.empty()) {
             FieldsRequired.set(+EGroupFields::PDiskId);
         }
         if (Database) {
@@ -1080,7 +1080,7 @@ public:
                 return true;
             }
         }
-        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) && IsDatabaseRequest()) {
+        if (StrictDatabaseOnlyToken && IsDatabaseRequest()) {
             // We don't want to provide a possibility for strict database users to get groups outside the database.
             if (!FilterGroupIds.empty() && ReplyAndPassAwayIfGroupsAreOutOfDatabase()) {
                 return false;
@@ -1411,7 +1411,7 @@ public:
         if (!ApplyFilterAndCheckAccess()) {
             return false;
         }
-        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) && IsDatabaseRequest()) {
+        if (StrictDatabaseOnlyToken && IsDatabaseRequest()) {
             // We don't want to provide a possibility for strict database users to get pdisks outside the database.
             if (!InitialFilterPDiskIds.empty() && ReplyAndPassAwayIfPDisksAreOutOfDatabase()) {
                 return false;

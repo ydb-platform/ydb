@@ -1038,6 +1038,11 @@ bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::u
     if (nodeIds.empty()) {
         return false;
     }
+    if (!IsDatabaseRequest()) {
+        // GetDatabaseNodes() can return real database nodes only when IsDatabaseRequest() is true,
+        // otherwise it will return 0 – sentinel for the current node.
+        return false;
+    }
     const auto databaseNodes = GetDatabaseNodes();
     const auto nodesSet = std::unordered_set<TNodeId>(databaseNodes.begin(), databaseNodes.end());
     for (const auto& nodeId : nodeIds) {

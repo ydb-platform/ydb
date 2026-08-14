@@ -47,6 +47,7 @@ public:
     virtual void IncRecvSyscalls(ui64 ns) = 0;
     virtual void AddTotalBytesRead(ui64 value) = 0;
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;
+    virtual void UpdatePingTimeRdmaHistogram(ui64 value) = 0;
     virtual void UpdateIcQueueTimeHistogram(ui64 value) = 0;
     virtual void UpdateNumEventsInQueueHistogram(ui64 value) = 0;
     virtual void UpdateRdmaReadTimeHistogram(ui64 value) = 0;

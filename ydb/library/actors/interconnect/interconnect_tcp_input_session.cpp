@@ -588,7 +588,11 @@ namespace NActors {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
-                Metrics->UpdatePingTimeHistogram(durationUs);
+                if (UseRdmaSendReceiveTransport()) {
+                    Metrics->UpdatePingTimeRdmaHistogram(durationUs);
+                } else {
+                    Metrics->UpdatePingTimeHistogram(durationUs);
+                }
                 PingQ.push_back(duration);
                 if (PingQ.size() > 16) {
                     PingQ.pop_front();
@@ -1544,7 +1548,11 @@ namespace NActors {
         const auto pingUs = ping.MicroSeconds();
         Context->PingRTT_us = pingUs;
         NewPingProtocol = true;
-        Metrics->UpdatePingTimeHistogram(pingUs);
+        if (UseRdmaSendReceiveTransport()) {
+            Metrics->UpdatePingTimeRdmaHistogram(pingUs);
+        } else {
+            Metrics->UpdatePingTimeHistogram(pingUs);
+        }
     }
 
     void TInputSessionTCP::HandleClock(TInstant clock) {

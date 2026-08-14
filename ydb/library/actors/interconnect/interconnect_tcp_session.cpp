@@ -135,20 +135,18 @@ namespace NActors {
         Send(ReceiverId, new TEvInterconnect::TEvCloseInputSession);
     }
 
-    bool TInterconnectSessionTCP::IsRdmaInUse() {
+    IInterconnectSession::ERdmaState TInterconnectSessionTCP::GetRdmaState() const {
         if (RdmaQp) {
             using NInterconnect::NRdma::TQueuePair;
             const TQueuePair::TQpState res = RdmaQp->GetState(false);
             const TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
-            if (qpState) {
-                return TQueuePair::IsRtsState(*qpState);
+            if (qpState && TQueuePair::IsRtsState(*qpState)) {
+                return ERdmaState::Active;
             }
         }
-        return false;
-    }
-
-    bool TInterconnectSessionTCP::HasRdmaState() const {
-        return Params.UseRdmaRead || RdmaQp || RdmaInflightDataAmount;
+        return Params.UseRdmaRead || RdmaQp
+            ? ERdmaState::Present
+            : ERdmaState::None;
     }
 
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
@@ -635,25 +633,13 @@ namespace NActors {
         bool notEnoughCpu = false;
 
         while (Socket) {
-            const bool canProduceMorePackets = ProducePackets();
+            ProducePackets();
             if (!Socket) {
                 return;
             }
 
             const bool useRdmaMain = UseRdmaSendReceiveTransport();
-            if (useRdmaMain && !RdmaInitialTrafficStateReported &&
-                    (NumEventsInQueue || OutgoingStream || OutOfBandStream)) {
-                RdmaInitialTrafficStateReported = true;
-                YDB_LOG_NOTICE("RDMA main initial traffic state",
-                    {"marker", "ICRDMA"},
-                    {"queuedEvents", NumEventsInQueue},
-                    {"canProduceMore", canProduceMorePackets},
-                    {"outgoingSize", OutgoingStream.CalculateOutgoingSize()},
-                    {"outgoingUnsent", OutgoingStream.CalculateUnsentSize()},
-                    {"oobSize", OutOfBandStream.CalculateOutgoingSize()},
-                    {"inflightData", InflightDataAmount},
-                    {"inflightRdma", RdmaInflightDataAmount});
-            }
+
             if (useRdmaMain) {
                 WriteDataRdma();
                 if (!Socket) {
@@ -661,12 +647,9 @@ namespace NActors {
                 }
             }
 
-            WriteData(!useRdmaMain);
+            WriteDataTcp(!useRdmaMain);
             if (!Socket) {
                 return;
-            }
-            if (!canProduceMorePackets) {
-                break;
             }
 
             bool canProducePackets;
@@ -706,7 +689,7 @@ namespace NActors {
         UpdateState(finished ? EState::Idle : notEnoughCpu ? EState::WaitingCpu : EState::Utilized);
     }
 
-    bool TInterconnectSessionTCP::ProducePackets() {
+    void TInterconnectSessionTCP::ProducePackets() {
         // first, we create as many data packets as we can generate under certain conditions; they include presence
         // of events in channels queues and in flight fitting into requested limit; after we hit one of these conditions
         // we exit cycle
@@ -723,7 +706,7 @@ namespace NActors {
             try {
                 auto packetSize = MakePacket(true);
                 if (!packetSize) {
-                    return false;
+                    return;
                 }
                 bytesProduced += *packetSize;
             } catch (const TExSerializedEventTooLarge& ex) {
@@ -732,16 +715,15 @@ namespace NActors {
                     {"marker", "ICS31"},
                     {"exType", ex.Type});
                 Terminate(TDisconnectReason::EventTooLarge());
-                return false;
+                return;
             }
         }
-        return true;
     }
 
     void TInterconnectSessionTCP::StartHandshake() {
         YDB_LOG_INFO("Start handshake",
             {"marker", "ICS15"});
-        if (HasRdmaState()) {
+        if (GetRdmaState() != ERdmaState::None) {
             YDB_LOG_NOTICE("Start initial handshake instead of graceful reconnect for RDMA session",
                 {"marker", "ICRDMA"});
             IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartInitialHandshake);
@@ -886,7 +868,7 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::WriteData(bool writeMainChannel) {
+    void TInterconnectSessionTCP::WriteDataTcp(bool writeMainChannel) {
         // total bytes written during this call
         ui64 written = 0;
 

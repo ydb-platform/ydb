@@ -334,6 +334,10 @@ namespace {
             PingTimeHistogram->Collect(value);
         }
 
+        void UpdatePingTimeRdmaHistogram(ui64 value) override {
+            PingTimeRdmaHistogram->Collect(value);
+        }
+
         void UpdateIcQueueTimeHistogram(ui64 value) override {
             InterconnectQueueTimeHistogram->Collect(value);
         }
@@ -433,8 +437,9 @@ namespace {
                 SubscribersCount = AdaptiveCounters->GetCounter("SubscribersCount");
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
-                    "PingTimeUs", NMonitoring::ExponentialHistogram(
-                        18, 2, Common->Settings.EnableRdmaSendReceive ? 1.25 : 125));
+                    "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
+                PingTimeRdmaHistogram = AdaptiveCounters->GetHistogram(
+                    "PingTimeRdmaUs", NMonitoring::ExponentialHistogram(18, 2, 1.25));
                 InterconnectQueueTimeHistogram = AdaptiveCounters->GetHistogram(
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram = AdaptiveCounters->GetHistogram(
@@ -548,6 +553,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
         NMonitoring::THistogramPtr PingTimeHistogram;
+        NMonitoring::THistogramPtr PingTimeRdmaHistogram;
         NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
         NMonitoring::THistogramPtr NumEventsInQueueHistogram;
         NMonitoring::THistogramPtr RdmaReadTimeHistogram;
@@ -822,6 +828,10 @@ namespace {
             PingTimeHistogram_->Record(value);
         }
 
+        void UpdatePingTimeRdmaHistogram(ui64 value) override {
+            PingTimeRdmaHistogram_->Record(value);
+        }
+
         void UpdateIcQueueTimeHistogram(ui64 value) override {
             InterconnectQueueTimeHistogram_->Record(value);
         }
@@ -941,8 +951,10 @@ namespace {
                 SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}),
-                        NMonitoring::ExponentialHistogram(
-                            18, 2, Common->Settings.EnableRdmaSendReceive ? 1.25 : 125));
+                        NMonitoring::ExponentialHistogram(18, 2, 125));
+                PingTimeRdmaHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_rdma_us"}}),
+                        NMonitoring::ExponentialHistogram(18, 2, 1.25));
                 InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram_ = AdaptiveMetrics_->HistogramRate(
@@ -1090,6 +1102,7 @@ namespace {
         NMonitoring::IIntGauge* ClockSkewMicrosec_;
 
         NMonitoring::IHistogram* PingTimeHistogram_;
+        NMonitoring::IHistogram* PingTimeRdmaHistogram_;
         NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
         NMonitoring::IHistogram* NumEventsInQueueHistogram_;
         NMonitoring::IHistogram* RdmaReadTimeHistogram_;

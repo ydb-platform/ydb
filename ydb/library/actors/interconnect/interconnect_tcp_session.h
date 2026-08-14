@@ -510,8 +510,7 @@ namespace NActors {
 
         void Init(const TSessionParams& params) override;
         void CloseInputSession() override;
-        bool IsRdmaInUse() override;
-        bool HasRdmaState() const override;
+        ERdmaState GetRdmaState() const override;
         bool SupportsContinuation() const override { return true; }
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
@@ -597,7 +596,7 @@ namespace NActors {
         void IssueRam(bool batching);
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
-        bool ProducePackets();
+        void ProducePackets();
 
         size_t GetUnsentSize() const {
             return OutgoingStream.CalculateUnsentSize() + OutOfBandStream.CalculateUnsentSize() +
@@ -614,7 +613,7 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
-        void WriteData(bool writeMainChannel);
+        void WriteDataTcp(bool writeMainChannel);
         void WriteDataRdma();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
@@ -737,7 +736,6 @@ namespace NActors {
 
         ui64 RdmaSendWrSubmitted = 0;
         ui64 RdmaSendWrCompleted = 0;
-        bool RdmaInitialTrafficStateReported = false;
 
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;

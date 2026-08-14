@@ -380,7 +380,7 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelPing) {
     UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
         "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
 
-    const ui64 pingSamplesBefore = GetNodeHistogramSampleCount(cluster, 2, "PingTimeUs");
+    const ui64 pingSamplesBefore = GetNodeHistogramSampleCount(cluster, 2, "PingTimeRdmaUs");
     const ui64 senderBytesWrittenToSocketBefore = GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
     const ui64 receiverBytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 1, 2, "BytesWrittenToSocket");
 
@@ -392,7 +392,7 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelPing) {
     ui64 pingSamples = pingSamplesBefore;
     const TInstant deadline = TInstant::Now() + TDuration::Seconds(20);
     while (TInstant::Now() < deadline) {
-        pingSamples = GetNodeHistogramSampleCount(cluster, 2, "PingTimeUs");
+        pingSamples = GetNodeHistogramSampleCount(cluster, 2, "PingTimeRdmaUs");
         if (pingSamples > pingSamplesBefore) {
             break;
         }

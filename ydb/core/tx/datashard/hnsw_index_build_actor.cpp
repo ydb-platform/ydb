@@ -7,47 +7,70 @@ namespace NKikimr::NDataShard {
 
 using namespace NActors;
 
-class THnswIndexBuildActor : public TActorBootstrapped<THnswIndexBuildActor> {
+class THnswIndexBuildWorker : public TActorBootstrapped<THnswIndexBuildWorker> {
 public:
-    THnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 vectorColumnTag,
-            ui64 rowCountAtBuild,
-            const Ydb::Table::VectorIndexSettings& settings,
+    THnswIndexBuildWorker(const Ydb::Table::VectorIndexSettings& settings,
             std::vector<std::pair<TString, TString>> keysAndVectors,
-            std::shared_ptr<void> memoryReservation)
+            std::shared_ptr<void> memoryReservation,
+            THnswIndexBuildCallback callback)
         : TActorBootstrapped(NKikimrServices::TActivity::DATASHARD_HNSW_BUILDER)
-        , ReplyTo(replyTo)
-        , LocalTid(localTid)
-        , VectorColumnTag(vectorColumnTag)
-        , RowCountAtBuild(rowCountAtBuild)
         , Settings(settings)
         , KeysAndVectors(std::move(keysAndVectors))
         , MemoryReservation(std::move(memoryReservation))
+        , Callback(std::move(callback))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TString error;
-        auto index = THnswIndex::Build(Settings, KeysAndVectors, /* maxMemoryBytes */ 0, error);
-        auto result = MakeHolder<TDataShard::TEvPrivate::TEvHnswIndexBuildResult>();
-        result->LocalTid = LocalTid;
-        result->VectorColumnTag = VectorColumnTag;
-        result->RowCountAtBuild = RowCountAtBuild;
-        result->Error = std::move(error);
+        THnswIndexBuildResult result;
+        auto index = THnswIndex::Build(
+            Settings, KeysAndVectors, /* maxMemoryBytes */ 0, result.Error);
         if (index) {
-            result->Index = std::shared_ptr<THnswIndex>(std::move(index));
-            result->MemoryReservation = std::move(MemoryReservation);
+            result.Index = std::shared_ptr<THnswIndex>(std::move(index));
+            result.MemoryReservation = std::move(MemoryReservation);
         }
-        ctx.Send(ReplyTo, result.Release());
+        Callback(std::move(result), ctx);
         Die(ctx);
     }
 
 private:
-    const TActorId ReplyTo;
-    const ui32 LocalTid;
-    const ui32 VectorColumnTag;
-    const ui64 RowCountAtBuild;
     const Ydb::Table::VectorIndexSettings Settings;
     const std::vector<std::pair<TString, TString>> KeysAndVectors;
     std::shared_ptr<void> MemoryReservation;
+    THnswIndexBuildCallback Callback;
+};
+
+IActor* CreateHnswIndexBuildWorker(
+        const Ydb::Table::VectorIndexSettings& settings,
+        std::vector<std::pair<TString, TString>> keysAndVectors,
+        std::shared_ptr<void> memoryReservation,
+        THnswIndexBuildCallback callback) {
+    return new THnswIndexBuildWorker(settings, std::move(keysAndVectors),
+        std::move(memoryReservation), std::move(callback));
+}
+
+// Retains the existing friendship with TDataShard while adapting the common
+// worker result to DataShard's private lazy-build event.
+class THnswIndexBuildActor {
+public:
+    static IActor* Create(const TActorId& replyTo, ui32 localTid, ui32 vectorColumnTag,
+            ui64 rowCountAtBuild,
+            const Ydb::Table::VectorIndexSettings& settings,
+            std::vector<std::pair<TString, TString>> keysAndVectors,
+            std::shared_ptr<void> memoryReservation) {
+        return CreateHnswIndexBuildWorker(settings, std::move(keysAndVectors),
+            std::move(memoryReservation),
+            [replyTo, localTid, vectorColumnTag, rowCountAtBuild]
+            (THnswIndexBuildResult&& buildResult, const TActorContext& ctx) mutable {
+                auto result = MakeHolder<TDataShard::TEvPrivate::TEvHnswIndexBuildResult>();
+                result->LocalTid = localTid;
+                result->VectorColumnTag = vectorColumnTag;
+                result->RowCountAtBuild = rowCountAtBuild;
+                result->Index = std::move(buildResult.Index);
+                result->MemoryReservation = std::move(buildResult.MemoryReservation);
+                result->Error = std::move(buildResult.Error);
+                ctx.Send(replyTo, result.Release());
+            });
+    }
 };
 
 IActor* CreateHnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 vectorColumnTag,
@@ -55,8 +78,9 @@ IActor* CreateHnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 v
         const Ydb::Table::VectorIndexSettings& settings,
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation) {
-    return new THnswIndexBuildActor(replyTo, localTid, vectorColumnTag, rowCountAtBuild, settings,
-        std::move(keysAndVectors), std::move(memoryReservation));
+    return THnswIndexBuildActor::Create(replyTo, localTid, vectorColumnTag,
+        rowCountAtBuild, settings, std::move(keysAndVectors),
+        std::move(memoryReservation));
 }
 
 void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx) {

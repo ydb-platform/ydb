@@ -507,6 +507,27 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     return result;
 }
 
+bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
+    // BlobsToKeep: TBlobsByGenStep — TLogoBlobID entries; resolve group via TabletInfo.
+    if (BlobsToKeep.AnyOf([&](const TLogoBlobID& blob) {
+            return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
+        })) {
+        return true;
+    }
+    // BlobsToDelete / BlobsToDeleteDelayed: TTabletsByBlob — keyed by TUnifiedBlobId.
+    for (auto& [blobId, _] : BlobsToDelete) {
+        if (groups.contains(blobId.GetDsGroup())) {
+            return true;
+        }
+    }
+    for (auto& [blobId, _] : BlobsToDeleteDelayed) {
+        if (groups.contains(blobId.GetDsGroup())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
     // We assume here that all the channels have the same group type.
     // We get [2] because it is the first channel where we store data.

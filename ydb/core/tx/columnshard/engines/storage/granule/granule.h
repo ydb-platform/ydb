@@ -268,9 +268,9 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
-    void StartMoveData() {
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->StartMoveData(context);
+        ActualizationIndex->StartMoveData(targetGroups, context);
     }
 
     void StopMoveData() {

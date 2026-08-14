@@ -172,9 +172,9 @@ public:
         return GranulesStorage->ReturnToIndexes(portions);
     }
 
-    void StartMoveData() {
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
         for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
-            granule->StartMoveData();
+            granule->StartMoveData(targetGroups);
         }
     }
 

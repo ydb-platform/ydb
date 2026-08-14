@@ -31,7 +31,7 @@ public:
     explicit TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer)
         : MoveDataActualizer(actualizer)
     {
-        AFL_VERIFY(actualizer);
+        AFL_VERIFY(!!actualizer);
     }
 };
 

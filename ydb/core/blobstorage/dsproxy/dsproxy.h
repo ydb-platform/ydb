@@ -194,7 +194,6 @@ public:
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
-        bool EnableChecksumCalcAndValidationOnDsProxy = false;
     };
 
     struct TTypeSpecificParameters {
@@ -518,9 +517,6 @@ struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnableVPatch;
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
-    TMemorizableControlWrapper EnableChecksumCalcAndValidationOnDsProxy =
-            EnableChecksumCalcAndValidationOnDsProxyDefaultControl;
-
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \
     TMemorizableControlWrapper prefix##HDD = prefix##DefaultControl;    \

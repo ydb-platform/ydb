@@ -170,7 +170,7 @@ namespace {
                             key, std::move(data), vDiskId,
                             true, nullptr,
                             TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                            false, TWriteSource::BlobBalancer
+                            TWriteSource::BlobBalancer
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
@@ -184,7 +184,7 @@ namespace {
 
                         // TODO(alexvru): checksumming here
                         ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, nullptr, NWilson::TTraceId(),
-                            TWriteSource::BlobBalancer, false);
+                            TWriteSource::BlobBalancer);
                     }
                 }
             }

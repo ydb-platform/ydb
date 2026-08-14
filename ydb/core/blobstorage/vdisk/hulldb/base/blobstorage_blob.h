@@ -45,9 +45,6 @@ namespace NKikimr {
 
                 case EBlobHeaderMode::NO_HEADER:
                     return 0;
-
-                case EBlobHeaderMode::XXH3_64BIT_HEADER:
-                    return sizeof(ui64);
             }
         }
 
@@ -61,15 +58,12 @@ namespace NKikimr {
 
                 case 0:
                     return EBlobHeaderMode::NO_HEADER;
-
-                case sizeof(ui64):
-                    return EBlobHeaderMode::XXH3_64BIT_HEADER;
             }
 
             Y_ABORT("incorrect data and written size relation");
         }
 
-        static const size_t MaxHeaderSize = sizeof(ui64);
+        static const size_t MaxHeaderSize = HeaderSize;
 
         TDiskBlob() = default;
 
@@ -105,12 +99,6 @@ namespace NKikimr {
                 }
 
                 case EBlobHeaderMode::NO_HEADER:
-                    break;
-
-                case EBlobHeaderMode::XXH3_64BIT_HEADER:
-                    Y_ABORT_UNLESS(!offset);
-                    Y_ABORT_UNLESS(Rope->size() == blobSize + sizeof(ui64));
-                    Y_ABORT_UNLESS(ValidateChecksum(*Rope));
                     break;
             }
 
@@ -260,7 +248,7 @@ namespace NKikimr {
     public:
         template<typename TPartIt>
         static TRope CreateFromDistinctParts(TPartIt first, TPartIt last, NMatrix::TVectorType parts, ui64 fullDataSize,
-                TRopeArena& arena, EBlobHeaderMode blobHeaderMode, std::optional<ui64> checksum) {
+                TRopeArena& arena, EBlobHeaderMode blobHeaderMode, std::optional<ui64> /*checksum*/) {
             // ensure that we have correct number of set parts
             Y_ABORT_UNLESS(parts.CountBits() == std::distance(first, last));
             Y_ABORT_UNLESS(first != last);
@@ -279,20 +267,12 @@ namespace NKikimr {
                 }
 
                 case EBlobHeaderMode::NO_HEADER:
-                case EBlobHeaderMode::XXH3_64BIT_HEADER:
                     break;
             }
 
             // then copy parts' contents to the rope
             while (first != last) {
                 rope.Insert(rope.End(), std::move(*first++));
-            }
-
-            if (blobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER) {
-                if (!checksum) {
-                    checksum.emplace(CalculateChecksum(rope, Max<size_t>()));
-                }
-                rope.Insert(rope.End(), arena.CreateRope(&checksum.value(), sizeof(ui64)));
             }
 
             return rope;
@@ -319,9 +299,6 @@ namespace NKikimr {
             }
             return res;
         }
-
-        static ui64 CalculateChecksum(const TRope& rope, size_t numBytes = Max<size_t>());
-        static bool ValidateChecksum(const TRope& rope);
 
     private:
         friend class TDiskBlobMerger;
@@ -381,17 +358,11 @@ namespace NKikimr {
                 }
 
                 case EBlobHeaderMode::NO_HEADER:
-                case EBlobHeaderMode::XXH3_64BIT_HEADER:
                     break;
             }
 
             for (auto it = begin(); it != end(); ++it) {
                 rope.Insert(rope.End(), it.GetPart());
-            }
-
-            if (blobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER) {
-                const ui64 checksum = CalculateChecksum(rope);
-                rope.Insert(rope.End(), arena.CreateRope(&checksum, sizeof(checksum)));
             }
 
             return rope;

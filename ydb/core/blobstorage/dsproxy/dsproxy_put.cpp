@@ -577,8 +577,7 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
                 params.EnableRequestMod3x3ForMinLatency, params.Common.Source,
-                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams,
-                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
+                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , HandleClass(params.Common.Event->HandleClass)
         , ReportedBytes(0)
@@ -603,8 +602,7 @@ public:
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Events, Mon, params.HandleClass, params.Tactic,
-                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams,
-                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
+                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(params.HandleClass)

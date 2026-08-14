@@ -4,17 +4,11 @@
 #include "dsproxy_blackboard.h"
 #include "dsproxy_mon.h"
 #include "request_history.h"
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
-
-namespace NDsProxyGetImpl {
-
-bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus, const NKikimrBlobStorage::TQueryResult& result,
-        const TRope& resultBuffer);
-
-} // namespace NDsProxyGetImpl
 
 class TStrategyBase;
 
@@ -29,7 +23,6 @@ class TGetImpl {
     const bool CollectDebugInfo;
     const bool MustRestoreFirst;
     const bool ReportDetailedPartMap;
-    const bool EnableChecksumCalcAndValidationOnDsProxy;
     std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     ui64 ReplyBytes = 0;
@@ -68,7 +61,7 @@ class TGetImpl {
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
-            const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidationOnDsProxy = false,
+            const TAccelerationParams& accelerationParams,
             const TString& requestPrefix = {})
         : Deadline(ev->Deadline)
         , Info(info)
@@ -80,7 +73,6 @@ public:
         , CollectDebugInfo(ev->CollectDebugInfo)
         , MustRestoreFirst(ev->MustRestoreFirst)
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
-        , EnableChecksumCalcAndValidationOnDsProxy(enableChecksumCalcAndValidationOnDsProxy)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
@@ -214,16 +206,6 @@ public:
             TRope resultBuffer = ev.GetBlobData(result);
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
             TString errorReason = record.GetErrorReason();
-
-            if (EnableChecksumCalcAndValidationOnDsProxy && !NDsProxyGetImpl::ValidateVDiskGetResponseChecksum(replyStatus, result, resultBuffer)) {
-                DSP_LOG_ERROR_SX(logCtx, "BPG68", "Error in ValidateVDiskGetResponseChecksum on TEvVGetResult, blobId# " << blobId
-                        << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size()
-                        << " checksumType# " << static_cast<ui32>(result.GetChecksumType()));
-                NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
-                replyStatus = NKikimrProto::ERROR;
-                errorReason = "buffer checksum mismatch";
-                mutableResult->SetStatus(replyStatus);
-            }
 
             // Currently CRC can be checked only if blob part is fully read
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {

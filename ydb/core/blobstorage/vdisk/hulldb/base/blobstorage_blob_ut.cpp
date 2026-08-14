@@ -14,8 +14,8 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageDiskBlob) {
 
         Y_UNIT_TEST(CreateFromDistinctParts) {
-            for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
-                for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
+            for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER}) {
+                for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER}) {
                     const ui8 totalParts = MaxTotalPartCount;
                     const ui32 partSize = 6;
                     const ui64 fullDataSize = partSize;
@@ -61,7 +61,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(CreateIterate) {
-            for (auto addHeader : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
+            for (auto addHeader : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER}) {
                 ui8 partId = 2;
                 TString data("abcdefgh");
                 TRope buf = TDiskBlob::Create(data.size(), partId, 3, TRope(data), Arena, addHeader, std::nullopt);
@@ -78,8 +78,8 @@ namespace NKikimr {
         Y_UNIT_TEST(Merge) {
             TString data("abcdefgh");
 
-            for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
-                for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
+            for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER}) {
+                for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER}) {
                     // blob1
                     ui8 partId1 = 1;
                     const TLogoBlobID id(0, 0, 0, 0, data.size(), 0);

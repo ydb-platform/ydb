@@ -504,7 +504,7 @@ namespace NKikimr::NPrivate {
             // TODO(alexvru): checksumming here
             std::unique_ptr<IEventBase> put = std::make_unique<TEvBlobStorage::TEvVPut>(TLogoBlobID(PatchedBlobId, PatchedPartId),
                     Buffer, VDiskId, false, &cookie, Deadline, NKikimrBlobStorage::AsyncBlob,
-                    false, TWriteSource::SkeletonVPatch);
+                    TWriteSource::SkeletonVPatch);
             AddMark("Send vPut");
             Send(LeaderId, put.release());
         }

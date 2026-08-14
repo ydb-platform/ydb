@@ -21,6 +21,24 @@
 namespace NKikimr {
 namespace NDataShard {
 
+// One writer's position in a lock's uncommitted write chain
+struct TLockWriteSeqNum {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+};
+
+// All data about the last applied write at this lock's position in the writer's chain.
+// WriterIndex and WriteSeqNum are persisted via local DB columns; SerializedResult is
+// in-memory only and transferred via in-memory state migration, so a duplicate that
+// arrives after a restart is answered without the stored result, while a duplicate
+// that arrives after split/merge/move gets the original result replayed.
+struct TWriteSeqNumState {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+    // Opaque serialized result of the last applied write, empty when absent.
+    TString SerializedResult;
+};
+
 class ILocksDb {
 protected:
     ~ILocksDb() = default;
@@ -40,6 +58,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        TWriteSeqNumState WriteSeqNumState;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -68,6 +87,7 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -445,6 +465,13 @@ public:
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
+    ui64 GetWriterIndex() const { return WriteSeqNumState.WriterIndex; }
+    ui64 GetWriteSeqNum() const { return WriteSeqNumState.WriteSeqNum; }
+    bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
+
+    const TWriteSeqNumState& GetWriteSeqNumState() const { return WriteSeqNumState; }
+    void SetWriteSeqNumResult(TString serializedResult);
+
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
 private:
@@ -492,6 +519,7 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+    TWriteSeqNumState WriteSeqNumState;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -937,6 +965,9 @@ struct TLocksUpdate {
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
+    // This uncommitted write's position in its writer's chain; ApplyLocks persists it on the lock.
+    std::optional<TLockWriteSeqNum> SetWriteSeqNum;
+
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
     ui64 GetEffectiveBreakerQuerySpanId() const {
@@ -1248,8 +1279,8 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
+    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeSeqNum = 0) const;
+    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeSeqNum = 0) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

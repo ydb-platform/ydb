@@ -158,7 +158,7 @@ struct TDataEvents {
             return result;
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeSeqNum = 0) {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -168,6 +168,11 @@ struct TDataEvents {
             entry->SetPathId(pathId);
             if (hasWrites) {
                 entry->SetHasWrites(true);
+            }
+            if (writeSeqNum) {
+                auto* entryWriteSeqNum = entry->AddWriteSeqNums();
+                entryWriteSeqNum->SetWriterIndex(writerIndex);
+                entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
             }
         }
 
@@ -179,7 +184,8 @@ struct TDataEvents {
 
         bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsError() const { return !IsPrepared() && !IsComplete(); }
+        bool IsDuplicate() const { return Record.GetIsDuplicate(); }
+        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsDuplicate(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

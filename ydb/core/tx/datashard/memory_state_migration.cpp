@@ -170,6 +170,12 @@ private:
                     row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
                     row.BreakerNodeId = protoLock.GetBreakerNodeId();
                 }
+                if (protoLock.HasWriteSeqNumResult()) {
+                    const auto& proto = protoLock.GetWriteSeqNumResult();
+                    row.WriteSeqNumState.WriterIndex = proto.GetWriterIndex();
+                    row.WriteSeqNumState.WriteSeqNum = proto.GetWriteSeqNum();
+                    row.WriteSeqNumState.SerializedResult = proto.GetSerializedResult();
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -645,6 +651,15 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
+        }
+        if (ui64 writeSeqNum = lockInfo.GetWriteSeqNum(); writeSeqNum != 0) {
+            const auto& state = lockInfo.GetWriteSeqNumState();
+            auto* proto = protoLockInfo->MutableWriteSeqNumResult();
+            proto->SetWriterIndex(state.WriterIndex);
+            proto->SetWriteSeqNum(state.WriteSeqNum);
+            if (!state.SerializedResult.empty()) {
+                proto->SetSerializedResult(state.SerializedResult);
+            }
         }
         for (const auto& pathId : lockInfo.GetReadTables()) {
             pathId.ToProto(protoLockInfo->AddReadTables());

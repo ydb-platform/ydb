@@ -1034,36 +1034,12 @@ public:
         return result;
     }
 
-    // The unsafe variant never reaches SchemeShard: it becomes its own physical transaction that
-    // TKqpUnsafeTruncateExecuter drives over the shards of the table and of its sync indexes.
-    TFuture<TGenericResult> PrepareUnsafeTruncateTable(const TTruncateTableSettings& settings, const TString& cluster) {
-        // The legacy scheme query API executes DDL straight through the gateway and never builds a
-        // physical query, so there is nowhere to put the transaction this operation consists of.
-        if (!IsPrepare()) {
-            return MakeFuture(ResultFromError<TGenericResult>(
-                "Unsafe TRUNCATE TABLE is not supported in scheme queries, use the query service"));
-        }
-
-        auto metadata = SessionCtx->Tables().GetTable(cluster, settings.TablePath).Metadata;
-
-        auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-
-        // Pending writes of the user transaction must reach the shards before the truncate wipes
-        // them, otherwise the same statement gives a different result depending on whether a flush
-        // happened to occur earlier.
-        phyQuery.SetForceImmediateEffectsExecution(true);
-
-        auto& phyTx = *phyQuery.AddTransactions();
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE);
-
-        // Only the path: a scheme write registers the table but does not load its metadata, so
-        // PathId, SchemaVersion and ImplTables are all still empty here. The executer discovers
-        // them from the live schema.
-        phyTx.MutableUnsafeTruncate()->SetTablePath(metadata->Name);
-
-        TGenericResult result;
-        result.SetSuccess();
-        return MakeFuture<TGenericResult>(result);
+    // The unsafe form is compiled as part of a data query and its physical transaction is emitted
+    // by TKqpBuildTxsTransformer, so this gateway entry must never be reached for it. Reaching it
+    // would append a second transaction and silently duplicate the truncate.
+    TFuture<TGenericResult> PrepareUnsafeTruncateTable(const TTruncateTableSettings&, const TString&) {
+        return MakeFuture(ResultFromError<TGenericResult>(
+            "Unsafe TRUNCATE TABLE reached the scheme gateway, which cannot execute it"));
     }
 
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {

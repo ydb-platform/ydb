@@ -1033,6 +1033,8 @@ TKiDataQueryBlockSettings TKiDataQueryBlockSettings::Parse(const NNodes::TKiData
         auto name = tuple.Name().Value();
         if (name == HasUncommittedChangesReadSettingName) {
             settings.HasUncommittedChangesRead = true;
+        } else if (name == UnsafeTruncatePathSettingName) {
+            settings.UnsafeTruncatePath = TString(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -1045,6 +1047,13 @@ NNodes::TCoNameValueTupleList TKiDataQueryBlockSettings::BuildNode(TExprContext&
     if (HasUncommittedChangesRead) {
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(HasUncommittedChangesReadSettingName)
+            .Done());
+    }
+
+    if (!UnsafeTruncatePath.empty()) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(UnsafeTruncatePathSettingName)
+            .Value<TCoAtom>().Build(UnsafeTruncatePath)
             .Done());
     }
 

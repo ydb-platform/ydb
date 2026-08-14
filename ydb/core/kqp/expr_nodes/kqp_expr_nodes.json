@@ -484,7 +484,8 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"},
-                {"Index": 1, "Name": "Effects", "Type": "TExprList"}
+                {"Index": 1, "Name": "Effects", "Type": "TExprList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

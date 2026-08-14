@@ -781,6 +781,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
         .Effects()
             .Add(builtEffects)
             .Build()
+        .Settings(query.Settings())
         .Done();
 
     return result;

@@ -243,6 +243,12 @@ struct TKiDataQueryBlockSettings {
     static constexpr std::string_view HasUncommittedChangesReadSettingName = "has_uncommitted_changes_read"sv;
     bool HasUncommittedChangesRead = false;
 
+    // Set on a block that consists of nothing but TRUNCATE TABLE ... WITH (unsafe = true). The
+    // block carries the target path instead of a node because the query block rebuild keeps only
+    // results and effects, and would drop anything else.
+    static constexpr std::string_view UnsafeTruncatePathSettingName = "unsafe_truncate_path"sv;
+    TString UnsafeTruncatePath;
+
     static TKiDataQueryBlockSettings Parse(const NNodes::TKiDataQueryBlock& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };

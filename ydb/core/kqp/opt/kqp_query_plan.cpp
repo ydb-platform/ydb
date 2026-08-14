@@ -3153,6 +3153,12 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
+        // A transaction without stages - an unsafe truncate - has nothing to draw, and the
+        // consumers of the plan list skip transactions whose plan is empty.
+        if (tx.Stages().Empty()) {
+            return;
+        }
+
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
         TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);

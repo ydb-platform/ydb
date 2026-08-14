@@ -555,23 +555,39 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "only the row written after the truncate survives");
     }
 
-    // Separate statements of one transaction are the supported shape and are covered above. Putting
-    // both into a single query text is a different thing: the truncate is compiled along the scheme
-    // path, which builds no data query blocks, so the writes would be dropped on the floor. Pin the
-    // refusal rather than leave it to chance.
-    Y_UNIT_TEST(MixedWithDataInOneQueryRejected) {
+    // The shape the feature exists for: writes, reads and the truncate in one query text, executed
+    // in statement order. The truncate is compiled as a transaction of the data query, not through
+    // the scheme path, which is what lets it sit between them at all.
+    Y_UNIT_TEST(MixedWithDataInOneQuery) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
         auto client = kikimr.GetQueryClient();
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
         auto result = session.ExecuteQuery(Sprintf(R"(
-            UPSERT INTO `%s` (Key, Value) VALUES (5u, "mixed");
+            UPSERT INTO `%s` (Key, Value) VALUES (10u, "before");
+            SELECT COUNT(*) AS cnt FROM `%s`;
             TRUNCATE TABLE `%s` WITH (unsafe = true);
-        )", TablePath, TablePath), TTxControl::NoTx()).ExtractValueSync();
+            SELECT COUNT(*) AS cnt FROM `%s`;
+        )", TablePath, TablePath, TablePath, TablePath), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-            "a single query text may not mix writes with an unsafe truncate");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2u, "both SELECTs must produce a result");
+
+        {
+            auto before = result.GetResultSetParser(0);
+            UNIT_ASSERT(before.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(before.ColumnParser("cnt").GetUint64(), 4u,
+                "the read before the truncate must see the write that precedes it");
+        }
+        {
+            auto after = result.GetResultSetParser(1);
+            UNIT_ASSERT(after.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(after.ColumnParser("cnt").GetUint64(), 0u,
+                "the read after the truncate must see an empty table");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
     // Anomaly (c), the other side: everyone else's locks are broken.
@@ -954,6 +970,49 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_C(swallowed.load() > 0, "the truncate never reached the prepare phase");
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "a truncate whose prepare was never answered cannot report success");
+    }
+
+    // Truncating an impl table on its own is the one way this statement could produce the very
+    // disagreement it goes out of its way to avoid: an empty index over a full table. The plain
+    // TRUNCATE and every write refuse it, so this must too.
+    Y_UNIT_TEST(IndexImplTableRejected) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ExecDdl(session, R"(
+            CREATE TABLE `/Root/UnsafeTruncateImpl` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX idx GLOBAL ON (Value)
+            );
+        )");
+
+        auto fill = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/UnsafeTruncateImpl` (Key, Value) VALUES (1u, "a"), (2u, "b");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
+
+        const TString implPath = "/Root/UnsafeTruncateImpl/idx/indexImplTable";
+
+        auto result = session.ExecuteQuery(Sprintf(
+            "TRUNCATE TABLE `%s` WITH (unsafe = true);", implPath.c_str()),
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+            "wiping an index impl table alone would leave the index disagreeing with its table");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "index implementation table");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountOf(session, implPath), 2u, "the index must be untouched");
+        UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateImpl"), 2u);
+
+        // The table itself still truncates, impl table included.
+        auto viaTable = session.ExecuteQuery(R"(
+            TRUNCATE TABLE `/Root/UnsafeTruncateImpl` WITH (unsafe = true);
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(viaTable.GetStatus(), EStatus::SUCCESS, viaTable.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateImpl"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(CountOf(session, implPath), 0u);
     }
 
     // Wiping a table is at least as destructive as deleting its rows, so the statement must require

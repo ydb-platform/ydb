@@ -246,6 +246,7 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
             .Add(results)
             .Build()
         .Effects(query.Effects())
+        .Settings(query.Settings())
         .Done().Ptr();
 
     return TStatus::Ok;

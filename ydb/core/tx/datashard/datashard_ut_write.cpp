@@ -4864,6 +4864,28 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(),
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
             "committing a lock together with an unsafe truncate must not reach the local database");
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(ReadTable(server, shards, tableId), "",
+            "a refused truncate must not have wiped anything");
+    }
+
+    // The operation is applied unconditionally and cannot be rolled back, so it must not be
+    // accepted as an uncommitted write: the caller would believe it still holds the decision.
+    Y_UNIT_TEST(UnsafeTruncateUnderLockRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        req->SetLockId(1234567890123, runtime.GetNodeId(0));
+
+        Write(runtime, sender, shards[0], std::move(req),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(ReadTable(server, shards, tableId), "",
+            "a refused truncate must not have wiped anything");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardWrite)

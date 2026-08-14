@@ -1111,6 +1111,13 @@ public:
                     secureParams.emplace(secretName, "");
                 }
 
+                // An unsafe truncate has no stages and a type of its own, so leaving it in would
+                // trip the tasks graph on "mixed physical tx types" as soon as a query holds both
+                // it and data transactions.
+                if (tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE) {
+                    continue;
+                }
+
                 txs.emplace_back(tx, QueryState->QueryData);
                 try {
                     QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
@@ -1121,11 +1128,9 @@ public:
                 }
             }
 
-            // Neither a scheme tx nor an unsafe truncate has stages, so there is no tasks graph to
-            // build for them: TKqpTasksGraph would reject the type outright.
+            // A scheme tx has no stages either, and it is never mixed with anything else.
             const bool buildsTasksGraph = !txs.empty()
-                && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME
-                && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE;
+                && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME;
 
             if (buildsTasksGraph && isValidParams) {
                 auto tasksGraph = TKqpTasksGraph(

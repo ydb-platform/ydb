@@ -96,6 +96,8 @@ struct TKiExploreTxResults {
         THashMap<TString, TPrimitiveYdbOperations> TablePrimitiveOps; // needed to split query into blocks
         TVector<TKiOperation> TableOperations;
         bool HasUncommittedChangesRead = false;
+        // Non-empty on a block that is nothing but an unsafe truncate of this path.
+        TString UnsafeTruncatePath;
     };
 
     bool ConcurrentResults = true;
@@ -121,11 +123,11 @@ struct TKiExploreTxResults {
         hasData = false;
         hasUnsafeTruncate = false;
         for (auto& queryBlock : QueryBlocks) {
+            hasUnsafeTruncate = hasUnsafeTruncate || !queryBlock.UnsafeTruncatePath.empty();
             for (auto& node : queryBlock.TableOperations) {
                 auto op = FromString<TYdbOperation>(TString(node.Operation()));
                 hasScheme = hasScheme || (op & KikimrSchemeOps());
                 hasData = hasData || (op & KikimrDataOps());
-                hasUnsafeTruncate = hasUnsafeTruncate || (op == TYdbOperation::UnsafeTruncateTable);
             }
         }
     }
@@ -772,9 +774,20 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             }
         }
 
-        txRes.AddTableOperation(BuildYdbOpNode(cluster,
-            unsafe ? TYdbOperation::UnsafeTruncateTable : TYdbOperation::TruncateTable,
-            truncateTable.Pos(), ctx));
+        if (!unsafe) {
+            txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+            return true;
+        }
+
+        // The unsafe form is a data plane operation and must keep its place in statement order.
+        // Reads record no table operations, so nothing else would ever start a new block here and
+        // a truncate between two SELECTs would sink into the block they share. Give it a block of
+        // its own, and start another one so whatever follows lands after it.
+        // No TKiOperation is recorded: BuildYdbOpNode leaves the table name empty, and every
+        // consumer of the operation list resolves that name against the table metadata.
+        txRes.AddQueryBlock();
+        txRes.QueryBlocks.back().UnsafeTruncatePath = TString(truncateTable.TablePath().Value());
+        txRes.AddQueryBlock();
         return true;
     }
 
@@ -892,6 +905,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     for (const auto& block : txExplore.QueryBlocks) {
         TKiDataQueryBlockSettings settings;
         settings.HasUncommittedChangesRead = block.HasUncommittedChangesRead;
+        settings.UnsafeTruncatePath = block.UnsafeTruncatePath;
 
         TExprNode::TListType queryResults;
         for (auto& result : block.Results) {
@@ -1180,7 +1194,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     bool hasUnsafeTruncate;
     txExplore.GetTableOperations(hasScheme, hasData, hasUnsafeTruncate);
 
-    if (hasData && (hasScheme || hasUnsafeTruncate)) {
+    if (hasData && hasScheme) {
         TString message = TStringBuilder() << "Queries with mixed data and scheme operations "
             << "are not supported. Use separate queries for different types of operations.";
 
@@ -1188,13 +1202,14 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         return nullptr;
     }
 
-    // The unsafe truncate is not a scheme operation, but it is still compiled along the scheme
-    // path: that is where the gateway proxy turns it into its own physical transaction. Keeping it
-    // out of KikimrSchemeOps() is what stops the "scheme operations can't be performed inside
-    // transaction" checks from rejecting it.
-    if (hasScheme || hasUnsafeTruncate) {
+    if (hasScheme) {
         return MakeSchemeTx(commit, ctx);
     }
+
+    // An unsafe truncate deliberately does not go through MakeSchemeTx: it is a data plane
+    // operation and must be able to sit between data statements of one query. It rides along as a
+    // block of its own and becomes its own physical transaction further down the pipeline.
+    Y_UNUSED(hasUnsafeTruncate);
 
     auto dataQueryBlocks = MakeKiDataQueryBlocks(commit.World(), txExplore, ctx, types);
 

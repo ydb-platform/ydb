@@ -1733,6 +1733,25 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         // NTable::TDatabase::TruncateTable asserts both !Truncated and !DataModified for the
         // table, so mixing an unsafe truncate with anything else touching the same table would abort
         // the tablet rather than fail the request. Keep unsafe truncates in their own write transaction.
+
+        // Committing locks is such a modification even though it carries no operation of its own:
+        // KqpCommitLocks runs before the operations and applies the uncommitted rows of every
+        // committed lock, which marks the table modified. A rollback goes through the same path.
+        if (rec.HasLocks()) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Unsafe truncate cannot commit or rollback locks in the same write transaction");
+            return writeOp;
+        }
+
+        // An unsafe truncate is applied unconditionally and cannot be rolled back, so it must never
+        // pretend to be an uncommitted write. A lock id would also demote the operation from
+        // GlobalWriter to GlobalReader in the dependency tracker and take away its conflicts.
+        if (rec.GetLockTxId()) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Unsafe truncate cannot be performed as an uncommitted write");
+            return writeOp;
+        }
+
         THashSet<ui64> unsafeTruncatedTables;
         for (const auto& operation : writeTx->GetOperations()) {
             if (operation.GetOperationType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {

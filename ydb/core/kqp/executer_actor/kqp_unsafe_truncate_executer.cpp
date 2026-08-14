@@ -41,6 +41,9 @@ class TKqpUnsafeTruncateExecuter: public TActorBootstrapped<TKqpUnsafeTruncateEx
         TTableId TableId;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         bool Navigated = false;
+        // Impl tables are only ever reached through the index of the table the statement names,
+        // never named by the statement itself.
+        bool IsIndexImplTable = false;
     };
 
 public:
@@ -169,6 +172,23 @@ private:
                 return;
             }
 
+            // An impl table is an ordinary KindTable, so the check above lets it through, and
+            // ShowPrivatePath above disables the scheme cache's own guard. Wiping one directly would
+            // empty the index while the table it belongs to keeps every row - exactly the
+            // disagreement this operation truncates the impl tables together with the table to
+            // avoid. Both other ways to reach the same data refuse it too: the plain TRUNCATE with
+            // "Cannot truncate index", and any write with "Writing to index implementation tables
+            // is not allowed".
+            if (!table.IsIndexImplTable
+                && entry.TableKind != NSchemeCache::ETableKind::KindRegularTable
+                && entry.TableKind != NSchemeCache::ETableKind::KindUnknown)
+            {
+                ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
+                    TStringBuilder() << "Unsafe TRUNCATE TABLE cannot truncate index implementation table "
+                                     << table.Path << ", truncate the table it belongs to instead");
+                return;
+            }
+
             if (!entry.CdcStreams.empty()) {
                 ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
                     TStringBuilder() << "Unsafe TRUNCATE TABLE is not supported for " << table.Path
@@ -215,7 +235,7 @@ private:
         }
 
         for (auto& path : discovered) {
-            Tables.push_back(TTableToTruncate{.Path = std::move(path)});
+            Tables.push_back(TTableToTruncate{.Path = std::move(path), .IsIndexImplTable = true});
         }
 
         // Another round if the tables just navigated brought in impl tables of their own.

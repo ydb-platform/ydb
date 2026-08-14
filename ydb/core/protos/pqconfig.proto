@@ -268,7 +268,7 @@ message TMirrorPartitionConfig {
     optional TCredentials Credentials = 7;
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
-    optional bool SyncWriteTime = 10 [default = false];
+    reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
 }
 
 message TPartitionConfig {

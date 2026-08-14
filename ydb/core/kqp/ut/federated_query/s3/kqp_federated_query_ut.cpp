@@ -960,8 +960,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(InsertIntoBucketValuesCast) {
-        const TString writeDataSourceName = "/Root/write_data_source";
-        const TString writeTableName = "/Root/write_binding";
+        const TString writeDataSourceName1 = "/Root/write_data_source1";
+        const TString writeDataSourceName2 = "/Root/write_data_source2";
+        const TString writeTableName1 = "/Root/write_binding1";
+        const TString writeTableName2 = "/Root/write_binding2";
         const TString writeBucket = "test_bucket_values_cast";
         const TString writeObject = "test_object_write/";
         {
@@ -975,22 +977,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         {
             const TString query = fmt::format(R"(
-                CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                CREATE EXTERNAL DATA SOURCE `{write_source1}` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="{write_location}",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `{write_table}` (
+                CREATE EXTERNAL DATA SOURCE `{write_source2}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{write_location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{write_table1}` (
                     key Uint64 NOT NULL,
                     value String NOT NULL
                 ) WITH (
-                    DATA_SOURCE="{write_source}",
+                    DATA_SOURCE="{write_source1}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+                CREATE EXTERNAL TABLE `{write_table2}` (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source2}",
                     LOCATION="{write_object}",
                     FORMAT="tsv_with_names"
                 );
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_location"_a = GetBucketLocation(writeBucket),
                 "write_object"_a = writeObject);
 
@@ -1001,31 +1018,33 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr->GetQueryClient();
         {
             const TString query = fmt::format(R"(
-                INSERT INTO `{write_table}`
+                INSERT INTO `{write_table1}`
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source1}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_table}` SELECT * FROM AS_TABLE([
+                INSERT INTO `{write_table2}` SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source2}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                 SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_object"_a = writeObject);
 
             const auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();

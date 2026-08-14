@@ -1716,7 +1716,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         }
                         accessDescription << NACLib::AccessRightsToString(requestIt->RequireAnyOfAccess[i]);
                     }
-                    errString = TStringBuilder() << MakeAccessDeniedError(ctx, entry.Path, "with any of access rights ") << accessDescription;
+                    const TString part = TStringBuilder() << "with any of access rights " << accessDescription;
+                    errString = TStringBuilder() << MakeAccessDeniedError(ctx, entry.Path, part) << " " << part;
                 }
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

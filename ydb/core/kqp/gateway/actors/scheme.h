@@ -76,9 +76,14 @@ public:
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request",
                     {"txId", response.GetTxId()});
 
-                NYql::TIssue issue(NYql::TPosition(), "Access denied.");
+                NYql::TIssues issues;
+                if (!response.GetIssues().empty()) {
+                    NYql::IssuesFromMessage(response.GetIssues(), issues);
+                } else {
+                    issues.AddIssue(NYql::TIssue(NYql::TPosition(), "Access denied."));
+                }
                 Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
-                    "Access denied for scheme request", {issue}));
+                    "Access denied for scheme request", issues));
                 this->Die(ctx);
                 return;
             }
@@ -130,8 +135,12 @@ public:
                     Promise.SetValue(std::move(result));
                     this->Die(ctx);
                 } else {
+                    NYql::TIssues issues;
+                    if (!response.GetIssues().empty()) {
+                        NYql::IssuesFromMessage(response.GetIssues(), issues);
+                    }
                     Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                        response.GetSchemeShardReason(), {}));
+                        response.GetSchemeShardReason(), issues));
                     this->Die(ctx);
                 }
                 return;

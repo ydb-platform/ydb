@@ -45,7 +45,7 @@ public:
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
 
-    void StartMoveData(const TAddExternalContext& context);
+    void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context);
     void StopMoveData();
     void RefreshMoveData(const TAddExternalContext& context);
     ui64 GetMoveDataPortionsCount() const;

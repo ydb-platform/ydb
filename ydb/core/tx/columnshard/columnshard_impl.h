@@ -544,6 +544,9 @@ private:
         THashSet<ui32> TargetGroups;
         bool Active = false;
         bool VacuumStarted = false;
+        // Set to true when the executor calls MoveDataCompleted(); signals that
+        // vacuum is done and only the HasBlobsForGroups gate remains.
+        bool VacuumCompleted = false;
     };
 
     TMoveDataState MoveDataState;

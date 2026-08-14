@@ -360,6 +360,79 @@ Y_UNIT_TEST(TestStaleDeregisterDoesNotDropNewerPending) {
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
 }
+
+void AdvancePastDeadlineMapTtl(TTestActorRuntime* runtime) {
+    // Default TTL is 5 minutes; wakeup period is 1 minute.
+    for (int i = 0; i < 6; ++i) {
+        runtime->AdvanceCurrentTime(TDuration::Minutes(1));
+        runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+    }
+}
+
+// Pending Stage/Publish without Register must expire by TTL instead of leaking forever.
+Y_UNIT_TEST(TestPendingExpiresByTtl) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
+    );
+
+    AdvancePastDeadlineMapTtl(runtime);
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 1));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
+}
+
+// After retired tombstone expires, Stage-before-Register may buffer again.
+Y_UNIT_TEST(TestRetiredExpiresAllowsBufferAgain) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvDeregisterDirectReadSession({"session", 1}, 1)
+    );
+
+    AdvancePastDeadlineMapTtl(runtime);
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 1, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 1)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 1)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 1));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
 } // Test suite
 
 } //namespace NKikimr::NPQ

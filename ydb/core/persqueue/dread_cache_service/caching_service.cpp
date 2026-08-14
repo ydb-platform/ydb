@@ -1,4 +1,5 @@
 #include "caching_service.h"
+#include "deadline_map.h"
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -11,6 +12,7 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
@@ -20,6 +22,10 @@ using namespace NActors;
 using namespace Ydb::Topic;
 using namespace NGRpcProxy::V1;
 
+namespace {
+constexpr ui64 ExpireDeadlineMapsWakeupTag = 1;
+constexpr TDuration DeadlineMapWakeupPeriod = TDuration::Minutes(1);
+} // namespace
 
 i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     if (proto.HasCodec()) {
@@ -40,7 +46,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: Created");
 
         Become(&TThis::StateWork);
-        Y_UNUSED(ctx);
+        ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
     }
 
     STRICT_STFUNC(StateWork,
@@ -53,10 +59,41 @@ public:
           hFunc(TEvPQProxy::TEvDirectReadDataSessionConnected, HandleCreateClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionDead, HandleDestroyClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandlePartitionSessionReleased)
+          hFunc(TEvents::TEvWakeup, HandleWakeup)
     )
 
 private:
     using TSessionsMap = THashMap<TReadSessionKey, TCacheServiceData>;
+
+    struct TPendingStage {
+        ui32 Generation = 0;
+        std::shared_ptr<NKikimrClient::TResponse> Response;
+    };
+    struct TPendingDirectReads {
+        TMap<ui64, TPendingStage> Stages;
+        TMap<ui64, ui32> Publishes; // readId -> tablet generation
+        TInstant Deadline;
+    };
+    struct TRetiredSession {
+        ui32 Generation = 0;
+        TInstant Deadline;
+    };
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != ExpireDeadlineMapsWakeupTag) {
+            return;
+        }
+        const auto& ctx = ActorContext();
+        const auto now = ctx.Now();
+        const auto pendingExpired = PendingBySession.Expire(now);
+        const auto retiredExpired = RetiredSessions.Expire(now);
+        if (pendingExpired || retiredExpired) {
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: expired deadline map entries",
+                {"pending", pendingExpired},
+                {"retired", retiredExpired});
+        }
+        ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
+    }
 
     void HandleCreateClientSession(TEvPQProxy::TEvDirectReadDataSessionConnected::TPtr& ev) {
         const auto& ctx = ActorContext();
@@ -127,7 +164,7 @@ private:
             ServerSessions.erase(sessionIter);
         } else {
             // Drop any Stage/Publish that arrived before Register for this dead binding.
-            PendingBySession.erase(key);
+            PendingBySession.Erase(key);
         }
     }
 
@@ -178,8 +215,7 @@ private:
                 {"partitionSessionId", sessionKey.PartitionSessionId},
                 {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
                 {"TabletGeneration", ev->Get()->TabletGeneration});
-            auto& pending = PendingBySession[sessionKey];
-            pending.Stages[ev->Get()->ReadKey.ReadId] = TPendingStage{
+            GetOrCreatePending(sessionKey).Stages[ev->Get()->ReadKey.ReadId] = TPendingStage{
                 ev->Get()->TabletGeneration,
                 ev->Get()->Response
             };
@@ -213,7 +249,7 @@ private:
                 {"partitionSessionId", key.PartitionSessionId},
                 {"readId", readId},
                 {"generation", generation});
-            PendingBySession[key].Publishes[readId] = generation;
+            GetOrCreatePending(key).Publishes[readId] = generation;
             return;
         }
 
@@ -223,12 +259,11 @@ private:
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
-        auto pendingIter = PendingBySession.find(key);
-        if (!pendingIter.IsEnd()) {
-            pendingIter->second.Stages.erase(ev->Get()->ReadKey.ReadId);
-            pendingIter->second.Publishes.erase(ev->Get()->ReadKey.ReadId);
-            if (pendingIter->second.Stages.empty() && pendingIter->second.Publishes.empty()) {
-                PendingBySession.erase(pendingIter);
+        if (auto* pending = PendingBySession.Find(key)) {
+            pending->Stages.erase(ev->Get()->ReadKey.ReadId);
+            pending->Publishes.erase(ev->Get()->ReadKey.ReadId);
+            if (pending->Stages.empty() && pending->Publishes.empty()) {
+                PendingBySession.Erase(key);
             }
         }
         auto iter = ServerSessions.find(key);
@@ -397,8 +432,8 @@ private:
     }
 
     void FlushPendingDirectReads(const TReadSessionKey& key) {
-        auto pendingIter = PendingBySession.find(key);
-        if (pendingIter.IsEnd()) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
             return;
         }
         auto sessionIter = ServerSessions.find(key);
@@ -410,56 +445,75 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: flush pending stage/publish after register",
             {"sessionId", key.SessionId},
             {"partitionSessionId", key.PartitionSessionId},
-            {"stages", pendingIter->second.Stages.size()},
-            {"publishes", pendingIter->second.Publishes.size()});
+            {"stages", pending->Stages.size()},
+            {"publishes", pending->Publishes.size()});
 
         // Stage before Publish; maps are ordered by readId.
-        for (auto& [readId, stage] : pendingIter->second.Stages) {
+        for (auto& [readId, stage] : pending->Stages) {
             StageToSession(sessionIter, readId, stage.Generation, stage.Response);
         }
-        for (const auto& [readId, generation] : pendingIter->second.Publishes) {
+        for (const auto& [readId, generation] : pending->Publishes) {
             PublishToSession(sessionIter, readId, generation);
         }
-        PendingBySession.erase(pendingIter);
+        PendingBySession.Erase(key);
+    }
+
+    TPendingDirectReads& GetOrCreatePending(const TReadSessionKey& key) {
+        if (auto* pending = PendingBySession.Find(key)) {
+            return *pending;
+        }
+        auto* inserted = PendingBySession.TryInsert(
+            key, TPendingDirectReads{}, ActorContext().Now());
+        Y_ABORT_UNLESS(inserted);
+        return *inserted;
     }
 
     void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {
-        auto& retiredGeneration = RetiredSessionGeneration[key];
-        retiredGeneration = Max(retiredGeneration, generation);
+        const auto now = ActorContext().Now();
+        if (auto* retired = RetiredSessions.Find(key)) {
+            retired->Generation = Max(retired->Generation, generation);
+            RetiredSessions.TouchDeadline(key, now);
+        } else {
+            TRetiredSession entry;
+            entry.Generation = generation;
+            auto* inserted = RetiredSessions.TryInsert(key, std::move(entry), now);
+            Y_ABORT_UNLESS(inserted);
+        }
+
+        const ui32 retiredGeneration = RetiredSessions.Find(key)->Generation;
 
         // Drop only pending for generations <= retired. Newer Stage/Publish (e.g. Stage(N)
         // before Register, then stale Deregister(N-1)) must survive for FlushPending.
-        auto pendingIter = PendingBySession.find(key);
-        if (pendingIter.IsEnd()) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
             return;
         }
-        auto& pending = pendingIter->second;
-        for (auto it = pending.Stages.begin(); it != pending.Stages.end(); ) {
+        for (auto it = pending->Stages.begin(); it != pending->Stages.end(); ) {
             if (it->second.Generation <= retiredGeneration) {
-                it = pending.Stages.erase(it);
+                it = pending->Stages.erase(it);
             } else {
                 ++it;
             }
         }
-        for (auto it = pending.Publishes.begin(); it != pending.Publishes.end(); ) {
+        for (auto it = pending->Publishes.begin(); it != pending->Publishes.end(); ) {
             if (it->second <= retiredGeneration) {
-                it = pending.Publishes.erase(it);
+                it = pending->Publishes.erase(it);
             } else {
                 ++it;
             }
         }
-        if (pending.Stages.empty() && pending.Publishes.empty()) {
-            PendingBySession.erase(pendingIter);
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
         }
     }
 
     void ClearRetiredSession(const TReadSessionKey& key) {
-        RetiredSessionGeneration.erase(key);
+        RetiredSessions.Erase(key);
     }
 
     bool IsSessionGenerationRetired(const TReadSessionKey& key, ui32 generation) const {
-        auto it = RetiredSessionGeneration.find(key);
-        return !it.IsEnd() && generation <= it->second;
+        const auto* retired = RetiredSessions.Find(key);
+        return retired && generation <= retired->Generation;
     }
 
     template<class TEv>
@@ -707,23 +761,13 @@ private:
             *msgMeta = (proto.GetMessageMeta());
         }
     }
-private:
-    struct TPendingStage {
-        ui32 Generation = 0;
-        std::shared_ptr<NKikimrClient::TResponse> Response;
-    };
-    struct TPendingDirectReads {
-        TMap<ui64, TPendingStage> Stages;
-        TMap<ui64, ui32> Publishes; // readId -> tablet generation
-    };
 
     TSessionsMap ServerSessions;
-    THashMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
+    TDeadlineMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
     // Highest generation for which the session was Deregistered/Released. Late Stage/Publish
     // with generation <= this value must not re-create PendingBySession after teardown.
-    // Keys stay until Register of the same session key (or actor death); needed so a late
-    // Stage after erase does not leak again.
-    THashMap<TReadSessionKey, ui32> RetiredSessionGeneration;
+    // Entries expire by TTL (with deadline refresh on each MarkSessionRetired).
+    TDeadlineMap<TReadSessionKey, TRetiredSession> RetiredSessions;
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 
     ::NMonitoring::TDynamicCounterPtr Counters;

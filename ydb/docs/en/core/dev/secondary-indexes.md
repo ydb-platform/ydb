@@ -36,48 +36,23 @@ To effectively limit the result of a query using the [`LIMIT` command](../yql/re
 - `WHERE a = $var1 AND b > $var2 ORDER BY a, b DESC LIMIT 1`, all index rows that match the filter conditions will be read;
 - `WHERE a = $var1 AND b > $var2 ORDER BY a DESC, b DESC LIMIT 1`, only one row will be read.
 
-<<<<<<< HEAD
 Considering the above, there's no use in pre-indexing all possible combinations of table columns to speed up the execution of any query. An index is always a compromise between the lookup and write speed and the storage space occupied by the data. Indexes are created for specific queries and search criteria made by an app in the database.
 
 ## Using secondary indexes when selecting data {#use}
 
-For a table to be accessed by a secondary index, its name must be explicitly specified in the `VIEW` section after the table name as described in the article about the YQL [`SELECT` statement](../yql/reference/syntax/select#secondary_index). For example, a query to retrieve orders from the `orders` table by the specified customer ID (`id_customer`) looks like this:
-=======
 When retrieving data from a table, {{ ydb-short-name }} provides two ways to use secondary indexes:
->>>>>>> 56800654bb0 (updating automatic secondary index selection (#48761))
 
 1. **Explicit index specification** — the secondary index name is specified in the `VIEW` section after the table name, as described in the article about the [`SELECT` command](../yql/reference/syntax/select#secondary_index) in YQL. For example, to retrieve from the Orders table (`orders`) a sample of orders for a customer with a given ID (`id_customer`), the query will look as follows:
 
-<<<<<<< HEAD
-```yql
-DECLARE $customer_id AS Uint64;
-
-SELECT *
-FROM   orders VIEW idx_customer AS o
-WHERE  o.id_customer = $customer_id
-```
-=======
    ```yql
    DECLARE $customer_id AS Uint64;
    SELECT *
    FROM   orders VIEW idx_customer AS o
    WHERE  o.id_customer = $customer_id
    ```
->>>>>>> 56800654bb0 (updating automatic secondary index selection (#48761))
 
    , where `idx_customer` is the name of the secondary index on the `orders` table, with the first field being `id_customer`.
 
-<<<<<<< HEAD
-Where `idx_customer` is the name of the secondary index on the `orders` table with the `id_customer` field specified first.
-
-If no `VIEW` section is specified, making a query like this results in a full scan of the `orders` table.
-
-In transactional applications, such information queries are executed with paginated data output. This eliminates an increase in the cost and time of query execution if the number of entries that meet the filtering conditions grows. The described approach to writing [paginated queries](../dev/paging.md) using the primary key can also be applied to columns that are part of a secondary index.
-
-An experimental capability to automatically select a secondary index for use in a query is also available. The selection algorithm is currently rule-based and uses only the query text to automatically select a secondary index.
-
-### Automatic use of indexes when selecting data
-=======
 2. **Automatic index selection by the query optimizer** — if the `VIEW` section is not specified, the optimizer can independently decide to use a particular secondary index based on the query text. Detailed criteria for index selection are described below.
 
 {% note warning %}
@@ -89,10 +64,7 @@ If you have existing queries without an explicit index (without the `VIEW` secti
 
 {% endnote %}
 
-### Automatic index usage in queries
-
-Explicitly specifying the `VIEW` section takes precedence over the optimizer's decision to use secondary indexes. That is, the query
->>>>>>> 56800654bb0 (updating automatic secondary index selection (#48761))
+### Automatic use of indexes when selecting data
 
 Explicitly specifying the `VIEW` section takes priority over the optimizer's decision to use secondary indexes. That is, the query
 

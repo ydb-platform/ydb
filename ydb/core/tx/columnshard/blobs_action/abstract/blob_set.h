@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
@@ -85,12 +86,9 @@ public:
 
     // Returns true if no blob in the set has the given channel and generation in [fromGen, nextFromGen).
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const {
-        for (const auto& blob : Blobs) {
-            if (blob.Channel() == channel && blob.Generation() >= fromGen && blob.Generation() < nextFromGen) {
-                return false;
-            }
-        }
-        return true;
+        return FindIf(Blobs, [&](const TLogoBlobID& blob) {
+            return blob.Channel() == channel && blob.Generation() >= fromGen && blob.Generation() < nextFromGen;
+        }) == Blobs.end();
     }
 
     template <class TActor>

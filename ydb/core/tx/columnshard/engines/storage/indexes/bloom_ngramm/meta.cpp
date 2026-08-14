@@ -275,7 +275,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     // The largest power-of-2 filter strictly below the storage blob limit (the blob splitter requires
     // chunks < MaxBlobSize): filters above it are either split by record subranges or folded down to it
     // (a smaller bloom filter stays correct, only its FPR grows), so the builder never emits an oversize chunk.
-    const ui64 clampBits = chunkSizeLimit ? std::max<ui64>(BitsPerUi64, std::bit_floor(*chunkSizeLimit * CHAR_BIT - 1)) : MaxBitsSize;
+    const ui64 clampBits =
+        (chunkSizeLimit && *chunkSizeLimit > 0) ? std::max<ui64>(BitsPerUi64, std::bit_floor(*chunkSizeLimit * CHAR_BIT - 1)) : MaxBitsSize;
 
     if (!useOldSizing) {
         const auto foldAndSerialize = [&](TArrayPower2BitsStorage&& maxStorage, const ui64 maxTargetBits) {

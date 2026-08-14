@@ -59,7 +59,6 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
 
     if (NWilson::TTraceId userFacingTraceId = ctx->GetUserFacingWilsonTraceId()) {
         userFacingTraceId.Serialize(Record.MutableUserFacingTraceId());
-        Record.SetProxyRequestStartTimeUs(TInstant::Now().MicroSeconds());
     }
 
     UserCtx = builder.Build();

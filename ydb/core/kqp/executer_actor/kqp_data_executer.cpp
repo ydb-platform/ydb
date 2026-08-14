@@ -335,6 +335,7 @@ public:
             tl.Phase(EUserFacingTracePhase::CommitCoordinator) = ev->Get()->CommitCoordinator;
             tl.Phase(EUserFacingTracePhase::CommitApplyShards) = ev->Get()->CommitApplyShards;
             UserFacingTraceData->ShardCommitAcks = std::move(ev->Get()->ShardCommitAcks);
+            UserFacingTraceData->ShardCommitAcksTruncated = ev->Get()->ShardCommitAcksTruncated;
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();

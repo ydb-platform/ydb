@@ -21,4 +21,17 @@ bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
     return false;
 }
 
+const char* GetTableSinkModeVerb(NKikimrKqp::TKqpTableSinkSettings::EType mode) {
+    switch (mode) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_FILL:             return "FILL";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:          return "REPLACE";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:           return "UPSERT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT: return "UPSERT INCREMENT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:           return "INSERT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:           return "DELETE";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:           return "UPDATE";
+        default:                                                       return nullptr;
+    }
+}
+
 } // namespace NKikimr::NKqp

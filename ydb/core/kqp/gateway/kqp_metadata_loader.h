@@ -26,19 +26,29 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
 
 class TUserFacingCompileDependencyCollector {
 public:
-    void Record(EUserFacingCompileDependency dependency, TString target, TInstant start, TInstant end) {
+    void Record(EUserFacingCompileDependency dependency, TString target, TInstant start, TInstant end,
+            EUserFacingCompileStatus status) {
         std::lock_guard guard(Mutex);
-        Spans.push_back({dependency, std::move(target), start, end});
+        if (Spans.size() < MaxSpans) {
+            Spans.push_back({dependency, std::move(target), start, end, status});
+        } else {
+            ++Dropped;
+        }
     }
 
-    std::shared_ptr<const std::vector<TUserFacingCompileSpan>> Snapshot() const {
+    std::shared_ptr<const TUserFacingCompileTrace> Snapshot() const {
         std::lock_guard guard(Mutex);
-        return std::make_shared<const std::vector<TUserFacingCompileSpan>>(Spans);
+        return std::make_shared<const TUserFacingCompileTrace>(TUserFacingCompileTrace{
+            .Spans = Spans,
+            .Dropped = Dropped,
+        });
     }
 
 private:
+    static constexpr size_t MaxSpans = 64;
     mutable std::mutex Mutex;
     std::vector<TUserFacingCompileSpan> Spans;
+    size_t Dropped = 0;
 };
 
 class TKqpTableMetadataLoader : public NYql::IKikimrGateway::IKqpTableMetadataLoader {

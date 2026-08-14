@@ -88,6 +88,14 @@ public:
     {
         RequestEv.reset(ev->Release().Release());
 
+        ProxyRequestStartTime = StartTime;
+        const auto& proxyRequestHops = RequestEv->Record.GetProxyRequestHops();
+        ProxyRequestHops.reserve(proxyRequestHops.size());
+        for (const auto& hop : proxyRequestHops) {
+            ProxyRequestHops.push_back(hop);
+            ProxyRequestStartTime -= TDuration::MicroSeconds(hop.GetDurationUs());
+        }
+
         if (!RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
@@ -180,6 +188,8 @@ public:
     bool IsWarmupCompilation_ = false;
 
     TInstant StartTime;
+    TInstant ProxyRequestStartTime;
+    std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
@@ -200,7 +210,7 @@ public:
     TString ObfuscatedQueryText;
     TInstant CompileWallStart;
     TInstant CompileWallEnd;
-    std::shared_ptr<const std::vector<TUserFacingCompileSpan>> UserFacingCompileSpans;
+    std::shared_ptr<const TUserFacingCompileTrace> UserFacingCompileSpans;
     std::optional<TUserFacingCompileActorSpan> UserFacingCompileActorSpan;
     ETableReadType MaxReadType = ETableReadType::Other;
 

@@ -41,16 +41,6 @@ struct TMergeRuntimeState {
     THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> OpenBatches;
     ui64 PrevRowsAdded = 0;
     ui64 PrevRowsSkipped = 0;
-    // Bumped on each ownership transfer (controller <-> conveyor task). Detects use-after-move.
-    ui64 Generation = 0;
-
-    TMergeRuntimeState() = default;
-
-    void BumpGeneration() {
-        ++Generation;
-    }
-
-    TString DebugString() const;
 };
 
 class TBuildFilterTaskContext {

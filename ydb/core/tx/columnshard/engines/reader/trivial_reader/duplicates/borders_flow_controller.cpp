@@ -2,10 +2,6 @@
 
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
-#include <ydb/library/actors/core/log.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
-
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, TMergeRuntimeState&& mergeState,
@@ -148,9 +144,6 @@ void TBordersFlowController::DrainQueue() {
     }
     TMergeRuntimeState state = std::move(*IdleMergeState);
     IdleMergeState.reset();
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_drain_queue")("owner", ev.Get()->Recipient.ToString())(
-        "state", state.DebugString())("ready_borders", readyBorders.size())("queue_left", BordersQueue.size())(
-        "aborted", MergeContext && MergeContext->IsAborted());
     const std::shared_ptr<TMergeBorders> task =
         std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, std::move(state), ev, readyBorders);
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
@@ -160,17 +153,12 @@ void TBordersFlowController::DrainQueue() {
 
 void TBordersFlowController::ReturnMergeState(TMergeRuntimeState&& state) {
     AFL_VERIFY(!IdleMergeState.has_value());
-    state.BumpGeneration();
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_return_merge_state")("state", state.DebugString())(
-        "inflight", IsInflight);
     IdleMergeState.emplace(std::move(state));
 }
 
 void TBordersFlowController::OnReadyMergeBorders(const bool allowDrain) {
     AFL_VERIFY(IsInflight);
     AFL_VERIFY(IdleMergeState.has_value());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_merge_idle")("allow_drain", allowDrain)(
-        "state", IdleMergeState->DebugString())("queue", BordersQueue.size());
     IsInflight = false;
     Counters->OnMergeInflight(-1);
     if (allowDrain) {
@@ -179,8 +167,6 @@ void TBordersFlowController::OnReadyMergeBorders(const bool allowDrain) {
 }
 
 void TBordersFlowController::AbortPendingMerges() {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_abort_pending_merges")("inflight", IsInflight)(
-        "idle_state", IdleMergeState.has_value())("queue", BordersQueue.size())("debug", DebugString());
     if (!BordersQueue.empty()) {
         Counters->OnMergeQueue(-1 * static_cast<i64>(BordersQueue.size()));
         BordersQueue.clear();

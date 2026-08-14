@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
-// Immutable-ish config shared by the controller and merge tasks (no FiltersBuilder / OpenBatches).
+// Shared merge config. Progressive filter state lives in TMergeRuntimeState.
 struct TMergeContext {
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     bool IsReversed;
@@ -41,7 +41,6 @@ private:
     TMergeRuntimeState State;
     TEvBordersConstructionResult::TPtr Event;
     std::vector<NArrow::TSimpleRow> ReadyBorders;
-    ui64 TaskId = 0;
 
 private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;

@@ -1,7 +1,5 @@
 #include "private_events.h"
 
-#include <util/string/builder.h>
-
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate {
 
 TEvFilterRequestResourcesAllocated::TEvFilterRequestResourcesAllocated(const std::shared_ptr<TFilterAccumulator>& request,
@@ -87,13 +85,6 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
     : Context(std::move(context))
     , Result(std::move(error))
 {
-}
-
-TString TMergeRuntimeState::DebugString() const {
-    TStringBuilder sb;
-    sb << "{gen=" << Generation << ";open_batches=" << OpenBatches.size() << ";filters=" << FiltersBuilder.CountSources()
-       << ";prev_added=" << PrevRowsAdded << ";prev_skipped=" << PrevRowsSkipped << "}";
-    return sb;
 }
 
 TEvMergeBordersResult::TEvMergeBordersResult(TBuildFilterTaskContext&& context, TMergeRuntimeState&& mergeState,

@@ -244,9 +244,7 @@ protected:
         if (!entity.GetEntityRecordsCount()) {
             usage = false;
         } else {
-            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount())(
-                                        "portion_id", PortionId.value_or(0))("entity_portion", entity.GetDeprecatedPortionId())(
-                                        "source_idx", SourceIdx.value_or(0))("entity_id", entity.GetEntityId());
+            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
             usage = RecordIndex < entity.GetEntityRecordsCount();
         }
         return true;

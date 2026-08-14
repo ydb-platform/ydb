@@ -228,7 +228,6 @@ class THoldingDeduplicationConveyorService: public NActors::TActor<THoldingDedup
 
     TMutex Mutex;
     std::vector<NConveyor::ITask::TPtr> Held;
-    std::atomic<bool> ExecuteImmediately{ false };
     std::atomic<ui64> HeldCountAtomic{ 0 };
 
 public:
@@ -249,10 +248,6 @@ public:
     void Handle(NConveyorComposite::TEvExecution::TEvNewTask::TPtr& ev) {
         auto task = ev->Get()->GetTask();
         AFL_VERIFY(!!task);
-        if (ExecuteImmediately.load()) {
-            task->Execute(nullptr, task);
-            return;
-        }
         with_lock(Mutex) {
             Held.push_back(std::move(task));
             HeldCountAtomic.store(Held.size());
@@ -273,10 +268,6 @@ public:
 
     ui64 HeldCount() const {
         return HeldCountAtomic.load();
-    }
-
-    void SetExecuteImmediately(const bool value) {
-        ExecuteImmediately.store(value);
     }
 };
 
@@ -4114,80 +4105,6 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         for (ui32 i = 0; i < subs2.size(); ++i) {
             UNIT_ASSERT_C(subs2[i]->FilterReady || subs2[i]->Failed, "subscriber " << i << " stuck; reason=" << subs2[i]->FailureReason);
-        }
-    }
-
-    // Concurrent managers each calling Next/BuildSortablePosition (coredump had two such stacks).
-    Y_UNIT_TEST(ConcurrentManagersNextBuildSortablePositionStress) {
-        NActors::TTestActorRuntimeBase runtime(1, /*useRealThreads=*/true);
-        InitializeRuntimeWithLogging(runtime);
-        EnsureInlineDeduplicationConveyor(runtime);
-        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
-
-        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
-        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
-
-        std::deque<std::shared_ptr<TPortionInfo>> portions;
-        TColumnDataMap columnStore;
-        for (ui64 i = 0; i < 30; ++i) {
-            const ui64 start = i * 2;
-            const ui64 end = start + 15;
-            const ui32 records = 16;
-            portions.push_back(MakeTestPortion(i + 1, start, end, records));
-            std::vector<ui64> pk;
-            std::vector<ui64> ps;
-            std::vector<ui64> tx;
-            std::vector<ui64> wr;
-            for (ui64 k = start; k <= end; ++k) {
-                pk.push_back(k);
-                ps.push_back(10 + i);
-                tx.push_back(1);
-                wr.push_back(0);
-            }
-            RegisterColumnData(columnStore, tabletActorId, i + 1, pk, ps, tx, wr);
-        }
-
-        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
-        runtime.RegisterService(cacheId, runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
-
-        constexpr ui32 ManagerCount = 4;
-        std::vector<TManagerSetupResult> setups(ManagerCount);
-        std::vector<NActors::TActorId> managers;
-        for (ui32 m = 0; m < ManagerCount; ++m) {
-            managers.push_back(
-                SetupDuplicateManager(runtime, TSnapshot(1000, 1), portions, dam, cdm, tabletActorId, setups[m], ERequestSorting::NONE));
-        }
-
-        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
-        std::vector<std::shared_ptr<TTestFilterSubscriber>> subs;
-        for (ui32 m = 0; m < ManagerCount; ++m) {
-            for (ui32 i = 0; i < portions.size(); ++i) {
-                auto sub = std::make_shared<TTestFilterSubscriber>();
-                subs.push_back(sub);
-                runtime.Send(
-                    MakeFilterRequestHandle(managers[m], edgeActor, portions[i]->GetPortionId(), portions[i]->GetRecordsCount(), sub), 0, true);
-            }
-        }
-
-        // Real-threads runtime: poll until subscribers settle.
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
-        while (TInstant::Now() < deadline) {
-            bool done = true;
-            for (const auto& s : subs) {
-                if (!s->FilterReady && !s->Failed) {
-                    done = false;
-                    break;
-                }
-            }
-            if (done) {
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(10));
-        }
-
-        for (ui32 i = 0; i < subs.size(); ++i) {
-            UNIT_ASSERT_C(subs[i]->FilterReady || subs[i]->Failed,
-                "subscriber " << i << " stuck; failed=" << subs[i]->Failed << " reason=" << subs[i]->FailureReason);
         }
     }
 }

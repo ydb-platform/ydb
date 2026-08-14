@@ -70,10 +70,6 @@ void TDuplicateManager::AbortAndPassAway(const TString& error) {
         TryFinishAbort();
         return;
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_abort")("self", SelfId().ToString())("error", error)(
-        "merge_inflight", BordersFlowController.IsMergeInflight())("fetch_inflight", InflightExecutors)("filter_requests_inflight",
-        InflightFilterRequests)("pending_executors", PendingExecutors.size())("pending_filter_requests", PendingFilterRequests.size())(
-        "pending_next_after_merge", PendingNextAfterMerge.size())("borders", BordersFlowController.DebugString());
     AbortionFlag->Inc();
     // Do not clear IsInflight: an in-flight TMergeBorders still owns the progressive filter state.
     BordersFlowController.AbortPendingMerges();
@@ -352,10 +348,6 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     auto& event = *ev->Get();
     AFL_VERIFY(event.MergeState.has_value());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "df_diag")("event", "df_merge_result")("self", SelfId().ToString())(
-        "ok", event.Result.IsSuccess())("error", event.Result.IsSuccess() ? TString() : event.Result.GetErrorMessage())(
-        "state", event.MergeState->DebugString())("aborting", IsAborting())("filters", event.ReadyFilters.size())(
-        "borders", BordersFlowController.DebugString());
     BordersFlowController.ReturnMergeState(std::move(*event.MergeState));
     event.MergeState.reset();
     if (IsAborting()) {

@@ -47,7 +47,9 @@ public:
                      (TNodeId)0,
                      TlsActivationContext->ActorSystem()->NodeId);
 
-        if (this->ReplyAndPassAwayIfNodesAreOutOfDatabase(nodeIds)) {
+        const bool strictDatabaseToken =
+            IsStrictDatabaseOnlyToken(AppData(), TString(TBase::GetRequest().GetUserTokenObject()));
+        if (strictDatabaseToken && TBase::ReplyAndPassAwayIfNodesAreOutOfDatabase(nodeIds)) {
             return;
         }
         if (!nodeIds.empty()) {
@@ -78,6 +80,11 @@ public:
                 if (TBase::RequestSettings.FilterNodeIds.empty()) {
                     return ReplyAndPassAway();
                 }
+            }
+            if (strictDatabaseToken && TBase::RequestSettings.FilterNodeIds.empty()) {
+                // For strictDatabaseToken if a database has no registered nodes,
+                // we report 200 with an empty response, not with a cluster nodes.
+                return ReplyAndPassAway();
             }
         }
         {

@@ -941,8 +941,10 @@ public:
             return;
         }
         StrictDatabaseOnlyToken = IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()));
-        if (ReplyAndPassAwayIfNodesAreOutOfDatabase(FilterNodeIds)) {
-            return;
+        if (StrictDatabaseOnlyToken) {
+            if (ReplyAndPassAwayIfNodesAreOutOfDatabase(FilterNodeIds)) {
+                return;
+            }
         }
         if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
             // fields that are not available for database users

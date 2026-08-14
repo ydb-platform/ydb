@@ -1032,9 +1032,6 @@ bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::unord
 }
 
 bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::unordered_set<TNodeId>& nodeIds) {
-    if (!IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()))) {
-        return false;
-    }
     if (nodeIds.empty()) {
         return false;
     }

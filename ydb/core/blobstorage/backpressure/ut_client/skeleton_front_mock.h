@@ -55,7 +55,7 @@ public:
         if (!Ready && record.GetNotifyIfNotReady()) {
             Notify.insert(ev->Sender);
         }
-        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY));
+        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false));
     }
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {

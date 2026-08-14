@@ -1,6 +1,9 @@
 #pragma once
 
 #include "defs.h"
+
+#include "blob_header_mode.h"
+
 #include <ydb/core/protos/blobstorage_base.pb.h>
 
 namespace NKikimr {
@@ -18,7 +21,7 @@ namespace NKikimr {
         };
 
         EHandleType HandleType(const ui32 minHugeBlobInBytes, NKikimrBlobStorage::EPutHandleClass handleClass,
-                               ui32 originalBufSizeWithoutOverhead, bool addHeader);
+            ui32 originalBufSizeWithoutOverhead);
 
     } // NPriPut
 

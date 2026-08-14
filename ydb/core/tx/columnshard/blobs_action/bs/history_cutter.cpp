@@ -16,8 +16,6 @@ namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 namespace {
 
-static TAtomicCounter CutHistoryPGCounter = 1;
-
 class TCutHistoryBarrierActor: public TActorBootstrapped<TCutHistoryBarrierActor> {
 public:
     TCutHistoryBarrierActor(const TActorId& tabletActorId, const TActorId& launcherActorId, ui64 tabletId, ui32 currentGen, ui32 channel,
@@ -40,7 +38,8 @@ public:
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
         const auto status = ev->Get()->Status;
-        if (status == NKikimrProto::OK) {
+        if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
+            // ALREADY means the barrier is already at or beyond the requested level — safe to cut.
             // Send cut request to Hive.
             auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
             req->Record.SetTabletID(TabletId);
@@ -69,10 +68,10 @@ private:
     static constexpr int MaxRetries = 3;
 
     void SendBarrier(const TActorContext& ctx) {
-        auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, CutHistoryPGCounter.Val(), Channel, /*collect=*/true,
+        auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, 0, Channel, /*collect=*/true,
             /*collectGeneration=*/NextFromGen - 1, /*collectStep=*/Max<ui32>(), /*keep=*/nullptr, /*doNotKeep=*/nullptr, TInstant::Max(),
             /*issueKeepFlag=*/false, TWriteSource::ColumnShardGC, /*hard=*/true);
-        CutHistoryPGCounter.Add(ev->PerGenerationCounterStepSize());
+        ev->PerGenerationCounter = TBlobManager::AllocateGCPerGenerationCounter(ev->PerGenerationCounterStepSize());
         SendToBSProxy(ctx, Group, ev.Release());
     }
 
@@ -112,24 +111,12 @@ bool THistoryCutterWrapper::IsEnabled() const {
     return AppData()->ColumnShardConfig.GetCutHistoryEnabled();
 }
 
-bool THistoryCutterWrapper::IsActiveEntry(const TEntryKey& key) const {
-    if (key.Channel >= (ui32)TabletInfo->Channels.size()) {
-        return false;
-    }
-    const auto& hist = TabletInfo->Channels[key.Channel].History;
-    return !hist.empty() && hist.back().FromGeneration == key.FromGeneration;
-}
-
-bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
-    if (key.Channel >= (ui32)TabletInfo->Channels.size()) {
-        return false;
-    }
-    const auto& hist = TabletInfo->Channels[key.Channel].History;
+bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration) {
     ui32 targetGroup = 0;
     bool found = false;
     std::unordered_set<ui32> seenGroups;
     for (const auto& e : hist) {
-        if (e.FromGeneration == key.FromGeneration) {
+        if (e.FromGeneration == fromGeneration) {
             targetGroup = e.GroupID;
             found = true;
             break;
@@ -137,6 +124,13 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
         seenGroups.insert(e.GroupID);
     }
     return found && !seenGroups.contains(targetGroup);
+}
+
+bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
+    if (key.Channel >= (ui32)TabletInfo->Channels.size()) {
+        return false;
+    }
+    return SeenGroupsCheckPasses(TabletInfo->Channels[key.Channel].History, key.FromGeneration);
 }
 
 ui32 THistoryCutterWrapper::GetNextFromGeneration(const TEntryKey& key) const {

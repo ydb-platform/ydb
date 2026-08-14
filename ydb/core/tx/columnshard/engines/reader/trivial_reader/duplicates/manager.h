@@ -96,6 +96,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
+            hFunc(NPrivate::TEvFilterRequestAllocationFailed, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvBordersConstructionResult, Handle);
             hFunc(TEvMergeBordersResult, Handle);
@@ -107,6 +108,7 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
+    void Handle(const NPrivate::TEvFilterRequestAllocationFailed::TPtr&);
     void Handle(const TEvBordersConstructionResult::TPtr&);
     void Handle(const TEvMergeBordersResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);

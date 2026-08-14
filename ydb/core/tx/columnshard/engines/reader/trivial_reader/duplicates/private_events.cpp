@@ -20,6 +20,13 @@ std::unique_ptr<TFilterBuildingGuard>&& TEvFilterRequestResourcesAllocated::Extr
     return std::move(RequestGuard);
 }
 
+TEvFilterRequestAllocationFailed::TEvFilterRequestAllocationFailed(const std::shared_ptr<TFilterAccumulator>& request, const TString& error)
+    : Request(request)
+    , Error(error)
+{
+    AFL_VERIFY(Request);
+}
+
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {

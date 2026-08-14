@@ -25,7 +25,12 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        Request->Abort(TStringBuilder() << "cannot allocate memory (filter size allocation): " << errorMessage);
+        const TString error = TStringBuilder() << "cannot allocate memory (filter size allocation): " << errorMessage;
+        if (!Request->IsDone()) {
+            Request->Abort(error);
+        }
+        // Notify the manager so InflightFilterRequests can unwind (needed for TryFinishAbort).
+        TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterRequestAllocationFailed(Request, error));
     }
 
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
@@ -247,6 +252,16 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     }
 
     StartFilterAfterAllocation(ev);
+}
+
+void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestAllocationFailed::TPtr& ev) {
+    // Subscriber already aborted in DoOnAllocationImpossible; only unwind the inflight counter.
+    AFL_VERIFY(ev->Get()->GetRequest());
+    AFL_VERIFY(ev->Get()->GetRequest()->IsDone());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestAllocationFailed")(
+        "error", ev->Get()->GetError())("info", ev->Get()->GetRequest()->DebugString())("aborting", IsAborting());
+    OnFilterRequestCompleted();
 }
 
 void TDuplicateManager::StartFilterAfterAllocation(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {

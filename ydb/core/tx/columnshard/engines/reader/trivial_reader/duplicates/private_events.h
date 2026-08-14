@@ -27,6 +27,18 @@ public:
     std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard();
 };
 
+// Filter-size memory allocation failed before the request was registered in FiltersStore.
+// Subscriber is already notified; the manager must unwind InflightFilterRequests.
+class TEvFilterRequestAllocationFailed
+    : public NActors::TEventLocal<TEvFilterRequestAllocationFailed, NColumnShard::TEvPrivate::EvFilterRequestAllocationFailed> {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Request);
+    YDB_READONLY_DEF(TString, Error);
+
+public:
+    TEvFilterRequestAllocationFailed(const std::shared_ptr<TFilterAccumulator>& request, const TString& error);
+};
+
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {

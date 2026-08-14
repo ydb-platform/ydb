@@ -690,6 +690,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
+ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/metadata/secret/ut Secret.Validation
 ydb/services/metadata/secret/ut Secret.ValidationQueryService
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI

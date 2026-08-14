@@ -642,7 +642,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (CanRetry(error)) {
-            if (error.GetExceptionName() == "FsCompleteMultipartUploadFailed") {
+            if (RequiresNewUpload(error)) {
                 ForceNewUpload = true;
             }
             UploadId.Clear(); // force getting info after restart
@@ -697,6 +697,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     bool CanRetry(const Aws::S3::S3Error& error) const {
         return Attempt < Retries && NWrappers::ShouldRetry(error);
+    }
+
+    static bool RequiresNewUpload(const Aws::S3::S3Error& error) {
+        const auto& exceptionName = error.GetExceptionName();
+        return exceptionName == "FsCompleteMultipartUploadFailed"
+            || exceptionName == "InvalidPart"
+            || exceptionName == "InvalidPartOrder";
     }
 
     void Retry() {

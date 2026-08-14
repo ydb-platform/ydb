@@ -1456,7 +1456,8 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
                 TabletId,
                 TabletGeneration,
                 InitialDDiskSessionSeqNo,
-                std::nullopt)}});
+                std::nullopt,
+                static_cast<ui32>(DirectBlockGroupIndex))}});
 
     PBufferConnections.push_back(TDDiskConnection{
         .HostConnection = NTransport::THostConnection{
@@ -1465,7 +1466,8 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
             .Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(
                 TabletId,
                 TabletGeneration,
-                std::nullopt)}});
+                std::nullopt,
+                static_cast<ui32>(DirectBlockGroupIndex))}});
 
     NKikimrBlobStorage::NDDisk::TDDiskId id;
     pbufferId.Serialize(&id);
@@ -1591,8 +1593,6 @@ void TDirectBlockGroup::OnConnectResponse(
 
     if (!HasError(error)) {
         Counters.OnConnectOk(ToDBGConnectionType(connectionType));
-        connection.HostConnection.Credentials.DDiskInstanceGuid =
-            result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
             if (seqNo <= connection.ConfirmedSessionSeqNo) {
                 LOG_WARN(
@@ -1606,6 +1606,24 @@ void TDirectBlockGroup::OnConnectResponse(
                     connection.ConfirmedSessionSeqNo);
                 return;
             }
+        }
+
+        connection.HostConnection.Credentials.DDiskInstanceGuid =
+            result.GetDDiskInstanceGuid();
+        if (result.HasConnectionToken()) {
+            auto creds = connectionType == EConnectionType::DDisk
+                             ? NDDisk::TQueryCredentials::ToDDisk(
+                                   result.GetConnectionToken())
+                             : NDDisk::TQueryCredentials::ToPersistentBuffer(
+                                   result.GetConnectionToken());
+            connection.HostConnection.Credentials.ConnectionToken =
+                creds.ConnectionToken;
+        } else {
+            connection.HostConnection.Credentials.ConnectionToken =
+                std::nullopt;
+        }
+
+        if (connectionType == EConnectionType::DDisk) {
             connection.SessionState = EDDiskSessionState::Locked;
             connection.ConfirmedSessionSeqNo = seqNo;
             Oracle.OnDDiskConnected(hostIndex, TInstant::Now());

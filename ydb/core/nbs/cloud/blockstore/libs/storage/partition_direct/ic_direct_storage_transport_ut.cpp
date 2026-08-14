@@ -37,7 +37,8 @@ THostConnection MakeDDiskConnection(
             /*tabletId=*/100,
             /*generation=*/1,
             /*sessionSeqNo=*/1,
-            guid)};
+            guid,
+            /*directBlockGroupIndex=*/0)};
 }
 
 THostConnection MakePBufferConnection(
@@ -50,7 +51,8 @@ THostConnection MakePBufferConnection(
         .Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(
             /*tabletId=*/100,
             /*generation=*/1,
-            guid)};
+            guid,
+            /*directBlockGroupIndex=*/0)};
 }
 
 TGuardedSgList MakeSgList(TString& buffer)

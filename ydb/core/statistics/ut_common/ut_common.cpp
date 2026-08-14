@@ -148,10 +148,8 @@ TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, con
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetTenants().Run(fullDbName, nodeCount);
-
-    if (!env.GetServer().GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    }
+    WaitForDatabaseRunning(env, fullDbName);
+    WaitForPath(env, fullDbName, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 
     return fullDbName;
 }

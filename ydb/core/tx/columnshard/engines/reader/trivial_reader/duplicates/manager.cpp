@@ -74,6 +74,10 @@ void TDuplicateManager::AbortAndPassAway(const TString& error) {
     // Do not clear IsInflight: an in-flight TMergeBorders still owns the progressive filter state.
     BordersFlowController.AbortPendingMerges();
     PendingExecutors.clear();
+    // InflightFilterRequests is incremented only for requests that entered HandleFilterRequestImpl.
+    // Decrement it for: (1) PendingNextAfterMerge (allocated, deferred until merge idle), and
+    // (2) FiltersStore waiting portions (allocated and registered). PendingFilterRequests never
+    // incremented the counter — only notify their subscribers.
     for (auto& ev : PendingFilterRequests) {
         ev->Get()->GetSubscriber()->OnFailure(error);
     }

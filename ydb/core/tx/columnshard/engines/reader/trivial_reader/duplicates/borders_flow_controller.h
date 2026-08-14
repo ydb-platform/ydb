@@ -52,7 +52,8 @@ public:
     // so AbortAndPassAway cannot start another merge against the progressive filter state.
     void AbortPendingMerges();
 
-    void OnReadyMergeBorders(const bool allowDrain = true);
+    // allowDrain=true: start the next queued merge; false: leave queue idle (abort/shutdown).
+    void OnReadyMergeBorders(const bool allowDrain);
 
     void ReturnMergeState(TMergeRuntimeState&& state);
 

@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 // Shared merge config. Progressive filter state lives in TMergeRuntimeState.
 struct TMergeContext {
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
-    bool IsReversed;
+    const bool IsReversed;
     std::shared_ptr<TPortionStore> Portions;
     std::map<ui32, std::shared_ptr<arrow::Field>> FetchingColumns;
     std::shared_ptr<const TAtomicCounter> AbortionFlag;

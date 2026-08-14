@@ -221,7 +221,9 @@ public:
 
 // Captures BUILD_DUPLICATE_FILTERS tasks so tests can abort the manager while merge is "inflight",
 // then execute the held task afterwards (lifetime race from #49177 / #48648).
-struct TEvReleaseHeldTasks: public NActors::TEventLocal<TEvReleaseHeldTasks, 12345> {};
+constexpr ui32 EvReleaseHeldTasksType = 12345;   // test-local event type (isolated actor)
+
+struct TEvReleaseHeldTasks: public NActors::TEventLocal<TEvReleaseHeldTasks, EvReleaseHeldTasksType> {};
 
 class THoldingDeduplicationConveyorService: public NActors::TActor<THoldingDeduplicationConveyorService> {
     using TBase = NActors::TActor<THoldingDeduplicationConveyorService>;

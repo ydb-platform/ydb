@@ -60,6 +60,7 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
 
+    // Fresh merger per task: progressive state is carried via OpenBatches/FiltersBuilder, not the stream.
     auto merger = Context->MakeMerger();
     for (const auto& [portionId, data] : State.OpenBatches) {
         const ui64 start = State.FiltersBuilder.GetProcessedRows(portionId);

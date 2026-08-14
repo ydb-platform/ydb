@@ -3,12 +3,14 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/schema/schema_ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/generic/algorithm.h>
 #include <util/thread/pool.h>
 
 namespace NKafka::NTests {
@@ -157,25 +159,17 @@ auto DropLocationForwards(NActors::TTestActorRuntime& runtime) {
         });
 }
 
-auto InjectFalseLocationStatusOnce(NActors::TTestActorRuntime& runtime, size_t& injected) {
-    auto* rt = &runtime;
-    return runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [&injected, rt](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (!ev || !ev->Get()->Ev) {
-                return;
-            }
-            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType) {
-                return;
-            }
-            if (injected >= 1) {
-                return;
-            }
-            ++injected;
-            auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
-            response->Record.SetStatus(false);
-            rt->Send(new IEventHandle(ev->Sender, ev->Recipient, response));
-            ev.Reset();
-        });
+auto CaptureLocationRequestPartitions(TEvPipeCache::TEvForward::TPtr& ev) {
+    TVector<ui64> ids;
+    if (!ev || !ev->Get()->Ev) {
+        return ids;
+    }
+    if (ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType) {
+        return ids;
+    }
+    auto* req = static_cast<TEvPersQueue::TEvGetPartitionsLocation*>(ev->Get()->Ev.Get());
+    ids.assign(req->Record.GetPartitions().begin(), req->Record.GetPartitions().end());
+    return ids;
 }
 
 } // namespace
@@ -215,7 +209,8 @@ Y_UNIT_TEST(UnauthorizedStaysUnauthorized) {
     const TString path = "/Root/topic_location_auth";
     CreateTopic(runtime, path);
 
-    const auto token = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+    auto token = MakeIntrusive<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+    token->SaveSerializationInfo();
     auto ev = RunTopicLocation(runtime, path, token->GetSerializedToken());
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
     UNIT_ASSERT(!ev->Issues.Empty());
@@ -243,11 +238,126 @@ Y_UNIT_TEST(RetriesOnFalseLocationStatus) {
     CreateTopic(runtime, path);
 
     size_t injected = 0;
-    auto injectObserver = InjectFalseLocationStatusOnce(runtime, injected);
+    ui64 firstCookie = 0;
+    auto injectObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [&injected, &firstCookie, rt = &runtime](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev ||
+                ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                return;
+            }
+            if (injected == 0) {
+                firstCookie = ev->Cookie;
+                ++injected;
+                auto* rejected = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+                rejected->Record.SetStatus(false);
+                rt->Send(new IEventHandle(ev->Sender, ev->Recipient, rejected, 0, ev->Cookie));
+
+                // Stale complete success must not win while the actor is waiting to retry.
+                auto* stale = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+                stale->Record.SetStatus(true);
+                auto* location = stale->Record.AddLocations();
+                location->SetPartitionId(0);
+                location->SetNodeId(999);
+                location->SetGeneration(1);
+                rt->Send(new IEventHandle(ev->Sender, ev->Recipient, stale, 0, ev->Cookie));
+                ev.Reset();
+                return;
+            }
+            if (injected == 1 && firstCookie != 0) {
+                ++injected;
+                auto* staleGen = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+                staleGen->Record.SetStatus(true);
+                auto* location = staleGen->Record.AddLocations();
+                location->SetPartitionId(0);
+                location->SetNodeId(888);
+                location->SetGeneration(1);
+                rt->Send(new IEventHandle(ev->Sender, ev->Recipient, staleGen, 0, firstCookie));
+            }
+        });
+    auto ev = RunTopicLocation(runtime, path);
+    UNIT_ASSERT(injected >= 1u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
+    UNIT_ASSERT_VALUES_UNEQUAL(ev->Partitions[0].NodeId, 999u);
+    UNIT_ASSERT_VALUES_UNEQUAL(ev->Partitions[0].NodeId, 888u);
+}
+
+Y_UNIT_TEST(OldBalancerZeroCookieIsAccepted) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_location_old_cookie";
+    CreateTopic(runtime, path);
+
+    size_t injected = 0;
+    auto injectObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [&injected, rt = &runtime](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev ||
+                ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                return;
+            }
+            if (injected >= 1) {
+                return;
+            }
+            ++injected;
+            auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+            response->Record.SetStatus(true);
+            auto* location = response->Record.AddLocations();
+            location->SetPartitionId(0);
+            location->SetNodeId(42);
+            location->SetGeneration(7);
+            // Cookie 0: old PQRB does not echo the request cookie.
+            rt->Send(new IEventHandle(ev->Sender, ev->Recipient, response, 0, 0));
+            ev.Reset();
+        });
     auto ev = RunTopicLocation(runtime, path);
     UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].NodeId, 42u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].Generation, 7u);
+}
+
+Y_UNIT_TEST(RetriesOnIncompleteLocationSet) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_location_incomplete";
+    CreateTopic(runtime, path, /*partitions=*/3);
+
+    size_t injected = 0;
+    TVector<ui64> requested;
+    auto injectObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [&injected, &requested, rt = &runtime](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev ||
+                ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                return;
+            }
+            requested = CaptureLocationRequestPartitions(ev);
+            if (injected >= 1) {
+                return;
+            }
+            ++injected;
+            auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+            response->Record.SetStatus(true);
+            auto* location = response->Record.AddLocations();
+            location->SetPartitionId(0);
+            location->SetNodeId(1);
+            location->SetGeneration(1);
+            rt->Send(new IEventHandle(ev->Sender, ev->Recipient, response));
+            ev.Reset();
+        });
+
+    auto ev = RunTopicLocation(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(requested.size(), 3u);
+    Sort(requested);
+    UNIT_ASSERT_VALUES_EQUAL(requested[0], 0u);
+    UNIT_ASSERT_VALUES_EQUAL(requested[1], 1u);
+    UNIT_ASSERT_VALUES_EQUAL(requested[2], 2u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 3u);
 }
 
 Y_UNIT_TEST(TimesOutWhenLocationStuck) {

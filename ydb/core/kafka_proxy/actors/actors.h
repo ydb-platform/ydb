@@ -250,6 +250,9 @@ struct TTopicOffsetsSettings {
     TString Path;
     TString Database;
     TString Token;
+    // Used for SelectRow when set; otherwise Token is used. Lets OffsetFetch
+    // describe anonymously when auth is optional but still check SelectRow.
+    TString SelectRowToken;
     TVector<ui32> PartitionIds;
     TVector<TString> Consumers;
     bool RequireSelectRow = false;

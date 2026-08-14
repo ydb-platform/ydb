@@ -18,7 +18,9 @@ using namespace NKikimr::NPQ;
 
 namespace {
 
-class TTopicOffsetsActor: public TActorBootstrapped<TTopicOffsetsActor>, protected TPipeCacheClient {
+class TTopicOffsetsActor: public TBaseActor<TTopicOffsetsActor>
+                        , protected TPipeCacheClient
+                        , public TConstantLogPrefix {
     static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
     static constexpr size_t StatusMaxRetries = 15;
     static constexpr TDuration StatusRetryInitialDelay = TDuration::MilliSeconds(25);
@@ -27,7 +29,8 @@ class TTopicOffsetsActor: public TActorBootstrapped<TTopicOffsetsActor>, protect
 
 public:
     TTopicOffsetsActor(TActorId requester, TTopicOffsetsSettings&& settings)
-        : TPipeCacheClient(this)
+        : TBaseActor<TTopicOffsetsActor>(NKikimrServices::KAFKA_PROXY)
+        , TPipeCacheClient(this)
         , Requester(requester)
         , Settings(std::move(settings))
         , Response(MakeHolder<TEvKafka::TEvTopicOffsetsResponse>())
@@ -59,6 +62,22 @@ public:
         Become(&TTopicOffsetsActor::StateWork);
     }
 
+    TString BuildLogPrefix() const override {
+        return TStringBuilder() << "[TTopicOffsetsActor][" << Settings.Path << "]";
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        if (Response) {
+            ReplyError(
+                Ydb::StatusIds::INTERNAL_ERROR,
+                TStringBuilder() << "Unhandled exception: " << exc.what());
+        } else {
+            PassAway();
+        }
+        return true;
+    }
+
 private:
     void PassAway() override {
         if (DescriberId) {
@@ -66,13 +85,15 @@ private:
             DescriberId = {};
         }
         TPipeCacheClient::Close();
-        TActorBootstrapped::PassAway();
+        TBaseActor::PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
         if (!Response) {
             return;
         }
+        Inflight.clear();
+        StatusRetryPending.clear();
         Response->Status = status;
         Response->Issues.AddIssue(message);
         Send(Requester, Response.Release());
@@ -83,6 +104,8 @@ private:
         if (!Response) {
             return;
         }
+        Inflight.clear();
+        StatusRetryPending.clear();
         Response->Status = Ydb::StatusIds::SUCCESS;
         Send(Requester, Response.Release());
         PassAway();
@@ -97,9 +120,7 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Settings.Path);
-        if (it == ev->Get()->Topics.end()) {
-            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected describer response");
-        }
+        AFL_ENSURE(it != ev->Get()->Topics.end())("path", Settings.Path);
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
             auto status = NDescriber::Convert(topicInfo.Status);
@@ -109,9 +130,15 @@ private:
             return ReplyError(status, NDescriber::Description(Settings.Path, topicInfo.Status));
         }
 
+        AFL_ENSURE(topicInfo.Info);
+
+        const TString& selectRowToken = !Settings.SelectRowToken.empty()
+            ? Settings.SelectRowToken
+            : Settings.Token;
         // Anonymous access (no token) skips SelectRow, matching the previous OffsetFetch actor.
-        if (Settings.RequireSelectRow && !Settings.Token.empty()) {
-            TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(Settings.Token);
+        if (Settings.RequireSelectRow && !selectRowToken.empty()) {
+            AFL_ENSURE(topicInfo.SecurityObject);
+            TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(selectRowToken);
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
                 return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");
             }
@@ -168,6 +195,9 @@ private:
     }
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev) {
+        if (!Response) {
+            return;
+        }
         const auto tabletId = ev->Cookie;
         if (!Inflight.contains(tabletId)) {
             return;
@@ -187,6 +217,7 @@ private:
             return ScheduleStatusRetry(tabletId);
         }
 
+        AFL_ENSURE(Response);
         for (const auto& part : record.GetPartResult()) {
             const auto partitionId = static_cast<ui32>(part.GetPartition());
             if (!RequestedPartitions.empty() && !RequestedPartitions.contains(partitionId)) {

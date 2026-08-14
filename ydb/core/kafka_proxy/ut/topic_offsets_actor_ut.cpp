@@ -344,6 +344,21 @@ Y_UNIT_TEST(RequireSelectRowWithBadTokenIsUnauthorized) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
 }
 
+Y_UNIT_TEST(SelectRowUsesDedicatedTokenWhenDescriberIsAnonymous) {
+    auto setup = CreateSetup("TopicOffsetsSelectRowOptionalAuth");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_offsets_select_row_optional";
+    CreateTopic(runtime, path);
+
+    auto token = MakeIntrusive<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+    token->SaveSerializationInfo();
+    auto settings = MakeSettings(path);
+    settings.RequireSelectRow = true;
+    settings.SelectRowToken = token->GetSerializedToken();
+    auto ev = RunTopicOffsets(runtime, std::move(settings));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
+}
+
 Y_UNIT_TEST(ParsesConsumerOffsetsAndSkipsErrors) {
     auto server = CreateSimulatedServer();
     auto& runtime = server->GetRuntime();
@@ -449,6 +464,15 @@ Y_UNIT_TEST(TimesOutWhenStatusStuck) {
     const auto* ev = handle->Get();
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::TIMEOUT);
     UNIT_ASSERT(ev->Issues.ToString().Contains("timed out"));
+
+    auto* late = new TEvPersQueue::TEvStatusResponse();
+    auto* part = late->Record.AddPartResult();
+    part->SetPartition(0);
+    part->SetStatus(NKikimrPQ::TStatusResponse::STATUS_OK);
+    runtime.Send(new IEventHandle(schedule.GetRoot(), edge, late, 0, /*cookie=*/1));
+    auto lateHandle = runtime.GrabEdgeEvent<TEvKafka::TEvTopicOffsetsResponse>(
+        edge, TDuration::MilliSeconds(200));
+    UNIT_ASSERT(!lateHandle);
 }
 
 Y_UNIT_TEST(PoisonRepliesCancelled) {

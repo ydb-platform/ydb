@@ -14,6 +14,8 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <absl/container/flat_hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
@@ -23,14 +25,17 @@ using namespace NKikimr::NPQ;
 
 namespace {
 
-class TTopicLocationActor: public TActorBootstrapped<TTopicLocationActor>, protected TPipeCacheClient {
+class TTopicLocationActor: public TBaseActor<TTopicLocationActor>
+                         , protected TPipeCacheClient
+                         , public TConstantLogPrefix {
     static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
     static constexpr ui64 TimeoutTag = 1;
     static constexpr ui64 RetryTag = 2;
 
 public:
     TTopicLocationActor(TActorId requester, TString path, TString database, TString token)
-        : TPipeCacheClient(this)
+        : TBaseActor<TTopicLocationActor>(NKikimrServices::KAFKA_PROXY)
+        , TPipeCacheClient(this)
         , Requester(requester)
         , Path(std::move(path))
         , Database(std::move(database))
@@ -59,6 +64,18 @@ public:
         Become(&TTopicLocationActor::StateWork);
     }
 
+    TString BuildLogPrefix() const override {
+        return TStringBuilder() << "[TTopicLocationActor][" << Path << "]";
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        ReplyError(
+            Ydb::StatusIds::INTERNAL_ERROR,
+            TStringBuilder() << "Unhandled exception: " << exc.what());
+        return true;
+    }
+
 private:
     void PassAway() override {
         if (DescriberId) {
@@ -66,10 +83,12 @@ private:
             DescriberId = {};
         }
         TPipeCacheClient::Close();
-        TActorBootstrapped::PassAway();
+        TBaseActor::PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
+        LocationInflight = false;
+        RetryPending = false;
         if (!Response) {
             PassAway();
             return;
@@ -89,9 +108,7 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Path);
-        if (it == ev->Get()->Topics.end()) {
-            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected describer response");
-        }
+        AFL_ENSURE(it != ev->Get()->Topics.end())("path", Path);
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
             auto status = NDescriber::Convert(topicInfo.Status);
@@ -101,14 +118,32 @@ private:
             }
             return ReplyError(status, NDescriber::Description(Path, topicInfo.Status));
         }
-        if (!topicInfo.Self || !topicInfo.Info) {
-            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Incomplete describer response");
-        }
+        AFL_ENSURE(topicInfo.Self && topicInfo.Info);
+        AFL_ENSURE(Response);
 
         Response->PathId = topicInfo.Self->Info.GetPathId();
         Response->SchemeShardId = topicInfo.Self->Info.GetSchemeshardId();
         BalancerTabletId = topicInfo.Info->Description.GetBalancerTabletID();
+
+        SchemePartitionIds.clear();
+        for (const auto& partition : topicInfo.Info->Description.GetPartitions()) {
+            SchemePartitionIds.push_back(partition.GetPartitionId());
+        }
         RequestLocation();
+    }
+
+    bool HasAllSchemePartitions(const NKikimrPQ::TPartitionsLocationResponse& record) const {
+        absl::flat_hash_set<ui64> got;
+        got.reserve(record.LocationsSize());
+        for (const auto& location : record.GetLocations()) {
+            got.insert(location.GetPartitionId());
+        }
+        for (auto id : SchemePartitionIds) {
+            if (!got.contains(id)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void RequestLocation() {
@@ -116,24 +151,47 @@ private:
         if (!remaining) {
             return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
         }
-        // Empty partition list: ReadBalancer returns its live PartitionsInfo.
+        // Ask for scheme partition ids so a lagging balancer returns Status=false
+        // instead of a partial live PartitionsInfo (e.g. during split).
+        // Cookie 0 is reserved: old PQRB replies without echoing the request cookie.
+        const ui64 cookie = ++LocationRequestGeneration;
+        AFL_ENSURE(cookie != 0);
         SendToTablet(
             BalancerTabletId,
-            new TEvPersQueue::TEvGetPartitionsLocation(TVector<ui64>{}, remaining));
+            new TEvPersQueue::TEvGetPartitionsLocation(SchemePartitionIds, remaining),
+            cookie);
         LocationInflight = true;
     }
 
     void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev) {
-        if (!LocationInflight) {
+        if (!LocationInflight || RetryPending) {
             return;
         }
-        const auto& record = ev->Get()->Record;
-        if (!record.GetStatus()) {
+        if (ev->Cookie == 0) {
+            // Old PQRB does not put the request cookie on the response.
+            // Generation matching is impossible; drop stale replies only via
+            // LocationInflight / RetryPending.
+            return ApplyLocationResponse(ev->Get()->Record);
+        }
+        if (ev->Cookie != LocationRequestGeneration) {
+            return;
+        }
+        ApplyLocationResponse(ev->Get()->Record);
+    }
+
+    void ApplyLocationResponse(const NKikimrPQ::TPartitionsLocationResponse& record) {
+        if (!record.GetStatus() || !HasAllSchemePartitions(record)) {
             return ScheduleRetry();
         }
 
-        Response->Partitions.reserve(record.LocationsSize());
+        AFL_ENSURE(Response);
+        Response->Partitions.reserve(SchemePartitionIds.size());
+        absl::flat_hash_set<ui64> scheme(
+            SchemePartitionIds.begin(), SchemePartitionIds.end());
         for (const auto& location : record.GetLocations()) {
+            if (!scheme.contains(location.GetPartitionId())) {
+                continue;
+            }
             TEvPQProxy::TPartitionLocationInfo part;
             part.PartitionId = location.GetPartitionId();
             part.Generation = location.GetGeneration();
@@ -153,6 +211,7 @@ private:
     }
 
     void ScheduleRetry() {
+        LocationInflight = false;
         if (!Remaining()) {
             return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
         }
@@ -172,9 +231,7 @@ private:
         }
         if (ev->Get()->Tag == RetryTag) {
             RetryPending = false;
-            if (LocationInflight) {
-                RequestLocation();
-            }
+            RequestLocation();
         }
     }
 
@@ -201,7 +258,9 @@ private:
     THolder<TEvPQProxy::TEvPartitionLocationResponse> Response;
     TActorId DescriberId;
     ui64 BalancerTabletId = 0;
+    TVector<ui64> SchemePartitionIds;
     TInstant RequestStart;
+    ui64 LocationRequestGeneration = 0; // 0 is never sent; old PQRB replies with cookie 0
     bool LocationInflight = false;
     bool RetryPending = false;
     TBackoff Backoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));

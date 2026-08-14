@@ -438,7 +438,8 @@ void TKafkaOffsetFetchActor::RegisterOffsetsActor(const TString& topicName, cons
     const auto actorId = ctx.Register(CreateTopicOffsetsActor(SelfId(), {
         .Path = NormalizePath(Context->DatabasePath, topicName),
         .Database = Context->DatabasePath,
-        .Token = Context->UserToken ? Context->UserToken->GetSerializedToken() : TString(),
+        .Token = GetUserSerializedToken(Context),
+        .SelectRowToken = Context->UserToken ? Context->UserToken->GetSerializedToken() : TString(),
         .PartitionIds = TVector<ui32>(entities.Partitions->begin(), entities.Partitions->end()),
         .Consumers = TVector<TString>(entities.Consumers->begin(), entities.Consumers->end()),
         .RequireSelectRow = true,

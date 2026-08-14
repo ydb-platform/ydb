@@ -9,10 +9,34 @@ namespace {
 THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
     TTestContext& tc,
     TEvPersQueue::TEvGetPartitionsLocation* request,
-    TDuration timeout = TDuration::Seconds(10)
+    TDuration timeout = TDuration::Seconds(10),
+    ui64 cookie = 0,
+    ui64* responseCookie = nullptr
 ) {
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request, 0, GetPipeConfigWithRetries());
-    return tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        *responseCookie = Max<ui64>();
+        tc.Runtime->SetObserverFunc([responseCookie, edge = tc.Edge](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPersQueue::TEvGetPartitionsLocationResponse::EventType &&
+                ev->Recipient == edge)
+            {
+                *responseCookie = ev->Cookie;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+    }
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        request,
+        0,
+        GetPipeConfigWithRetries(),
+        TActorId(),
+        cookie);
+    auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    }
+    return response;
 }
 
 void WaitBalancerReady(TTestContext& tc, ui32 retries = 20) {
@@ -142,6 +166,40 @@ Y_UNIT_TEST(HappyPathAfterPipesReady) {
     response = SendLocationRequest(tc, unknown);
     UNIT_ASSERT(response);
     UNIT_ASSERT(!response->Record.GetStatus());
+}
+
+Y_UNIT_TEST(EchoesRequestCookie) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc);
+    WaitBalancerReady(tc);
+
+    ui64 responseCookie = Max<ui64>();
+    auto response = SendLocationRequest(
+        tc,
+        new TEvPersQueue::TEvGetPartitionsLocation(),
+        TDuration::Seconds(10),
+        /*cookie=*/42,
+        &responseCookie);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(responseCookie, 42u);
+
+    responseCookie = Max<ui64>();
+    auto* unknown = new TEvPersQueue::TEvGetPartitionsLocation();
+    unknown->Record.AddPartitions(50);
+    response = SendLocationRequest(
+        tc,
+        unknown,
+        TDuration::Seconds(10),
+        /*cookie=*/43,
+        &responseCookie);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(!response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(responseCookie, 43u);
 }
 
 Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {

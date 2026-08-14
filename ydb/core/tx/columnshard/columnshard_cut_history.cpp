@@ -29,8 +29,9 @@ using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutt
 class TCutHistorySweepCallback: public NOlap::NDataAccessorControl::IAccessorCallback {
 public:
     TCutHistorySweepCallback(
-        const TActorId& tabletActorId, TVector<TEntryKey>&& candidates, THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted)
+        const TActorId& tabletActorId, ui64 ourTabletId, TVector<TEntryKey>&& candidates, THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted)
         : TabletActorId(tabletActorId)
+        , OurTabletId(ourTabletId)
         , Candidates(std::move(candidates))
         , NextGenMap(std::move(nextGenMap))
         , Exhausted(exhausted)
@@ -46,6 +47,10 @@ public:
             }
             for (const auto& blobId : accessor->GetBlobIds()) {
                 const TLogoBlobID& lid = blobId.GetLogoBlobId();
+                // Skip blobs from other tablets (shared/borrowed) — they must not disprove our candidates.
+                if (lid.TabletID() != OurTabletId) {
+                    continue;
+                }
                 for (const auto& key : Candidates) {
                     if (lid.Channel() != key.Channel) {
                         continue;
@@ -72,6 +77,7 @@ public:
 
 private:
     TActorId TabletActorId;
+    ui64 OurTabletId;
     TVector<TEntryKey> Candidates;
     THashMap<TEntryKey, ui32> NextGenMap;
     bool Exhausted;
@@ -100,7 +106,14 @@ void TColumnShard::SetupCutHistory() {
     }
     cutter->SetLauncherActorId(LauncherID());
     CutHistoryCutter = cutter;
-    // Boot feed: empty map is safe — IsDrained + tier-2 sweep guard correctness.
+    // Boot feed with empty map is correct and safe:
+    //   • Old live portions are already in the engine at boot → tier-2 sweep will see them and
+    //     disprove any candidate whose channel/generation range they touch.
+    //   • Portions mid-delete have blobs in BlobsToDelete/Delayed → IsDrained returns false,
+    //     blocking nomination until regular GC completes.
+    //   • Fully-GCed historical ranges have no blobs anywhere → the barrier request is vacuous
+    //     and succeeds immediately (or returns ALREADY, treated as success).
+    // Counter state is rebuilt on-the-fly by OnPortionAdded hooks as the engine loads.
     cutter->OnBootComplete({});
 }
 
@@ -148,7 +161,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGenerationPublic(key));
     }
 
-    auto callback = std::make_shared<TCutHistorySweepCallback>(SelfId(), TVector<TEntryKey>(candidates), std::move(nextGenMap), isLast);
+    auto callback =
+        std::make_shared<TCutHistorySweepCallback>(SelfId(), TabletID(), TVector<TEntryKey>(candidates), std::move(nextGenMap), isLast);
 
     ctx.Send(SelfId(), new TEvPrivate::TEvAskTabletDataAccessors(std::move(portionsMap), callback));
 }

@@ -336,7 +336,7 @@ def test_viewer_describe_strict_database_token_forbidden_params(mon_base_url_wit
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
 
 
-# path_id/schemeshard_id require monitoring access; strict database and viewer tokens get 403.
+# path_id/schemeshard_id params require monitoring+ level access; strict database and viewer tokens get 4xx.
 def test_viewer_describe_path_id_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,
@@ -388,3 +388,38 @@ def test_viewer_describe_schemeshard_id_forbidden(mon_base_url_with_extra_sids_c
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
         # An administrator also gets 400, but from handler validation
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
+
+
+def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    tenant_node_id = tenant_nodelist_ids[0]
+    endpoints = [
+        '/viewer/sysinfo',
+        '/viewer/tabletinfo',
+    ]
+    for ep in endpoints:
+        foreign_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, foreign_path, 'database@builtin', 403)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(tenant_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+
+        # Scope-param validation must not block tokens above strict database level.
+        # Foreign node_id is filtered out by database scope which results with OK (200) empty response, not 4xx.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(mon_base_url_with_extra_sids_control, foreign_path, token, 200)

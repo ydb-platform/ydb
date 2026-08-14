@@ -118,6 +118,28 @@ def get_tenant_path_id(cluster, root_path, database_path, use_tls=False):
     return int(describe_path_self(cluster, root_path, database_path, use_tls)['PathId'])
 
 
+def get_nodelist_ids(base_url, database=None, token='root@builtin'):
+    params = {}
+    if database is not None:
+        params['database'] = database
+    response = requests.get(
+        base_url + '/viewer/json/nodelist',
+        params=params,
+        headers={'Authorization': token},
+        verify=False,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return [node['Id'] for node in response.json()]
+
+
+def get_foreign_node_id_for_database(base_url, database, token='root@builtin'):
+    database_nodes = set(get_nodelist_ids(base_url, database=database, token=token))
+    foreign_nodes = set(get_nodelist_ids(base_url, token=token)) - database_nodes
+    assert foreign_nodes, f'no foreign nodes found for database={database}'
+    return min(foreign_nodes)
+
+
 def wait_for_viewer_ready(
     base_url,
     database=DATABASE,

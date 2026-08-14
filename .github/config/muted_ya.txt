@@ -28,6 +28,7 @@ ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFi
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-with_schema_grants]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-fifo]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-std]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-fifo]
@@ -36,6 +37,7 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
+ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
 ydb/tools/stress_tool/ut unittest.sole chunk

@@ -389,7 +389,7 @@ private:
 
     void NextEpoch();
 
-    TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message, bool checkMemory);
+    TWriteResult WriteInternal(TWriteMessage&& message, bool checkMemory);
 
     bool IsFederation(const std::string& endpoint);
 

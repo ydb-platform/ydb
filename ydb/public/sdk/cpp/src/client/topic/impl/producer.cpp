@@ -1791,23 +1791,19 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 }
 
 TProducer::~TProducer() {
-    try {
-        auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
-            handlersExecutor->Stop();
-        }
-
-        if (MainWorkerState.load() == Idle) {
-            ShutdownPromise.TrySetValue();
-        }
-
-        // Bounded wait to avoid hanging the destructor indefinitely if
-        // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
-        // or the state machine never reaches Idle).
-        ShutdownFuture.Wait(TDuration::Seconds(30));
-    } catch (...) {
-        // Destructors must not throw.
+    auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
+    if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+        handlersExecutor->Stop();
     }
+
+    if (MainWorkerState.load() == Idle) {
+        ShutdownPromise.TrySetValue();
+    }
+
+    // Bounded wait to avoid hanging the destructor indefinitely if
+    // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
+    // or the state machine never reaches Idle).
+    ShutdownFuture.Wait(TDuration::Seconds(30));
 }
 
 NThreading::TFuture<void> TProducer::WaitEvent() {
@@ -2088,7 +2084,7 @@ void TProducer::RunMainWorker(std::int64_t owner) {
     }
 }
 
-TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& message, bool checkMemory) {
+TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory) {
     {
         std::lock_guard lock(GlobalLock);
         if (Closed.load()) {
@@ -2164,7 +2160,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
-        auto result = WriteInternal(IssueContinuationToken(), std::move(message), true);
+        auto result = WriteInternal(std::move(message), true);
         if (!result.IsTimeout() || remainingTimeout == TDuration::Zero()) {
             return result;
         }
@@ -2183,8 +2179,8 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     }
 }
 
-void TProducer::Write(TContinuationToken&& continuationToken, TWriteMessage&& message) {
-    WriteInternal(std::move(continuationToken), std::move(message), false);
+void TProducer::Write(TContinuationToken&&, TWriteMessage&& message) {
+    WriteInternal(std::move(message), false);
 }
 
 TWriteStats TProducer::GetWriteStats() {

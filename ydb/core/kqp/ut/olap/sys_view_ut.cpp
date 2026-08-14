@@ -388,6 +388,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
             }
         }
+        // default cap is not exceeded here, so the normal (non-passthrough) sorted-limit path is what ran above
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
     }
 
     Y_UNIT_TEST(StatsSysViewOrderByPKWithLimitPassthrough) {

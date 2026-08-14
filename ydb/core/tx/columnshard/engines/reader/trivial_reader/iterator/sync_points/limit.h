@@ -130,6 +130,7 @@ private:
     std::deque<TSourceIterator> UnfilledIterators;
 
     virtual bool IsFinished() const override {
+        // in passthrough FetchedCount is frozen below Limit, so termination falls to TBase::IsFinished (all sources drained)
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 

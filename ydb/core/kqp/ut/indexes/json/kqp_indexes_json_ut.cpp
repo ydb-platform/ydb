@@ -174,9 +174,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(NonIntegerPk) {
-        // With the unique-index feature OFF (the default), a JSON index over a non-integer PK can neither
+        // With the unique-index feature OFF, a JSON index over a non-integer PK can neither
         // use the PK as doc_id nor auto-provision the __ydb_row_id infrastructure, so it is rejected.
-        auto kikimr = Kikimr();
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableAddUniqueIndex(false);
+        featureFlags.SetEnableFulltextIndexRowId(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -432,8 +437,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(NoCompositePk) {
-        // With the unique-index feature OFF (the default), a composite-PK table cannot host a JSON index.
-        auto kikimr = Kikimr();
+        // With the unique-index feature OFF, a composite-PK table cannot host a JSON index.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableAddUniqueIndex(false);
+        featureFlags.SetEnableFulltextIndexRowId(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);

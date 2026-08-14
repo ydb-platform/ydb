@@ -57,7 +57,6 @@
       "SysLog":false,
       "DefaultLevel":3,
       "AllowDropEntries":false,
-      "JsonTextMessageWithValues":true,
       "BackendFileName":"/place/kikimr-logs/kikimr.txt"
     },
   "NameserviceConfig":

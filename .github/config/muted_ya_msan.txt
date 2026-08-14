@@ -2,6 +2,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAll
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
+ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
+ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.QuotaNoResourceThenAllowed
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
@@ -16,6 +18,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripShared
 ydb/library/nmslib/test/run_bunit exectest.run[bunit]
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
+ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write

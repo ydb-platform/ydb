@@ -2692,6 +2692,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (self.Input().Maybe<TCoWithWorld>()) {
+            if (auto res = ApplyExtractMembersToWithWorld(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
         if (self.Input().Maybe<TCoTake>()) {
             if (auto res = ApplyExtractMembersToTake(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;

@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # CREATE TRANSFER
 
 Создает [трансфер](../../../concepts/transfer.md) из [топика](../../../concepts/datamodel/topic.md) в [таблицу](../../../concepts/datamodel/table.md).

@@ -28,11 +28,6 @@ namespace NActors {
         ESendingType SendingType = ESendingType::Common;
     };
 
-    struct TLocalQueueContext {
-        ui32 WriteTurn = 0;
-        ui16 LocalQueueSize = 0;
-    };
-
     struct TThreadActivityContext {
         std::atomic<i64> StartOfProcessingEventTS = GetCycleCountFast();
         std::atomic<i64> ActivationStartTS = 0;
@@ -84,7 +79,6 @@ namespace NActors {
 
     struct TThreadContext {
         TWorkerContext WorkerContext;
-        TLocalQueueContext LocalQueueContext;
         TThreadActivityContext ActivityContext;
         TExecutionContext ExecutionContext;
         TMailboxContext MailboxContext;

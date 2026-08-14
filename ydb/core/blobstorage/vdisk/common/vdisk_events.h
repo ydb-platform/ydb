@@ -3324,7 +3324,9 @@ namespace NKikimr {
 
         TEvGetLogoBlobIndexStatResponseAck(ui64 sequenceId, bool cancel = false) {
             Record.set_sequence_id(sequenceId);
-            Record.set_cancel(cancel);
+            if (cancel) {
+                Record.set_cancel(true);
+            }
         }
     };
 

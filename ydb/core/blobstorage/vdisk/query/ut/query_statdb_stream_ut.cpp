@@ -33,65 +33,65 @@ namespace {
         Y_UNIT_TEST(DoesNotSplitTabletsAndRetainsTotalsAcrossExtractions) {
             TLogoBlobIndexStatStreamAccumulator accumulator(1);
 
-            // A tablet may exceed the requested chunk size, but it remains the
+            // A tablet may exceed the requested batch size, but it remains the
             // current tablet and is not exposed until the next tablet starts.
             accumulator.Update(MakeKey(3, 30), MakeMemRec(10));
             accumulator.Update(MakeKey(3, 20), MakeMemRec(20));
-            UNIT_ASSERT(!accumulator.IsChunkReady());
+            UNIT_ASSERT(!accumulator.IsBatchReady());
 
             accumulator.Update(MakeKey(2, 30), MakeMemRec(30));
-            UNIT_ASSERT(accumulator.IsChunkReady());
+            UNIT_ASSERT(accumulator.IsBatchReady());
 
-            NKikimrVDisk::LogoBlobIndexStat chunk;
-            accumulator.ExtractChunk(&chunk);
-            UNIT_ASSERT(!accumulator.IsChunkReady());
-            UNIT_ASSERT_VALUES_EQUAL(chunk.tablets_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels_size(), 0);
-            AssertSingleChannelTablet(chunk.tablets(0), 3, 2, 30);
+            NKikimrVDisk::LogoBlobIndexStat batch;
+            accumulator.ExtractBatch(&batch);
+            UNIT_ASSERT(!accumulator.IsBatchReady());
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 0);
+            AssertSingleChannelTablet(batch.tablets(0), 3, 2, 30);
             UNIT_ASSERT_VALUES_EQUAL(
-                chunk.tablets(0).channels(0).min_id(), MakeKey(3, 20).LogoBlobID().ToString());
+                batch.tablets(0).channels(0).min_id(), MakeKey(3, 20).LogoBlobID().ToString());
             UNIT_ASSERT_VALUES_EQUAL(
-                chunk.tablets(0).channels(0).max_id(), MakeKey(3, 30).LogoBlobID().ToString());
+                batch.tablets(0).channels(0).max_id(), MakeKey(3, 30).LogoBlobID().ToString());
 
             // The first record for tablet 2 was already retained as current
-            // state while the previous chunk was extracted.
+            // state while the previous batch was extracted.
             accumulator.Update(MakeKey(2, 20), MakeMemRec(40));
-            UNIT_ASSERT(!accumulator.IsChunkReady());
+            UNIT_ASSERT(!accumulator.IsBatchReady());
             accumulator.Update(MakeKey(1, 30), MakeMemRec(50));
-            UNIT_ASSERT(accumulator.IsChunkReady());
+            UNIT_ASSERT(accumulator.IsBatchReady());
 
-            accumulator.ExtractChunk(&chunk);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.tablets_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels_size(), 0);
-            AssertSingleChannelTablet(chunk.tablets(0), 2, 2, 70);
+            accumulator.ExtractBatch(&batch);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 0);
+            AssertSingleChannelTablet(batch.tablets(0), 2, 2, 70);
 
             accumulator.Update(MakeKey(1, 20), MakeMemRec(60));
             accumulator.Finish();
-            UNIT_ASSERT(accumulator.IsChunkReady());
+            UNIT_ASSERT(accumulator.IsBatchReady());
 
-            accumulator.ExtractChunk(&chunk);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.tablets_size(), 1);
-            AssertSingleChannelTablet(chunk.tablets(0), 1, 2, 110);
+            accumulator.ExtractBatch(&batch);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 1);
+            AssertSingleChannelTablet(batch.tablets(0), 1, 2, 110);
 
             // Global channel totals are emitted only by Finish, after all
-            // intermediate chunks have been extracted.
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels(0).count(), 6);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels(0).data_size(), 210);
+            // intermediate batches have been extracted.
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels(0).count(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels(0).data_size(), 210);
             UNIT_ASSERT_VALUES_EQUAL(
-                chunk.channels(0).min_id(), MakeKey(1, 20).LogoBlobID().ToString());
+                batch.channels(0).min_id(), MakeKey(1, 20).LogoBlobID().ToString());
             UNIT_ASSERT_VALUES_EQUAL(
-                chunk.channels(0).max_id(), MakeKey(3, 30).LogoBlobID().ToString());
+                batch.channels(0).max_id(), MakeKey(3, 30).LogoBlobID().ToString());
         }
 
-        Y_UNIT_TEST(EmptyDatabaseProducesEmptyTerminalChunk) {
+        Y_UNIT_TEST(EmptyDatabaseProducesEmptyTerminalBatch) {
             TLogoBlobIndexStatStreamAccumulator accumulator(1024);
             accumulator.Finish();
 
-            NKikimrVDisk::LogoBlobIndexStat chunk;
-            accumulator.ExtractChunk(&chunk);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.tablets_size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(chunk.channels_size(), 0);
+            NKikimrVDisk::LogoBlobIndexStat batch;
+            accumulator.ExtractBatch(&batch);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 0);
         }
     }
 
@@ -99,7 +99,7 @@ namespace {
         Y_UNIT_TEST(DefaultsPreserveLegacySingleResponseProtocol) {
             NKikimrVDisk::GetLogoBlobIndexStatRequest request;
             UNIT_ASSERT(!request.stream());
-            UNIT_ASSERT_VALUES_EQUAL(request.max_chunk_bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(request.max_batch_bytes(), 0);
 
             TString requestWire;
             UNIT_ASSERT(request.SerializeToString(&requestWire));
@@ -125,7 +125,7 @@ namespace {
         Y_UNIT_TEST(ControlFieldsRoundTrip) {
             NKikimrVDisk::GetLogoBlobIndexStatRequest request;
             request.set_stream(true);
-            request.set_max_chunk_bytes(1 << 20);
+            request.set_max_batch_bytes(1 << 20);
 
             TString wire;
             UNIT_ASSERT(request.SerializeToString(&wire));
@@ -133,7 +133,7 @@ namespace {
             NKikimrVDisk::GetLogoBlobIndexStatRequest parsedRequest;
             UNIT_ASSERT(parsedRequest.ParseFromString(wire));
             UNIT_ASSERT(parsedRequest.stream());
-            UNIT_ASSERT_VALUES_EQUAL(parsedRequest.max_chunk_bytes(), 1 << 20);
+            UNIT_ASSERT_VALUES_EQUAL(parsedRequest.max_batch_bytes(), 1 << 20);
 
             NKikimrVDisk::GetLogoBlobIndexStatResponse response;
             response.set_has_more(true);
@@ -146,14 +146,21 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(parsedResponse.sequence_id(), 7);
 
             TEvGetLogoBlobIndexStatResponseAck ack(7, true);
+            UNIT_ASSERT(ack.Record.has_sequence_id());
             UNIT_ASSERT_VALUES_EQUAL(ack.Record.sequence_id(), 7);
+            UNIT_ASSERT(ack.Record.has_cancel());
             UNIT_ASSERT(ack.Record.cancel());
+
+            TEvGetLogoBlobIndexStatResponseAck regularAck(8);
+            UNIT_ASSERT(regularAck.Record.has_sequence_id());
+            UNIT_ASSERT_VALUES_EQUAL(regularAck.Record.sequence_id(), 8);
+            UNIT_ASSERT(!regularAck.Record.has_cancel());
         }
 
         Y_UNIT_TEST(FieldNumbersAreAdditiveAndStable) {
             const auto* request = NKikimrVDisk::GetLogoBlobIndexStatRequest::descriptor();
             UNIT_ASSERT_VALUES_EQUAL(request->FindFieldByName("stream")->number(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(request->FindFieldByName("max_chunk_bytes")->number(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(request->FindFieldByName("max_batch_bytes")->number(), 2);
 
             const auto* response = NKikimrVDisk::GetLogoBlobIndexStatResponse::descriptor();
             UNIT_ASSERT_VALUES_EQUAL(response->FindFieldByName("status")->number(), 1);

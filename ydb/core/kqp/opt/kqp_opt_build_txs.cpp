@@ -643,6 +643,13 @@ public:
         // is bypassed - it asserts on empty stage lists - and the transaction is assembled here.
         // Appending it now is what puts it at its statement position among the data transactions.
         if (auto truncatePath = GetUnsafeTruncatePath(query)) {
+            // Nothing below reads the results or the effects of this block, so anything left in
+            // them would be dropped without a trace. ExploreNode gives the truncate a block of its
+            // own precisely so that cannot happen; fail loudly rather than lose a write silently.
+            YQL_ENSURE(query.Results().Empty() && query.Effects().Empty(),
+                "Unsafe truncate block must hold nothing else, got "
+                    << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
+
             TKqpPhyTxSettings txSettings;
             txSettings.Type = EPhysicalTxType::UnsafeTruncate;
             txSettings.UnsafeTruncatePath = *truncatePath;

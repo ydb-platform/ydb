@@ -118,12 +118,10 @@ struct TKiExploreTxResults {
         return syncSet;
     }
 
-    void GetTableOperations(bool& hasScheme, bool& hasData, bool& hasUnsafeTruncate) {
+    void GetTableOperations(bool& hasScheme, bool& hasData) {
         hasScheme = false;
         hasData = false;
-        hasUnsafeTruncate = false;
         for (auto& queryBlock : QueryBlocks) {
-            hasUnsafeTruncate = hasUnsafeTruncate || !queryBlock.UnsafeTruncatePath.empty();
             for (auto& node : queryBlock.TableOperations) {
                 auto op = FromString<TYdbOperation>(TString(node.Operation()));
                 hasScheme = hasScheme || (op & KikimrSchemeOps());
@@ -1191,8 +1189,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     bool hasScheme;
     bool hasData;
-    bool hasUnsafeTruncate;
-    txExplore.GetTableOperations(hasScheme, hasData, hasUnsafeTruncate);
+    txExplore.GetTableOperations(hasScheme, hasData);
 
     if (hasData && hasScheme) {
         TString message = TStringBuilder() << "Queries with mixed data and scheme operations "
@@ -1209,8 +1206,6 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     // An unsafe truncate deliberately does not go through MakeSchemeTx: it is a data plane
     // operation and must be able to sit between data statements of one query. It rides along as a
     // block of its own and becomes its own physical transaction further down the pipeline.
-    Y_UNUSED(hasUnsafeTruncate);
-
     auto dataQueryBlocks = MakeKiDataQueryBlocks(commit.World(), txExplore, ctx, types);
 
     TKiExecDataQuerySettings execSettings;

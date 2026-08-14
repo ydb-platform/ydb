@@ -1069,6 +1069,70 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(CountRows(admin), 3u, "nothing may have been wiped");
     }
+
+    // Several truncates interleaved with writes and reads in one query text. Each truncate gets a
+    // query block of its own, so this is what would break if a block ever held anything else.
+    Y_UNIT_TEST(InterleavedTruncatesInOneQuery) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = session.ExecuteQuery(Sprintf(R"(
+            UPSERT INTO `%s` (Key, Value) VALUES (10u, "a");
+            TRUNCATE TABLE `%s` WITH (unsafe = true);
+            UPSERT INTO `%s` (Key, Value) VALUES (20u, "b"), (21u, "b2");
+            SELECT COUNT(*) AS cnt FROM `%s`;
+            TRUNCATE TABLE `%s` WITH (unsafe = true);
+            UPSERT INTO `%s` (Key, Value) VALUES (30u, "c");
+            SELECT COUNT(*) AS cnt FROM `%s`;
+        )", TablePath, TablePath, TablePath, TablePath, TablePath, TablePath, TablePath),
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2u);
+        {
+            auto first = result.GetResultSetParser(0);
+            UNIT_ASSERT(first.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(first.ColumnParser("cnt").GetUint64(), 2u,
+                "only the two rows written after the first truncate may be visible");
+        }
+        {
+            auto second = result.GetResultSetParser(1);
+            UNIT_ASSERT(second.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(second.ColumnParser("cnt").GetUint64(), 1u,
+                "only the row written after the second truncate may be visible");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 1u);
+    }
+
+    // The path travels from the parsed statement to the executer as written, so a prefix or a bare
+    // relative name has to survive the trip.
+    Y_UNIT_TEST(RelativePathIsResolved) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto viaPrefix = session.ExecuteQuery(R"(
+            PRAGMA TablePathPrefix = "/Root";
+            TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(viaPrefix.GetStatus(), EStatus::SUCCESS, viaPrefix.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
+
+        auto refill = session.ExecuteQuery(Sprintf(
+            R"(UPSERT INTO `%s` (Key, Value) VALUES (1u, "one"), (2u, "two");)", TablePath),
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(refill.GetStatus(), EStatus::SUCCESS, refill.GetIssues().ToString());
+
+        auto bare = session.ExecuteQuery(
+            "TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);",
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(bare.GetStatus(), EStatus::SUCCESS, bare.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
+    }
 }
 
 } // namespace NKqp

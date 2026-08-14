@@ -1512,8 +1512,10 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
-        // Unsafe truncate writes through no sink at all, so a query made of such transactions
-        // carries no sink settings, exactly like a scheme query.
+        // Sink settings are only emitted for transactions that write through a sink. A scheme tx
+        // never does, and neither does an unsafe truncate - it drives its own shard writes - so a
+        // query made only of those carries no sink settings at all. A query that also holds data
+        // transactions does carry them, and takes the branches above instead.
         auto checkNoSinkTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
                 switch (tx.GetType()) {

@@ -311,10 +311,6 @@ enum class TYdbOperation : ui64 {
     AlterSecret            = 1ull << 40,
     DropSecret             = 1ull << 41,
     TruncateTable          = 1ull << 42,
-    // Deliberately outside KikimrSchemeOps(): this one is a data plane operation and its whole
-    // point is running inside a transaction, which the scheme ops bitmask forbids. It is still
-    // compiled through the scheme path - see the routing in KiBuildQuery.
-    UnsafeTruncateTable    = 1ull << 43,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

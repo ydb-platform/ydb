@@ -2,6 +2,7 @@ INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
 ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes/")
 
 SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes)
 
@@ -137,7 +138,6 @@ SET(ORIG_SOURCES
     mkql_tostring.cpp
     mkql_udf.cpp
     mkql_udf_profile.cpp
-    mkql_udf_profile.h
     mkql_unwrap.cpp
     mkql_varitem.cpp
     mkql_visitall.cpp

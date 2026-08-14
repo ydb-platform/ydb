@@ -325,6 +325,7 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_compaction
     ut_disk_quotas
+    ut_direct_restore
     ut_erase_rows
     ut_export
     ut_external_blobs

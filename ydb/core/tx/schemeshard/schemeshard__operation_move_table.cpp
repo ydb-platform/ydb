@@ -820,6 +820,12 @@ public:
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
             }
+            if (srcPath->IsColumnTable() && srcPath.Parent()->IsOlapStore()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "TABLESTORE tables cannot be renamed or moved");
+                return result;
+            }
+
             TPath::TChecker checks = srcPath.Check();
             checks
                 .NotEmpty()
@@ -852,6 +858,12 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            if (dstParent->IsOlapStore()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Moving tables into a TABLESTORE is not supported");
                 return result;
             }
 

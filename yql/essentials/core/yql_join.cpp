@@ -268,9 +268,10 @@ namespace {
                             continue;
                         }
                         if (name.IsAtom("ShuffleMode")) {
-                            if (!value.IsAtom({"Off", "Map", "Hash"})) {
-                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
-                                            "streamlookup(" << name.Content() << "...): Unsupported value: " << value.Content()));
+                            static const std::initializer_list<std::string_view> ShuffleModeValues = {"Default", "Off", "Map", "Hash"};
+                            if (!value.IsAtom(ShuffleModeValues)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()),
+                                            TStringBuilder() << "streamlookup(" << name.Content() << "...): Expected one of " << JoinSeq(", ", ShuffleModeValues) << ", but got: " << value.Content()));
                                 return IGraphTransformer::TStatus::Error;
                             }
                             continue;

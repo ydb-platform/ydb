@@ -1449,14 +1449,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // Prepare "mock cloud" database
         auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
         auto location = GetKikimrRunner()->GetEndpoint();
+        NYdb::TDriver driver(
+            NYdb::TDriverConfig()
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
+                .SetEndpoint(location)
+                .SetDatabase(databasePath)
+        );
+        NYdb::NTopic::TTopicClient topicClient(driver);
         {
-            NYdb::TDriver driver(
-                NYdb::TDriverConfig()
-                    .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
-                    .SetEndpoint(location)
-                    .SetDatabase(databasePath)
-            );
-            NYdb::NTopic::TTopicClient topicClient(driver);
             WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
                 auto result = topicClient.CreateTopic(topicName).GetValueSync();
                 if (result.IsSuccess()) {
@@ -1466,7 +1466,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
                 return false;
             });
-            driver.Stop(true);
         }
 
         constexpr char missingSecretPath[] = "eds_missing_iam_token";
@@ -1553,7 +1552,98 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
 
-        // Cannot verify successful use without some kind of "mock IAM"
+        // Confirm write to topic via eds works
+        auto now = TInstant::Now();
+        constexpr char testData[] = "barfoo";
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("{test_data}");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName,
+                "test_data"_a = testData
+            ));
+
+        ReadTopicMessages(topicName, TVector<std::string> { testData }, topicClient, now, true);
+
+        driver.Stop(true);
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        // Check successful EDS creation with sa returning invalid tokens
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = "bad-token"
+        ));
+
+        // Confirm write to topic via eds fails
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for bad token");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::GENERIC_ERROR, "Error: Access denied");
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        constexpr char serviceAccountUnavailableToken[] = "unavailable-token";
+        // Check with "unavailable-token" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountUnavailableToken
+        ));
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for unavailable-token");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::GENERIC_ERROR,
+            TStringBuilder() << "Too busy to respond forever");
+
+        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
+        constexpr char serviceAccountBadId[] = "bad-sa";
+        // Check with "bad-sa" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountBadId
+            ),
+            EStatus::UNAUTHORIZED,
+            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::PERMISSION_DENIED << ", ");
+
+        constexpr char serviceAccountUnavailable[] = "unavailable";
+        // Check with "unavailable" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountUnavailable
+            ),
+            EStatus::UNAVAILABLE,
+            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::UNAVAILABLE << ", ");
+
         // Check with disabled feature-flag
         {
             auto& runtime = GetRuntime();
@@ -1574,7 +1664,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
-        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         ExecQuery(fmt::format(
                 createExternalDataSourceTemplate,
                 "pq_source"_a = pqBadSourceName,

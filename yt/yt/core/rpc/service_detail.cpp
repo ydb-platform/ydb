@@ -582,11 +582,18 @@ public:
             return;
         }
 
+        // Guards from race with DoGuardedRun. If request timed out then there
+        // is no need to attempt to execute it. Thus, early exchange here.
+        auto wasRun = RunLatch_.exchange(true);
+
         YT_TLOG_DEBUG("Request timed out, canceling")
             .With("RequestId", RequestId_)
             .With("Stage", stage);
 
-        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+        auto error = TError(
+            NYT::EErrorCode::Timeout,
+            "Request timed out%v",
+            stage == ERequestProcessingStage::Waiting ? " before being run" : "");
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
             AbortStreamsUnlessClosed(error);
@@ -596,10 +603,10 @@ public:
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
-        // Guards from race with DoGuardedRun.
         // We can only mark as complete those requests that will not be run
-        // as there's no guarantee that, if started,  the method handler will respond promptly to cancelation.
-        if (!RunLatch_.exchange(true)) {
+        // as there's no guarantee that, if started, the method handler will
+        // respond promptly to cancelation.
+        if (!wasRun) {
             SetComplete();
         }
     }

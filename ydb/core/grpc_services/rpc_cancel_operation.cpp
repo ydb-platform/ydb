@@ -17,6 +17,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -160,8 +162,11 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvExport::TEvCancelExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCancelExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvCancelExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -169,8 +174,11 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvImport::TEvCancelImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvCancelImportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvCancelImportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -178,8 +186,11 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvIndexBuilder::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvCancelResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvCancelResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -187,8 +198,11 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvForcedCompaction::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvCancelResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvCancelResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -196,8 +210,11 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvSetColumnConstraint::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvCancelResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvCancelResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }

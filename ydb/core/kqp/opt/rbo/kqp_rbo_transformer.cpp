@@ -477,6 +477,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 

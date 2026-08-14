@@ -699,7 +699,8 @@ namespace NKikimr {
                 const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
                 const bool isZeroEntry = item.GetIsZeroEntry();
 
-                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size())) {
+                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size(),
+                        item.GetDataKind())) {
                     info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
                     continue;
                 }

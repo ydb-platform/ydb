@@ -54,9 +54,8 @@ void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProv
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-    auto p = dynamic_cast<TEvDescribeTopicRequest*>(ctx.release());
-
-    EnsureReq(p);
+    auto* p = ctx.release();
+    Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe topic request");
     f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribeTopicActor(p));

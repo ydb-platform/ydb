@@ -85,6 +85,17 @@ Y_UNIT_TEST_F(FederationRootDbAccountTopic, TNameResolverFixture) {
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
 }
 
+Y_UNIT_TEST_F(FederationAbsolutePathUnderLbRootNotDoubled, TNameResolverFixture) {
+    // Alter/describe with absolute path under LbRoot and database=/Root (CommitOffsetBadOffsets).
+    SetFcc(false);
+    const auto resolved = OkFull(ResolveName("/Root", "/Root/LbCommunal/account/topic2", "dc1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic2");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/LbCommunal/account");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "//Root//LbCommunal//account//topic2", "dc1")),
+        "/Root/LbCommunal/account/topic2");
+}
+
 Y_UNIT_TEST_F(FederationNavigateDatabaseWithoutLbRoot, TNameResolverFixture) {
     // Describe account1/topic under /Root with empty LbRoot → tenant NavigateDatabase.
     SetFcc(false);
@@ -103,6 +114,19 @@ Y_UNIT_TEST_F(FccAbsolutePathNotStrippedByPqRoot, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "/Root/table1/feed")),
         "/Root/table1/feed");
+}
+
+Y_UNIT_TEST_F(FccKeepsPqPathWithLegacyLookingLeaf, TNameResolverFixture) {
+    // Path with '/' is modern even if the leaf looks like rt3/-- (TopicService UpdateOffsets).
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/PQ/rt3.dc1--topic1")),
+        "/Root/PQ/rt3.dc1--topic1");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "PQ/rt3.dc1--topic1")),
+        "/Root/PQ/rt3.dc1--topic1");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "//Root//PQ//rt3.dc1--topic1")),
+        "/Root/PQ/rt3.dc1--topic1");
 }
 
 Y_UNIT_TEST_F(FederationUserDbAbsolutePathWithPqRootEqDomain, TNameResolverFixture) {

@@ -59,10 +59,22 @@ bool BasicNameChecks(TStringBuf name) {
     return !name.empty() && !name.Contains("//");
 }
 
+bool HasModernPathSeparator(TStringBuf topic) {
+    // True for account/topic; false for bare names and short legacy with only '//'.
+    for (size_t i = 0; i + 1 < topic.size(); ++i) {
+        if (topic[i] == '/' && topic[i + 1] != '/' && (i == 0 || topic[i - 1] != '/')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool IsLegacyStyleName(TStringBuf topic) {
-    // Full: rt3.<dc>--...
-    // Short without rt3.: account--topic / account@dir--topic
-    // Bare topic without path separators: "topic"
+    // Modern paths use a single '/' separator (e.g. PQ/rt3.dc1--topic leaf under a dir).
+    // Short legacy may still contain accidental '//' (account--a//b) without a modern sep.
+    if (HasModernPathSeparator(topic)) {
+        return false;
+    }
     if (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@")) {
         return true;
     }
@@ -71,7 +83,8 @@ bool IsLegacyStyleName(TStringBuf topic) {
 
 bool IsExplicitLegacyName(TStringBuf topic) {
     // Unlike bare names, these are never relative modern paths inside a user DB.
-    return topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@");
+    return !HasModernPathSeparator(topic)
+        && (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@"));
 }
 
 // True when database is a strict child of lbRoot (e.g. Root/account1 under Root).
@@ -364,6 +377,23 @@ std::expected<TResolvedName, TString> ResolveName(
         // Full path under database: /Root/account/topic + database /Root → account/topic.
         // Callers (e.g. describer) may pass database-prefixed absolute paths as-is.
         SkipPathPrefix(topicName, databaseNorm);
+    }
+
+    // Absolute under LbRoot (possibly after stripping a parent database) must not be
+    // re-joined as LbRoot + "LbRootSuffix/...". E.g. db=/Root, LbRoot=/Root/LbAccount,
+    // name=/Root/LbAccount/account/topic → account/topic (not LbAccount/account/topic).
+    if (!lbRoot.empty()) {
+        if (IsPathPrefix(topicName, lbRoot)) {
+            SkipPathPrefix(topicName, lbRoot);
+        } else if (!databaseNorm.empty()
+            && databaseNorm != lbRoot
+            && IsPathPrefix(lbRoot, databaseNorm)) {
+            TStringBuf lbSuffix = lbRoot;
+            SkipPathPrefix(lbSuffix, databaseNorm);
+            if (!lbSuffix.empty() && IsPathPrefix(topicName, lbSuffix)) {
+                SkipPathPrefix(topicName, lbSuffix);
+            }
+        }
     }
 
     auto wrap = [&](TString path) {

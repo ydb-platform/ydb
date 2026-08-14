@@ -254,6 +254,9 @@ public:
 
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
+        ResponseEv->ExecutionTraces.insert(ResponseEv->ExecutionTraces.end(),
+            std::make_move_iterator(ev->Get()->ExecutionTraces.begin()),
+            std::make_move_iterator(ev->Get()->ExecutionTraces.end()));
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:

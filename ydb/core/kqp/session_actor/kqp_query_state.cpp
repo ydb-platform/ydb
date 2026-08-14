@@ -147,6 +147,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
     CompilationRunning = false;
     CompileResult = compileResult;
     YQL_ENSURE(CompileResult);
+    CompileStatus = CompileResult->Status;
     MaxReadType = CompileResult->MaxReadType;
 
     if (CompileResult->Status != Ydb::StatusIds::SUCCESS) {

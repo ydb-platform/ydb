@@ -8,6 +8,7 @@
 #include <util/system/types.h>
 
 #include <unordered_map>
+#include <tuple>
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -27,33 +28,61 @@ struct TTimeWindow {
 
 class TShardReadDiagnosticsCollector {
 public:
-    void OnStart(ui64 shardId) {
+    void OnStart(ui64 shardId, TInstant now = TInstant::Now()) {
         auto it = Indexes_.find(shardId);
         if (it == Indexes_.end()) {
             if (Reads_.size() >= MaxShardReadDiagnostics) {
+                const auto replacement = FindReplaceable();
+                if (replacement == Reads_.size()) {
+                    ++Dropped_;
+                    return;
+                }
+                Indexes_.erase(Reads_[replacement].GetShardId());
+                Reads_[replacement].Clear();
+                it = Indexes_.emplace(shardId, replacement).first;
                 ++Dropped_;
-                return;
+            } else {
+                const size_t index = Reads_.size();
+                Reads_.emplace_back();
+                it = Indexes_.emplace(shardId, index).first;
             }
-            const size_t index = Reads_.size();
-            Reads_.emplace_back();
-            it = Indexes_.emplace(shardId, index).first;
         }
         auto& shard = Reads_[it->second];
         shard.SetShardId(shardId);
         if (!shard.GetStartTimeMs()) {
-            shard.SetStartTimeMs(TInstant::Now().MilliSeconds());
+            shard.SetStartTimeMs(now.MilliSeconds());
         }
     }
 
     void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0,
             Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-            bool finished = true) {
-        const auto it = Indexes_.find(shardId);
+            bool finished = true, TInstant now = TInstant::Now()) {
+        auto it = Indexes_.find(shardId);
         if (it == Indexes_.end()) {
+            NKqpProto::TKqpShardReadStats candidate;
+            candidate.SetShardId(shardId);
+            candidate.SetFinishTimeMs(now.MilliSeconds());
+            candidate.SetRows(rows);
+            candidate.SetRetries(retries);
+            candidate.SetStatus(status);
+            candidate.SetFinished(finished || status != Ydb::StatusIds::SUCCESS);
+            if (nodeId) {
+                candidate.SetNodeId(nodeId);
+            }
+            if (status == Ydb::StatusIds::SUCCESS && retries == 0) {
+                return;
+            }
+            const size_t replacement = FindLessInterestingThan(candidate);
+            if (replacement == Reads_.size()) {
+                return;
+            }
+            Indexes_.erase(Reads_[replacement].GetShardId());
+            Reads_[replacement] = std::move(candidate);
+            Indexes_.emplace(shardId, replacement);
             return;
         }
         auto& shard = Reads_[it->second];
-        shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
+        shard.SetFinishTimeMs(now.MilliSeconds());
         shard.SetRows(shard.GetRows() + rows);
         shard.SetRetries(Max(shard.GetRetries(), retries));
         // Status is the final outcome; retries preserve transient failures separately.
@@ -92,6 +121,41 @@ public:
     }
 
 private:
+    static auto Rank(const NKqpProto::TKqpShardReadStats& shard) {
+        const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+            && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
+        const ui64 durationMs = shard.GetStartTimeMs() && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+            ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
+        return std::tuple(failed, shard.GetRetries() > 0, durationMs);
+    }
+
+    size_t FindReplaceable() const {
+        size_t result = Reads_.size();
+        for (size_t i = 0; i < Reads_.size(); ++i) {
+            const auto& shard = Reads_[i];
+            if (!shard.GetFinished() || std::get<0>(Rank(shard)) || shard.GetRetries() > 0) {
+                continue;
+            }
+            if (result == Reads_.size() || Rank(shard) < Rank(Reads_[result])) {
+                result = i;
+            }
+        }
+        return result;
+    }
+
+    size_t FindLessInterestingThan(const NKqpProto::TKqpShardReadStats& candidate) const {
+        size_t result = Reads_.size();
+        for (size_t i = 0; i < Reads_.size(); ++i) {
+            if (Rank(Reads_[i]) >= Rank(candidate)) {
+                continue;
+            }
+            if (result == Reads_.size() || Rank(Reads_[i]) < Rank(Reads_[result])) {
+                result = i;
+            }
+        }
+        return result;
+    }
+
     std::vector<NKqpProto::TKqpShardReadStats> Reads_;
     std::unordered_map<ui64, size_t> Indexes_;
     size_t Dropped_ = 0;

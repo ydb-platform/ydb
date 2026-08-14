@@ -1831,8 +1831,10 @@ protected:
 
         EndExecutionPhase();
         ExecutionTrace->Timeline.Execute.End = TInstant::Now();
+        ExecutionTrace->Status = ResponseEv->Record.GetResponse().GetStatus();
         Stats->ExportTraceSnapshot(*ExecutionTrace);
-        ResponseEv->ExecutionTrace = std::move(ExecutionTrace);
+        ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
+        ExecutionTrace.reset();
     }
 
     NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EExecutionPhase phase,

@@ -55,7 +55,7 @@ struct TEvKqpExecuter {
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
         TVector<ui32> BatchOperationKeyIds;
 
-        std::unique_ptr<TExecutionTraceSnapshot> ExecutionTrace;
+        std::vector<TExecutionTraceSnapshot> ExecutionTraces;
 
         enum class EExecutionType {
             Data,

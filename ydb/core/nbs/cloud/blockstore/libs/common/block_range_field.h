@@ -13,14 +13,24 @@ namespace NYdb::NBS::NBlockStore {
 class TBlockRangeField
 {
 public:
-    using TEnumerateFunc = std::function<void(TBlockRange64 item)>;
+    enum class EEnumerateContinuation
+    {
+        Continue,
+        Stop,
+    };
+    using TEnumerateFunc =
+        std::function<EEnumerateContinuation(TBlockRange64 item)>;
 
     void Add(TBlockRange64 range);
     void Remove(TBlockRange64 range);
+    void Clear();
 
     [[nodiscard]] bool Overlaps(TBlockRange64 other) const;
 
     void Enumerate(TEnumerateFunc func) const;
+
+    [[nodiscard]] bool Empty() const;
+    [[nodiscard]] TString Print() const;
 
 private:
     struct TBlockRangeComparator

@@ -109,8 +109,11 @@ public:
         PBufferErased,
     };
 
+    // Restored from PBuffer on recovery.
     TInflightInfo(
         IReadyQueue* readyQueues,
+        THostMask desiredDDisks,
+        THostMask disabled,
         ui64 lsn,
         size_t byteCount,
         THostIndex host);
@@ -118,15 +121,21 @@ public:
     // Pending write: lsn is generated but data is not in any PBuffer yet.
     // ReadMask is empty (reads wait on the quorum future) and the write is not
     // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
-    TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
+    TInflightInfo(
+        IReadyQueue* readyQueue,
+        THostMask desiredDDisks,
+        THostMask disabled,
+        ui64 lsn,
+        size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
 
-    // Detach from ReadyQueue.
+    // Detach from ReadyQueue. Called before parent DirtyMap destroyed.
     void Detach();
 
+    // Instance of PBuffer record found on host during recovery.
     void RestorePBuffer(THostIndex host);
 
     // Transitions a pending write (see the byteCount-only constructor) to the
@@ -145,12 +154,10 @@ public:
     // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] THostIndex RequestFlush(
-        THostIndex destination,
-        THostMask disabledHosts);
+    [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
     void ConfirmFlush(THostIndex host);
     void FlushFailed(THostIndex host);
-    [[nodiscard]] THostMask GetRequestedFlushes() const;
+    [[nodiscard]] THostMask GetInflightFlushes() const;
 
     void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
@@ -160,8 +167,8 @@ public:
     // requested/confirmed.
     [[nodiscard]] THostMask GetEraseNeeded() const;
 
-    // Skip removed hosts flushing and erase. Update state.
-    void RemoveHosts(THostMask removed);
+    // Update state according to the changed configuration.
+    void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
@@ -182,6 +189,10 @@ private:
 
     void SetState(EState newState);
 
+    void MaybeAdvanceToFlushed();
+    void MaybeAdvanceToErased();
+    void MaybeQueryErase();
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
@@ -191,9 +202,10 @@ private:
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
 
+    THostMask DesiredDDisks;
+    THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
-    THostMask FlushDesired;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

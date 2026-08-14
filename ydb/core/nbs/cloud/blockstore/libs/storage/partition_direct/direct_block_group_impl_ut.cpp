@@ -1358,12 +1358,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "Enabled{++++++}",
             configAfter);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3+{Disabled,0,0};"
-            "H4+{Disabled,0,0};"
-            "H5+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};"
+            "H5+{Disabled,0};",
             dirtyMapDDiskAfter);
     }
 }

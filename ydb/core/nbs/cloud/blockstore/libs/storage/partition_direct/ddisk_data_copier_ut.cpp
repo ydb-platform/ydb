@@ -22,6 +22,13 @@ THostMask MakePrimariesMask()
     return result;
 }
 
+void FinishFlushes(TBlocksDirtyMap& dirtyMap, const TFlushHints& hints)
+{
+    for (const auto& [route, flush]: hints.GetAllHints()) {
+        dirtyMap.FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
+    }
+}
+
 struct TFixture: public TBaseFixture
 {
     TDDiskDataCopierPtr Copier;
@@ -55,21 +62,21 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,0};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
         // No ranges locked.
@@ -111,12 +118,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             if (i == 5) {
                 // Check state on 5th iteration
                 UNIT_ASSERT_VALUES_EQUAL(
-                    "H0*{Operational,32768,32768};"
-                    "H1*{Fresh,1536,1792};"   // Watermarks for reading
-                                              // and writing raised
-                    "H2*{Operational,32768,32768};"
-                    "H3*{Operational,32768,32768};"
-                    "H4+{Disabled,0,0};",
+                    "H0*{Operational,32768};"
+                    "H1*{Fresh+,1536};"   // Watermarks for reading
+                                          // and writing raised
+                    "H2*{Operational,32768};"
+                    "H3*{Operational,32768};"
+                    "H4+{Disabled,0};",
                     DirtyMap->DebugPrintDDiskState());
             }
         }
@@ -129,11 +136,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // All DDisk fully operational
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
@@ -164,7 +171,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -176,14 +183,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // Data copying should not be advanced.
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
-        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
@@ -210,7 +219,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -225,14 +234,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TDDiskDataCopier::EResult::Error,
             complete.GetValue());
 
-        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
@@ -282,7 +293,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -295,13 +306,15 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // Data copying should not be advanced.
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
-        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
@@ -310,7 +323,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data coping
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -340,11 +353,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,256,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,256};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
         // Start data coping again
@@ -375,11 +388,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,512,512};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,512};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
@@ -388,7 +401,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 partially fresh.
-        DirtyMap->MarkFresh(FreshDDisk, CopyRangeSize);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, CopyRangeSize);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
@@ -411,30 +424,40 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            CopyRangeSize * 2,
-            *DirtyMap->GetFreshWatermark(FreshDDisk));
+            TBlockRange64::MakeClosedInterval(512, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,512,512};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,512};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST_F(ShouldCopyWithWrites, TFixture)
     {
+        const auto overlapped_0 = TBlockRange64::WithLength(
+            10,
+            10);   // overlapped with #0 sync range
+        const auto overlapped_1 = TBlockRange64::WithLength(
+            260,
+            10);   // overlapped with #1 sync range
+        const auto overlapped_01 = TBlockRange64::WithLength(
+            250,
+            10);   // overlapped with #0 + #1 sync range
+
         Init();
         RangeData = GenerateRandomString(CopyRangeSize * 3);
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         DirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         DirtyMap->WriteFinished(
             123,
-            TBlockRange64::WithLength(10, 10),   // #0
+            overlapped_0,
             MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
@@ -442,7 +465,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TBlockRange64::WithLength(250, 10));
         DirtyMap->WriteFinished(
             124,
-            TBlockRange64::WithLength(250, 10),   // #0 + #1
+            overlapped_01,
             MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
@@ -450,7 +473,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TBlockRange64::WithLength(260, 10));
         DirtyMap->WriteFinished(
             125,
-            TBlockRange64::WithLength(260, 10),   // #1
+            overlapped_1,
             MakePrimariesMask(),
             MakePrimariesMask());
 
@@ -459,6 +482,9 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Coping range #0 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should not contains writes overlapped with copied
         // range #0
@@ -466,6 +492,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:125[260..269];"
             "H0->H3:125[260..269];"
+            "H1->H1:125[260..269];"
             "H2->H2:125[260..269];",
             flushHints.DebugPrint());
 
@@ -481,7 +508,18 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
             false);
 
+        // Coping range #1 waiting for flushes completed.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[256..511]wait;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Complete flushes to start coping range #1.
+        FinishFlushes(*DirtyMap, flushHints);
+
         // Coping range #1 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[256..511]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should not contains writes overlapped with range #1,
         // but contains #0
@@ -506,6 +544,9 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             false);
 
         //  Coping range #2 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[512..767]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should contains writes overlapped with range #1
         flushHints = DirtyMap->MakeFlushHint(1);
@@ -524,6 +565,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         SetWriteResult(
             TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
             false);
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
@@ -532,8 +574,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            CopyRangeSize * 3,
-            *DirtyMap->GetFreshWatermark(FreshDDisk));
+            TBlockRange64::MakeClosedInterval(768, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
     }
 }
 

@@ -1,5 +1,7 @@
 #include "block_range_field.h"
 
+#include <util/string/builder.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,6 +77,11 @@ void TBlockRangeField::Remove(TBlockRange64 range)
     }
 }
 
+void TBlockRangeField::Clear()
+{
+    Intervals.clear();
+}
+
 bool TBlockRangeField::Overlaps(TBlockRange64 other) const
 {
     if (Intervals.empty()) {
@@ -95,8 +102,24 @@ bool TBlockRangeField::Overlaps(TBlockRange64 other) const
 void TBlockRangeField::Enumerate(TEnumerateFunc func) const
 {
     for (const auto& range: Intervals) {
-        func(range);
+        if (func(range) == EEnumerateContinuation::Stop) {
+            break;
+        }
     }
+}
+
+bool TBlockRangeField::Empty() const
+{
+    return Intervals.empty();
+}
+
+TString TBlockRangeField::Print() const
+{
+    TStringBuilder result;
+    for (const auto& range: Intervals) {
+        result << range.Print();
+    }
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

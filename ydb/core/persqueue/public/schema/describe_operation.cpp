@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -71,12 +70,8 @@ public:
         LocationsReceived = !Settings.IncludeLocation && !Settings.IncludeStats;
     }
 
-    TStringBuilder LogBuilder() const {
-        return TStringBuilder() << "[" << SelfId() << "]";
-    }
-
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << (Strategy ? Strategy->GetName() : "DescribeOperation") << "]";
+        return TStringBuilder() << "[" << Strategy->GetName() << "]";
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
@@ -183,8 +178,6 @@ private:
                     case NDescriber::EStatus::UNAUTHORIZED:
                     case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                         return Ydb::StatusIds::SCHEME_ERROR;
-                    case NDescriber::EStatus::UNKNOWN_ERROR:
-                        return Ydb::StatusIds::INTERNAL_ERROR;
                     default:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                 }
@@ -467,19 +460,18 @@ private:
         Schedule(delay, new TEvents::TEvWakeup(tabletId));
     }
 
-    bool HandleStatsRetryWakeup(ui64 tabletId) {
+    void HandleStatsRetryWakeup(ui64 tabletId) {
         if (!StatsRetryPending.erase(tabletId)) {
-            return false;
+            return;
         }
         if (!TabletsInflight.contains(tabletId)) {
-            return true;
+            return;
         }
         if (!RemainingRequestTimeout()) {
             HandleRequestTimeout();
-            return true;
+            return;
         }
         RequestStats(tabletId);
-        return true;
     }
 
     void ScheduleBalancerRetry() {
@@ -522,14 +514,11 @@ private:
     }
 
     TDuration RemainingRequestTimeout() const {
-        if (!RequestStartTime) {
-            return RequestTimeout;
-        }
         const auto now = TActivationContext::Now();
-        if (now >= *RequestStartTime + RequestTimeout) {
+        if (now >= RequestStartTime + RequestTimeout) {
             return TDuration::Zero();
         }
-        return *RequestStartTime + RequestTimeout - now;
+        return RequestStartTime + RequestTimeout - now;
     }
 
     void HandleRequestTimeout() {
@@ -558,7 +547,7 @@ private:
     bool BalancerRetryPending = false;
     bool IsDead = false;
     TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
-    std::optional<TInstant> RequestStartTime;
+    TInstant RequestStartTime;
     absl::flat_hash_map<ui64, TBackoff> StatsBackoff;
     absl::flat_hash_set<ui64> StatsRetryPending;
     NActors::TActorId DescriberActorId;

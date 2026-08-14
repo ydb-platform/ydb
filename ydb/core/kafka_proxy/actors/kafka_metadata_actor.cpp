@@ -209,6 +209,15 @@ private:
 
 } // namespace
 
+NActors::IActor* CreateTopicLocationActor(
+    const NActors::TActorId& requester,
+    TString path,
+    TString database,
+    TString token)
+{
+    return new TTopicLocationActor(std::move(requester), std::move(path), std::move(database), std::move(token));
+}
+
 TActorId MakeKafkaDiscoveryCacheID() {
     static const char x[12] = "kafka_dsc_c";
     return TActorId(0, TStringBuf(x, 12));

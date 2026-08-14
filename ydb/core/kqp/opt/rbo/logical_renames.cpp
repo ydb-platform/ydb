@@ -145,7 +145,7 @@ void TOpMap::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::T
         }
     }
     if (changed) {
-        InvalidateSubplanCandidates();
+        InvalidateUniqueRawInputIUs();
     }
 }
 

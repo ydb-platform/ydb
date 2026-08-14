@@ -89,11 +89,7 @@ public:
         const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
         AddInfoUnits(target, expression.GetInputIUs(false, true));
 
-        for (const auto& iu : expression.GetInputIUs(true, false)) {
-            if (!iu.IsSubplanContext()) {
-                continue;
-            }
-
+        for (const auto& iu : expression.GetRawInputIUs()) {
             const auto* subplanEntry = Props.Subplans.Find(iu);
             if (!subplanEntry) {
                 continue;

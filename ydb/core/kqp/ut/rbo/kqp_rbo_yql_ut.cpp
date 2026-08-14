@@ -1360,7 +1360,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
     }
 
-    Y_UNIT_TEST(MapSubplanCandidatesFollowExpressionMutations) {
+    Y_UNIT_TEST(MapUniqueRawInputIUsFollowExpressionMutations) {
         NYql::TExprContext exprCtx;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -1375,24 +1375,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 TMapElement(TInfoUnit("duplicate"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
             });
 
-        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{firstBinding}));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{firstBinding}));
 
         map->SetMapElementExpression(0, MakeColumnAccess(replacementBinding, pos, &exprCtx, &expressionProps));
-        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
 
         map->RemoveMapElement(1);
-        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding}));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding}));
 
         map->AddMapElement(TMapElement(
             TInfoUnit("first_again"),
             MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps),
             false));
-        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
 
         map->SetMapElements({
             TMapElement(TInfoUnit("first_again"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
         });
-        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{firstBinding}));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{firstBinding}));
     }
 
     Y_UNIT_TEST(MapElementExpressionMutationPreservesRenameInvariant) {
@@ -1481,29 +1481,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
     }
 
-    Y_UNIT_TEST(FilterSubplanCandidatesFollowExpressionMutation) {
-        NYql::TExprContext exprCtx;
-        TPlanProps expressionProps;
-        const auto pos = NYql::TPositionHandle();
-        const TInfoUnit oldBinding("old_subplan", true);
-        const TInfoUnit newBinding("new_subplan", true);
-
-        auto filter = MakeIntrusive<TOpFilter>(
-            MakeIntrusive<TOpEmptySource>(pos),
-            pos,
-            MakeColumnAccess(oldBinding, pos, &exprCtx, &expressionProps));
-
-        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{oldBinding}));
-
-        filter->SetFilterExpression(MakeColumnAccess(newBinding, pos, &exprCtx, &expressionProps));
-        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{newBinding}));
-    }
-
     Y_UNIT_TEST(SubplanTraversalFollowsRegistryMutations) {
         NYql::TExprContext exprCtx;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
         const TInfoUnit binding("subplan", true);
+        const TInfoUnit replacementBinding("replacement_subplan", true);
         auto filter = MakeIntrusive<TOpFilter>(
             MakeIntrusive<TOpEmptySource>(pos),
             pos,
@@ -1513,17 +1496,58 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto originalSubplan = MakeIntrusive<TOpEmptySource>(pos);
         auto replacementSubplan = MakeIntrusive<TOpEmptySource>(pos);
 
-        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        filter->SetFilterExpression(MakeColumnAccess(replacementBinding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding}));
+        filter->SetFilterExpression(MakeColumnAccess(binding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans).empty());
 
         root.PlanProps.Subplans.Add(binding, originalSubplan, ESubplanType::EXPR);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans) == (TVector<TInfoUnit>{binding}));
         UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 1);
 
         root.PlanProps.Subplans.ReplacePlan(binding, replacementSubplan);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans) == (TVector<TInfoUnit>{binding}));
         UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 1);
 
         root.PlanProps.Subplans.Remove(binding);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans).empty());
         UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 0);
+    }
+
+    Y_UNIT_TEST(SubplanTraversalResumesRawIUResolutionAfterMove) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit firstBinding("first_subplan", true);
+        const TInfoUnit secondBinding("second_subplan", true);
+        auto filter = MakeIntrusive<TOpFilter>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            MakeBinaryPredicate(
+                "And",
+                MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps),
+                MakeColumnAccess(secondBinding, pos, &exprCtx, &expressionProps)));
+        TOpRoot root(filter, pos, {});
+        filter->BindExpressionPlanProps(&root.PlanProps);
+        auto firstSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        auto secondSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        root.PlanProps.Subplans.Add(firstBinding, firstSubplan, ESubplanType::EXPR);
+        root.PlanProps.Subplans.Add(secondBinding, secondSubplan, ESubplanType::EXPR);
+
+        auto iterator = root.begin();
+        UNIT_ASSERT(iterator != TOpEnd{});
+        UNIT_ASSERT(iterator->Current == firstSubplan);
+        UNIT_ASSERT(iterator->SubplanIU && *iterator->SubplanIU == firstBinding);
+
+        TOpIterator moved(std::move(iterator));
+        UNIT_ASSERT(iterator == TOpEnd{});
+        ++moved;
+        UNIT_ASSERT(moved != TOpEnd{});
+        UNIT_ASSERT(moved->Current == secondSubplan);
+        UNIT_ASSERT(moved->SubplanIU && *moved->SubplanIU == secondBinding);
     }
 
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {

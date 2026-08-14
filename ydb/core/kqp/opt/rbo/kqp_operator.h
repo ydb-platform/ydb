@@ -223,13 +223,18 @@ public:
     }
 
     /**
-     * Get expression members that may currently bind to subplans. The result
-     * is plan-independent; callers classify the candidates against TSubplans.
+     * Get the unique raw input IUs used to discover subplan references. The
+     * result is plan-independent, cached by operators that expose it, and
+     * preserves first-occurrence order.
      */
-    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const {
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const {
         static const TVector<TInfoUnit> empty;
         return empty;
     }
+
+    // Resolve cached, plan-independent raw input IUs against the current registry.
+    // The result itself is intentionally not cached.
+    TVector<TInfoUnit> GetSubplanIUs(const TSubplans& subplans) const;
 
     const TTypeAnnotationNode* GetIUType(const TInfoUnit& iu);
 
@@ -496,7 +501,7 @@ public:
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const override;
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
@@ -529,11 +534,11 @@ protected:
     void ComputeOutputIUs() override;
 
 private:
-    void InvalidateSubplanCandidates();
+    void InvalidateUniqueRawInputIUs();
 
     TVector<TMapElement> MapElements;
-    mutable bool SubplanCandidatesDirty = true;
-    mutable TVector<TInfoUnit> SubplanCandidates;
+    mutable bool UniqueRawInputIUsDirty = true;
+    mutable TVector<TInfoUnit> UniqueRawInputIUs;
 };
 
 /**
@@ -624,7 +629,7 @@ public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const override;
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
@@ -647,8 +652,8 @@ protected:
 
 private:
     TExpression FilterExpr;
-    mutable bool SubplanCandidatesDirty = true;
-    mutable TVector<TInfoUnit> SubplanCandidates;
+    mutable bool UniqueRawInputIUsDirty = true;
+    mutable TVector<TInfoUnit> UniqueRawInputIUs;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
@@ -960,10 +965,11 @@ private:
         TIntrusivePtr<IOperator> Parent;
         size_t ChildIndex = 0;
         std::shared_ptr<TInfoUnit> SubplanIU;
-        // Points into the operator's raw member cache; current subplan bindings
-        // are resolved live while the plan remains unmodified.
-        const TVector<TInfoUnit>* SubplanCandidates = nullptr;
-        size_t NextSubplanCandidateIdx = 0;
+        // Points into the operator's raw member cache. The cursor is advanced
+        // before descent, but the next registry lookup stays live until this
+        // frame resumes.
+        const TVector<TInfoUnit>* UniqueRawInputIUs = nullptr;
+        size_t NextRawInputIUIdx = 0;
         size_t NextChildIdx = 0;
         // Pre-order only: the node was already emitted when its frame was entered
         bool Emitted = false;

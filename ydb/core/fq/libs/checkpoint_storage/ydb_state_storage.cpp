@@ -679,7 +679,7 @@ TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& conte
                 declare $seq_no as Uint64;
                 %s;
 
-                SELECT task_id, CAST(COUNT(*) as UINT64) as cnt, CAST(MIN(type) as UINT8) as type
+                SELECT task_id, CAST(COUNT(*) as UINT64) as cnt, CAST(MAX(type) as UINT8) as type
                 FROM %s
                 WHERE graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND %s
                 GROUP BY task_id;
@@ -1120,7 +1120,8 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     NYql::TIssues& issues) {
     YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ApplyIncrements",
         {"graphId", context->GraphId},
-        {"checkpointId", context->CheckpointId});
+        {"checkpointId", context->CheckpointId},
+        {"taskCount", context->Tasks.size()});
 
     std::vector<NYql::NDq::TComputeActorState> states;
     try {

@@ -561,20 +561,27 @@ public:
 
         RegisterDefaultCoordinator();
         size_t count = 20;
+        ui64 taskId1 = 1316;
+        ui64 taskId2 = 1317;
 
-        for (size_t i = 0; i < count; ++i) {
-            auto state = MakeState(TStringBuilder() << "some random state " << i);
-            auto checkpointId = TCheckpointId(Generation, i);
+        for (size_t seqNo = 0; seqNo < count; ++seqNo) {
+            auto checkpointId = TCheckpointId(Generation, seqNo);
             CreateCheckpoint(GraphId, Generation, checkpointId, false);
-            SaveState(1316, checkpointId, state);
-            SaveState(1317, checkpointId, state);
+            auto state1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+            SaveState(taskId1, checkpointId, state1);
+            auto state2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+            SaveState(taskId2, checkpointId, state2);
         }
 
         ui64 seqNo = 10;
         auto checkpointId = TCheckpointId(Generation, seqNo);
-        auto actual = GetState(1317, GraphId, checkpointId);
-        auto expected = MakeState(TStringBuilder() << "some random state " << seqNo);
-        UNIT_ASSERT_VALUES_EQUAL(expected, actual);
+        auto actual1 = GetState(taskId1, GraphId, checkpointId);
+        auto expected1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+        UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
+
+        auto actual2 = GetState(taskId2, GraphId, checkpointId);
+        auto expected2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+        UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
     }
 
     void ShouldUseGc() {

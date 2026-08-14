@@ -329,6 +329,37 @@ Y_UNIT_TEST(TestPendingDroppedOnDeregisterWithoutRegister) {
     UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
 }
+
+// Stale lower-gen Deregister must not wipe Stage/Publish pending for a newer generation.
+Y_UNIT_TEST(TestStaleDeregisterDoesNotDropNewerPending) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvStageDirectReadData(
+                    {"session", 1, 1}, 2, std::make_shared<NKikimrClient::TResponse>())
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvPublishDirectRead({"session", 1, 1}, 2)
+    );
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvDeregisterDirectReadSession({"session", 1}, 1)
+    );
+
+    runtime->Send(
+            setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session", 1}, 2)
+    );
+
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session", 1}, 2));
+    UNIT_ASSERT(!resp->Error);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
+}
 } // Test suite
 
 } //namespace NKikimr::NPQ

@@ -426,7 +426,31 @@ private:
     void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {
         auto& retiredGeneration = RetiredSessionGeneration[key];
         retiredGeneration = Max(retiredGeneration, generation);
-        PendingBySession.erase(key);
+
+        // Drop only pending for generations <= retired. Newer Stage/Publish (e.g. Stage(N)
+        // before Register, then stale Deregister(N-1)) must survive for FlushPending.
+        auto pendingIter = PendingBySession.find(key);
+        if (pendingIter.IsEnd()) {
+            return;
+        }
+        auto& pending = pendingIter->second;
+        for (auto it = pending.Stages.begin(); it != pending.Stages.end(); ) {
+            if (it->second.Generation <= retiredGeneration) {
+                it = pending.Stages.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = pending.Publishes.begin(); it != pending.Publishes.end(); ) {
+            if (it->second <= retiredGeneration) {
+                it = pending.Publishes.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (pending.Stages.empty() && pending.Publishes.empty()) {
+            PendingBySession.erase(pendingIter);
+        }
     }
 
     void ClearRetiredSession(const TReadSessionKey& key) {
@@ -697,6 +721,8 @@ private:
     THashMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
     // Highest generation for which the session was Deregistered/Released. Late Stage/Publish
     // with generation <= this value must not re-create PendingBySession after teardown.
+    // Keys stay until Register of the same session key (or actor death); needed so a late
+    // Stage after erase does not leak again.
     THashMap<TReadSessionKey, ui32> RetiredSessionGeneration;
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 

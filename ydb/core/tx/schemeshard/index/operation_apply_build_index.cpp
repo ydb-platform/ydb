@@ -58,6 +58,11 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
         if (NKikimr::NKMeans::ValidateSettings(vectorDescription->GetSettings().settings(), unused)) {
             *operation->MutableVectorIndexKmeansTreeDescription() = *vectorDescription;
             operation->SetVectorIndexEmbeddingColumn(embeddingColumn);
+            const TPath mainTable = index.Parent();
+            mainTable.Base()->PathId.ToProto(operation->MutableVectorIndexTablePathId());
+            operation->SetVectorIndexTablePath(mainTable.PathString());
+            index.Base()->PathId.ToProto(operation->MutableVectorIndexPathId());
+            operation->SetVectorIndexPath(index.PathString());
             for (const auto& [columnId, column] : table->Columns) {
                 if (column.Name == embeddingColumn) {
                     operation->SetVectorIndexEmbeddingColumnId(columnId);

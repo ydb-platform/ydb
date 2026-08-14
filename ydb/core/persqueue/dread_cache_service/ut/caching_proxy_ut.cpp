@@ -265,7 +265,7 @@ Y_UNIT_TEST(TestStagePublishBeforeRegister) {
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.begin()->first, 1);
 }
 
-// Late Stage/Publish after Deregister must not be buffered (would leak until actor death).
+// Late Stage/Publish after Deregister must not be buffered (retired-generation tombstone).
 Y_UNIT_TEST(TestLateStageAfterDeregisterNotBuffered) {
     TTestSetup setup;
     auto runtime = setup.GetRuntime();

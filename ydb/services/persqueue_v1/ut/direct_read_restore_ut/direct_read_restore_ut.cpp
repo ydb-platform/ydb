@@ -1117,14 +1117,13 @@ Y_UNIT_TEST(StopDirectReadOnGenerationBumpWhileRestoreStuck) {
     Client.ReadDataNoAck(Runtime(), /*expectedDirectReadId=*/1);
 }
 
-// PQRB restart hang hypothesis (prod: control alive, DirectRead Unknown session / BytesRead=0):
+// PQRB restart hang (prod: control alive, DirectRead Unknown session / BytesRead=0):
 // ProcessBalancerDead force-stops partitions and re-locks; CreateSession fires
 // RegisterDirectReadSession to dread cache before Start reaches the client.
-// If Register is delayed, partition still Prepare/Publish (tablet path) and advances Offset /
-// inFlight DirectRead while cache buffers Stage/Publish until Register.
-// Client StartDirectRead → Unknown session; SDK would retry forever. After Register is
-// delivered and DirectRead is re-inited, inFlight without a client-visible DirectRead
-// still blocks further reads — durable hang with control alive (pre-buffering fix).
+// If Register is delayed, partition still Stage/Publish and advances inFlight DirectRead;
+// client StartDirectRead → Unknown session while Register is held.
+// Without buffering, dropped Stage/Publish left tablet inFlight without cache data → durable
+// hang after Register and re-init. With buffering, FlushPending on Register restores data.
 Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
     WriteOneMessage();
     OpenDirectReadSession(/*readDataNoAck=*/true);
@@ -1167,7 +1166,7 @@ Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
     Client.StartDirectReadPartition(Runtime());
     WriteOneMessage();
 
-    // Must not hang forever: either data arrives (bug fixed) or we fail fast with the hang.
+    // After Register + re-init, buffered Stage/Publish must be visible (or fail fast on hang).
     UNIT_ASSERT_C(
         Client.TryReadNextDataNoAck(Runtime(), TDuration::Seconds(15)),
         "DirectRead hung after PQRB restart: Register was delayed, cache returned Unknown session, "
@@ -1175,12 +1174,11 @@ Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
         "control stayed alive but further DirectRead did not recover");
 }
 
-// Same durable hang as UnknownSessionAfterPqrbRestartWhileRegisterHeld, via Topic SDK
+// Same scenario as UnknownSessionAfterPqrbRestartWhileRegisterHeld via Topic SDK
 // (UseRealThreads=false): no Commit on first DataReceived; hold Register after PQRB reboot until
-// Stage/Publish are buffered in cache; write a second message while Register is still held
-// (unread data in topic); then release Register so SDK Start succeeds, but tablet inFlight
-// DirectRead the client never saw blocks further DataReceived (pre-buffering fix).
-// Expectation when the bug exists: FAIL — session open, no further DataReceived after release.
+// Stage/Publish are buffered; write a second message while Register is held (unread topic data);
+// release Register so SDK Start succeeds. Without buffering this hung (no further DataReceived);
+// with FlushPending on Register, DataReceived must resume.
 Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     Runtime().SetScheduledLimit(10'000'000);
 
@@ -1244,7 +1242,7 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
         "SDK read session closed during PQRB restart; expected control to stay alive");
 
     // Wait until PQ Stage/Publish reaches cache while Register is still held (buffered
-    // until Register) — durable-hang precondition.
+    // until Register) — regression precondition for the unbuffered hang.
     WaitStageOrPublishWhileRegisterHeldAtLeast(1);
     AssertRegisterStillHeld("Register must still be held after buffered Stage/Publish");
 
@@ -1257,8 +1255,7 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     WaitStageOrPublishWhileRegisterHeldAbove(stageBeforeSecondWrite);
     AssertRegisterStillHeld("Register must still be held after second write");
 
-    // Register lands; SDK retry should get past Unknown session. Hang remains if tablet already
-    // advanced inFlight DirectRead the client never saw.
+    // Register lands; FlushPending applies buffered Stage/Publish; SDK retry should deliver data.
     Env.ReleaseHeldRegisterDirectRead();
 
     const bool gotAfter = WaitPromiseSparse(gotDataAfterRestart, TDuration::Seconds(5));

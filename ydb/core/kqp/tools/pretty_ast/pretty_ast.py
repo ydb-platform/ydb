@@ -3,7 +3,7 @@
 import sys
 import argparse
 import json
-from typing_extensions import Self
+from typing import Self
 
 NEVER_INLINE = {
     'DqPhyStage',
@@ -91,7 +91,6 @@ COLOR_ARG = 'arg'
 COLOR_LAMBDA = COLOR_ARG
 COLOR_REF = None
 COLOR_TABLINE = 'tabline'
-COLOR_COLUMNS = 'columns'
 
 COLORS = {
     COLOR_COMMENT: '2;128;128;128',
@@ -101,11 +100,7 @@ COLORS = {
     COLOR_LITERAL: '2;64;192;192',
     COLOR_ARG: '2;192;156;0',
     COLOR_TABLINE: '2;64;64;64',
-    COLOR_COLUMNS: '2;96;168;96',
 }
-
-NOTE_OPEN = '⟨'
-NOTE_CLOSE = '⟩'
 
 
 def ansi_truecolor_spec_to_css_color(spec: str) -> str:
@@ -164,7 +159,7 @@ class HtmlPrinter:
     lines: list[str]
     curr_line: str
     style_stack: list[str]
-    prev_style: str | None
+    prev_style_depth: int
 
     class HtmlColorWrapper:
         color_name: str | None
@@ -184,23 +179,19 @@ class HtmlPrinter:
                 self.style_stack.pop()
 
     def __init__(self):
-        self.prev_style = None
+        self.prev_style_depth = 0
         self.style_stack = []
         self.curr_line = ''
         self.lines = []
 
-    def current_style(self):
-        return self.style_stack[-1] if self.style_stack else None
-
     def check_change_color(self):
-        style = self.current_style()
-        if style == self.prev_style:
+        if len(self.style_stack) == self.prev_style_depth:
             return
-        if self.prev_style is not None:
+        if self.prev_style_depth > 0:
             self.curr_line += '</span>'
-        if style is not None:
-            self.curr_line += html_syntax_span_open(style)
-        self.prev_style = style
+        if len(self.style_stack) > 0:
+            self.curr_line += html_syntax_span_open(self.style_stack[-1])
+        self.prev_style_depth = len(self.style_stack)
 
     def color(self, color_name):
         return HtmlPrinter.HtmlColorWrapper(self.style_stack, color_name)
@@ -211,14 +202,13 @@ class HtmlPrinter:
 
     def endl(self):
         self.check_change_color()
-        if self.prev_style is not None:
+        if len(self.style_stack) > 0:
             self.curr_line += '</span>'
         self.lines.append(self.curr_line)
         self.curr_line = ''
-        style = self.current_style()
-        if style is not None:
-            self.curr_line += html_syntax_span_open(style)
-        self.prev_style = style
+        if len(self.style_stack) > 0:
+            self.curr_line += html_syntax_span_open(self.style_stack[-1])
+        self.prev_style_depth = len(self.style_stack)
 
     def finalize(self):
         if self.curr_line:
@@ -321,13 +311,6 @@ def has_long_or_block_oper_inside(item):
         return False
 
 
-def print_note(context: Context, note):
-    if not note:
-        return
-    with context.printer.color(COLOR_COLUMNS):
-        context.printer.out(' ' + NOTE_OPEN + note + NOTE_CLOSE)
-
-
 def print_list(out, the_list: List, callables, context: Context):
     def print_shift(sh):
         for _ in range(sh):
@@ -349,12 +332,9 @@ def print_list(out, the_list: List, callables, context: Context):
     if oper and oper in callables:
         child_list = callables[oper].children_names
 
-    notes = getattr(the_list, 'child_notes', None)
-
     for pos, item in enumerate(the_list.list):
         is_last = pos == (len(the_list.list) - 1)
         is_first = pos == 0
-        note = notes.get(pos) if notes else None
 
         if not is_first and is_long_oper:
             context.printer.endl()
@@ -369,14 +349,7 @@ def print_list(out, the_list: List, callables, context: Context):
             #     param_name = 'λ'
             if param_name:
                 with context.printer.color(COLOR_COMMENT):
-                    context.printer.out('⦗' + param_name)
-                if note:
-                    # Put the resolved column names into the parameter label, otherwise a long
-                    # child would push the note far away from the thing it describes
-                    print_note(context, note)
-                    note = None
-                with context.printer.color(COLOR_COMMENT):
-                    context.printer.out('⦘')
+                    context.printer.out('⦗' + param_name + '⦘')
                 if not is_first and is_long_oper and isinstance(item, List) and has_long_or_block_oper_inside(item):
                     context.printer.endl()
                     print_shift(context.shift)
@@ -406,7 +379,6 @@ def print_list(out, the_list: List, callables, context: Context):
                 context.lambda_args.update(sub_ctx.lambda_args)
             with context.printer.color(sub_oper_color):
                 context.printer.out(')')
-            print_note(context, note)
             if sub_oper in ('return', 'let', 'declare'):
                 context.printer.endl()
                 if is_last:
@@ -428,7 +400,6 @@ def print_list(out, the_list: List, callables, context: Context):
                 color = get_oper_color(oper) if (oper and pos == 0) else COLOR_LITERAL
                 with context.printer.color(color):
                     context.printer.out(str(item.value))
-            print_note(context, note)
             if not is_last:
                 context.printer.out(' ')
         elif isinstance(item, Reference):
@@ -440,7 +411,6 @@ def print_list(out, the_list: List, callables, context: Context):
             with context.printer.color(color):
                 context.printer.out('$')
                 context.printer.out(str(item.alias))
-            print_note(context, note)
 
             if not is_last:
                 context.printer.out(' ')
@@ -821,388 +791,13 @@ def build_callable_index(node_descriptions):
     return result
 
 
-STAGE_OPERS = {'DqPhyStage', 'DqStage'}
-
-WIDE_MAP_OPERS = {'WideMap', 'ExpandMap'}
-
-BLOCK_JOIN_OPERS = {'BlockHashJoinCore'}
-
-# Operators that do not change the wide column list of their first input
-FLOW_PASSTHROUGH_OPERS = {
-    'ToFlow',
-    'FromFlow',
-    'ToStream',
-    'FromStream',
-    'AsFlow',
-    'WideToBlocks',
-    'WideFilter',
-    'WideSort',
-    'WideTop',
-    'WideTopSort',
-    'WideTakeBlocks',
-    'WideSkipBlocks',
-    'Take',
-    'Skip',
-}
-
-# Block flows carry an implicit trailing column with the block length
-BLOCK_LENGTH_NAME = '_block_length'
-
-UNKNOWN_NAME = '?'
-
-# Used when callable definitions are not loaded from the JSON files
-FALLBACK_CHILD_POS = {
-    'DqPhyStage': {'Inputs': 1, 'Program': 2, 'Settings': 3},
-    'DqStage': {'Inputs': 1, 'Program': 2, 'Settings': 3},
-    'TDqOutput': {'Stage': 1, 'Index': 2},
-    'DqCnUnionAll': {'Output': 1},
-    'DqCnParallelUnionAll': {'Output': 1},
-    'DqCnMap': {'Output': 1},
-    'DqCnBroadcast': {'Output': 1},
-    'DqCnHashShuffle': {'Output': 1, 'KeyColumns': 2},
-    'DqCnMerge': {'Output': 1, 'SortColumns': 2},
-    'BlockHashJoinCore': {
-        'LeftInput': 1,
-        'RightInput': 2,
-        'JoinKind': 3,
-        'LeftKeyColumns': 4,
-        'RightKeyColumns': 5,
-    },
-    'MapJoinCore': {
-        'LeftInput': 1,
-        'RightDict': 2,
-        'JoinKind': 3,
-        'LeftKeysColumns': 4,
-        'RightKeysColumns': 5,
-        'LeftRenames': 6,
-        'RightRenames': 7,
-    },
-    'WideMap': {'Input': 1, 'Lambda': 2},
-    'WideSort': {'Input': 1, 'Keys': 2},
-}
-
-
-def as_index(item):
-    if not isinstance(item, Element):
-        return None
-    try:
-        return int(item.value)
-    except (TypeError, ValueError):
-        return None
-
-
-def format_names(names):
-    return ', '.join(name if name else UNKNOWN_NAME for name in names)
-
-
-class ColumnResolver:
-    """
-    Recovers names of wide channel columns and annotates the nodes where positional
-    column indices are used: join inputs, join/shuffle/sort key columns and WideMap
-    permutations. Wide flows carry no names in the AST, so names come from the
-    `_wide_channels` setting of the producing stage and are then propagated through
-    the wide pipeline of the consuming stage.
-    """
-
-    def __init__(self, program: List, callables):
-        self.callables = callables or {}
-        self.ref_table, _, _ = collect_refs(program)
-        self.stage_names = {}
-        for alias, macro in self.ref_table.items():
-            if len(macro.definition) != 1:
-                continue
-            node = macro.definition[0]
-            if isinstance(node, List) and get_oper(node) in STAGE_OPERS:
-                self.stage_names[alias] = self.stage_wide_names(node)
-
-    def deref(self, item):
-        for _ in range(32):
-            if not isinstance(item, Reference):
-                break
-            macro = self.ref_table.get(item.alias)
-            if macro is None or len(macro.definition) != 1:
-                return None
-            item = macro.definition[0]
-        return item if isinstance(item, List) else None
-
-    def literal(self, item):
-        return str(item.value) if isinstance(item, Element) else None
-
-    def child_pos(self, the_list: List, name):
-        oper = get_oper(the_list)
-        descr = self.callables.get(oper)
-        if descr:
-            for idx, child_name in descr.children_names.items():
-                if child_name == name:
-                    return idx + 1
-        return FALLBACK_CHILD_POS.get(oper, {}).get(name)
-
-    def child(self, the_list: List, name):
-        pos = self.child_pos(the_list, name)
-        if pos is not None and pos < len(the_list.list):
-            return the_list.list[pos]
-        return None
-
-    def struct_member_names(self, node):
-        struct = self.deref(node)
-        if struct is None or get_oper(struct) != 'StructType':
-            return None
-        names = []
-        for item in struct.list[1:]:
-            member = self.deref(item)
-            names.append(self.literal(member.list[0]) if member and member.list else None)
-        return names
-
-    def stage_wide_names(self, stage: List):
-        settings = self.deref(self.child(stage, 'Settings'))
-        if settings is None:
-            return None
-        for item in settings.list:
-            setting = self.deref(item)
-            if setting is None or len(setting.list) < 2:
-                continue
-            if self.literal(setting.list[0]) == '_wide_channels':
-                return self.struct_member_names(setting.list[1])
-        return None
-
-    def connection_names(self, node):
-        """Column names produced by the stage on the other end of a connection"""
-        connection = self.deref(node)
-        if connection is None:
-            return None
-        output = self.deref(self.child(connection, 'Output'))
-        if output is None:
-            return None
-        stage = self.child(output, 'Stage')
-        if isinstance(stage, Reference) and stage.alias in self.stage_names:
-            return self.stage_names[stage.alias]
-        inlined = self.deref(stage)
-        if inlined is not None and get_oper(inlined) in STAGE_OPERS:
-            return self.stage_wide_names(inlined)
-        return None
-
-    def flow_names(self, node, env, depth=0):
-        if node is None or depth > 48:
-            return None
-
-        if isinstance(node, Reference):
-            if node.alias in env:
-                return env[node.alias]
-            macro = self.ref_table.get(node.alias)
-            if macro is not None and len(macro.definition) == 1:
-                return self.flow_names(macro.definition[0], env, depth + 1)
-            return None
-
-        if not isinstance(node, List):
-            return None
-
-        oper = get_oper(node)
-        first_input = node.list[1] if len(node.list) > 1 else None
-
-        if oper in FLOW_PASSTHROUGH_OPERS:
-            return self.flow_names(first_input, env, depth + 1)
-
-        if oper == 'WideFromBlocks':
-            names = self.flow_names(first_input, env, depth + 1)
-            if names and names[-1] == BLOCK_LENGTH_NAME:
-                names = names[:-1]
-            return names
-
-        if oper in WIDE_MAP_OPERS:
-            input_names = self.flow_names(first_input, env, depth + 1)
-            lam = self.deref(node.list[2]) if len(node.list) > 2 else None
-            return self.lambda_out_names(lam, input_names)
-
-        if oper in BLOCK_JOIN_OPERS:
-            left = self.flow_names(self.child(node, 'LeftInput'), env, depth + 1)
-            right = self.flow_names(self.child(node, 'RightInput'), env, depth + 1)
-            if left is None or right is None:
-                return None
-            return list(left) + list(right)
-
-        if oper == 'MapJoinCore':
-            return self.map_join_out_names(node, env, depth)
-
-        if oper in ('FlatMap', 'OrderedFlatMap'):
-            # A wide flow is often wrapped into a FlatMap over the dict of the build side
-            lam = self.deref(node.list[2]) if len(node.list) > 2 else None
-            if lam is not None and get_oper(lam) == 'lambda' and len(lam.list) > 2:
-                return self.flow_names(lam.list[2], env, depth + 1)
-            return None
-
-        return None
-
-    def lambda_out_names(self, lam, input_names):
-        if lam is None or get_oper(lam) != 'lambda' or len(lam.list) < 3:
-            return None
-        args_list = self.deref(lam.list[1])
-        if args_list is None:
-            return None
-
-        args = [item.alias for item in args_list.list if isinstance(item, Reference)]
-        arg_names = list(input_names) if input_names else []
-        if len(arg_names) + 1 == len(args):
-            arg_names.append(BLOCK_LENGTH_NAME)
-        arg_pos = {alias: pos for pos, alias in enumerate(args)}
-
-        return [self.expr_name(body, arg_pos, arg_names) for body in lam.list[2:]]
-
-    def expr_name(self, body, arg_pos, arg_names):
-        if isinstance(body, Reference):
-            pos = arg_pos.get(body.alias)
-            return arg_names[pos] if pos is not None and pos < len(arg_names) else None
-        if isinstance(body, List) and get_oper(body) == 'Member' and len(body.list) > 2:
-            return self.literal(body.list[2])
-        return None
-
-    def map_join_out_names(self, node: List, env, depth):
-        """MapJoinCore output layout is fully described by its rename lists"""
-        left = self.flow_names(self.child(node, 'LeftInput'), env, depth + 1)
-        renames = {}
-
-        left_renames = self.deref(self.child(node, 'LeftRenames'))
-        right_renames = self.deref(self.child(node, 'RightRenames'))
-        if left_renames is None or right_renames is None:
-            return None
-
-        for pos in range(0, len(left_renames.list) - 1, 2):
-            source = as_index(left_renames.list[pos])
-            target = as_index(left_renames.list[pos + 1])
-            if target is None:
-                # Renames by name: the consumer sees a struct, not a wide flow
-                return None
-            renames[target] = left[source] if left and source is not None and source < len(left) else None
-
-        for pos in range(0, len(right_renames.list) - 1, 2):
-            target = as_index(right_renames.list[pos + 1])
-            if target is None:
-                return None
-            renames[target] = self.literal(right_renames.list[pos])
-
-        if not renames:
-            return None
-        return [renames.get(pos) for pos in range(max(renames) + 1)]
-
-    def index_list_names(self, node, names):
-        """Resolve a list of column indices, or of tuples starting with a column index"""
-        index_list = self.deref(node)
-        if index_list is None or not names:
-            return None
-
-        resolved = []
-        for item in index_list.list:
-            index = as_index(item)
-            if index is None:
-                tuple_item = self.deref(item)
-                if tuple_item is not None and tuple_item.list:
-                    index = as_index(tuple_item.list[0])
-            if index is None:
-                return None
-            resolved.append(names[index] if 0 <= index < len(names) else UNKNOWN_NAME)
-        return resolved
-
-    def hint_declared_names(self, node, declared, depth=0):
-        """
-        Names of columns computed by an expression cannot be recovered from the flow itself.
-        For the outermost map of a stage program the stage output type provides them.
-        """
-        if isinstance(node, Reference):
-            node = self.deref(node)
-        if not isinstance(node, List) or depth > 16:
-            return
-        oper = get_oper(node)
-        if oper in WIDE_MAP_OPERS:
-            node.declared_names = declared
-        elif oper in FLOW_PASSTHROUGH_OPERS or oper == 'WideFromBlocks':
-            if len(node.list) > 1:
-                self.hint_declared_names(node.list[1], declared, depth + 1)
-
-    def note_child(self, node: List, notes, name, names):
-        if not names:
-            return
-        pos = self.child_pos(node, name)
-        if pos is not None and pos < len(node.list):
-            notes[pos] = format_names(names)
-
-    def note_index_child(self, node: List, notes, name, names):
-        pos = self.child_pos(node, name)
-        if pos is None or pos >= len(node.list):
-            return
-        resolved = self.index_list_names(node.list[pos], names)
-        if resolved:
-            notes[pos] = format_names(resolved)
-
-    def annotate(self, node, env=None):
-        if not isinstance(node, List):
-            return
-        env = env or {}
-        oper = get_oper(node)
-        notes = {}
-
-        if oper in STAGE_OPERS:
-            env = dict(env)
-            inputs = self.deref(self.child(node, 'Inputs'))
-            program = self.deref(self.child(node, 'Program'))
-            input_names = [self.connection_names(item) for item in inputs.list] if inputs else []
-            if program is not None and get_oper(program) == 'lambda' and len(program.list) > 1:
-                args_list = self.deref(program.list[1])
-                if args_list is not None:
-                    arg_notes = {}
-                    for pos, arg in enumerate(args_list.list):
-                        if not isinstance(arg, Reference) or pos >= len(input_names):
-                            continue
-                        if input_names[pos]:
-                            env[arg.alias] = input_names[pos]
-                            arg_notes[pos] = format_names(input_names[pos])
-                    if arg_notes:
-                        args_list.child_notes = arg_notes
-                declared = self.stage_wide_names(node)
-                if declared and len(program.list) > 2:
-                    self.hint_declared_names(program.list[2], declared)
-        elif oper == 'DqCnHashShuffle':
-            self.note_index_child(node, notes, 'KeyColumns', self.connection_names(node))
-        elif oper == 'DqCnMerge':
-            self.note_index_child(node, notes, 'SortColumns', self.connection_names(node))
-        elif oper in BLOCK_JOIN_OPERS:
-            left = self.flow_names(self.child(node, 'LeftInput'), env)
-            right = self.flow_names(self.child(node, 'RightInput'), env)
-            self.note_child(node, notes, 'LeftInput', left)
-            self.note_child(node, notes, 'RightInput', right)
-            self.note_index_child(node, notes, 'LeftKeyColumns', left)
-            self.note_index_child(node, notes, 'RightKeyColumns', right)
-        elif oper == 'MapJoinCore':
-            left = self.flow_names(self.child(node, 'LeftInput'), env)
-            self.note_child(node, notes, 'LeftInput', left)
-            self.note_index_child(node, notes, 'LeftKeysColumns', left)
-        elif oper in WIDE_MAP_OPERS:
-            output = self.flow_names(node, env)
-            declared = getattr(node, 'declared_names', None)
-            if output and declared and len(output) == len(declared):
-                output = [name or declared[pos] for pos, name in enumerate(output)]
-            if output and len(node.list) > 2:
-                notes[2] = '→ ' + format_names(output)
-        elif oper in ('WideSort', 'WideTopSort', 'WideTop'):
-            self.note_index_child(node, notes, 'Keys', self.flow_names(node.list[1], env) if len(node.list) > 1 else None)
-
-        if notes:
-            existing = getattr(node, 'child_notes', None) or {}
-            existing.update(notes)
-            node.child_notes = existing
-
-        for item in node.list:
-            self.annotate(item, env)
-
-
-def parse_and_process(lines, replace_refs_options: ReplaceRefsOptions, callables=None, annotate_columns=True):
+def parse_and_process(lines, replace_refs_options: ReplaceRefsOptions):
     program = parse(lines)
     ref_table, ref_counts, _ = collect_refs(program)
     replaced_program = List(False)
     replaced_program.list, _ = replace_refs(program.list, ref_table, ref_counts, replace_refs_options)
     simplified_program = List(False)
     simplified_program.list = simplify_blocks(replaced_program.list)
-    if annotate_columns:
-        # Must run on the final program: inlining and block simplification rebuild the lists
-        ColumnResolver(simplified_program, callables).annotate(simplified_program)
     return simplified_program
 
 
@@ -1232,13 +827,6 @@ def climain():
         type=int,
         default=3,
         help="Don't inline let macros that are used more than this number of times",
-    )
-    argparser.add_argument(
-        '--no-columns',
-        dest='columns',
-        action='store_false',
-        default=True,
-        help='Do not annotate wide channel column names and positional column indices',
     )
     args = argparser.parse_args()
 
@@ -1295,12 +883,7 @@ def climain():
     # print('%d callables' % len(callables), file=sys.stderr)
 
     input = sys.stdin.read()
-    program = parse_and_process(
-        input.split('\n'),
-        ReplaceRefsOptions(max_uses_for_inlining=args.max_uses_for_inlining),
-        callables,
-        annotate_columns=args.columns,
-    )
+    program = parse_and_process(input.split('\n'), ReplaceRefsOptions(max_uses_for_inlining=args.max_uses_for_inlining))
     printer = HtmlPrinter() if args.html else TerminalPrinter()
     print_list(sys.stdout, program, callables, Context(tabstops=tabstops, printer=printer))
     printer.finalize()

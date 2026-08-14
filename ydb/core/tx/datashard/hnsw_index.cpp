@@ -14,6 +14,8 @@
 #pragma clang diagnostic pop
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
@@ -146,7 +148,8 @@ public:
         std::unique_ptr<const similarity::Object> queryObj(
             new similarity::Object(-1, -1, Dimension * sizeof(float), view.Data));
 
-        similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(k));
+        const size_t graphK = DeltaVectors.empty() && ErasedKeys.empty() ? k : Keys.size();
+        similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(graphK));
         Index->Search(&query, -1);
 
         const similarity::KNNQueue<float>* queue = query.Result();
@@ -164,7 +167,25 @@ public:
             }
         }
 
-        result.Results.assign(reversed.rbegin(), reversed.rend());
+        THashMap<TString, float> merged;
+        for (auto it = reversed.rbegin(); it != reversed.rend(); ++it) {
+            merged.emplace(it->first, it->second);
+        }
+
+        for (const auto& [key, vector] : DeltaVectors) {
+            auto deltaView = TFloatVectorView::FromSerialized(vector);
+            if (!deltaView.IsValid() || deltaView.Dimension != Dimension) {
+                continue;
+            }
+            similarity::Object deltaObj(-1, -1, Dimension * sizeof(float), deltaView.Data);
+            merged[key] = query.DistanceObjLeft(&deltaObj);
+        }
+
+        result.Results.assign(merged.begin(), merged.end());
+        SortBy(result.Results, [](const auto& item) { return item.second; });
+        if (DeltaVectors.empty() && ErasedKeys.empty() && result.Results.size() > k) {
+            result.Results.resize(k);
+        }
         return result;
     }
 
@@ -177,12 +198,42 @@ public:
     }
 
     bool GetVector(TStringBuf key, TString& result) const {
+        if (auto it = DeltaVectors.find(key); it != DeltaVectors.end()) {
+            result = it->second;
+            return true;
+        }
+        if (ErasedKeys.contains(key)) {
+            return false;
+        }
         auto it = KeyToIndex.find(key);
         if (it == KeyToIndex.end()) {
             return false;
         }
         result = Vectors[it->second];
         return true;
+    }
+
+    bool Upsert(TString key, TString vector) {
+        auto view = TFloatVectorView::FromSerialized(vector);
+        if (!view.IsValid() || view.Dimension != Dimension) {
+            return false;
+        }
+        ErasedKeys.erase(key);
+        DeltaVectors[std::move(key)] = std::move(vector);
+        return true;
+    }
+
+    void Erase(TStringBuf key) {
+        DeltaVectors.erase(key);
+        ErasedKeys.emplace(key);
+    }
+
+    bool HasDelta(TStringBuf key) const {
+        return DeltaVectors.contains(key) || ErasedKeys.contains(key);
+    }
+
+    bool HasChanges() const {
+        return !DeltaVectors.empty() || !ErasedKeys.empty();
     }
 
 private:
@@ -192,6 +243,8 @@ private:
     std::vector<TString> Keys; // Object::id() -> serialized primary key
     std::vector<TString> Vectors; // Object::id() -> wire-format vector
     THashMap<TString, size_t> KeyToIndex;
+    THashMap<TString, TString> DeltaVectors;
+    THashSet<TString> ErasedKeys;
     std::unique_ptr<similarity::Hnsw<float>> Index;
 };
 
@@ -280,6 +333,22 @@ THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k) const {
 
 bool THnswIndex::GetVector(TStringBuf key, TString& result) const {
     return Impl->GetVector(key, result);
+}
+
+bool THnswIndex::Upsert(TString key, TString vector) {
+    return Impl->Upsert(std::move(key), std::move(vector));
+}
+
+void THnswIndex::Erase(TStringBuf key) {
+    Impl->Erase(key);
+}
+
+bool THnswIndex::HasDelta(TStringBuf key) const {
+    return Impl->HasDelta(key);
+}
+
+bool THnswIndex::HasChanges() const {
+    return Impl->HasChanges();
 }
 
 size_t THnswIndex::Size() const {

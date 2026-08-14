@@ -407,11 +407,13 @@ void TDataShardUserDb::UpsertRowInt(
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops);
     } else {
         if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops);
     }
 
     if (VolatileTxId) {

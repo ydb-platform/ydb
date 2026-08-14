@@ -457,6 +457,7 @@ class TDataShard
 
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
             ui32 LocalTid = 0;
+            ui32 VectorColumnTag = 0;
             ui64 RowCountAtBuild = 0;
             std::shared_ptr<NDataShard::THnswIndex> Index;
             std::shared_ptr<void> MemoryReservation;
@@ -1898,7 +1899,8 @@ public:
     }
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
-            std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0) {
+            std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
+            ui32 vectorColumnTag = 0) {
         auto& entry = HnswIndexCache[localTid];
         // Active reads may still own the old index and keep its reservation.
         entry.Index.reset();
@@ -1916,8 +1918,44 @@ public:
         }
         entry.Index = std::move(index);
         entry.RowCountAtBuild = rowCountAtBuild;
+        entry.VectorColumnTag = vectorColumnTag;
+        entry.DeltaReservations.clear();
         entry.Building = false;
         entry.NextScanAttemptAt = TInstant::Zero();
+    }
+
+    void UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
+            TConstArrayRef<TCell> keyCells, TArrayRef<const NIceDb::TUpdateOp> ops) {
+        auto it = HnswIndexCache.find(localTid);
+        if (it == HnswIndexCache.end() || !it->second.Index || !it->second.VectorColumnTag) {
+            return;
+        }
+
+        auto& entry = it->second;
+        const TString key = TSerializedCellVec::Serialize(keyCells);
+        if (!entry.Index->HasDelta(key)) {
+            auto reservation = TryReserveHnswCacheMemory(
+                NDataShard::THnswIndex::EstimateMemoryBytes(1, entry.Index->Dimension()));
+            if (!reservation) {
+                HnswIndexCache.erase(it);
+                return;
+            }
+            entry.DeltaReservations.emplace(key, std::move(reservation));
+        }
+
+        if (rowOp == NTable::ERowOp::Erase) {
+            entry.Index->Erase(key);
+            return;
+        }
+        for (const auto& op : ops) {
+            if (op.Tag == entry.VectorColumnTag && op.Op == NTable::ECellOp::Set) {
+                const auto cell = op.AsCell();
+                if (cell.IsNull() || !entry.Index->Upsert(key, TString(cell.AsBuf()))) {
+                    entry.Index->Erase(key);
+                }
+                return;
+            }
+        }
     }
 
     bool IsUserTable(const TTableId& tableId) const {
@@ -3051,6 +3089,8 @@ private:
     struct THnswIndexCacheEntry {
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
+        ui32 VectorColumnTag = 0;
+        THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
         TInstant NextScanAttemptAt;
     };

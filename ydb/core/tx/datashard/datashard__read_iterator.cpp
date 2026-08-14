@@ -1185,22 +1185,18 @@ private:
     // them all up front and only then Select: otherwise each missing page
     // costs a separate transaction restart, turning one top-K query into up
     // to Limit sequential restart round-trips.
-    bool IsCoveredHnswRead() const {
-        THashSet<NTable::TTag> keyTags(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end());
-        for (size_t i = 0; i < State.Columns.size(); ++i) {
-            if (i != State.VectorTopK->Column && !keyTags.contains(State.Columns[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     // HNSW indexes posting-table rows, while overlap queries need unique base
     // table keys. Those keys are part of the posting-table primary key, so we
     // can deduplicate candidates before touching the table and progressively
     // over-fetch until Limit unique neighbors have been found.
     THnswSearchResult SearchHnswDistinct() const {
         const auto& topK = *State.VectorTopK;
+        if (topK.HnswIndex->HasChanges()) {
+            // The overlay may contain changes from an uncommitted or aborted
+            // transaction. Return every candidate and let MVCC Select plus
+            // AddRow validate/rank the currently visible rows.
+            return topK.HnswIndex->Search(topK.Target, topK.HnswIndex->Size());
+        }
         size_t requested = topK.Limit;
         if (!topK.DistinctColumns.empty()) {
             requested = Min(topK.HnswIndex->Size(), Max<size_t>(requested * 2, 32));
@@ -1254,34 +1250,6 @@ private:
     EReadStatus MaterializeHnswResults(const THnswSearchResult& results, TTransactionContext& txc) {
         auto& topK = *State.VectorTopK;
 
-        if (IsCoveredHnswRead()) {
-            THashMap<NTable::TTag, size_t> keyPositions;
-            for (size_t i = 0; i < TableInfo.KeyColumnIds.size(); ++i) {
-                keyPositions.emplace(TableInfo.KeyColumnIds[i], i);
-            }
-            for (const auto& [serializedKey, distance] : results.Results) {
-                TSerializedCellVec key(serializedKey);
-                TString vector;
-                if (!topK.HnswIndex->GetVector(serializedKey, vector)) {
-                    continue;
-                }
-                TVector<TCell> cells(State.Columns.size());
-                for (size_t i = 0; i < State.Columns.size(); ++i) {
-                    if (i == topK.Column) {
-                        cells[i] = TCell(vector.data(), vector.size());
-                    } else if (auto it = keyPositions.find(State.Columns[i]); it != keyPositions.end()) {
-                        cells[i] = key.GetCells().at(it->second);
-                    }
-                }
-                RowsProcessed++;
-                topK.TotalReadRows++;
-                topK.TotalReadBytes += EstimateSize(cells);
-                topK.Rows.emplace_back(cells, distance, TString());
-                std::push_heap(topK.Rows.begin(), topK.Rows.end());
-            }
-            return EReadStatus::Done;
-        }
-
         TVector<TSerializedCellVec> keys;
         keys.reserve(results.Results.size());
         for (const auto& [serializedKey, _] : results.Results) {
@@ -1301,7 +1269,6 @@ private:
         // so a retry can never append the same row twice.
         struct TFetchedRow {
             NTable::TRowState RowState;
-            double Distance;
         };
         TVector<TFetchedRow> fetched;
         fetched.reserve(keys.size());
@@ -1311,7 +1278,6 @@ private:
 
             TFetchedRow row;
             row.RowState.Init(State.Columns.size());
-            row.Distance = static_cast<double>(results.Results[i].second);
             NTable::TSelectStats stats;
             auto status = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, row.RowState, stats, 0,
                 State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
@@ -1327,23 +1293,10 @@ private:
             fetched.emplace_back(std::move(row));
         }
 
-        THashSet<TString> seen;
         for (const auto& row : fetched) {
             TDbTupleRef value(ColumnTypes.data(), (*row.RowState).data(), ColumnTypes.size());
-            if (!topK.DistinctColumns.empty()) {
-                TVector<TCell> distinct;
-                for (ui32 column : topK.DistinctColumns) {
-                    distinct.push_back(value.Cells().at(column));
-                }
-                if (!seen.insert(TSerializedCellVec::Serialize(distinct)).second) {
-                    continue;
-                }
-            }
             RowsProcessed++;
-            topK.TotalReadRows++;
-            topK.TotalReadBytes += EstimateSize(value.Cells());
-            topK.Rows.emplace_back(value.Cells(), row.Distance, TString());
-            std::push_heap(topK.Rows.begin(), topK.Rows.end());
+            topK.AddRow(value.Cells());
         }
 
         return EReadStatus::Done;
@@ -2674,7 +2627,8 @@ public:
                     Self->DisableHnswIndexBuild(localTid);
                 } else {
                     const ui64 rowCount = vectors.size();
-                    auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid, rowCount,
+                    auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
+                        record.GetColumns(topK.GetColumn()), rowCount,
                         topK.GetSettings(), std::move(vectors),
                         std::move(memoryReservation));
                     const TActorId actorId = ctx.Register(

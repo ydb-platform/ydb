@@ -9,13 +9,15 @@ using namespace NActors;
 
 class THnswIndexBuildActor : public TActorBootstrapped<THnswIndexBuildActor> {
 public:
-    THnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui64 rowCountAtBuild,
+    THnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 vectorColumnTag,
+            ui64 rowCountAtBuild,
             const Ydb::Table::VectorIndexSettings& settings,
             std::vector<std::pair<TString, TString>> keysAndVectors,
             std::shared_ptr<void> memoryReservation)
         : TActorBootstrapped(NKikimrServices::TActivity::DATASHARD_HNSW_BUILDER)
         , ReplyTo(replyTo)
         , LocalTid(localTid)
+        , VectorColumnTag(vectorColumnTag)
         , RowCountAtBuild(rowCountAtBuild)
         , Settings(settings)
         , KeysAndVectors(std::move(keysAndVectors))
@@ -27,6 +29,7 @@ public:
         auto index = THnswIndex::Build(Settings, KeysAndVectors, /* maxMemoryBytes */ 0, error);
         auto result = MakeHolder<TDataShard::TEvPrivate::TEvHnswIndexBuildResult>();
         result->LocalTid = LocalTid;
+        result->VectorColumnTag = VectorColumnTag;
         result->RowCountAtBuild = RowCountAtBuild;
         result->Error = std::move(error);
         if (index) {
@@ -40,17 +43,19 @@ public:
 private:
     const TActorId ReplyTo;
     const ui32 LocalTid;
+    const ui32 VectorColumnTag;
     const ui64 RowCountAtBuild;
     const Ydb::Table::VectorIndexSettings Settings;
     const std::vector<std::pair<TString, TString>> KeysAndVectors;
     std::shared_ptr<void> MemoryReservation;
 };
 
-IActor* CreateHnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui64 rowCountAtBuild,
+IActor* CreateHnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 vectorColumnTag,
+        ui64 rowCountAtBuild,
         const Ydb::Table::VectorIndexSettings& settings,
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation) {
-    return new THnswIndexBuildActor(replyTo, localTid, rowCountAtBuild, settings,
+    return new THnswIndexBuildActor(replyTo, localTid, vectorColumnTag, rowCountAtBuild, settings,
         std::move(keysAndVectors), std::move(memoryReservation));
 }
 
@@ -59,7 +64,7 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
     auto* result = ev->Get();
     if (result->Index) {
         SetHnswIndex(result->LocalTid, result->Index, std::move(result->MemoryReservation),
-            result->RowCountAtBuild);
+            result->RowCountAtBuild, result->VectorColumnTag);
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
             TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid
             << " size=" << result->Index->Size());

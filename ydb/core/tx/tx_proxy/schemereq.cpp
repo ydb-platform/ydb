@@ -1469,6 +1469,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
+    static bool IsCdcDlqTarget(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+            return true;
+        }
+        // CDC implementation topic (`…/feed/streamImpl`) is KindTopic, but schemeshard
+        // marks it with EPathSubTypeStreamImpl when the parent is a CDC stream.
+        return entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic
+            && entry.Self
+            && entry.Self->Info.GetPathSubType() == NKikimrSchemeOp::EPathSubTypeStreamImpl;
+    }
+
     bool CheckDlqTargets(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext& ctx) {
         auto resolveIt = resolveSet.begin();
         auto requestIt = ResolveForACL.begin();
@@ -1476,20 +1487,28 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         while (resolveIt != resolveSet.end() && requestIt != ResolveForACL.end()) {
             const auto& entry = *resolveIt;
             if (requestIt->RequireTopic
-                && entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic || !entry.PQGroupInfo))
+                && entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok)
             {
                 const TString path = CanonizePath(entry.Path);
-                const TString msg = TStringBuilder()
-                    << "Dead letter queue path must be a topic, got "
-                    << path;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                    << ", " << msg
-                    << ", kind# " << static_cast<int>(entry.Kind)
-                );
-                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
-                return false;
+                TString msg;
+                if (IsCdcDlqTarget(entry)) {
+                    msg = TStringBuilder()
+                        << "CDC stream cannot be used as a dead letter queue: "
+                        << path;
+                } else if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic || !entry.PQGroupInfo) {
+                    msg = TStringBuilder()
+                        << "Dead letter queue path must be a topic, got "
+                        << path;
+                }
+                if (!msg.empty()) {
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                        << ", " << msg
+                        << ", kind# " << static_cast<int>(entry.Kind)
+                    );
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
+                    return false;
+                }
             }
             ++resolveIt;
             ++requestIt;

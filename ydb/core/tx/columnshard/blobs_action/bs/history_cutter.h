@@ -74,7 +74,7 @@ public:
 
     // Returns current sweep candidates (non-empty while sweep in flight).
     const TVector<TEntryKey>& GetSweepCandidates() const {
-        return SweepCandidates_;
+        return SweepCandidates;
     }
 
     // Sets the snapshot of all engine portion IDs that tier-2 will scan.
@@ -95,12 +95,12 @@ public:
 
     bool IsEnabled() const;
 
-    bool SweepInFlight() const {
-        return SweepInFlight_;
+    bool IsSweepInFlight() const {
+        return SweepInFlight;
     }
 
     bool HasPortionSnapshot() const {
-        return SweepPortionOffset_ > 0 || !SweepPortionIds_.empty();
+        return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
     // Public accessor used by Handle(TEvStartCutHistorySweep) to build nextGenMap for the callback.
@@ -120,7 +120,7 @@ private:
 
     // Computes the entry key (channel, fromGen) for a blob id.
     // Returns false if the blob belongs to the active entry or is foreign.
-    bool GetEntryKey(const TLogoBlobID& lid, TEntryKey& out) const;
+    bool GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const;
 
     void IncrementCounter(const TEntryKey& key);
     void DecrementCounter(const TEntryKey& key);
@@ -139,15 +139,15 @@ private:
     // portionId -> set of TEntryKey the portion contributes to (for decrement at erase).
     THashMap<ui64, THashSet<TEntryKey>> PortionKeys;
 
-    bool SweepInFlight_ = false;
+    bool SweepInFlight = false;
 
     // Tier-2 sweep state (all in-memory; reset on restart/completion).
-    TVector<TEntryKey> SweepCandidates_;
-    TVector<TEntryKey> SweepSurvivors_;
+    TVector<TEntryKey> SweepCandidates;
+    TVector<TEntryKey> SweepSurvivors;
 
     // Cursor over the engine's in-memory portion snapshot (snapshotted once per sweep).
-    TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds_;
-    size_t SweepPortionOffset_ = 0;
+    TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;
+    size_t SweepPortionOffset = 0;
 };
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

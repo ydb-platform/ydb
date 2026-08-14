@@ -134,8 +134,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // The entry {ch=2, fromGen=0} should have counter=1 now.
         // Verify indirectly: cutter must NOT nominate it (counter != 0).
         // GetSweepCandidates() is non-empty only after TryNominate; since we have no actor
-        // context here, just check SweepInFlight() is false and no candidates.
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        // context here, just check IsSweepInFlight() is false and no candidates.
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
         UNIT_ASSERT(cutter->GetSweepCandidates().empty());
     }
 
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // Now counter=0 and BlobsToKeep/Delete empty → IsDrained true → entry is nominatable.
         // We cannot call TryNominate without actor context, but we can verify GetSweepCandidates
         // is still empty (TryNominate not yet called).
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
     }
 
     Y_UNIT_TEST(ForeignBlobIgnored) {
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // If we remove portion 55 nothing should be poisoned.
         cutter->OnPortionRemoved(55);
         // No crash = test passes (no underflow → no poison).
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
     }
 
     Y_UNIT_TEST(ActiveEntryBlobIgnored) {
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         portionBlobs[77].push_back(ub);
         cutter->OnBootComplete(portionBlobs);
         // No assertion other than no crash.
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
     }
 
     Y_UNIT_TEST(BootCompleteWithEmptyMap) {
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
         // Empty boot — all counters zero; entry {ch=2, fromGen=0} is drained.
         cutter->OnBootComplete({});
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
         UNIT_ASSERT(cutter->GetSweepCandidates().empty());
     }
 
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // Remove the portion → counter should go to 0 (was 1, not 2).
         cutter->OnPortionRemoved(88);
         // No poison → removal was clean.
-        UNIT_ASSERT(!cutter->SweepInFlight());
+        UNIT_ASSERT(!cutter->IsSweepInFlight());
     }
 
     Y_UNIT_TEST(SeenGroupsCheck) {

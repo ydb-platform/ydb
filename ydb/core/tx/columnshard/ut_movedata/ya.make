@@ -9,6 +9,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/testlib/default
     ydb/core/tx/columnshard/blobs_action/bs
+    ydb/core/tx/columnshard/engines/scheme/versions
+    ydb/core/tx/columnshard/engines/storage/actualizer/move
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
 )

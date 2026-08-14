@@ -381,6 +381,20 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestDropExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
     }
 
+    Y_UNIT_TEST(TestNonIamExternalDataSourceWithIamDelegationEnabled) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appCfg).SetWithSampleTables(false));
+        auto& featureFlags = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableExternalDataSourceIamDelegation(true);
+
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        const TString path = "/Root/f1/f2/external_data_source";
+        TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), gateway, path);
+        TestDropExternalDataSource(*kikimr.GetTestServer().GetRuntime(), gateway, path);
+    }
+
     Y_UNIT_TEST(TestLoadExternalTable) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
@@ -705,6 +719,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSourceIamDelegation(true);
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }

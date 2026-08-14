@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "ydb/public/api/client/yc_private/iam/resource.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+
+// Minimal private IAM ServiceControl API surface used by the external data
+// source delegation lifecycle.
+service ServiceControlService {
+  rpc SetupDelegation(SetupDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
+  rpc RevokeDelegation(RevokeDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
+  rpc EnsureEnabled(EnsureServicesEnabledRequest) returns (.ydb.yc.priv.operation.Operation);
+  rpc CanEnsureEnabled(CanEnsureServicesEnabledRequest) returns (CanEnsureServicesEnabledResponse);
+}
+
+message EnsureServicesEnabledRequest {
+  repeated string service_ids = 1;
+  Resource resource = 2;
+  string on_behalf_of_subject_id = 3;
+}
+
+message CanEnsureServicesEnabledRequest {
+  repeated string service_ids = 1;
+  Resource resource = 2;
+  string on_behalf_of_subject_id = 3;
+}
+
+message CanEnsureServicesEnabledResponse {
+}
+
+message SetupDelegationRequest {
+  string service_id = 1;
+  string microservice_id = 2;
+  Resource resource = 3;
+  string target_service_account_id = 4;
+  Resource referrer = 5;
+  string on_behalf_of_subject_id = 6;
+  bool with_references = 7;
+}
+
+message RevokeDelegationRequest {
+  string service_id = 1;
+  string microservice_id = 2;
+  Resource resource = 3;
+  string target_service_account_id = 4;
+  Resource referrer = 5;
+  bool with_references = 6;
+}

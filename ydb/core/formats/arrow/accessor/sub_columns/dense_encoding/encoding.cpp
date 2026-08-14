@@ -6,7 +6,6 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/byte_stream_split.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -344,27 +343,34 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
 TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const std::shared_ptr<arrow::FixedWidthType>& indexType,
     const std::shared_ptr<arrow::util::Codec>& codec) {
     VerifyLittleEndian();
-    // reencode positions to specified arrow data type
-    const auto casted = TStatusValidator::GetValid(arrow::compute::Cast(arrow::Datum(positions), indexType)).make_array();
+    AFL_VERIFY(positions->type()->Equals(*indexType))("positions_type", positions->type()->ToString())("index_type", indexType->ToString());
     const ui32 width = GetIndexByteWidth(*indexType);
-    const auto& data = *casted->data();
-    const i64 length = casted->length();
+    const auto& data = *positions->data();
+    const i64 length = positions->length();
 
-    const TValidityBitmap validity(*casted);
+    const TValidityBitmap validity(*positions);
     const TStringBuf validityData = validity.GetData();
-    const i64 encodedCount = length - casted->null_count();
+    const i64 encodedCount = length - positions->null_count();
     TString payload;
-    payload.reserve(1 + validityData.size() + width * encodedCount);
+    payload.ReserveAndResize(1 + validityData.size() + width * encodedCount);
+    char* output = payload.Detach();
     const char hasNulls = validityData.empty() ? 0 : 1;
-    payload.append(&hasNulls, 1);
+    output[0] = hasNulls;
+    size_t outputPosition = 1;
     if (hasNulls) {
-        payload.append(validityData);
+        memcpy(output + outputPosition, validityData.data(), validityData.size());
+        outputPosition += validityData.size();
     }
     if (length) {
         const ui8* values = data.buffers[1]->data() + data.offset * width;
-        for (i64 i = 0; i < length; ++i) {
-            if (!casted->IsNull(i)) {
-                payload.append((const char*)(values + i * width), width);
+        if (!hasNulls) {
+            memcpy(output + outputPosition, values, width * length);
+        } else {
+            for (i64 i = 0; i < length; ++i) {
+                if (GetBit(validityData, i)) {
+                    memcpy(output + outputPosition, values + i * width, width);
+                    outputPosition += width;
+                }
             }
         }
     }

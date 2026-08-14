@@ -1615,8 +1615,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = sourceName,
                 "topic_name"_a = topicName
             ),
-            EStatus::GENERIC_ERROR,
-            TStringBuilder() << "Too busy to respond forever");
+            EStatus::TIMEOUT, //EStatus::GENERIC_ERROR,
+            TStringBuilder() << "Query compilation timed out"); //TStringBuilder() << "Too busy to respond forever");
 
         constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         constexpr char serviceAccountBadId[] = "bad-sa";

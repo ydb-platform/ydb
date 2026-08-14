@@ -1,19 +1,12 @@
 #include "kqp_federated_query_actors.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/simple/services.h>
-<<<<<<< HEAD
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/core/util/backoff.h>
-=======
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/util/backoff.h>
-#include <ydb/library/aclib/aclib.h>
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
->>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
@@ -632,12 +625,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-<<<<<<< HEAD
-    TActorSystem* actorSystem
-=======
     NActors::TActorSystem* actorSystem,
     bool forModify
->>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 ) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {

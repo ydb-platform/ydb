@@ -5,11 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recip
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
 
 TEST_SRCS(
-<<<<<<< HEAD
-=======
     test_iam.py
-    test_scalar_topic_write.py
->>>>>>> 997c9c62119 (YQ-5434 streaming queries: iam auth test (#45289))
     test_streaming.py
     test_watermarks.py
 )

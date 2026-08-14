@@ -3315,6 +3315,19 @@ namespace NKikimr {
         }
     };
 
+    struct TEvGetLogoBlobIndexStatResponseAck
+        : public TEventPB<TEvGetLogoBlobIndexStatResponseAck,
+                    NKikimrVDisk::GetLogoBlobIndexStatResponseAck,
+                    TEvBlobStorage::EvGetLogoBlobIndexStatResponseAck>
+    {
+        TEvGetLogoBlobIndexStatResponseAck() = default;
+
+        TEvGetLogoBlobIndexStatResponseAck(ui64 sequenceId, bool cancel = false) {
+            Record.set_sequence_id(sequenceId);
+            Record.set_cancel(cancel);
+        }
+    };
+
     struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};
 
     ////////////////////////////////////////////////////////////////////////////

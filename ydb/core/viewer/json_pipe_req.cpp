@@ -1023,6 +1023,34 @@ bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
+bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds) {
+    return ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl({nodeIds.begin(), nodeIds.end()});
+}
+
+bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::unordered_set<TNodeId>& nodeIds) {
+    return ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(nodeIds);
+}
+
+bool TViewerPipeClient::ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::unordered_set<TNodeId>& nodeIds) {
+    if (!IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject()))) {
+        return false;
+    }
+    if (nodeIds.empty()) {
+        return false;
+    }
+    const auto databaseNodes = GetDatabaseNodes();
+    const auto nodesSet = std::unordered_set<TNodeId>(databaseNodes.begin(), databaseNodes.end());
+    for (const auto& nodeId : nodeIds) {
+        if (!nodesSet.count(nodeId)) {
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
+                "Access denied");
+            return true;
+        }
+    }
+    return false;
+}
+
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Followers = FromStringWithDefault(params.Get("followers"), Followers);
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);

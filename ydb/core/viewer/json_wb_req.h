@@ -6,7 +6,6 @@
 #include "wb_group.h"
 #include "wb_merge.h"
 #include "wb_req.h"
-#include <ydb/core/base/auth.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/yaml/yaml.h>
@@ -48,22 +47,8 @@ public:
                      (TNodeId)0,
                      TlsActivationContext->ActorSystem()->NodeId);
 
-        const bool strictDatabaseToken =
-            IsStrictDatabaseOnlyToken(AppData(), TString(TBase::GetRequest().GetUserTokenObject()));
-        // Strict database users must pass `database` query parameter before the handler runs;
-        // IsDatabaseRequest() check below means board resolve succeeded and GetDatabaseNodes() is meaningful.
-        if (strictDatabaseToken && TBase::IsDatabaseRequest() && !nodeIds.empty()) {
-            auto databaseNodes = TBase::GetDatabaseNodes();
-            auto nodesSet = std::unordered_set<TNodeId>(databaseNodes.begin(), databaseNodes.end());
-            for (TNodeId nodeId : nodeIds) {
-                if (!nodesSet.count(nodeId)) {
-                    return ReplyAndPassAway(
-                        TBase::GETHTTPACCESSDENIED(
-                            "text/plain",
-                            "Some requested nodes are outside the specified database"),
-                        "Access denied");
-                }
-            }
+        if (this->ReplyAndPassAwayIfNodesAreOutOfDatabase(nodeIds)) {
+            return;
         }
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {

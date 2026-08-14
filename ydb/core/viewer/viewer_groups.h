@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -157,7 +158,8 @@ public:
     std::unordered_set<TString> FilterStoragePools;
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
-    std::unordered_set<ui32> FilterPDiskIds;
+    std::unordered_set<ui32> FilterPDiskIds; // may be cleared while applying filters
+    std::unordered_set<ui32> InitialFilterPDiskIds; // copy of initialyy sent FilterPDiskIds
 
     enum class EWith {
         Everything,
@@ -837,6 +839,7 @@ public:
         SplitIds(Params.Get("node_id"), ',', FilterNodeIds);
         SplitIds(Params.Get("pdisk_id"), ',', FilterPDiskIds);
         SplitIds(Params.Get("group_id"), ',', FilterGroupIds);
+        InitialFilterPDiskIds = FilterPDiskIds;
         if (!FilterStoragePools.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
@@ -936,8 +939,12 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        if (ReplyAndPassAwayIfNodesAreOutOfDatabase(FilterNodeIds)) {
+            return;
+        }
         if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
-            FieldsRequired.reset(+EGroupFields::NodeId); // fields that are not available for database users
+            // fields that are not available for database users
+            FieldsRequired.reset(+EGroupFields::NodeId);
             FieldsRequired.reset(+EGroupFields::PDiskId);
             FieldsRequired.reset(+EGroupFields::PDisk);
             FieldsRequired.reset(+EGroupFields::PileName);
@@ -950,6 +957,13 @@ public:
                     FieldsRequired |= itDependentFields->second;
                 }
             }
+        }
+        // Database-only users normally don't fetch PDiskId (see CheckAccessViewer above).
+        // If pdisk_id was passed, we need to request PDiskId from BSC to validate parameters scope.
+        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) &&
+            !InitialFilterPDiskIds.empty()
+        ) {
+            FieldsRequired.set(+EGroupFields::PDiskId);
         }
         if (Database) {
             if (!DatabaseNavigateResponse) {
@@ -991,7 +1005,64 @@ public:
         }
     }
 
-    void ApplyFilter() {
+    bool ReplyAndPassAwayIfGroupsAreOutOfDatabase() {
+        std::unordered_set<TGroupId> allowedGroupIds;
+        for (TGroup* group : GroupView) {
+            allowedGroupIds.insert(group->GroupId);
+        }
+        for (TGroupId groupId : FilterGroupIds) {
+            if (!allowedGroupIds.contains(groupId)) {
+                TBase::ReplyAndPassAway(
+                    GETHTTPACCESSDENIED("text/plain",
+                        "Some requested storage groups are outside the specified database"),
+                    "Access denied");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool ReplyAndPassAwayIfPDisksAreOutOfDatabase() {
+        // Scope validation needs PDisk data from BS Controller; defer until it arrives.
+        if (!AreBSControllerRequestsDone() || !FieldsAvailable.test(+EGroupFields::PDiskId)) {
+            return false;
+        }
+
+        std::unordered_set<ui32> allowedPDiskIds;
+        for (TGroup* group : GroupView) {
+            for (const auto& vdisk : group->VDisks) {
+                allowedPDiskIds.insert(vdisk.VSlotId.PDiskId);
+            }
+        }
+        if (allowedPDiskIds.empty() && !VSlotsByVSlotId.empty()) {
+            std::unordered_set<TGroupId> allowedGroupIds;
+            for (TGroup* group : GroupView) {
+                allowedGroupIds.insert(group->GroupId);
+            }
+            for (const auto& [vslotId, info] : VSlotsByVSlotId) {
+                if (info && allowedGroupIds.count(info->GetGroupId())) {
+                    allowedPDiskIds.insert(vslotId.PDiskId);
+                }
+            }
+        }
+        if (allowedPDiskIds.empty()) {
+            TBase::ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "Some requested PDisk identifiers are outside the specified database"),
+                "Access denied");
+            return true;
+        }
+        for (ui32 pdiskId : InitialFilterPDiskIds) {
+            if (!allowedPDiskIds.contains(pdiskId)) {
+                TBase::ReplyAndPassAway(
+                    GETHTTPACCESSDENIED("text/plain", "Some requested PDisk identifiers are outside the specified database"),
+                    "Access denied");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool ApplyFilterAndCheckAccess() {
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty()) {
             if (FieldsAvailable.test(+EGroupFields::PoolName)) {
@@ -1006,7 +1077,13 @@ public:
                 FoundGroups = TotalGroups = GroupView.size();
                 GroupsByGroupId.clear();
             } else {
-                return;
+                return true;
+            }
+        }
+        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) && IsDatabaseRequest()) {
+            // We don't want to provide a possibility for strict database users to get groups outside the database.
+            if (!FilterGroupIds.empty() && ReplyAndPassAwayIfGroupsAreOutOfDatabase()) {
+                return false;
             }
         }
         // group id pre-filter, affects TotalGroups count
@@ -1036,7 +1113,7 @@ public:
                 FilterStoragePools.clear();
                 GroupsByGroupId.clear();
             } else {
-                return;
+                return true;
             }
         }
         // node_id + pdisk_id pre-filter, affects TotalGroups count
@@ -1057,7 +1134,7 @@ public:
                 FilterPDiskIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return;
+                return true;
             }
         }
         // node_id pre-filter, affects TotalGroups count
@@ -1077,7 +1154,7 @@ public:
                 FilterNodeIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return;
+                return true;
             }
         }
         // pdisk_id pre-filter, affects TotalGroups count
@@ -1097,7 +1174,7 @@ public:
                 FilterPDiskIds.clear();
                 GroupsByGroupId.clear();
             } else {
-                return;
+                return true;
             }
         }
         if (NeedFilter) {
@@ -1162,6 +1239,7 @@ public:
             NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
             FoundGroups = GroupView.size();
         }
+        return true;
     }
 
     void GroupCollection() {
@@ -1329,11 +1407,20 @@ public:
         }
     }
 
-    void ApplyEverything() {
-        ApplyFilter();
+    bool ApplyEverything() {
+        if (!ApplyFilterAndCheckAccess()) {
+            return false;
+        }
+        if (IsStrictDatabaseOnlyToken(AppData(), TString(GetRequest().GetUserTokenObject())) && IsDatabaseRequest()) {
+            // We don't want to provide a possibility for strict database users to get pdisks outside the database.
+            if (!InitialFilterPDiskIds.empty() && ReplyAndPassAwayIfPDisksAreOutOfDatabase()) {
+                return false;
+            }
+        }
         ApplyGroup();
         ApplySort();
         ApplyLimit();
+        return true;
     }
 
     bool CollectedHiveData = false;
@@ -2301,7 +2388,9 @@ public:
 
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
-        ApplyEverything();
+        if (!ApplyEverything()) {
+            return;
+        }
         ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));

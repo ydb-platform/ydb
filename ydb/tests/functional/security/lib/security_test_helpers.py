@@ -140,6 +140,70 @@ def get_foreign_node_id_for_database(base_url, database, token='root@builtin'):
     return min(foreign_nodes)
 
 
+def get_storage_groups(base_url, database, token='root@builtin', timeout=30, **params):
+    response = requests.get(
+        base_url + '/storage/groups',
+        params={'database': database, **params},
+        headers={'Authorization': token},
+        verify=False,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_tenant_storage_group_id(base_url, database, token='root@builtin', timeout_seconds=60):
+    last_data = {}
+
+    def ready():
+        data = get_storage_groups(
+            base_url,
+            database,
+            token,
+            fields_required='GroupId,PoolName',
+        )
+        last_data['data'] = data
+        groups = data.get('StorageGroups') or []
+        return bool(groups)
+
+    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
+        raise AssertionError(
+            f'no storage groups for database={database} after {timeout_seconds}s; '
+            f'last={last_data.get("data")}'
+        )
+    return int(last_data['data']['StorageGroups'][0]['GroupId'])
+
+
+def get_tenant_storage_pdisk_id(base_url, database, token='root@builtin', timeout_seconds=60):
+    last_data = {}
+
+    def ready():
+        data = get_storage_groups(
+            base_url,
+            database,
+            token,
+            fields_required='GroupId,VDisk,PDisk,NodeId,PDiskId',
+            **{'with': 'all'},
+            timeout=60,
+        )
+        last_data['data'] = data
+        for group in data.get('StorageGroups') or []:
+            for vdisk in group.get('VDisks') or []:
+                pdisk = vdisk.get('PDisk') or {}
+                pdisk_id_str = str(pdisk.get('PDiskId') or '')
+                if '-' in pdisk_id_str:
+                    last_data['pdisk_id'] = int(pdisk_id_str.split('-', 1)[1])
+                    return True
+        return False
+
+    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
+        raise AssertionError(
+            f'no pdisk id found for database={database} after {timeout_seconds}s; '
+            f'last={last_data.get("data")}'
+        )
+    return last_data['pdisk_id']
+
+
 def wait_for_viewer_ready(
     base_url,
     database=DATABASE,

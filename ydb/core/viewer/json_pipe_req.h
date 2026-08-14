@@ -1,5 +1,6 @@
 #pragma once
 #include "viewer.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -340,6 +341,10 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+
+    bool ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::vector<TNodeId>& nodeIds);
+    bool ReplyAndPassAwayIfNodesAreOutOfDatabase(const std::unordered_set<TNodeId>& nodeIds);
+
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
@@ -360,6 +365,8 @@ protected:
 
     void ClosePipes();
     i32 FailPipeConnect(TTabletId tabletId);
+
+    bool ReplyAndPassAwayIfNodesAreOutOfDatabaseImpl(const std::unordered_set<TNodeId>& nodeIds);
 
     bool IsLastRequest() const {
         return DataRequests == 1;

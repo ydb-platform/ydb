@@ -419,6 +419,51 @@ def test_viewer_direct_forbidden_for_strict_database_token(
             _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, token, 200)
 
 
+def test_storage_groups_scope_params_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+    tenant_storage_group_id,
+    tenant_storage_pdisk_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    tenant_node_id = tenant_nodelist_ids[0]
+    foreign_group_id = tenant_storage_group_id + 0x10000000
+    base = mon_base_url_with_extra_sids_control
+
+    allowed_cases = (
+        {'group_id': str(tenant_storage_group_id)},
+        {'node_id': str(tenant_node_id)},
+        {'pdisk_id': str(tenant_storage_pdisk_id)},
+    )
+    forbidden_cases = (
+        {'group_id': str(foreign_group_id)},
+        {'node_id': str(foreign_node_id)},
+        {'pdisk_id': '999999'},
+    )
+
+    for extra_params in allowed_cases:
+        path = _build_endpoint_path(
+            '/storage/groups',
+            with_database_cgi=True,
+            extra_params=extra_params,
+            database=tenant_database,
+        )
+        _assert_status(base, path, 'database@builtin', 200)
+
+    for extra_params in forbidden_cases:
+        path = _build_endpoint_path(
+            '/storage/groups',
+            with_database_cgi=True,
+            extra_params=extra_params,
+            database=tenant_database,
+        )
+        _assert_status(base, path, 'database@builtin', 403)
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base, path, token, 200)
+
+
 def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,

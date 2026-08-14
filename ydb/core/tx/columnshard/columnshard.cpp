@@ -334,6 +334,15 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
+
+    // Check if MoveData rewriting is complete and vacuum can be started.
+    if (MoveDataState.Active && !MoveDataState.VacuumStarted && HasIndex()) {
+        if (MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() == 0) {
+            LOG_S_INFO("TColumnShard: MoveData rewriting done, starting vacuum at tablet " << TabletID());
+            MoveDataState.VacuumStarted = true;
+            Executor()->StartMoveDataVacuumFromOwner();
+        }
+    }
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -647,6 +656,60 @@ void TColumnShard::ScheduleExecutorStatistics() {
             {"reportExecutorStatisticsPeriodMs", statistics.GetReportExecutorStatisticsPeriodMs()},
             {"scheduleDuration", scheduleDuration});
     }
+}
+
+void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetMoveDataEnabled()) {
+        // Feature disabled: hand off to base executor (immediate vacuum, no rewrite).
+        TTabletExecutedFlat::Handle(ev);
+        return;
+    }
+    if (MoveDataState.Active) {
+        // Already running: silently ignore duplicates (Hive may retry).
+        LOG_S_WARN("TColumnShard::Handle TEvMoveData: already active, ignoring at " << TabletID());
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    MoveDataState.HiveSender = ev->Sender;
+    MoveDataState.TargetGroups.clear();
+    for (auto g : record.GetGroups()) {
+        MoveDataState.TargetGroups.emplace(g);
+    }
+    MoveDataState.Active = true;
+    MoveDataState.VacuumStarted = false;
+
+    LOG_S_INFO(
+        "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
+
+    if (HasIndex()) {
+        MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData();
+        if (MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() == 0) {
+            // Nothing to move — trigger vacuum immediately.
+            MoveDataState.VacuumStarted = true;
+            Executor()->StartMoveDataVacuumFromOwner();
+        }
+    } else {
+        // No index yet — vacuum immediately.
+        MoveDataState.VacuumStarted = true;
+        Executor()->StartMoveDataVacuumFromOwner();
+    }
+}
+
+void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
+    if (!MoveDataState.Active) {
+        return;
+    }
+    LOG_S_INFO("TColumnShard::MoveDataCompleted at tablet " << TabletID());
+
+    if (HasIndex()) {
+        MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
+    }
+
+    ctx.Send(MoveDataState.HiveSender, new TEvTablet::TEvMoveDataResponse(TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
+
+    MoveDataState = TMoveDataState{};
 }
 
 }   // namespace NKikimr::NColumnShard

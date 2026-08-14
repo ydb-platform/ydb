@@ -13,24 +13,46 @@ namespace NKikimr::NBsController {
         bool WithAttentionToReplication = false;
     };
 
+    enum class ESelfHealReassignmentPriority : ui8 {
+        None = 0,           // Reassignment is not required
+        MaintenanceStatus,  // Reassignment is only performed if *all* other
+                            // VDisks are fully operational
+        DecommitStatus,
+        DriveStatus,
+    };
+
     struct TEvControllerUpdateSelfHealInfo : TEventLocal<TEvControllerUpdateSelfHealInfo, TEvBlobStorage::EvControllerUpdateSelfHealInfo> {
         struct TGroupContent {
+
             struct TVDiskInfo {
                 TVSlotId Location;
-                bool RequiresReassignment;
+                ESelfHealReassignmentPriority ReassignmentPriority = ESelfHealReassignmentPriority::None;
                 bool UnavailabilityRisk;
                 bool Decommitted;
-                bool IsSelfHealReasonDecommit;
                 bool OnlyPhantomsRemain;
                 bool IsReady;
                 TMonotonic ReadySince;
                 NKikimrBlobStorage::EVDiskStatus VDiskStatus;
+<<<<<<< HEAD
+=======
+                std::optional<TString> DiskScope;
+
+                bool RequiresReassignment() const {
+                    return ReassignmentPriority != ESelfHealReassignmentPriority::None;
+                }
+
+                bool IsReassignmentUrgent() const {
+                    return static_cast<ui8>(ReassignmentPriority) >
+                           static_cast<ui8>(ESelfHealReassignmentPriority::MaintenanceStatus);
+                }
+>>>>>>> d4ac973f208 (Refactor reassign VDisk selection logic in SelfHeal actor (#49761))
             };
             ui32 Generation;
             TBlobStorageGroupType Type;
             TMap<TVDiskID, TVDiskInfo> VDisks;
             std::shared_ptr<TGroupGeometryInfo> Geometry;
         };
+
         struct TVDiskStatusUpdate {
             TVDiskID VDiskId;
             std::optional<bool> OnlyPhantomsRemain;

@@ -92,10 +92,10 @@ private:
     TVector<std::pair<ui32, ui32>> Cut;
 };
 
+}   // anonymous namespace
+
 using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
-
-}   // anonymous namespace
 
 // ---- tests ------------------------------------------------------------------
 
@@ -237,6 +237,32 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter->OnPortionRemoved(88);
         // No poison → removal was clean.
         UNIT_ASSERT(!cutter->SweepInFlight());
+    }
+
+    Y_UNIT_TEST(SeenGroupsCheck) {
+        // History: [{fromGen=0, group=100}, {fromGen=5, group=100}, {fromGen=10, group=200}]
+        //   entry {fromGen=0, group=100}: no earlier entries → passes
+        //   entry {fromGen=5, group=100}: earlier entry {0,100} already has group 100 → blocked
+        //   entry {fromGen=10, group=200}: earlier entries have groups {100,100}; 200 not seen → passes
+        //   entry {fromGen=10, group=200} is the active (last) entry — TryNominate skips it via loop
+        //   bound, but SeenGroupsCheckPasses itself does not exclude it.
+        using TEntry = TTabletChannelInfo::THistoryEntry;
+        std::vector<TEntry> hist;
+        auto addEntry = [&](ui32 fromGen, ui32 group) {
+            TEntry e;
+            e.FromGeneration = fromGen;
+            e.GroupID = group;
+            hist.push_back(e);
+        };
+        addEntry(0, 100);
+        addEntry(5, 100);
+        addEntry(10, 200);
+
+        UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/0));
+        UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5));
+        UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/10));
+        // Non-existent fromGeneration → not found → false.
+        UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/99));
     }
 
 }   // TCutHistoryCutterCounters

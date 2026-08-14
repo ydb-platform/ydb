@@ -935,7 +935,9 @@ public:
 
     void Bootstrap() {
         Become(&TAuthorizeServiceAccountUseActor::StateFunc);
+#if 0 // [BACKPORT stable-26-2]
         EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+#endif
         SendRequest();
     }
 
@@ -952,11 +954,14 @@ public:
             *request->Request.mutable_iam_token() = Token;
         };
 
+#if 0 // [BACKPORT stable-26-2]
         if (EnableAccessServiceV2Interface) {
             auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
             setupRequest(request);
             Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
-        } else {
+        } else
+#endif
+        {
             auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
             setupRequest(request);
             Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
@@ -986,9 +991,11 @@ public:
         HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponse>(ev);
     }
 
+#if 0
     void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
         HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
     }
+#endif
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         try {
@@ -1006,7 +1013,9 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, HandleAuthorizeResult)
+#if 0 // [BACKPORT stable-26-2]
         hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, HandleAuthorizeResult)
+#endif
         sFunc(NActors::TEvents::TEvWakeup, SendRequest)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
     )
@@ -1014,7 +1023,9 @@ public:
     NThreading::TPromise<NYdbGrpc::TGrpcStatus> Promise;
     const TString ServiceAccountId;
     const TString Token;
+#if 0 // [BACKPORT stable-26-2]
     bool EnableAccessServiceV2Interface;
+#endif
     TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
     static inline const TString Permission = "iam.serviceAccounts.use";
 };
@@ -1033,7 +1044,9 @@ NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
 
 NActors::IActor* CreateAccessServiceActor() {
     // XXX duplicated: ticket_parser, http_proxy
+#if 0 // [BACKPORT stable-26-2]
     auto enableV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+#endif
     auto& authConfig = AppData()->AuthConfig;
 
     NCloud::TAccessServiceSettings asSettings;
@@ -1046,7 +1059,7 @@ NActors::IActor* CreateAccessServiceActor() {
         TString certificate = TFileInput(authConfig.GetPathToRootCA()).ReadAll();
         asSettings.CertificateRootCA = certificate;
     }
-    return NCloud::CreateAccessServiceWithCache(asSettings, enableV2Interface);
+    return NCloud::CreateAccessServiceWithCache(asSettings /*, enableV2Interface*/);
 }
 
 }  // namespace NKikimr::NKqp

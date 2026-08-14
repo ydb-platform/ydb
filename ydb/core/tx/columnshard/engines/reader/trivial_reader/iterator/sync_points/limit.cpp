@@ -138,6 +138,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     // once we stop reordering here, correctness relies on KQP's per-shard TopSort re-sorting and re-limiting the passthrough output
     if (SysViewMaxHeldPortions && source->GetType() == IDataSource::EType::SimpleSysInfo && FilledIterators.size() > SysViewMaxHeldPortions) {
         Passthrough = true;
+        // FetchedCount is intentionally abandoned here: in passthrough it never gates emission again (KQP re-limits)
         FilledIterators.clear();
         UnfilledIterators.clear();
         NYDBTest::TControllers::GetColumnShardController()->OnSysViewLimitSyncPointPassthrough();

@@ -255,6 +255,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        // details must be filled in records-then-indexes order so GetChunksPKOrder() permutation applied below aligns
         std::vector<TString> details;
         const auto& records = GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {

@@ -382,6 +382,8 @@ namespace NKikimr::NBlobDepot {
         void UpdateThroughputs(bool reschedule = true);
 
         THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
+        ui64 S3RouterNodeCount = 0;
+        ui64 S3RouterNodesWithUsingProxy = 0;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

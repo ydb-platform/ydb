@@ -141,23 +141,44 @@ namespace NKikimr::NBlobDepot {
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
 
-        for (const ui64 latencyMs : record.GetBalancerLatencyMs()) {
-            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS].IncrementFor(latencyMs);
-        }
-        for (const ui64 latencyMs : record.GetNonBalancerLatencyMs()) {
-            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS].IncrementFor(latencyMs);
-        }
-        for (const ui64 latencyMs : record.GetBalancerResolveLatencyMs()) {
-            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS].IncrementFor(latencyMs);
-        }
+        auto applyLatencyHistogram = [&](NKikimrBlobDepot::EPercentileCounters counter, const auto& buckets) {
+            if (buckets.empty()) {
+                return;
+            }
+
+            auto& hist = TabletCounters->Percentile()[counter];
+            const ui32 n = Min<ui32>(hist.GetRangeCount(), buckets.size());
+            for (ui32 i = 0; i < n; ++i) {
+                if (const ui64 count = buckets.Get(i)) {
+                    hist.AddFor(hist.GetRangeBound(i), count);
+                }
+            }
+        };
+
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS, record.GetBalancerLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS, record.GetNonBalancerLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS, record.GetBalancerResolveLatencyHistogram());
 
         if (record.HasIsUsingProxy()) {
-            S3RouterIsUsingProxyByNode[record.GetNodeId()] = record.GetIsUsingProxy();
-            ui64 isUsingProxy = 0;
-            for (const auto& [_, value] : S3RouterIsUsingProxyByNode) {
-                isUsingProxy = Max<ui64>(isUsingProxy, value ? 1 : 0);
+            const ui32 nodeId = record.GetNodeId();
+            const bool isUsingProxyByNode = record.GetIsUsingProxy();
+            auto it = S3RouterIsUsingProxyByNode.find(nodeId);
+            if (it == S3RouterIsUsingProxyByNode.end()) {
+                ++S3RouterNodeCount;
+                it = S3RouterIsUsingProxyByNode.emplace(nodeId, false).first;
             }
-            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_ROUTER_IS_USING_PROXY] = isUsingProxy;
+            if (isUsingProxyByNode != it->second) {
+                if (isUsingProxyByNode) {
+                    ++S3RouterNodesWithUsingProxy;
+                } else if (S3RouterNodesWithUsingProxy) {
+                    --S3RouterNodesWithUsingProxy;
+                }
+
+                it->second = isUsingProxyByNode;
+            }
+
+            const bool isUsingProxy = S3RouterNodeCount && S3RouterNodesWithUsingProxy == S3RouterNodeCount;
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_ROUTER_IS_USING_PROXY] = isUsingProxy ? 1 : 0;
         }
     }
 

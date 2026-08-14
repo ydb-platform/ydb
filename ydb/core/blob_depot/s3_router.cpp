@@ -16,7 +16,9 @@
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
-#include <util/system/spinlock.h>
+
+#include <algorithm>
+#include <atomic>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -24,13 +26,48 @@ namespace NKikimr::NBlobDepot {
 
     namespace {
 
+    struct TLatencyHistogram {
+        static constexpr ui64 Bounds[] = {
+            1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
+        };
+
+        static constexpr size_t BucketCount = std::size(Bounds) + 1; // last bucket is +inf
+
+        std::atomic<ui64> Buckets[BucketCount] = {};
+
+        void Record(ui64 valueMs) {
+            const auto* end = Bounds + std::size(Bounds);
+            const size_t i = std::lower_bound(Bounds, end, valueMs) - Bounds;
+            Buckets[i].fetch_add(1, std::memory_order_relaxed);
+        }
+
+        template <typename TRepeated>
+        void Take(TRepeated* out) {
+            ui64 snapshot[BucketCount];
+            bool any = false;
+            for (size_t i = 0; i < BucketCount; ++i) {
+                snapshot[i] = Buckets[i].exchange(0, std::memory_order_relaxed);
+                any = any || snapshot[i];
+            }
+
+            if (!any) {
+                return;
+            }
+
+            out->Clear();
+            out->Reserve(BucketCount);
+            for (size_t i = 0; i < BucketCount; ++i) {
+                out->Add(snapshot[i]);
+            }
+        }
+    };
+
     struct TRouteStats {
         std::atomic<ui64> Requests{0};
         std::atomic<ui64> Errors{0};
         std::atomic<ui64> BytesRead{0};
         std::atomic<ui64> BytesWritten{0};
-        TAdaptiveLock LatencyLock;
-        TVector<ui64> LatencyMs;
+        TLatencyHistogram Latency;
     };
 
     struct TRouterStats {
@@ -44,7 +81,7 @@ namespace NKikimr::NBlobDepot {
         std::atomic<ui64> FiveXxRefreshTriggers{0};
         std::atomic<bool> IsUsingProxy{false};
 
-        TVector<ui64> BalancerResolveLatencyMs;
+        TLatencyHistogram BalancerResolveLatency;
     };
 
     class TRouteCounters : public TThrRefBase {
@@ -67,10 +104,7 @@ namespace NKikimr::NBlobDepot {
                 ++route.Errors;
             }
 
-            const ui64 latencyMs = requestStats.Latency.MilliSeconds();
-            with_lock (route.LatencyLock) {
-                route.LatencyMs.push_back(latencyMs);
-            }
+            route.Latency.Record(requestStats.Latency.MilliSeconds());
         }
     };
 
@@ -140,12 +174,6 @@ namespace NKikimr::NBlobDepot {
         return value.exchange(0);
     }
 
-    static void TakeLatencies(TRouteStats& route, TVector<ui64>& out) {
-        with_lock (route.LatencyLock) {
-            out.swap(route.LatencyMs);
-        }
-    }
-
     class TBlobDepotS3Router : public TActorBootstrapped<TBlobDepotS3Router> {
         struct TEvPrivate {
             enum {
@@ -187,6 +215,11 @@ namespace NKikimr::NBlobDepot {
             const ui32 sec = lo == hi ? lo
                 : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
             return TDuration::Seconds(sec);
+        }
+
+        TDuration MetricsPushInterval() const {
+            const ui32 ms = Settings.GetMetricsPushIntervalMs();
+            return TDuration::MilliSeconds(ms ? ms : 2500);
         }
 
         TIntrusivePtr<TRouteCounters> MakeRouteCounters(bool nonBalancer) {
@@ -287,7 +320,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SchedulePushMetrics() {
-            TActivationContext::Schedule(TDuration::MilliSeconds(2500), new IEventHandle(TEvPrivate::EvPushMetrics, 0,
+            TActivationContext::Schedule(MetricsPushInterval(), new IEventHandle(TEvPrivate::EvPushMetrics, 0,
                 SelfId(), {}, nullptr, 0));
         }
 
@@ -312,21 +345,9 @@ namespace NKikimr::NBlobDepot {
                 record.SetFiveXxRefreshTriggers(ExchangeAtomic(Stats.FiveXxRefreshTriggers));
                 record.SetIsUsingProxy(Stats.IsUsingProxy.load());
 
-                TVector<ui64> latencies;
-                TakeLatencies(Stats.BalancerRoute, latencies);
-                for (auto&& latencyMs : latencies) {
-                    record.AddBalancerLatencyMs(latencyMs);
-                }
-
-                TakeLatencies(Stats.NonBalancerRoute, latencies);
-                for (auto&& latencyMs : latencies) {
-                    record.AddNonBalancerLatencyMs(latencyMs);
-                }
-
-                latencies.swap(Stats.BalancerResolveLatencyMs);
-                for (auto&& latencyMs : latencies) {
-                    record.AddBalancerResolveLatencyMs(latencyMs);
-                }
+                Stats.BalancerRoute.Latency.Take(record.MutableBalancerLatencyHistogram());
+                Stats.NonBalancerRoute.Latency.Take(record.MutableNonBalancerLatencyHistogram());
+                Stats.BalancerResolveLatency.Take(record.MutableBalancerResolveLatencyHistogram());
 
                 NTabletPipe::SendData(SelfId(), PipeId, event.release());
             }
@@ -387,7 +408,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
             RefreshInFlight = false;
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
-            Stats.BalancerResolveLatencyMs.push_back(latency.MilliSeconds());
+            Stats.BalancerResolveLatency.Record(latency.MilliSeconds());
 
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {

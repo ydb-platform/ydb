@@ -95,7 +95,7 @@ private:
         switch (status) {
             case NTxProxy::TResultStatus::ExecComplete:
                 if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus, record);
                 } else {
                     return ReplyOkAndDie();
                 }
@@ -105,12 +105,12 @@ private:
                 return RetryPropose();
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus, record);
                 } else {
-                    return ReplyError(ydbStatus, ssStatus);
+                    return ReplyError(ydbStatus, ssStatus, record);
                 }
             default:
-                return ReplyError(ydbStatus, ssStatus);
+                return ReplyError(ydbStatus, ssStatus, record);
         }
     }
 
@@ -171,9 +171,15 @@ private:
     }
 
 private:
-    void ReplyError(Ydb::StatusIds::StatusCode errorCode, NKikimrScheme::EStatus ssStatus) {
-        ReplyErrorAndDie(errorCode,
-            TStringBuilder() << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus));
+    void ReplyError(Ydb::StatusIds::StatusCode errorCode, NKikimrScheme::EStatus ssStatus, const NKikimrTxUserProxy::TEvProposeTransactionStatus& record) {
+        TStringBuilder message;
+        message << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus);
+        for (const auto& issue : record.GetIssues()) {
+            if (!issue.message().empty()) {
+                message << ": " << issue.message();
+            }
+        }
+        ReplyErrorAndDie(errorCode, std::move(message));
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {

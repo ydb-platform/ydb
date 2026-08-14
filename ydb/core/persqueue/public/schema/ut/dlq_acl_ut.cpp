@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/public/schema/schema.h>
+#include <ydb/core/persqueue/public/schema/schema_ut_helpers.h>
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
@@ -129,8 +130,8 @@ void CreateDLQTopic(const std::shared_ptr<TTopicSdkTestSetup>& setup, const char
 THolder<TEvSchemaResponse> CreateTopicWithDLQ(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
-    const char* mainTopic,
-    const char* dlqTopic
+    const TString& mainTopic,
+    const TString& dlqTopic
 ) {
     auto& runtime = setup->GetRuntime();
     const auto userToken = MakeUserToken(userSid);
@@ -543,6 +544,51 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic) {
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::UNAUTHORIZED, result->ErrorMessage);
     UNIT_ASSERT(!result->ErrorMessage.empty());
+}
+
+Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsATable) {
+    constexpr const char* USER_NAME = "topicuser9";
+    constexpr const char* DLQ_TABLE = "dlqtable";
+    constexpr const char* MAIN_TOPIC = "main-topic-table-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "CREATE TABLE `" << DLQ_TABLE << "` (key Uint64, value String, PRIMARY KEY (key));");
+
+    auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TABLE);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");
+}
+
+Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
+    constexpr const char* USER_NAME = "topicuser10";
+    constexpr const char* TABLE_NAME = "cdcdlqtable";
+    constexpr const char* FEED_NAME = "feed";
+    constexpr const char* MAIN_TOPIC = "main-topic-cdc-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "ALTER TABLE `" << TABLE_NAME << "` ADD CHANGEFEED `" << FEED_NAME
+        << "` WITH (FORMAT = 'JSON', MODE = 'UPDATES');");
+
+    const TString cdcStreamPath = TStringBuilder() << TABLE_NAME << "/" << FEED_NAME;
+    auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcStreamPath);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");
 }
 
 } // Y_UNIT_TEST_SUITE(DlqAcl)

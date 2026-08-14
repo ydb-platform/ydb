@@ -464,6 +464,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             Y_ABORT_UNLESS(response.PQGroupInfo);
             config->CopyFrom(response.PQGroupInfo->Description);
 
+            const TString database = config->GetPQTabletConfig().GetYdbDatabasePath();
+            const auto oldConsumerInfoByName = CollectConsumerVersionInfo(
+                config->GetPQTabletConfig(),
+                database
+            );
+
             // keep previous values or set in ModifyPersqueueConfig
             config->ClearTotalGroupCount();
             config->MutablePQTabletConfig()->ClearPartitionKeySchema();
@@ -480,6 +486,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                 response.PQGroupInfo->Description,
                 response.Self->Info
             );
+
+            // Keep DLQ ACL version tracking for Kafka / DataStreams / other
+            // TUpdateSchemeActor alters that re-propose the stored config.
+            auto* tabletConfig = config->MutablePQTabletConfig();
+            BumpTopicConfigVersion(*tabletConfig);
+            ApplyConsumerVersionUpdates(*tabletConfig, oldConsumerInfoByName, database);
         }
 
         virtual void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {

@@ -86,6 +86,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         // Resolve the path only to check access on it if it exists, absence is not an error.
         bool AllowNotExist = false;
 
+        // DLQ target must resolve to a topic (not a table, CDC stream, directory, …).
+        bool RequireTopic = false;
+
         TPathToResolve(const NKikimrSchemeOp::TModifyScheme& modifyScheme)
             : ModifyScheme(modifyScheme)
         {
@@ -840,6 +843,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 NACLib::EAccessRights::AlterSchema,
                 NACLib::EAccessRights::UpdateRow,
             };
+            toResolve.RequireTopic = true;
             ResolveForACL.push_back(std::move(toResolve));
         }
     }
@@ -1465,6 +1469,35 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
+    bool CheckDlqTargets(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext& ctx) {
+        auto resolveIt = resolveSet.begin();
+        auto requestIt = ResolveForACL.begin();
+
+        while (resolveIt != resolveSet.end() && requestIt != ResolveForACL.end()) {
+            const auto& entry = *resolveIt;
+            if (requestIt->RequireTopic
+                && entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+                && (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic || !entry.PQGroupInfo))
+            {
+                const TString path = CanonizePath(entry.Path);
+                const TString msg = TStringBuilder()
+                    << "Dead letter queue path must be a topic, got "
+                    << path;
+                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                    << ", " << msg
+                    << ", kind# " << static_cast<int>(entry.Kind)
+                );
+                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
+                return false;
+            }
+            ++resolveIt;
+            ++requestIt;
+        }
+
+        return true;
+    }
+
     bool CheckAccess(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext &ctx) {
         const bool checkAdmin = (CheckAdministrator || CheckDatabaseAdministrator);
         const bool isAdmin = (IsClusterAdministrator || IsDatabaseAdministrator);
@@ -1835,6 +1868,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
         Y_ABORT_UNLESS(navigate->ResultSet.size() == ResolveForACL.size());
+
+        if (!CheckDlqTargets(navigate->ResultSet, ctx)) {
+            return Die(ctx);
+        }
 
         // Check user access level, permissions on scheme objects and other restrictions/permissions
         if (UserToken) {

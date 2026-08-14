@@ -26,8 +26,10 @@ namespace NKikimr {
             void Finish(NKikimrVDisk::ChannelInfo* output) const {
                 output->set_count(Count);
                 output->set_data_size(DataSize);
-                output->set_min_id(MinId.ToString());
-                output->set_max_id(MaxId.ToString());
+                if (Count > 0) {
+                    output->set_min_id(MinId.ToString());
+                    output->set_max_id(MaxId.ToString());
+                }
             }
 
         private:
@@ -102,7 +104,7 @@ namespace NKikimr {
         }
 
         bool IsBatchReady() const {
-            return BatchReady;
+            return BatchBytes >= MaxBatchBytes;
         }
 
         void ExtractBatch(NKikimrVDisk::LogoBlobIndexStat* output) {
@@ -110,7 +112,6 @@ namespace NKikimr {
             output->Clear();
             output->Swap(&Batch);
             BatchBytes = 0;
-            BatchReady = false;
         }
 
         void Finish() {
@@ -133,13 +134,11 @@ namespace NKikimr {
             const ui64 tabletSize = output->ByteSizeLong();
             // LogoBlobIndexStat.tablets is field 1, so its tag occupies one byte.
             BatchBytes += 1 + google::protobuf::io::CodedOutputStream::VarintSize64(tabletSize) + tabletSize;
-            BatchReady = BatchBytes >= MaxBatchBytes;
         }
 
     private:
         const ui64 MaxBatchBytes;
         ui64 BatchBytes = 0;
-        bool BatchReady = false;
         bool Finished = false;
         std::optional<TTabletInfo> CurrentTablet;
         TAllChannels AllChannels;

@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace {
 
-    TKeyLogoBlob MakeKey(ui64 tabletId, ui32 step) {
-        return TKeyLogoBlob(TLogoBlobID(tabletId, 1, step, 0, 1, 0));
+    TKeyLogoBlob MakeKey(ui64 tabletId, ui32 step, ui8 channel = 0) {
+        return TKeyLogoBlob(TLogoBlobID(tabletId, 1, step, channel, 1, 0));
     }
 
     TMemRecLogoBlob MakeMemRec(ui32 dataSize) {
@@ -92,6 +92,39 @@ namespace {
             accumulator.ExtractBatch(&batch);
             UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 0);
+        }
+
+        Y_UNIT_TEST(EmptyChannelsDoNotContainSyntheticIdBounds) {
+            TLogoBlobIndexStatStreamAccumulator accumulator(1024);
+            const TKeyLogoBlob key = MakeKey(42, 10, 2);
+            accumulator.Update(key, MakeMemRec(17));
+            accumulator.Finish();
+
+            NKikimrVDisk::LogoBlobIndexStat batch;
+            accumulator.ExtractBatch(&batch);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).channels_size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels_size(), 3);
+
+            for (ui32 channel = 0; channel < 2; ++channel) {
+                for (const auto* channels : {
+                        &batch.tablets(0).channels(),
+                        &batch.channels()})
+                {
+                    UNIT_ASSERT_VALUES_EQUAL(channels->Get(channel).count(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(channels->Get(channel).data_size(), 0);
+                    UNIT_ASSERT(channels->Get(channel).min_id().empty());
+                    UNIT_ASSERT(channels->Get(channel).max_id().empty());
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).tablet_id(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).channels(2).count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).channels(2).data_size(), 17);
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).channels(2).min_id(), key.LogoBlobID().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(batch.tablets(0).channels(2).max_id(), key.LogoBlobID().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels(2).min_id(), key.LogoBlobID().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(batch.channels(2).max_id(), key.LogoBlobID().ToString());
         }
     }
 

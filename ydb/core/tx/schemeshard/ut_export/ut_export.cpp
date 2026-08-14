@@ -2608,11 +2608,7 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot");
     }
 
-<<<<<<< HEAD
     Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
-=======
-    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
         Env(); // Init test env
         ui64 txId = 100;
 
@@ -2626,16 +2622,12 @@ partitioning_settings {
 
         UpdateRow(Runtime(), "Table", 1, "valueA");
         UpdateRow(Runtime(), "Table", 2, "valueB");
-<<<<<<< HEAD
         Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         // Reject the first 'CompleteMultipartUpload' the way s3 does when the stored etags do not
         // match the parts it holds. The request is dropped, so the upload is still there and its
         // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
         // as UNKNOWN with the exception name set and without the retryable flag.
-=======
-
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
         THolder<IEventHandle> injectResult;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -2648,10 +2640,6 @@ partitioning_settings {
                     NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
                     UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
 
-<<<<<<< HEAD
-=======
-                    // Force a multipart upload so that CompleteMultipartUpload is reached.
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
                     if (schemeTx.HasBackup()) {
                         schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
                         schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
@@ -2662,7 +2650,6 @@ partitioning_settings {
                 }
 
                 case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
-<<<<<<< HEAD
                     if (injectResult) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
@@ -2678,7 +2665,85 @@ partitioning_settings {
                         Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(std::move(error))
                     );
                     injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
-=======
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default: {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+        });
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              number_of_retries: 10
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        Runtime().SetObserverFunc(prevObserver);
+        Runtime().Send(injectResult.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                    // Force a multipart upload so that CompleteMultipartUpload is reached.
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
                     // S3 no longer knows about this multipart upload (session expired, aborted by
                     // a lifecycle policy, or lost across a restart). Drop the request so it never
                     // reaches the server: CompleteMultipartUpload is what assembles the object, so
@@ -2699,7 +2764,6 @@ partitioning_settings {
                     );
                     // Reply to the uploader (the request's sender) on behalf of the storage wrapper.
                     injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -2710,18 +2774,10 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
-<<<<<<< HEAD
-        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              number_of_retries: 10
-=======
         TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
@@ -2741,13 +2797,6 @@ partitioning_settings {
         Runtime().Send(injectResult.Release(), 0, true);
 
         Env().TestWaitNotification(Runtime(), exportId);
-<<<<<<< HEAD
-        TestGetExport(Runtime(), exportId, "/MyRoot");
-
-        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
-        UNIT_ASSERT(data);
-        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
-=======
 
         // The table's data object was never assembled by S3.
         const auto& data = S3Mock().GetData();
@@ -2757,7 +2806,6 @@ partitioning_settings {
         // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
         // is recorded as complete while the exported table is missing from the bucket.
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
->>>>>>> 1a1b40353f0 (report export failure when the multipart upload is gone)
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {

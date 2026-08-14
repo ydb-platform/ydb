@@ -21,6 +21,22 @@ TString ReadFixture(TStringBuf path) {
     return input.ReadAll();
 }
 
+TString ExplainGenericQuery(TKikimrRunner& kikimr, const TString& query,
+    const NYdb::NQuery::TExecuteQuerySettings& settings)
+{
+    auto result = kikimr.GetQueryClient().ExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        settings
+    ).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetStats().has_value(), "Expected explain stats");
+    if (auto plan = result.GetStats()->GetPlan()) {
+        return TString(*plan);
+    }
+    return {};
+}
+
 void MakeDirectory(TKikimrRunner& kikimr, const TString& path) {
     auto result = kikimr.GetSchemeClient().MakeDirectory(path).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), path << ": " << result.GetIssues().ToString());
@@ -89,15 +105,14 @@ Y_UNIT_TEST_SUITE(KqpRboLarge1CRepro) {
         CreateSchema(session);
 
         const auto countersBefore = GetNewRboCompileCounters(kikimr);
-        const auto explainSettings = TExplainDataQuerySettings()
-            .ClientTimeout(infiniteTimeout)
-            .OperationTimeout(infiniteTimeout)
-            .CancelAfter(infiniteTimeout);
-        auto result = session.ExplainDataQuery(ReadFixture(QueryPath), explainSettings).GetValueSync();
+        const auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+            .ExecMode(NYdb::NQuery::EExecMode::Explain)
+            .ClientTimeout(infiniteTimeout);
+        const auto plan = ExplainGenericQuery(kikimr, ReadFixture(QueryPath), explainSettings);
         const auto countersAfter = GetNewRboCompileCounters(kikimr);
 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_C(!result.GetPlan().empty(), "Expected a non-empty explain plan");
+        UNIT_ASSERT_C(!plan.empty(), "Expected a non-empty explain plan");
         UNIT_ASSERT_VALUES_EQUAL(countersAfter.first, countersBefore.first + 1);
         UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second);
     }

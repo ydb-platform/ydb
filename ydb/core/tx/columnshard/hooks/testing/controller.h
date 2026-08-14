@@ -349,6 +349,8 @@ public:
         return ShardActuals.begin()->second;
     }
 
+    ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;
+
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);

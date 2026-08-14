@@ -31,6 +31,9 @@
 
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -299,6 +302,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void Handle(TEvPrivate::TEvRetryConfigSubscription::TPtr& ev);
+    void ApplyColumnShardConfig();
+    void SubscribeToColumnShardConfig();
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
@@ -498,6 +506,10 @@ protected:
             HFunc(TEvDataShard::TEvCancelRestore, Handle);
             HFunc(TEvDataShard::TEvCompactTable, Handle);
 
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
+
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
@@ -560,6 +572,8 @@ private:
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
+    // Local CMS snapshot of ColumnShardConfig
+    NKikimrConfig::TColumnShardConfig ColumnShardConfig;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;

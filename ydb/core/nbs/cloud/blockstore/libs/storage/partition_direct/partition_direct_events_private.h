@@ -2,6 +2,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+
 #include <ydb/core/base/events.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -33,6 +35,7 @@ struct TEvPartitionDirectPrivate
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvPartitionCleanupCompleted,
 
         EvEnd,
     };
@@ -91,6 +94,21 @@ struct TEvPartitionDirectPrivate
         TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
             : DirectBlockGroupId(dbgId)
             , NewHostIndex(newHostIndex)
+        {}
+    };
+
+    // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
+    struct TEvPartitionCleanupCompleted
+        : public NActors::TEventLocal<
+              TEvPartitionCleanupCompleted,
+              EvPartitionCleanupCompleted>
+    {
+        NProto::TError Error;
+
+        TEvPartitionCleanupCompleted() = default;
+
+        explicit TEvPartitionCleanupCompleted(NProto::TError error)
+            : Error(std::move(error))
         {}
     };
 };

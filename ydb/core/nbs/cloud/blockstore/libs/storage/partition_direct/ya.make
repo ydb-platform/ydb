@@ -20,6 +20,7 @@ SRCS(
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
     part_monitoring.cpp
+    partition_cleanup_actor.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     read_request_executor.cpp

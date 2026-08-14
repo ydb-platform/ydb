@@ -80,6 +80,22 @@ void TPartitionActor::OnTabletDead(
     DetachEndpointAddDie(ctx);
 }
 
+// Tablet received poison pill, cleanup resources
+void TPartitionActor::PassAway()
+{
+    const auto& ctx = NActors::TActivationContext::AsActorContext();
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s PassAway",
+        LogTitle.GetWithTime().c_str());
+
+    // Do not call Die() here: Die() invokes PassAway() again.
+    CleanupResources(ctx);
+    TActor::PassAway();
+}
+
 void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
@@ -109,6 +125,26 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
     Y_UNUSED(ctx);
 }
 
+void TPartitionActor::CleanupResources(const TActorContext& ctx)
+{
+    if (LoadActorAdapter) {
+        ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
+        LoadActorAdapter = {};
+    }
+
+    if (CleanupActor) {
+        ctx.Send(CleanupActor, new TEvents::TEvPoisonPill());
+        CleanupActor = {};
+    }
+
+    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
+
+    if (FastPathService) {
+        FastPathService->Stop();
+        FastPathService.reset();
+    }
+}
+
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
 {
     LOG_INFO(
@@ -117,14 +153,7 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
 
-    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
-
-    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
-
-    if (FastPathService) {
-        FastPathService->Stop();
-    }
-
+    CleanupResources(ctx);
     Die(ctx);
 }
 
@@ -667,6 +696,35 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
+{
+    switch (ev->GetTypeRewrite()) {
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
+        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
+        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+        HFunc(
+            TEvService::TEvGetLoadActorAdapterActorIdRequest,
+            HandleGetLoadActorAdapterActorId);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
+        default:
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_ERROR(
+                    TActivationContext::AsActorContext(),
+                    NKikimrServices::NBS_PARTITION,
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
+            }
+            break;
+    }
+}
+
 STFUNC(TPartitionActor::StateWork)
 {
     LOG_DEBUG(
@@ -678,19 +736,9 @@ STFUNC(TPartitionActor::StateWork)
         ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
-        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
-        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
-        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
-        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
-
         HFunc(
             TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
             HandleControllerAllocateDDiskBlockGroupResult);
-        HFunc(
-            TEvService::TEvGetLoadActorAdapterActorIdRequest,
-            HandleGetLoadActorAdapterActorId);
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
@@ -710,22 +758,10 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
 
-        HFunc(
-            TEvPartitionDirectPrivate::TEvPoison,
-            HandlePoisonByBlockedGeneration);
-
         HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
 
         default:
-            if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Unhandled event type: %u event %s ",
-                    LogTitle.GetWithTime().c_str(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
-            }
+            HandleCommonEvents(ev);
             break;
     }
 }

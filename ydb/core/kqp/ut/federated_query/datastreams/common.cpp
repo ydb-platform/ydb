@@ -127,7 +127,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         {
             auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
-            featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
+            featureFlags.SetEnableAccessServiceV2Interface(useAccessServiceV2 && FromString<bool>(useAccessServiceV2));
         }
 
         LogSettings

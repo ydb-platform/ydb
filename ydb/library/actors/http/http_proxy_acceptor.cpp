@@ -1,6 +1,5 @@
 #include <util/network/sock.h>
 #include <util/system/error.h>
-#include <util/generic/yexception.h>
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
@@ -27,7 +26,7 @@ TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, 
         }
         SetNonBlock(socket->Socket);
         return socket;
-    } catch (const yexception&) {
+    } catch (...) {
         return nullptr;
     }
 }

@@ -12,6 +12,7 @@
 
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
+#include <util/system/error.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
@@ -62,7 +63,13 @@ namespace NKikimr::NHttpProxy {
             }
             Driver = MakeHolder<NYdb::TDriver>(std::move(config));
         }
-        PreboundSocket = NHttp::TryBindListeningSocket({}, Config.GetHttpConfig().GetPort());
+        const ui16 httpPort = Config.GetHttpConfig().GetPort();
+        PreboundSocket = NHttp::TryBindListeningSocket({}, httpPort);
+        if (!PreboundSocket) {
+            Cerr << "HttpProxy: failed to pre-bind port " << httpPort
+                 << " (LastSystemError=" << LastSystemError() << "); acceptor will retry asynchronously"
+                 << Endl;
+        }
     }
 
     TStringBuilder THttpProxyActor::LogPrefix() const {

@@ -404,13 +404,19 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
                     ? col.DataSize
                     : col.DataSize + col.Offset - next_cols.front()->Offset;
 
-            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size;
+            // PackTupleOr/UnpackTupleOr are instantiated for at most
+            // kSIMDMaxCols columns, so a wider group cannot be dispatched.
+            // Stop growing the group there and let the rest of the columns go
+            // through the fallback path.
+            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size &&
+                                    next_cols.size() < kSIMDMaxCols;
             if (col_pushed) {
                 next_cols.push(&col);
                 tuple_size = tuple_size_with_col;
             }
 
             if (!SIMDSmallTuple_.Cols && next_cols.size() > 1 &&
+                next_cols.size() <= kSIMDMaxCols &&
                 tuple_size <= max_simd_tuple_size &&
                 (!col_pushed || !fixed_cols_left)) {
                 SIMDSmallTupleDesc simd_desc;

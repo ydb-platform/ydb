@@ -1,5 +1,6 @@
 #include "index.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -53,6 +54,38 @@ void TGranuleActualizationIndex::Start() {
     SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex);
     Actualizers.emplace_back(TieringActualizer);
     Actualizers.emplace_back(SchemeActualizer);
+}
+
+void TGranuleActualizationIndex::StartMoveData(const TAddExternalContext& context) {
+    AFL_VERIFY(!MoveDataActualizer);
+    MoveDataActualizer = std::make_shared<TMoveDataActualizer>(VersionedIndex);
+    Actualizers.emplace_back(MoveDataActualizer);
+    MoveDataActualizer->Refresh(context);
+}
+
+void TGranuleActualizationIndex::StopMoveData() {
+    if (!MoveDataActualizer) {
+        return;
+    }
+    auto it = std::find(Actualizers.begin(), Actualizers.end(), std::static_pointer_cast<IActualizer>(MoveDataActualizer));
+    if (it != Actualizers.end()) {
+        Actualizers.erase(it);
+    }
+    MoveDataActualizer.reset();
+}
+
+void TGranuleActualizationIndex::RefreshMoveData(const TAddExternalContext& context) {
+    if (!MoveDataActualizer) {
+        return;
+    }
+    MoveDataActualizer->Refresh(context);
+}
+
+ui64 TGranuleActualizationIndex::GetMoveDataPortionsCount() const {
+    if (!MoveDataActualizer) {
+        return 0;
+    }
+    return MoveDataActualizer->GetPortionsToMoveCount();
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {

@@ -1,4 +1,5 @@
 #include "processor_impl.h"
+#include "query_metrics_retention_db.h"
 
 namespace NKikimr {
 namespace NSysView {
@@ -15,7 +16,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
         : TTxBase(self)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_COLLECT; }
+    TTxType GetTxType() const override { return TXTYPE_CLEANUP_HOUR_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         More = false;
@@ -52,42 +53,24 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
         }
 
         if (Deleted < BatchSize && NewEvictBeforeHourEndUs) {
-            auto publicRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
-            if (!publicRowset.IsReady()) {
+            TQueryMetricsOneHourCleanupResult cleanup;
+            if (!CleanupQueryMetricsOneHour(
+                    db,
+                    NewEvictBeforeHourEndUs,
+                    BatchSize - Deleted,
+                    cleanup))
+            {
                 return false;
             }
-
-            while (!publicRowset.EndOfSet()) {
-                const ui64 hourEndUs =
-                    publicRowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
-                if (hourEndUs >= NewEvictBeforeHourEndUs) {
-                    NewEvictBeforeHourEndUs = 0;
-                    break;
-                }
-
-                const ui32 rank = publicRowset.GetValue<Schema::MetricsOneHour::Rank>();
-                db.Table<Schema::MetricsOneHour>().Key(hourEndUs, rank).Delete();
-                SizeEvictedBuckets += rank == 1;
-
-                if (++Deleted == BatchSize) {
-                    More = true;
-                    break;
-                }
-
-                if (!publicRowset.Next()) {
-                    return false;
-                }
-            }
-            if (publicRowset.EndOfSet()) {
-                NewEvictBeforeHourEndUs = 0;
-            }
+            Deleted += cleanup.Deleted;
+            SizeEvictedBuckets += cleanup.EvictedBuckets;
+            NewEvictBeforeHourEndUs = cleanup.NewCutoff;
+            More = More || cleanup.More;
         }
 
         if (NewEvictBeforeHourEndUs != Self->MetricsOneHourEvictBeforeHourEndUs) {
-            const ui64 previousCutoff = Self->MetricsOneHourEvictBeforeHourEndUs;
-            Self->MetricsOneHourEvictBeforeHourEndUs = NewEvictBeforeHourEndUs;
-            Self->PersistMetricsOneHourEvictBeforeHourEnd(db);
-            Self->MetricsOneHourEvictBeforeHourEndUs = previousCutoff;
+            Self->PersistMetricsOneHourEvictBeforeHourEnd(
+                db, NewEvictBeforeHourEndUs);
         }
 
         return true;

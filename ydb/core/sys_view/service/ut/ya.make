@@ -9,6 +9,7 @@ PEERDIR(
 
 SRCS(
     query_history_ut.cpp
+    query_interval_ut.cpp
 )
 
 END()

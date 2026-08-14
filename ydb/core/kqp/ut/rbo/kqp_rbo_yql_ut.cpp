@@ -3592,6 +3592,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
+        appConfig.MutableTableServiceConfig()->SetEnablePruneKeyColumns(true);
         appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
@@ -3697,21 +3699,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
+                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)              
                 SELECT t1.Value1, t2.Value1
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
                 WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
+                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)           
                 SELECT t1.Value1, t2.Value1
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
                 WHERE t1.Key = 1
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, Index212 left / Index212 right
+                -- LookupJoin, Index212 left / Index212 right             
                 SELECT t1.Value2, t2.Value2
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
                 WHERE t1.SubKey2 >= "0"

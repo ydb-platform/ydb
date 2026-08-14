@@ -498,26 +498,22 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
-    const bool splitEnabled = NYDBTest::TControllers::GetColumnShardController()->GetEnableIndexBlobSplit();
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-            // The index does not fit the target storage: an inplace (_LOCAL) index cannot be split at all, and
-            // with EnableIndexBlobSplit off no index is split anywhere. Drop it (Success here means "handled",
-            // not "index stored") — the portion stays correct without it, only the skip optimization is lost.
-            // With the flag on a blob-storage chunk was already split to fit, so an oversize one here is a bug.
-            if (indexStorageId == IStoragesManager::LocalMetadataStorageId || !splitEnabled) {
-                auto indexMeta = GetIndexOptional(indexId);
-                YDB_LOG_WARN("",
-                    {"event", "index_skipped"},
-                    {"index_id", indexId},
-                    {"index_name", indexMeta.HasObject() ? indexMeta->GetIndexName() : TString{}},
-                    {"packed_size", chunk->GetPackedSize()},
-                    {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
-                return TConclusionStatus::Success();
-            }
-            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+            // The chunk does not fit the target storage. Inplace (_LOCAL) indexes cannot be split and with the
+            // flag off nothing is split; with the flag on a blob-storage chunk was already split to fit, so
+            // reaching here means the builder produced an oversize chunk anyway. Drop it (Success means
+            // "handled", not "index stored") instead of failing: a failure would abort the compaction and
+            // actualization callers via DetachResult, i.e. the tablet crash #26733 fixes. The portion stays
+            // correct without the index, only the skip optimization is lost.
+            auto indexMeta = GetIndexOptional(indexId);
+            YDB_LOG_WARN("",
+                {"event", "index_skipped"},
+                {"index_id", indexId},
+                {"index_name", indexMeta.HasObject() ? indexMeta->GetIndexName() : TString{}},
+                {"packed_size", chunk->GetPackedSize()},
+                {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
+            return TConclusionStatus::Success();
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {

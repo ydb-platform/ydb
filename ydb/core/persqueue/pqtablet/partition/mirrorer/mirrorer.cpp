@@ -172,9 +172,15 @@ bool AppendToWriteRequest(
     write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
+<<<<<<< HEAD
     if (syncWriteTime) {
         write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
     }
+=======
+    // SyncWriteTime removed; mirrored topics always preserve source write time
+    // (same as PQv1 remote_mirror_rule + client_write_disabled).
+    write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
+>>>>>>> f3674463da7 (Reduce msgbus usage in PQ tests: create/alter/delete via Topic/PersQueue SDK (#49687))
     write->SetDisableDeduplication(true);
     write->SetUncompressedSize(message.GetUncompressedSize());
 
@@ -683,7 +689,8 @@ static EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool ha
 }
 
 void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
-    if (!Config.GetSyncWriteTime() || WriteRequestInFlight || !StreamStatus) {
+    // SyncWriteTime removed; mirrored topics always sync source write-time watermark.
+    if (WriteRequestInFlight || !StreamStatus) {
         return;
     }
     const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());

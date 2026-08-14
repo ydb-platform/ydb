@@ -12,7 +12,34 @@
 
 namespace NKikimr {
 
+<<<<<<< HEAD
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
+=======
+bool ResolveConsumerServiceType(
+    const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQConfig& pqConfig,
+    bool checkServiceType,
+    TString& outServiceType,
+    TString& error)
+{
+    if (consumer.HasServiceType()) {
+        outServiceType = consumer.GetServiceType();
+        return true;
+    }
+    if (!checkServiceType) {
+        outServiceType = "";
+        return true;
+    }
+    if (pqConfig.GetDisallowDefaultClientServiceType()) {
+        error = "service type must be set for all read rules";
+        return false;
+    }
+    outServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+    return true;
+}
+
+bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
+>>>>>>> f3674463da7 (Reduce msgbus usage in PQ tests: create/alter/delete via Topic/PersQueue SDK (#49687))
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
@@ -31,16 +58,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
     }
-    TString serviceType = "";
-    if (in.HasServiceType()) {
-        serviceType = in.GetServiceType();
-    } else if (checkServiceType) {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
+    TString serviceType;
+    if (!ResolveConsumerServiceType(in, pqConfig, checkServiceType, serviceType, error)) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        return false;
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
 

@@ -4,7 +4,9 @@
 #include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <util/generic/hash.h>

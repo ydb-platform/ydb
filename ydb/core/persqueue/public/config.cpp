@@ -98,7 +98,11 @@ TString GetDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer) {
 } // namespace
 
 TString GetNormalizedDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer, const TString& database) {
-    return CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer));
+    const auto dlq = GetDLQTopicPath(consumer);
+    if (dlq.empty()) {
+        return {};
+    }
+    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 THashSet<TString> CollectDLQTopicPaths(

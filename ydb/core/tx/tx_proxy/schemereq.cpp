@@ -86,9 +86,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         // Resolve the path only to check access on it if it exists, absence is not an error.
         bool AllowNotExist = false;
 
-        // DLQ target must resolve to a topic (not a table, CDC stream, directory, …).
-        bool RequireTopic = false;
-
         TPathToResolve(const NKikimrSchemeOp::TModifyScheme& modifyScheme)
             : ModifyScheme(modifyScheme)
         {
@@ -843,7 +840,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 NACLib::EAccessRights::AlterSchema,
                 NACLib::EAccessRights::UpdateRow,
             };
-            toResolve.RequireTopic = true;
             ResolveForACL.push_back(std::move(toResolve));
         }
     }
@@ -1469,49 +1465,32 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    static bool IsCdcDlqTarget(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
-        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            return true;
-        }
-        // CDC implementation topic (`…/feed/streamImpl`) is KindTopic, but schemeshard
-        // marks it with EPathSubTypeStreamImpl when the parent is a CDC stream.
-        return entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic
-            && entry.Self
-            && entry.Self->Info.GetPathSubType() == NKikimrSchemeOp::EPathSubTypeStreamImpl;
-    }
-
     bool CheckDlqTargets(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext& ctx) {
-        auto resolveIt = resolveSet.begin();
-        auto requestIt = ResolveForACL.begin();
-
-        while (resolveIt != resolveSet.end() && requestIt != ResolveForACL.end()) {
-            const auto& entry = *resolveIt;
-            if (requestIt->RequireTopic
-                && entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok)
+        for (size_t i = 0; i < resolveSet.size() && i < ResolveForACL.size(); ++i) {
+            const auto& entry = resolveSet[i];
+            if (ResolveForACL[i].RequireAnyOfAccess.empty()
+                || entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok)
             {
-                const TString path = CanonizePath(entry.Path);
-                TString msg;
-                if (IsCdcDlqTarget(entry)) {
-                    msg = TStringBuilder()
-                        << "CDC stream cannot be used as a dead letter queue: "
-                        << path;
-                } else if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic || !entry.PQGroupInfo) {
-                    msg = TStringBuilder()
-                        << "Dead letter queue path must be a topic, got "
-                        << path;
-                }
-                if (!msg.empty()) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                        << ", " << msg
-                        << ", kind# " << static_cast<int>(entry.Kind)
-                    );
-                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
-                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
-                    return false;
-                }
+                continue;
             }
-            ++resolveIt;
-            ++requestIt;
+
+            const TString path = CanonizePath(entry.Path);
+            const bool isCdc = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream
+                || (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic
+                    && entry.Self
+                    && entry.Self->Info.GetPathSubType() == NKikimrSchemeOp::EPathSubTypeStreamImpl);
+            if (!isCdc && entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic && entry.PQGroupInfo) {
+                continue;
+            }
+
+            const TString msg = isCdc
+                ? TStringBuilder() << "CDC stream cannot be used as a dead letter queue: " << path
+                : TStringBuilder() << "Dead letter queue path must be a topic, got " << path;
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << ", " << msg);
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx, path);
+            return false;
         }
 
         return true;
@@ -1705,20 +1684,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 : CheckAnyOfAccess(*entry.SecurityObject, requestIt->RequireAnyOfAccess, *UserToken);
 
             if (!hasAccess) {
-                TString errString;
-                if (requestIt->RequireAnyOfAccess.empty()) {
-                    errString = MakeAccessDeniedError(ctx, entry.Path, access);
-                } else {
-                    TStringBuilder accessDescription;
-                    for (size_t i = 0; i < requestIt->RequireAnyOfAccess.size(); ++i) {
-                        if (i) {
-                            accessDescription << " or ";
-                        }
-                        accessDescription << NACLib::AccessRightsToString(requestIt->RequireAnyOfAccess[i]);
-                    }
-                    const TString part = TStringBuilder() << "with any of access rights " << accessDescription;
-                    errString = TStringBuilder() << MakeAccessDeniedError(ctx, entry.Path, part) << " " << part;
-                }
+                const TString errString = requestIt->RequireAnyOfAccess.empty()
+                    ? MakeAccessDeniedError(ctx, entry.Path, access)
+                    : TStringBuilder()
+                        << MakeAccessDeniedError(ctx, entry.Path, "with any of access rights AlterSchema or UpdateRow")
+                        << " with any of access rights AlterSchema or UpdateRow";
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 return false;

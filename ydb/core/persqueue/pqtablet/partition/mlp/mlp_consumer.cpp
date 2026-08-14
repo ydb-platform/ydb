@@ -1142,10 +1142,10 @@ void TConsumerActor::MoveToDLQIfPossible() {
 
     auto destinationTopic = [&]() -> TString {
         const auto& dlq = Config.GetDeadLetterQueue();
-        if (dlq.StartsWith("sqs://")) {
+        if (dlq.empty() || dlq.StartsWith("sqs://")) {
             return dlq;
         }
-        return CanonizeAndNormalizePath(Database, dlq);
+        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 
     auto messages = Storage->GetDLQMessages();

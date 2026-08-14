@@ -24,7 +24,6 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);
 
 TString NormalizePath(const TString& database, const TString& path);
-TString CanonizeAndNormalizePath(const TString& database, const TString& path);
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

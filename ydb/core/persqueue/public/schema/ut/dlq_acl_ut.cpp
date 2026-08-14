@@ -143,8 +143,8 @@ THolder<TEvSchemaResponse> CreateTopicWithDLQ(
 THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
-    const char* mainTopic,
-    const char* dlqTopic
+    const TString& mainTopic,
+    const TString& dlqTopic
 ) {
     auto& runtime = setup->GetRuntime();
     const auto userToken = MakeUserToken(userSid);
@@ -610,6 +610,76 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
 
     const TString cdcImplPath = TStringBuilder() << TABLE_NAME << "/" << FEED_NAME << "/streamImpl";
     auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcImplPath);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsATable) {
+    constexpr const char* USER_NAME = "topicuser12";
+    constexpr const char* DLQ_TABLE = "alter-dlqtable";
+    constexpr const char* MAIN_TOPIC = "main-topic-alter-table-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "CREATE TABLE `" << DLQ_TABLE << "` (key Uint64, value String, PRIMARY KEY (key));");
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TABLE);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
+    constexpr const char* USER_NAME = "topicuser13";
+    constexpr const char* TABLE_NAME = "altercdcdlqtable";
+    constexpr const char* FEED_NAME = "feed";
+    constexpr const char* MAIN_TOPIC = "main-topic-alter-cdc-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "ALTER TABLE `" << TABLE_NAME << "` ADD CHANGEFEED `" << FEED_NAME
+        << "` WITH (FORMAT = 'JSON', MODE = 'UPDATES');");
+
+    const TString cdcStreamPath = TStringBuilder() << TABLE_NAME << "/" << FEED_NAME;
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcStreamPath);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "CDC stream cannot be used as a dead letter queue");
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
+    constexpr const char* USER_NAME = "topicuser14";
+    constexpr const char* TABLE_NAME = "altercdcdlqimpltable";
+    constexpr const char* FEED_NAME = "feed";
+    constexpr const char* MAIN_TOPIC = "main-topic-alter-cdc-impl-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
+    NTests::ExecuteDDL(*setup, TStringBuilder()
+        << "ALTER TABLE `" << TABLE_NAME << "` ADD CHANGEFEED `" << FEED_NAME
+        << "` WITH (FORMAT = 'JSON', MODE = 'UPDATES');");
+
+    const TString cdcImplPath = TStringBuilder() << TABLE_NAME << "/" << FEED_NAME << "/streamImpl";
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, cdcImplPath);
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);

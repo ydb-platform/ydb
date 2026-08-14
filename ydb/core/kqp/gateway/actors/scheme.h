@@ -77,9 +77,8 @@ public:
                     {"txId", response.GetTxId()});
 
                 NYql::TIssues issues;
-                if (!response.GetIssues().empty()) {
-                    NYql::IssuesFromMessage(response.GetIssues(), issues);
-                } else {
+                NYql::IssuesFromMessage(response.GetIssues(), issues);
+                if (issues.Empty()) {
                     issues.AddIssue(NYql::TIssue(NYql::TPosition(), "Access denied."));
                 }
                 Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
@@ -136,9 +135,7 @@ public:
                     this->Die(ctx);
                 } else {
                     NYql::TIssues issues;
-                    if (!response.GetIssues().empty()) {
-                        NYql::IssuesFromMessage(response.GetIssues(), issues);
-                    }
+                    NYql::IssuesFromMessage(response.GetIssues(), issues);
                     Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
                         response.GetSchemeShardReason(), issues));
                     this->Die(ctx);

@@ -17,6 +17,7 @@ SRCS(
     columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
+    columnshard_cut_history.cpp
     columnshard_impl.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
@@ -106,6 +107,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_cut_history
     ut_rw
     ut_schema
     backup

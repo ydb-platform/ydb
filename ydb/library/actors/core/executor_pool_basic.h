@@ -17,6 +17,7 @@
 #include <library/cpp/threading/chunk_queue/queue.h>
 
 #include <util/system/mutex.h>
+#include <util/generic/vector.h>
 
 namespace NActors {
 
@@ -158,6 +159,7 @@ namespace NActors {
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
+        TAtomic SuggestedThreadCount;
         std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
@@ -176,7 +178,15 @@ namespace NActors {
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
         TExecutorPoolJail *Jail = nullptr;
         TSharedExecutorPool *SharedPool = nullptr;
+        class TWaker;
         std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
+        std::unique_ptr<TWaker> Waker;
+
+        const bool EnableWaker;
+        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i64>> ActivationCredits = 0;
+        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i16>> SleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic_bool> WakerPending = false;
+        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<TThreadParkPad> WakerPad;
 
     public:
         struct TSemaphore {
@@ -229,6 +239,7 @@ namespace NActors {
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -236,6 +247,7 @@ namespace NActors {
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
         void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
+        void ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingWriteCounter);
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -282,6 +294,8 @@ namespace NActors {
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
+        void RequestWaker();
+        void WakerLoop();
 
     };
 }

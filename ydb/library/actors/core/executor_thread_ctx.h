@@ -11,19 +11,22 @@
 
 namespace NActors {
     class TExecutorThread;
+    class TBasicExecutorPool;
     class IExecutorPool;
 
     enum class EThreadState : ui64 {
         None,
         Spin,
         Sleep,
-        Work
+        Work,
+        Blocking
     };
 
     struct TGenericExecutorThreadCtx {
         std::unique_ptr<TExecutorThread> Thread;
 
     protected:
+        friend class TBasicExecutorPool;
         friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;
 
@@ -87,6 +90,27 @@ namespace NActors {
         bool Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag); // in executor_pool_basic.cpp
 
         bool WakeUp();
+
+        bool StartWakerWait() {
+            EThreadState expected = EThreadState::None;
+            return ReplaceState(expected, EThreadState::Spin);
+        }
+
+        bool StartWakerBlocking() {
+            EThreadState expected = EThreadState::None;
+            return ReplaceState(expected, EThreadState::Blocking);
+        }
+
+        bool WakeFromWaker() {
+            EThreadState expected = EThreadState::Sleep;
+            if (!ReplaceState(expected, EThreadState::None)) {
+                return false;
+            }
+            WaitingPad.Unpark();
+            return true;
+        }
+
+        bool WaitForWaker(ui64 spinThresholdCycles, std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits);
 
         void Interrupt() {
             WaitingPad.Interrupt();

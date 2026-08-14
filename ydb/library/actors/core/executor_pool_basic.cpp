@@ -11,9 +11,11 @@
 #include "debug.h"
 #include "thread_context.h"
 #include <atomic>
+#include <algorithm>
 #include <memory>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/util/thread.h>
 
 #ifdef _linux_
 #include <pthread.h>
@@ -31,6 +33,35 @@
 
 
 namespace NActors {
+
+    class TBasicExecutorPool::TWaker : public ISimpleThread {
+    public:
+        explicit TWaker(TBasicExecutorPool* pool)
+            : Pool(pool)
+            , ThreadName(pool->PoolName ? pool->PoolName + "_waker" : "BasicPoolWaker")
+        {
+            SleepingStack.reserve(Pool->MaxFullThreadCount);
+            ActiveWorkers.reserve(Pool->MaxFullThreadCount);
+            ActiveMask.resize(Pool->MaxFullThreadCount, true);
+            for (i16 workerId = 0; workerId < Pool->MaxFullThreadCount; ++workerId) {
+                ActiveWorkers.push_back(workerId);
+            }
+        }
+
+        void* ThreadProc() override {
+            ::SetCurrentThreadName(ThreadName);
+            Pool->WakerLoop();
+            return nullptr;
+        }
+
+    private:
+        friend class TBasicExecutorPool;
+        TBasicExecutorPool* const Pool;
+        const TString ThreadName;
+        TVector<i16> SleepingStack;
+        TVector<i16> ActiveWorkers;
+        TVector<bool> ActiveMask;
+    };
 
     namespace {
 #ifdef ACTOR_SANITIZER
@@ -107,6 +138,7 @@ namespace NActors {
         , EventsPerMailboxValue(cfg.EventsPerMailbox)
         , RealtimePriority(cfg.RealtimePriority)
         , ThreadCount(cfg.Threads)
+        , SuggestedThreadCount(cfg.Threads)
         , MinFullThreadCount(cfg.MinThreadCount)
         , MaxFullThreadCount(cfg.MaxThreadCount)
         , DefaultFullThreadCount(cfg.DefaultThreadCount)
@@ -116,6 +148,7 @@ namespace NActors {
         , SharedOnly(cfg.ForcedForeignSlotCount || cfg.AdjacentPools.size() || (!cfg.Threads && !cfg.MaxThreadCount))
         , Priority(cfg.Priority)
         , Jail(jail)
+        , EnableWaker(cfg.EnableWaker)
         , ActorSystemProfile(cfg.ActorSystemProfile)
     {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
@@ -181,6 +214,7 @@ namespace NActors {
         }
 
         ThreadCount = static_cast<i16>(MaxFullThreadCount);
+        SuggestedThreadCount = ThreadCount;
         auto semaphore = TSemaphore();
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
@@ -194,6 +228,11 @@ namespace NActors {
         }
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
+        if (EnableWaker) {
+            Y_ABORT_UNLESS(!HasOwnSharedThread && !SharedOnly,
+                "EnableWaker is supported only for non-shared Basic executor pools");
+            Waker = std::make_unique<TWaker>(this);
+        }
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
@@ -256,13 +295,13 @@ namespace NActors {
 
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
-        Threads[workerId].UnsetWork();
         if (Harmonizer) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "try to harmonize");
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "harmonize done");
         }
+        Threads[workerId].UnsetWork();
 
         while (!StopFlag.load(std::memory_order_acquire)) {
             {
@@ -307,9 +346,212 @@ namespace NActors {
         return nullptr;
     }
 
+    TMailbox* TBasicExecutorPool::GetReadyActivationWaker(ui64 revolvingCounter) {
+        if (StopFlag.load(std::memory_order_acquire)) {
+            return nullptr;
+        }
+
+        const TWorkerId workerId = TlsThreadContext->WorkerId();
+        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
+        if (Harmonizer) {
+            LWPROBE(TryToHarmonize, PoolId, PoolName);
+            Harmonizer->Harmonize(hpnow);
+        }
+        Threads[workerId].UnsetWork();
+
+        while (!StopFlag.load(std::memory_order_acquire)) {
+            ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
+            bool needToBlock = false;
+            while (checkToSleepWorkers) {
+                if (CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1,
+                        std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    needToBlock = true;
+                    break;
+                }
+            }
+            if (needToBlock) {
+                Y_ABORT_UNLESS(Threads[workerId].StartWakerBlocking());
+                RequestWaker();
+                if (Threads[workerId].WaitForWaker(0, &StopFlag, &ActivationCredits)) {
+                    return nullptr;
+                }
+                continue;
+            }
+
+            {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> queueActivityGuard;
+                if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+                    Threads[workerId].SetWork();
+                    const i64 previousCredits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
+                    Y_DEBUG_ABORT_UNLESS(previousCredits > 0);
+                    return MailboxTable->Get(activation);
+                }
+            }
+
+            if (ActivationCredits.load(std::memory_order_acquire) > 0) {
+                SpinLockPause();
+                continue;
+            }
+
+            if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
+                return nullptr;
+            }
+
+            if (Threads[workerId].StartWakerWait()) {
+                RequestWaker();
+                if (Threads[workerId].WaitForWaker(SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &ActivationCredits)) {
+                    return nullptr;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     TMailbox* TBasicExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
+        if (EnableWaker) {
+            return GetReadyActivationWaker(revolvingCounter);
+        }
         return GetReadyActivationRingQueue(revolvingCounter);
+    }
+
+    void TBasicExecutorPool::RequestWaker() {
+        if (!WakerPending.exchange(true, std::memory_order_acq_rel)) {
+            WakerPad.Unpark();
+        }
+    }
+
+    void TBasicExecutorPool::WakerLoop() {
+        const auto removeActiveWorker = [&](i16 workerId) {
+            Waker->ActiveMask[workerId] = false;
+            auto it = std::find(Waker->ActiveWorkers.begin(), Waker->ActiveWorkers.end(), workerId);
+            Y_ABORT_UNLESS(it != Waker->ActiveWorkers.end());
+            *it = Waker->ActiveWorkers.back();
+            Waker->ActiveWorkers.pop_back();
+        };
+        while (!StopFlag.load(std::memory_order_acquire)) {
+            if (WakerPad.Park()) {
+                break;
+            }
+            WakerPending.store(false, std::memory_order_release);
+
+            const i16 threadCount = AtomicLoad(&SuggestedThreadCount);
+            CheckToSleepWorkers.store(0, std::memory_order_release);
+
+            for (size_t idx = 0; idx < Waker->ActiveWorkers.size();) {
+                const i16 workerId = Waker->ActiveWorkers[idx];
+                EThreadState expected = EThreadState::Blocking;
+                if (Threads[workerId].GetState<EThreadState>() != EThreadState::Blocking) {
+                    ++idx;
+                    continue;
+                }
+                if (Waker->ActiveWorkers.size() > static_cast<size_t>(threadCount)) {
+                    if (Threads[workerId].ReplaceState(expected, EThreadState::Sleep)) {
+                        Waker->SleepingStack.push_back(workerId);
+                        removeActiveWorker(workerId);
+                        continue;
+                    }
+                } else {
+                    if (Threads[workerId].ReplaceState(expected, EThreadState::None)) {
+                        Threads[workerId].WaitingPad.Unpark();
+                    }
+                }
+                ++idx;
+            }
+
+            for (size_t idx = 0; idx < Waker->ActiveWorkers.size()
+                    && Waker->ActiveWorkers.size() > static_cast<size_t>(threadCount);) {
+                const i16 workerId = Waker->ActiveWorkers[idx];
+                const EThreadState state = Threads[workerId].GetState<EThreadState>();
+                if (state == EThreadState::Sleep) {
+                    SleepingCount.fetch_sub(1, std::memory_order_acq_rel);
+                    removeActiveWorker(workerId);
+                    continue;
+                }
+                if (state == EThreadState::Spin) {
+                    EThreadState expected = EThreadState::Spin;
+                    if (Threads[workerId].ReplaceState(expected, EThreadState::Sleep)) {
+                        Waker->SleepingStack.push_back(workerId);
+                        removeActiveWorker(workerId);
+                        continue;
+                    }
+                }
+                ++idx;
+            }
+
+            while (Waker->ActiveWorkers.size() < static_cast<size_t>(threadCount)) {
+                auto it = std::find_if(Waker->SleepingStack.rbegin(), Waker->SleepingStack.rend(), [&](i16 workerId) {
+                    return !Waker->ActiveMask[workerId];
+                });
+                if (it == Waker->SleepingStack.rend()) {
+                    break;
+                }
+                const i16 workerId = *it;
+                Waker->ActiveMask[workerId] = true;
+                Waker->ActiveWorkers.push_back(workerId);
+                SleepingCount.fetch_add(1, std::memory_order_release);
+            }
+
+            const i16 activeThreadCount = static_cast<i16>(Waker->ActiveWorkers.size());
+            if (activeThreadCount > threadCount) {
+                CheckToSleepWorkers.store(activeThreadCount - threadCount, std::memory_order_release);
+            }
+            AtomicSet(ThreadCount, activeThreadCount);
+
+            const auto countSearchingWorkers = [&] {
+                i16 count = 0;
+                for (i16 workerId : Waker->ActiveWorkers) {
+                    if (Threads[workerId].GetState<EThreadState>() == EThreadState::None) {
+                        ++count;
+                    }
+                }
+                return count;
+            };
+
+            i64 budget = Max<i64>(ActivationCredits.load(std::memory_order_acquire) - countSearchingWorkers(), 0);
+            i16 newlySleeping = 0;
+
+            for (i16 workerId : Waker->ActiveWorkers) {
+                EThreadState expected = EThreadState::Spin;
+                if (budget > 0) {
+                    if (Threads[workerId].ReplaceState(expected, EThreadState::None)) {
+                        --budget;
+                    }
+                } else if (Threads[workerId].ReplaceState(expected, EThreadState::Sleep)) {
+                    Waker->SleepingStack.push_back(workerId);
+                    ++newlySleeping;
+                }
+            }
+
+            if (newlySleeping) {
+                SleepingCount.fetch_add(newlySleeping, std::memory_order_release);
+            }
+
+            // This reload closes the race where a producer publishes a credit
+            // before the waker publishes the corresponding sleeping worker.
+            budget = Max<i64>(ActivationCredits.load(std::memory_order_acquire) - countSearchingWorkers(), 0);
+            while (budget > 0) {
+                bool wokeWorker = false;
+                for (size_t idx = Waker->SleepingStack.size(); idx > 0; --idx) {
+                    const i16 workerId = Waker->SleepingStack[idx - 1];
+                    if (!Waker->ActiveMask[workerId]) {
+                        continue;
+                    }
+                    Waker->SleepingStack.erase(Waker->SleepingStack.begin() + idx - 1);
+                    if (Threads[workerId].WakeFromWaker()) {
+                        SleepingCount.fetch_sub(1, std::memory_order_acq_rel);
+                        --budget;
+                        wokeWorker = true;
+                    }
+                    break;
+                }
+                if (!wokeWorker) {
+                    break;
+                }
+            }
+        }
     }
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
@@ -383,7 +625,19 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) {
+        if (EnableWaker) {
+            ScheduleActivationExWaker(mailbox, revolvingCounter);
+            return;
+        }
         ScheduleActivationExRingQueue(mailbox, revolvingCounter, std::nullopt);
+    }
+
+    void TBasicExecutorPool::ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter) {
+        ActivationCredits.fetch_add(1, std::memory_order_acq_rel);
+        Activations.Push(mailbox->Hint, revolvingCounter);
+        if (SleepingCount.load(std::memory_order_acquire) > 0) {
+            RequestWaker();
+        }
     }
 
     void TBasicExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
@@ -470,6 +724,10 @@ namespace NActors {
         ThreadUtilization = 0;
         AtomicAdd(MaxUtilizationCounter, -(i64)GetCycleCountFast());
 
+        if (EnableWaker) {
+            Waker->Start();
+        }
+
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread->Start();
         }
@@ -483,6 +741,9 @@ namespace NActors {
     void TBasicExecutorPool::PrepareStop() {
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stop flag set");
         StopFlag.store(true, std::memory_order_release);
+        if (EnableWaker) {
+            WakerPad.Interrupt();
+        }
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
@@ -495,6 +756,9 @@ namespace NActors {
 
     void TBasicExecutorPool::Shutdown() {
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
+        if (EnableWaker) {
+            Waker->Join();
+        }
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join ", i);
             Threads[i].Thread->Join();
@@ -560,6 +824,14 @@ namespace NActors {
     void TBasicExecutorPool::SetFullThreadCount(i16 threads) {
         threads = Max<i16>(MinFullThreadCount, Min(MaxFullThreadCount, threads));
         with_lock (ChangeThreadsLock) {
+            if (EnableWaker) {
+                if (AtomicLoad(&SuggestedThreadCount) != threads) {
+                    AtomicSet(SuggestedThreadCount, threads);
+                    RequestWaker();
+                }
+                LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);
+                return;
+            }
             i16 prevCount = GetFullThreadCount();
             AtomicSet(ThreadCount, threads);
             TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));

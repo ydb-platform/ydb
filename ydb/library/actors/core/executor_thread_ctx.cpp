@@ -87,6 +87,31 @@ namespace NActors {
         return Sleep(stopFlag);
     }
 
+    bool TExecutorThreadCtx::WaitForWaker(ui64 spinThresholdCycles, std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits) {
+        Y_UNUSED(spinThresholdCycles);
+        EThreadState state = GetState<EThreadState>();
+        while (state == EThreadState::Spin && !stopFlag->load(std::memory_order_relaxed)) {
+            if (activationCredits->load(std::memory_order_acquire) > 0) {
+                EThreadState expected = EThreadState::Spin;
+                if (ReplaceState(expected, EThreadState::None)) {
+                    return false;
+                }
+                state = expected;
+                continue;
+            }
+            SpinLockPause();
+            state = GetState<EThreadState>();
+        }
+
+        while ((state == EThreadState::Sleep || state == EThreadState::Blocking) && !stopFlag->load(std::memory_order_relaxed)) {
+            if (WaitingPad.Park()) {
+                return true;
+            }
+            state = GetState<EThreadState>();
+        }
+        return stopFlag->load(std::memory_order_relaxed);
+    }
+
     bool TExecutorThreadCtx::WakeUp() {
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP, false> activityGuard;
         for (ui32 i = 0; i < 2; ++i) {
@@ -109,6 +134,8 @@ namespace NActors {
                         return true;
                     }
                     break;
+                case EThreadState::Blocking:
+                    return false;
                 default:
                     Y_ABORT();
             }

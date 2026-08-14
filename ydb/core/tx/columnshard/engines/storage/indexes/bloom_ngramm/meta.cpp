@@ -318,7 +318,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         ui32 size = filterSizeBytes * CHAR_BIT;
         if ((size & (size - 1)) == 0) {
             ui32 recordsCountBase = resolvedRecordsCount;
-            while (recordsCountBase < records && size * 2 <= TConstants::MaxFilterSizeBytes) {
+            while (recordsCountBase < records && size * 2 <= TConstants::MaxFilterSizeBits) {
                 size <<= 1;
                 recordsCountBase *= 2;
             }

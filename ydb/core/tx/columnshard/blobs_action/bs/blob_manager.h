@@ -18,7 +18,8 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
-}
+class THistoryCutterWrapper;
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage
 
 namespace NKikimr::NOlap {
 
@@ -177,6 +178,7 @@ private:
 
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+    ~TBlobManager();
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
@@ -238,7 +240,19 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 
+    // Returns true if none of BlobsToKeep / BlobsToDelete / BlobsToDeleteDelayed contains a
+    // blob with the given channel and generation in [fromGen, nextFromGen).
+    bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
+
+    // Access to the cut history cutter (null if not initialized).
+    NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
+
+    // Called by TColumnShard after boot to wire up the cutter.
+    void InitHistoryCutter(const TActorId& tabletActorId);
+
 private:
+    // Forward-declared to avoid circular include; defined in blob_manager.cpp.
+    std::unique_ptr<NBlobOperations::NBlobStorage::THistoryCutterWrapper> HistoryCutter;
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
     void PopGCBarriers(const ui32 count);

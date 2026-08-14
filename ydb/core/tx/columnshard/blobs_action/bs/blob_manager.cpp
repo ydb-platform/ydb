@@ -1,5 +1,6 @@
 #include "blob_manager.h"
 #include "gc.h"
+#include "history_cutter.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
@@ -144,6 +145,17 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 {
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
+    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, this, TActorId{});
+}
+
+TBlobManager::~TBlobManager() = default;
+
+void TBlobManager::InitHistoryCutter(const TActorId& tabletActorId) {
+    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, this, tabletActorId);
+}
+
+NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCutter() {
+    return HistoryCutter.get();
 }
 
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
@@ -545,6 +557,30 @@ void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
         AFL_VERIFY(GCBarrierPreparation <= *genStep)("last", GCBarrierPreparation)("prepared", genStep);
         GCBarrierPreparation = *genStep;
     }
+}
+
+bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+    // BlobsToKeep is a sorted set — we can scan only the relevant portion.
+    // TBlobsByGenStep::Blobs is private; iterate via the set (no public begin/end on range).
+    // We walk BlobsToDelete and BlobsToDeleteDelayed via their public begin/end.
+    const auto checkTabletsByBlob = [&](const TTabletsByBlob& m) {
+        for (const auto& [blobId, _] : m) {
+            const TLogoBlobID& lid = blobId.GetLogoBlobId();
+            if (lid.Channel() == channel && lid.Generation() >= fromGen && lid.Generation() < nextFromGen) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!checkTabletsByBlob(BlobsToDelete)) {
+        return false;
+    }
+    if (!checkTabletsByBlob(BlobsToDeleteDelayed)) {
+        return false;
+    }
+    // BlobsToKeep: use a lambda via ExtractTo — but that's destructive.
+    // Instead expose a const scan via HasBlobForChannelRange.
+    return BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);
 }
 
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {

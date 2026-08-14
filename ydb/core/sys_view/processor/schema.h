@@ -54,10 +54,11 @@ struct TProcessorSchema : NIceDb::Schema {
         struct ByReadBytes : Column<5, NScheme::NTypeIds::String> {};
         struct ByCpuTime   : Column<6, NScheme::NTypeIds::String> {};
         struct ByRequestUnits : Column<7, NScheme::NTypeIds::String> {};
+        struct IntervalEnd : Column<8, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<NodeId>;
         using TColumns = TableColumns<NodeId, QueryHashes, TextsToGet,
-            ByDuration, ByReadBytes, ByCpuTime, ByRequestUnits>;
+            ByDuration, ByReadBytes, ByCpuTime, ByRequestUnits, IntervalEnd>;
     };
 
 #define RESULT_QUERY_TABLE(TableName, TableID)                           \

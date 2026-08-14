@@ -8,6 +8,7 @@ namespace NKikimr::NSysView {
 
 struct TQueryMetricsRetentionPlan {
     TVector<ui64> BucketsToEvict;
+    ui64 EvictBeforeHourEnd = 0;
     ui64 RetainedBytes = 0;
 };
 
@@ -30,6 +31,13 @@ inline TQueryMetricsRetentionPlan PlanQueryMetricsRetention(
         }
         result.BucketsToEvict.push_back(hourEnd);
         result.RetainedBytes -= bytes;
+    }
+
+    if (!result.BucketsToEvict.empty()) {
+        auto firstRetained = bucketBytes.upper_bound(result.BucketsToEvict.back());
+        result.EvictBeforeHourEnd = firstRetained != bucketBytes.end()
+            ? firstRetained->first
+            : result.BucketsToEvict.back() + 1;
     }
 
     return result;

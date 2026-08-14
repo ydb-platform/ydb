@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 #include <ydb/core/util/format.h>
 
+#include <algorithm>
 #include <concepts>
 
 using namespace NKikimrServices;
@@ -430,13 +431,7 @@ namespace NKikimr {
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
 
-        struct TEvAckTimeout : TEventLocal<TEvAckTimeout, EvAckTimeout> {
-            explicit TEvAckTimeout(ui64 sequenceId)
-                : SequenceId(sequenceId)
-            {}
-
-            const ui64 SequenceId;
-        };
+        struct TEvAckTimeout : TEventLocal<TEvAckTimeout, EvAckTimeout> {};
 
         static constexpr ui64 DefaultBatchBytes = 1 << 20;
         static constexpr ui64 MinBatchBytes = 64 << 10;
@@ -455,11 +450,12 @@ namespace NKikimr {
             const ui64 requested = request.max_batch_bytes()
                 ? request.max_batch_bytes()
                 : Min(DefaultBatchBytes, configuredMax);
-            return Min(Max(requested, configuredMin), configuredMax);
+            return std::clamp(requested, configuredMin, configuredMax);
         }
 
         void Bootstrap() {
             TThis::Become(&TThis::StateTraverse);
+            TThis::Schedule(AckTimeout, new TEvAckTimeout);
             ContinueTraversal();
         }
 
@@ -531,14 +527,14 @@ namespace NKikimr {
 
         void ReplyAndWaitForAck() {
             OutstandingSequence = ++LastSentSequence;
+            AckDeadline = TActivationContext::Monotonic() + AckTimeout;
             TThis::Become(&TThis::StateWaitAck);
-            TThis::Schedule(AckTimeout, new TEvAckTimeout(OutstandingSequence));
             SendBatch(true, OutstandingSequence);
         }
 
         void ReplyAndDie() {
             SendBatch(false, ++LastSentSequence);
-            TThis::PassAway();
+            return TThis::PassAway();
         }
 
         bool ValidateControlMessage(const TAck::TPtr& ev) const {
@@ -552,9 +548,9 @@ namespace NKikimr {
 
             const auto& record = ev->Get()->Record;
             if (record.has_cancel() && record.cancel()) {
-                TThis::PassAway();
+                return TThis::PassAway();
             } else if (record.has_sequence_id() && record.sequence_id() > LastSentSequence) {
-                TThis::PassAway();
+                return TThis::PassAway();
             }
         }
 
@@ -580,14 +576,20 @@ namespace NKikimr {
             }
 
             OutstandingSequence = 0;
+            AckDeadline = TMonotonic::Max();
             TThis::Become(&TThis::StateTraverse);
             RequestSnapshot();
         }
 
         void HandleAckTimeout(TEvAckTimeout::TPtr& ev) {
-            if (ev->Get()->SequenceId == OutstandingSequence) {
-                TThis::PassAway();
+            const TMonotonic now = TActivationContext::Monotonic();
+            if (OutstandingSequence && AckDeadline <= now) {
+                return TThis::PassAway();
             }
+
+            TThis::Schedule(
+                OutstandingSequence ? AckDeadline : now + AckTimeout,
+                ev->Release().Release());
         }
 
         STRICT_STFUNC(StateTraverse, {
@@ -595,7 +597,7 @@ namespace NKikimr {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
             hFunc(TEvTakeHullSnapshotResult, Handle);
             hFunc(TAck, HandleAckWhileTraversing);
-            IgnoreFunc(TEvAckTimeout);
+            hFunc(TEvAckTimeout, HandleAckTimeout);
         })
 
         STRICT_STFUNC(StateWaitAck, {
@@ -627,7 +629,7 @@ namespace NKikimr {
         void PassAway() override {
             ReleaseSnapshot();
             TThis::Send(ParentId, new TEvents::TEvGone);
-            TBase::PassAway();
+            return TBase::PassAway();
         }
 
     private:
@@ -642,6 +644,7 @@ namespace NKikimr {
         std::optional<TYieldedState> YieldedState;
         ui64 LastSentSequence = 0;
         ui64 OutstandingSequence = 0;
+        TMonotonic AckDeadline = TMonotonic::Max();
     };
 
     template <>

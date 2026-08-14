@@ -1461,17 +1461,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         );
         NYdb::NTopic::TTopicClient topicClient(driver);
         {
-<<<<<<< HEAD
-            NYdb::TDriver driver(
-                NYdb::TDriverConfig()
-                    .SetEndpoint(location)
-                    .SetDatabase(databasePath)
-            );
-            NYdb::NTopic::TTopicClient topicClient(driver);
-            auto result = topicClient.CreateTopic(topicName).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            driver.Stop(true);
-=======
             WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
                 auto result = topicClient.CreateTopic(topicName).GetValueSync();
                 if (result.IsSuccess()) {
@@ -1481,7 +1470,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
                 return false;
             });
->>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
         }
 
         constexpr char missingSecretPath[] = "eds_missing_iam_token";

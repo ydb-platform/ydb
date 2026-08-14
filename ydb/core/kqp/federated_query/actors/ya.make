@@ -17,15 +17,11 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/library/aclib
     ydb/library/actors/core
-<<<<<<< HEAD
     ydb/services/metadata/secret
-=======
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/services/scheme_secret
->>>>>>> 7afa21d8741 (AUTH_METHOD=IAM: implement ServiceAccountId permission check (#46107))
 )
 
 YQL_LAST_ABI_VERSION()

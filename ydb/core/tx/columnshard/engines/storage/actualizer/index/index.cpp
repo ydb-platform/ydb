@@ -85,7 +85,7 @@ ui64 TGranuleActualizationIndex::GetMoveDataPortionsCount() const {
     if (!MoveDataActualizer) {
         return 0;
     }
-    return MoveDataActualizer->GetPortionsToMoveCount();
+    return MoveDataActualizer->GetMoveDataPortionsCount();
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {

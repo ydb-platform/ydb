@@ -39,7 +39,7 @@ public:
     }
 
     virtual bool HasBlobsForGroups(const THashSet<ui32>& groups) const override {
-        return Manager->HasBlobsForGroups(groups);
+        return Manager->HasBlobsForGroups(groups) || TBase::HasBlobsForGroups(groups);
     }
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {

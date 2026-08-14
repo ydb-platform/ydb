@@ -188,11 +188,9 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
             }
-            // Check if the source table has tiering configured with external storage
             if (auto tableTtl = owner.TablesManager.GetTableTtl(*srcInternalPathId)) {
                 if (!tableTtl->GetUsedTiers().empty()) {
-                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
-                        "Cannot move a table with configured tiering to external storage.");
+                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Cannot move a table that has tiering configured");
                 }
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transaction for moving pathId only

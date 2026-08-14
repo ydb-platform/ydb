@@ -940,9 +940,9 @@ public:
     }
 
     void SendRequest() {
-        YDB_LOG_DEBUG("Sending Authorize request",
-                {"serviceAccountId", ServiceAccountId},
-                {"permission", Permission});
+        LOG_D("Sending Authorize request"
+                << ", serviceAccountId" << ServiceAccountId
+                << ", permission" << Permission);
 
         const auto setupRequest = [&](auto& request) {
             request->Request.set_permission(Permission);
@@ -966,12 +966,12 @@ public:
     template <typename TEvResponse>
     void HandleAuthorizeResultImpl(typename TEvResponse::TPtr& ev) {
         if (ev->Get()->Status.Ok()) {
-            YDB_LOG_DEBUG("Authorize success",
-                    {"response", ev->Get()->Response.DebugString()});
+            LOG_D("Authorize success"
+                    ", response" << ev->Get()->Response.DebugString());
         } else {
-            YDB_LOG_WARN("Authorize failure",
-                    {"status", ev->Get()->Status.ToDebugString()},
-                    {"iteration", Backoff.GetIteration()});
+            LOG_D("Authorize failure"
+                    << ", status" << ev->Get()->Status.ToDebugString()
+                    << ", iteration" << Backoff.GetIteration());
             if (IsRetryableGrpcError(ev->Get()->Status) && Backoff.HasMore()) {
                 auto delay = Backoff.Next();
                 Schedule(delay, new NActors::TEvents::TEvWakeup());

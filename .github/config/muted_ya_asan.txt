@@ -543,6 +543,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
+ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithEmptyDatabase
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.CustomAccessRightsAlterSchema
 ydb/core/persqueue/public/describer/ut TDescriberTests.MultipleCDC

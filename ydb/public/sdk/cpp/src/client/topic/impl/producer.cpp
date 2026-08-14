@@ -635,14 +635,11 @@ std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEve
     return std::nullopt;
 }
 
-std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMessage() {
+void TProducer::TEventsWorker::HandleNewMessage() {
     std::lock_guard lock(Lock);
-    if (Producer->MessagesWorker->IsMemoryUsageOK()) {
-        return std::nullopt;
+    if (!Producer->MessagesWorker->IsMemoryUsageOK()) {
+        Producer->Metrics.IncBufferFull();
     }
-
-    Producer->Metrics.IncBufferFull();
-    return std::nullopt;
 }
 
 bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
@@ -2092,7 +2089,6 @@ void TProducer::RunMainWorker(std::int64_t owner) {
 }
 
 TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& message, bool checkMemory) {
-    std::optional<NThreading::TPromise<void>> eventsPromise;
     {
         std::lock_guard lock(GlobalLock);
         if (Closed.load()) {
@@ -2153,14 +2149,11 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         }
 
         MessagesWorker->AddMessage(key, choosePartitionKey, std::move(message), chosenPartition);
-        eventsPromise = EventsWorker->HandleNewMessage();
+        EventsWorker->HandleNewMessage();
         RunUserEventLoop();
     }
 
     RunMainWorker(-1);
-    if (eventsPromise) {
-        eventsPromise->TrySetValue();
-    }
 
     return TWriteResult{
         .Status = EWriteStatus::Queued,

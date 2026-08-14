@@ -271,7 +271,7 @@ private:
         NThreading::TPromise<void> WakeAndRotate();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
-        std::optional<NThreading::TPromise<void>> HandleNewMessage();
+        void HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, const std::vector<EEventType>& eventTypes = {});
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});

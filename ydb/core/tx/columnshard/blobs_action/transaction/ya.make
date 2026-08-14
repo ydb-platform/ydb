@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    tx_cut_history_sweep.cpp
     tx_draft.cpp
     tx_write_index.cpp
     tx_gc_indexed.cpp

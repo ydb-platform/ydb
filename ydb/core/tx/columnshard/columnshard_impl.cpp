@@ -521,6 +521,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupMetadata();
     SetupTtl();
     SetupGC();
+    SetupCutHistory();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
@@ -1935,6 +1936,9 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvWriteDraft, Handle);
         HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
         HFunc(TEvPrivate::TEvTieringModified, Handle);
+        HFunc(TEvPrivate::TEvStartCutHistorySweep, Handle);
+        HFunc(TEvPrivate::TEvCutHistoryBarrierDone, Handle);
+        HFunc(TEvPrivate::TEvCutHistorySweepBatchDone, Handle);
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

@@ -43,7 +43,9 @@ public:
 
     TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
     {
-        return MakeFuture(TAuthenticationResult());
+        return MakeFuture(TAuthenticationResult{
+            .User = "authenticated-user",
+        });
     }
 };
 

@@ -62,13 +62,15 @@ private:
         bool IsZeroEntry = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         TWriteSource WriteSource;
+        NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
                 NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock, bool alreadyEncrypted, bool isZeroEntry,
-                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource, bool single,
+                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource,
+                NKikimrBlobStorage::TDataKind::E dataKind, bool single,
                 std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
             : BlobId(id)
             , Buffer(std::move(buffer))
@@ -82,6 +84,7 @@ private:
             , IsZeroEntry(isZeroEntry)
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , WriteSource(writeSource)
+            , DataKind(dataKind)
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(executionRelay))
             , Deadline(deadline)
@@ -137,7 +140,8 @@ public:
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry,std::move(ev->ExtraBlockChecks), ev->WriteSource, true,
+            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry,std::move(ev->ExtraBlockChecks), ev->WriteSource,
+            ev->DataKind, true,
             std::move(ev->ExecutionRelay),
             ev->Deadline);
 
@@ -173,7 +177,7 @@ public:
             Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, msg.AlreadyEncrypted, msg.IsZeroEntry,
                 std::move(msg.ExtraBlockChecks),
-                msg.WriteSource, false, std::move(msg.ExecutionRelay), msg.Deadline);
+                msg.WriteSource, msg.DataKind, false, std::move(msg.ExecutionRelay), msg.Deadline);
 
             auto& blob = Blobs.back();
             LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -259,7 +263,7 @@ public:
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
-                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource);
+                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource, blob.DataKind);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -300,7 +304,8 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming, blob.WriteSource);
+                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming, blob.WriteSource,
+                        blob.DataKind);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

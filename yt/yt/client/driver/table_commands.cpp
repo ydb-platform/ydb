@@ -1291,11 +1291,11 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (Path.GetColumns()) {
         THROW_ERROR_EXCEPTION("Columns cannot be specified with table path, use \"column_names\" instead")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     if (Versioned && Options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
@@ -1437,7 +1437,7 @@ void TPullRowsCommand::DoExecute(ICommandContextPtr context)
 {
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     auto format = context->GetOutputFormat();

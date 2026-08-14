@@ -23,6 +23,14 @@ namespace {
 constexpr auto MinBackoff = TDuration::MilliSeconds(100);
 constexpr auto MaxBackoff = TDuration::Seconds(10);
 
+TBlockRange64 TrimRange(TBlockRange64 range, size_t maxBlockCount)
+{
+    if (range.Size() > maxBlockCount) {
+        return TBlockRange64::WithLength(range.Start, maxBlockCount);
+    }
+    return range;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -101,15 +109,9 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
         }
     }
 
-    if (auto watermark = DirtyMap->GetFreshWatermark(Destination)) {
-        FreshWatermark = *watermark;
-        Complete = NewPromise<EResult>();
-        StartCopyRange();
-        return Complete.GetFuture();
-    }
-
-    State = EState::Stopped;
-    return MakeFuture(EResult::Ok);
+    Complete = NewPromise<EResult>();
+    StartCopyRange();
+    return Complete.GetFuture();
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
@@ -128,17 +130,38 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
     }
 }
 
-NWilson::TSpan TDDiskDataCopier::CreateSpan() const
+std::optional<TBlockRange64> TDDiskDataCopier::GetFreshRange() const
+{
+    auto freshRange = DirtyMap->GetFreshRange(Destination);
+    if (!freshRange) {
+        return std::nullopt;
+    }
+
+    return TrimRange(*freshRange, CopyRangeSize / VolumeConfig->BlockSize);
+}
+
+NWilson::TSpan TDDiskDataCopier::CreateSpan(TBlockRange64 range) const
 {
     auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
-    span.Attribute("From", static_cast<i64>(FreshWatermark));
-    span.Attribute("Length", static_cast<i64>(CopyRangeSize));
+    span.Attribute("From", static_cast<i64>(range.Start));
+    span.Attribute(
+        "Length",
+        static_cast<i64>(range.Size() * VolumeConfig->BlockSize));
     return span;
 }
 
 void TDDiskDataCopier::StartCopyRange()
 {
+    auto freshRange = GetFreshRange();
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will copy range: %s",
+        LogTitle.GetWithTime().c_str(),
+        freshRange ? freshRange->Print().c_str() : "<empty>");
+
     switch (State) {
         case EState::Stopped: {
             Y_ABORT_UNLESS(false);
@@ -150,24 +173,40 @@ void TDDiskDataCopier::StartCopyRange()
             return;
         }
         case EState::Running:
+            if (!freshRange) {
+                State = EState::Stopped;
+                Complete.SetValue(EResult::Ok);
+                return;
+            }
             break;
     }
 
-    Y_ABORT_UNLESS(
-        DirtyMap->GetFreshWatermark(Destination) &&
-        FreshWatermark == DirtyMap->GetFreshWatermark(Destination));
+    auto start = DirtyMap->GetRangeSyncStartTrigger(Destination, *freshRange);
+    start.Subscribe(
+        [weakSelf = weak_from_this(),
+         range = *freshRange](const TFuture<void>& f)
+        {
+            Y_UNUSED(f);
 
-    const ui64 futureWatermark = FreshWatermark + CopyRangeSize;
-    auto range = TBlockRange64::WithLength(
-        FreshWatermark / VolumeConfig->BlockSize,
-        CopyRangeSize / VolumeConfig->BlockSize);
+            if (auto self = weakSelf.lock()) {
+                self->CopyRange(range);
+            }
+        });
+}
+
+void TDDiskDataCopier::CopyRange(TBlockRange64 range)
+{
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Copy range: %s",
+        LogTitle.GetWithTime().c_str(),
+        range.Print().c_str());
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         range,
         TRangeLock(DirtyMap, range, THostMask::MakeOne(Destination)),
-        CreateSpan());
-
-    DirtyMap->SetFlushWatermark(Destination, futureWatermark);
+        CreateSpan(range));
 
     auto readHint = DirtyMap->MakeReadHint(range);
     if (readHint.RangeHints.empty()) {
@@ -226,6 +265,14 @@ void TDDiskDataCopier::OnRangeRead(
 {
     copyRangeState->Span.Event("OnRangeRead");
 
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s Read: %s",
+        LogTitle.GetWithTime().c_str(),
+        copyRangeState->Range.Print().c_str(),
+        FormatError(response.Error).Quote().c_str());
+
     if (HasError(response.Error)) {
         LOG_ERROR(
             *ActorSystem,
@@ -266,6 +313,14 @@ void TDDiskDataCopier::OnRangeWritten(
 {
     copyRangeState->Span.Event("OnRangeWritten");
 
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s Write: %s",
+        LogTitle.GetWithTime().c_str(),
+        copyRangeState->Range.Print().c_str(),
+        FormatError(response.Error).Quote().c_str());
+
     if (HasError(response.Error)) {
         LOG_ERROR(
             *ActorSystem,
@@ -284,14 +339,8 @@ void TDDiskDataCopier::OnRangeWritten(
     }
 
     BackoffDelayProvider.Reset();
-    FreshWatermark = (copyRangeState->Range.End + 1) * VolumeConfig->BlockSize;
-    DirtyMap->SetReadWatermark(Destination, FreshWatermark);
-    Y_ABORT_UNLESS(VolumeConfig->VChunkSize > 0);
-    if (FreshWatermark < VolumeConfig->VChunkSize) {
-        StartCopyRange();
-    } else {
-        Complete.SetValue(EResult::Ok);
-    }
+    DirtyMap->RangeSynced(Destination, copyRangeState->Range);
+    StartCopyRange();
 }
 
 void TDDiskDataCopier::ScheduleStartCopyRange(TDuration delay)

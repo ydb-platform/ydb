@@ -44,7 +44,7 @@
 
 - C++
 
-  ### Пакеты Debian (Ubuntu 24.04)
+  ## Пакеты Debian (Ubuntu 24.04)
 
   Готовые `.deb`-пакеты для Ubuntu 24.04 (Noble), amd64 прикреплены к каждому [релизу на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/releases). Скачайте и установите их локально:
 
@@ -66,7 +66,7 @@
 
   {% endnote %}
 
-  ### Использование SDK в CMake
+  ## Использование SDK в CMake
 
   После установки пакетов подключите SDK в CMake-проекте:
 
@@ -74,7 +74,7 @@
 
   При конфигурации проекта передайте `-DCMAKE_PREFIX_PATH=/usr/share/yandex`, так как пакеты устанавливаются в префикс Yandex.
 
-  ### Сборка из исходного кода
+  ## Сборка из исходного кода
 
   Склонируйте репозиторий [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) и выполните команду из командной строки:
 

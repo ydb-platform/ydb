@@ -41,7 +41,7 @@ i32 CheckedCastToI32(ui64 length)
 {
     if (length >= std::numeric_limits<i32>::max()) {
         THROW_ERROR_EXCEPTION("Protobuf message size exceeds 2GB")
-            << TErrorAttribute("length", length);
+            .With("length", length);
     }
     return static_cast<i32>(length);
 }

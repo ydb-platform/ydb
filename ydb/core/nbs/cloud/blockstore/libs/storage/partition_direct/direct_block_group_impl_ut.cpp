@@ -1358,12 +1358,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "Enabled{++++++}",
             configAfter);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3+{Disabled,0,0};"
-            "H4+{Disabled,0,0};"
-            "H5+{Disabled,0,0};",
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};"
+            "H5+{Disabled,0};",
             dirtyMapDDiskAfter);
     }
 }
@@ -1607,6 +1607,102 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
 
         // The disconnect rejects the in-flight read with a "Session broken"
         // error.
+        transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            transportPtr->GetNodeId());
+
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Same scenarios as TSessionsWithRealTransport, but with a fake IDirectSession
+// injected so datapath uses TICDirectStorageTransport's direct Send path.
+Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
+{
+    Y_UNIT_TEST_F(ShouldReadViaDirectSession, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // Ready-path Connect is actor-based, but readiness may already have
+        // issued datapath reads via the fake session. Snapshot and require the
+        // explicit read below to increase the counter.
+        const ui64 sentBefore =
+            transportPtr->GetFakeDirectSessionSentEventCount();
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    CreateTraceId());
+            });
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_GT(
+            transportPtr->GetFakeDirectSessionSentEventCount(),
+            sentBefore);
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldCancelActiveRequestsOnDirectSessionDisconnect,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        transportPtr->SetPendingReadFromDDisk(
+            EConnectionType::DDisk,
+            ddisks[0]);
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    CreateTraceId());
+            });
+
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!inFlightRead.HasValue());
+        UNIT_ASSERT_GT(transportPtr->GetFakeDirectSessionSentEventCount(), 0u);
+
         transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
         transportPtr->FireDisconnect(
             EConnectionType::DDisk,

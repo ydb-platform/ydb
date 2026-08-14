@@ -233,7 +233,7 @@ void TConnection::Start()
     try {
         InitBuffers();
     } catch (const std::exception& ex) {
-        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error") << ex;
+        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error").With(ex);
         Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
@@ -283,8 +283,8 @@ void TConnection::RunPeriodicCheck()
         Terminate(TError(
             NBus::EErrorCode::TransportError,
             "Socket write stalled")
-            << TErrorAttribute("timeout", Config_->WriteStallTimeout)
-            << TErrorAttribute("pending_control", static_cast<EPollControl>(PendingControl_.load())));
+            .With("timeout", Config_->WriteStallTimeout)
+            .With("pending_control", static_cast<EPollControl>(PendingControl_.load())));
         return;
     }
 
@@ -293,8 +293,8 @@ void TConnection::RunPeriodicCheck()
         Terminate(TError(
             NBus::EErrorCode::TransportError,
             "Socket read stalled")
-            << TErrorAttribute("timeout", Config_->ReadStallTimeout)
-            << TErrorAttribute("pending_control", static_cast<EPollControl>(PendingControl_.load())));
+            .With("timeout", Config_->ReadStallTimeout)
+            .With("pending_control", static_cast<EPollControl>(PendingControl_.load())));
         return;
     }
 }
@@ -724,7 +724,7 @@ void TConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
             NBus::EErrorCode::TransportError,
             "Error connecting to %v",
             EndpointDescription_)
-            << fdOrError);
+            .With(fdOrError));
         return;
     }
 
@@ -1181,7 +1181,7 @@ bool TConnection::CheckTcpReadError(ssize_t result)
         if (IsSocketError(error)) {
             UpdateBusCounter(&TBusNetworkBandCounters::ReadErrors, 1);
             Abort(TError(NBus::EErrorCode::TransportError, "Socket read error")
-                << TError::FromSystem(error));
+                .With(TError::FromSystem(error)));
         }
         return false;
     }
@@ -1229,9 +1229,9 @@ bool TConnection::OnPacketReceived() noexcept
     } else if (!packetIsHandshake) {
         if (EncryptionMode_ == EEncryptionMode::Required) {
             Abort(TError(NBus::EErrorCode::TransportError, "Failed to negotiate TLS/SSL encryption")
-                << TErrorAttribute("mode", EncryptionMode_)
-                << TErrorAttribute("packet_id", Decoder_->GetPacketId())
-                << TErrorAttribute("packet_type", Decoder_->GetPacketType()));
+                .With("mode", EncryptionMode_)
+                .With("packet_id", Decoder_->GetPacketId())
+                .With("packet_type", Decoder_->GetPacketType()));
             return false;
         }
         // COMPAT(dann239): Java client apparently doesn't send handshakes, so let's
@@ -1358,8 +1358,8 @@ bool TConnection::OnHandshakePacketReceived()
                 OnSocketWrite();
             }
             Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL client/server encryption mode compatibility error")
-                << TErrorAttribute("mode", EncryptionMode_)
-                << TErrorAttribute("other_mode", otherEncryptionMode));
+                .With("mode", EncryptionMode_)
+                .With("other_mode", otherEncryptionMode));
         } else {
             if (ConnectionType_ == EConnectionType::Client &&
                 handshake.has_verification_mode() &&
@@ -1743,7 +1743,7 @@ bool TConnection::CheckTcpWriteError(ssize_t result)
         if (IsSocketError(error)) {
             UpdateBusCounter(&TBusNetworkBandCounters::WriteErrors, 1);
             Abort(TError(NBus::EErrorCode::TransportError, "Socket write error")
-                << TError::FromSystem(error));
+                .With(TError::FromSystem(error)));
         }
         return false;
     }
@@ -2044,8 +2044,8 @@ bool TConnection::CheckSslReadError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::ReadErrors, 1);
             Abort(GetLastSslError("TLS/SSL read error")
-                << TErrorAttribute("ssl_error_code", sslError)
-                << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
+                .With("ssl_error_code", sslError)
+                .With("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }
 
@@ -2074,8 +2074,8 @@ bool TConnection::CheckSslWriteError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::WriteErrors, 1);
             Abort(GetLastSslError("TLS/SSL write error")
-                << TErrorAttribute("ssl_error_code", sslError)
-                << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
+                .With("ssl_error_code", sslError)
+                .With("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }
 
@@ -2143,7 +2143,7 @@ bool TConnection::DoSslHandshake()
     }
 
     Abort(GetLastSslError("Failed to establish TLS/SSL session")
-        << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
+        .With("sys_error", TError::FromSystem(LastSystemError())));
     return false;
 }
 
@@ -2243,7 +2243,7 @@ void TConnection::TryEstablishSslSession()
         sslContext->ApplyConfig(Config_, pathResolver);
     } catch (const std::exception& ex) {
         Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
-            << TError(ex));
+            .With(TError(ex)));
         return;
     }
 
@@ -2263,14 +2263,14 @@ void TConnection::TryEstablishSslSession()
                 // Set hostname for peer certificate verification.
                 if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
                     Abort(GetLastSslError("Failed to set hostname for peer certificate verification")
-                        << TErrorAttribute("ssl_peer_hostname", EndpointHostName_));
+                        .With("ssl_peer_hostname", EndpointHostName_));
                     return;
                 }
 
                 // Add alternative hostname for peer certificate verification.
                 if (SSL_add1_host(Ssl_.get(), Config_->PeerAlternativeHostName->c_str()) != 1) {
                     Abort(GetLastSslError("Failed to add alternative hostname for peer certificate verification")
-                        << TErrorAttribute("ssl_peer_hostname", *Config_->PeerAlternativeHostName));
+                        .With("ssl_peer_hostname", *Config_->PeerAlternativeHostName));
                     return;
                 }
             } else if (auto networkAddress = TNetworkAddress::TryParse(EndpointHostName_); networkAddress.IsOK() && networkAddress.Value().IsIP()) {
@@ -2278,14 +2278,14 @@ void TConnection::TryEstablishSslSession()
                 auto address = ToString(networkAddress.Value(), {.IncludePort = false, .IncludeTcpProtocol = false});
                 if (X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(Ssl_.get()), address.c_str()) != 1) {
                     Abort(GetLastSslError("Failed to set IP address for peer certificate verification")
-                        << TErrorAttribute("ssl_peer_address", address));
+                        .With("ssl_peer_address", address));
                     return;
                 }
             } else {
                 // Set hostname for peer certificate verification.
                 if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
                     Abort(GetLastSslError("Failed to set hostname for peer certificate verification")
-                        << TErrorAttribute("ssl_peer_hostname", EndpointHostName_));
+                        .With("ssl_peer_hostname", EndpointHostName_));
                     return;
                 }
             }

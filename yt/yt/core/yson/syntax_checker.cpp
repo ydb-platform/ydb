@@ -72,7 +72,7 @@ void TYsonSyntaxChecker::ThrowUnexpectedToken(TStringBuf token, TStringBuf extra
         token,
         StateExpectationString(StateStack_.back()),
         extraMessage)
-        << TErrorAttribute("yson_parser_state", StateStack_.back());
+        .With("yson_parser_state", StateStack_.back());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

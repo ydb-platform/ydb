@@ -811,6 +811,97 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
     }
 
+    // A range missed while the DDisk was lagging is recorded in the Behind
+    // field. Once the DDisk stops lagging and the same range is flushed
+    // successfully, AddAhead must move it out of Behind and into Ahead (the
+    // BehindField.Remove step): the range is now up-to-date, not outdated.
+    Y_UNIT_TEST(ShouldMoveRangeFromBehindToAheadOnLateFlush)
+    {
+        TDDiskState ddisk;
+        // Fresh DDisk (operational 5 < total 100) => tracking enabled.
+        ddisk.Init(/*totalBlockCount=*/100, /*operationalBlockCount=*/5);
+        UNIT_ASSERT_VALUES_EQUAL(true, ddisk.IsTrackingEnabled());
+
+        // While lagging, a missed flush marks the range as outdated (Behind).
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(10, 10),
+            TDDiskState::EFlushCompletion::Missed);
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
+
+        // The DDisk catches up and the same range is flushed successfully.
+        // The range must leave Behind and appear in Ahead.
+        ddisk.StopLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(10, 10),
+            TDDiskState::EFlushCompletion::Completed);
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintAhead());
+    }
+
+    // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
+    // FlushCompleted must propagate the completion down to the DDisk state so
+    // the flushed range is recorded in the DDisk's Ahead field (data that is
+    // already up-to-date above the operational watermark and needs no sync).
+    // Operational DDisks have tracking disabled, so they record nothing.
+    Y_UNIT_TEST(ShouldTrackAheadRangeOnFreshDDiskAfterFlush)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Promote hand-off H3 to primary and make it Fresh with a low
+        // watermark so tracking is enabled and writes above the watermark are
+        // recorded as "ahead".
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        dirtyMap->UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Fresh+,5};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        // Nothing tracked before the flush.
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+
+        // Write above the fresh watermark to all four DDisks.
+        const THostMask requested = MakeHostMask(true, true, true, true, false);
+        dirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap->WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            requested);
+
+        // Finish flushes to every DDisk.
+        auto flushHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        // FlushCompleted recorded the flushed range in the Fresh DDisk's Ahead
+        // field. Only the Fresh host H3 tracks; the Operational hosts do not.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [10..19]\n",
+            dirtyMap->DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+
+        // Drain erases so the inflight map ends clean.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithOneDisabled)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

@@ -160,6 +160,12 @@ public:
                  // outdated and can't be read.
     };
 
+    enum class EFlushCompletion
+    {
+        Completed,   // Data flushed to DDisk
+        Missed,      // Data not flushed to DDisk
+    };
+
     // Enables the use of DDisk. If the operational blocks count less then total
     // block count, then the DDisk is only partially filled (fresh).
     void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
@@ -179,7 +185,7 @@ public:
     // passed to the OnRangeFlushed() method.
     [[nodiscard]] bool IsTrackingEnabled() const;
     // Updates the BehindField and the Ahead Field if required.
-    void OnRangeFlushed(TBlockRange64 range);
+    void OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush);
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
@@ -195,6 +201,7 @@ public:
 private:
     [[nodiscard]] bool IsFresh() const;
     void UpdateState(bool force);
+    void AddAhead(TBlockRange64 range);
 
     EState State = EState::Disabled;
 
@@ -326,7 +333,8 @@ public:
 
     // IReadyQueue implementation
     void Register(ui64 lsn, EQueueType queueType) override;
-    void UnRegister(ui64 lsn) override;
+    void UnRegister(ui64 lsn, EQueueType queueType) override;
+    void FlushCompleted(ui64 lsn, THostMask ddisks) override;
     void DataToPBufferAdded(
         THostIndex host,
         EPBufferCounter counter,
@@ -385,7 +393,7 @@ private:
         TBlockRange64 range,
         ui64 offsetBlocks);
 
-    void AddToAheadAndBehind(ui64 lsn);
+    void AddToAheadAndBehind(ui64 lsn, THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
     void InflightFlushFinished(TBlockRange64 range);

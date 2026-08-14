@@ -235,24 +235,24 @@ bool TDDiskState::IsTrackingEnabled() const
     return State != EState::Disabled && (Lagging || IsFresh());
 }
 
-void TDDiskState::OnRangeFlushed(TBlockRange64 range)
+void TDDiskState::OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush)
 {
     if (!IsTrackingEnabled()) {
         return;
     }
 
-    if (Lagging) {
+    // The replica is lagging and data has not been written. Adding the range to
+    // the behind map. Due to lagging switching races with notifications, it is
+    // possible to receive successful flush confirmation on a lagging replica.
+    // We will ignore such ranges for safety.
+    if (Lagging && flush == EFlushCompletion::Missed) {
         BehindField.Add(range);
-    } else {
-        BehindField.Remove(range);
     }
 
-    if (IsFresh() && !Lagging) {
-        AheadField.Add(range);
-        if (OperationalBlockCount) {
-            AheadField.Remove(
-                TBlockRange64::WithLength(0, OperationalBlockCount));
-        }
+    // The replica is not lagging and data has been written. Adding the range to
+    // the ahead map.
+    if (!Lagging && flush == EFlushCompletion::Completed) {
+        AddAhead(range);
     }
 
     UpdateState(false);
@@ -363,6 +363,17 @@ void TDDiskState::UpdateState(bool force)
     }
 
     State = IsFresh() ? EState::Fresh : EState::Operational;
+}
+
+void TDDiskState::AddAhead(TBlockRange64 range)
+{
+    Y_ABORT_UNLESS(!Lagging);
+
+    BehindField.Remove(range);
+    AheadField.Add(range);
+    if (OperationalBlockCount) {
+        AheadField.Remove(TBlockRange64::WithLength(0, OperationalBlockCount));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -988,7 +999,6 @@ void TBlocksDirtyMap::Register(ui64 lsn, EQueueType queueType)
             break;
         }
         case IReadyQueue::EQueueType::Erase: {
-            AddToAheadAndBehind(lsn);
             ReadyToErase.insert(lsn);
 
             ReadyToClone.erase(lsn);
@@ -998,11 +1008,27 @@ void TBlocksDirtyMap::Register(ui64 lsn, EQueueType queueType)
     }
 }
 
-void TBlocksDirtyMap::UnRegister(ui64 lsn)
+void TBlocksDirtyMap::UnRegister(ui64 lsn, EQueueType queueType)
 {
-    ReadyToErase.erase(lsn);
-    ReadyToClone.erase(lsn);
-    ReadyToFlush.erase(lsn);
+    switch (queueType) {
+        case IReadyQueue::EQueueType::Clone: {
+            ReadyToClone.erase(lsn);
+            break;
+        }
+        case IReadyQueue::EQueueType::Flush: {
+            ReadyToFlush.erase(lsn);
+            break;
+        }
+        case IReadyQueue::EQueueType::Erase: {
+            ReadyToErase.erase(lsn);
+            break;
+        }
+    }
+}
+
+void TBlocksDirtyMap::FlushCompleted(ui64 lsn, THostMask ddisks)
+{
+    AddToAheadAndBehind(lsn, ddisks);
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -1248,8 +1274,10 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                  : TRangeLock(weak_from_this(), lsn));
 }
 
-void TBlocksDirtyMap::AddToAheadAndBehind(ui64 lsn)
+void TBlocksDirtyMap::AddToAheadAndBehind(ui64 lsn, THostMask ddisks)
 {
+    // Check that one of the ddisks is lagging or aheading, in this case it
+    // needs to be notified about the data flush to ddisk.
     bool needNotify = AnyOf(
         DDiskStates,
         [](const TDDiskState& ddisk) { return ddisk.IsTrackingEnabled(); });
@@ -1265,8 +1293,11 @@ void TBlocksDirtyMap::AddToAheadAndBehind(ui64 lsn)
         state == TInflightInfo::EState::PBufferFlushed ||
         state == TInflightInfo::EState::PBufferErasing);
 
-    for (auto& ddiskState: DDiskStates) {
-        ddiskState.OnRangeFlushed(inflight->Range);
+    for (THostIndex host = 0; host < GetHostCount(); ++host) {
+        DDiskStates[host].OnRangeFlushed(
+            inflight->Range,
+            ddisks.Get(host) ? TDDiskState::EFlushCompletion::Completed
+                             : TDDiskState::EFlushCompletion::Missed);
     }
 }
 

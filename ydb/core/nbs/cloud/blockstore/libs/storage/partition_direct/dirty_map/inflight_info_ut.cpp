@@ -37,11 +37,27 @@ struct TTestReadyQueue: public IReadyQueue
         }
     }
 
-    void UnRegister(ui64 lsn) override
+    void UnRegister(ui64 lsn, EQueueType queueType) override
     {
-        ReadyToErase.erase(lsn);
-        ReadyToClone.erase(lsn);
-        ReadyToFlush.erase(lsn);
+        switch (queueType) {
+            case IReadyQueue::EQueueType::Clone: {
+                ReadyToClone.erase(lsn);
+                break;
+            }
+            case IReadyQueue::EQueueType::Flush: {
+                ReadyToFlush.erase(lsn);
+                break;
+            }
+            case IReadyQueue::EQueueType::Erase: {
+                ReadyToErase.erase(lsn);
+                break;
+            }
+        }
+    }
+
+    void FlushCompleted(ui64 lsn, THostMask ddisks) override
+    {
+        FlushCompletions[lsn] = ddisks;
     }
 
     void DataToPBufferAdded(
@@ -65,6 +81,17 @@ struct TTestReadyQueue: public IReadyQueue
         return PBufferCounters[host][EPBufferCounter::Total];
     }
 
+    bool HasFlushCompleted(ui64 lsn)
+    {
+        return FlushCompletions.contains(lsn);
+    }
+
+    TString GetFlushCompletedMask(ui64 lsn)
+    {
+        auto it = FlushCompletions.find(lsn);
+        return it == FlushCompletions.end() ? "" : it->second.Print();
+    }
+
     size_t GetLockedBytes(THostIndex host)
     {
         return PBufferCounters[host][EPBufferCounter::Locked];
@@ -73,6 +100,7 @@ struct TTestReadyQueue: public IReadyQueue
     THashSet<ui64> ReadyToClone;
     THashSet<ui64> ReadyToFlush;
     THashSet<ui64> ReadyToErase;
+    THashMap<ui64, THostMask> FlushCompletions;
     TMap<THostIndex, TMap<EPBufferCounter, size_t>> PBufferCounters;
 };
 
@@ -655,11 +683,13 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             123,
             4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        FlushAll(inflightInfo);
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Locking accounts locked bytes on all confirmed hosts and unregisters
-        // the lsn from the flush queue.
+        // the lsn from the erase queue.
         inflightInfo.LockPBuffer();
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
         UNIT_ASSERT_VALUES_EQUAL(
             4096,
             readyQueue.GetLockedBytes(THostIndex{0}));
@@ -683,12 +713,12 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             readyQueue.GetLockedBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToFlush.contains(123));
 
-        // Final unlock releases the locked bytes and re-registers the flush.
+        // Final unlock releases the locked bytes and re-registers the erase.
         inflightInfo.UnlockPBuffer();
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{2}));
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
     }
 
     Y_UNIT_TEST(ShouldRegisterEraseAfterUnlockInFlushedState)
@@ -867,6 +897,319 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
+
+        EraseAll(inflightInfo);
+    }
+
+    // Locking a still-written (not yet flushed) inflight must only remove it
+    // from the erase queue. Its flush registration has to survive so the buffer
+    // can still be flushed while a read holds the lock.
+    Y_UNIT_TEST(ShouldKeepFlushRegistrationWhenLockingWrittenState)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+
+        // Locking in the written state accounts locked bytes and keeps the lsn
+        // in the flush queue (only the erase queue is touched).
+        inflightInfo.LockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{0}));
+
+        // Unlocking in the written state must not register an erase: erase is
+        // only registered once the buffer is flushed.
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{0}));
+
+        // Finish flush + erase so the destructor invariants hold.
+        FlushAll(inflightInfo);
+        EraseAll(inflightInfo);
+    }
+
+    // Detach() drops the ready-queue back-reference. A detached inflight must
+    // destruct cleanly even while it is still locked: the destructor short
+    // circuits on the null ReadyQueue instead of asserting on the lock count.
+    Y_UNIT_TEST(ShouldDestructLockedInflightAfterDetach)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                MakeDDisks(),
+                THostMask::MakeEmpty(),
+                123,
+                4096);
+            inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            FlushAll(inflightInfo);
+
+            // Hold a lock, then detach. The destructor must not abort on the
+            // outstanding lock because ReadyQueue is now null.
+            inflightInfo.LockPBuffer();
+            inflightInfo.Detach();
+        }
+
+        // Detach happens before the counters are released, so they stay put.
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{0}));
+    }
+
+    // The move constructor transfers ownership of the ready-queue
+    // back-reference and resets the source. The moved-from object must destruct
+    // without touching the ready queue, so the accounted bytes are released
+    // only once.
+    Y_UNIT_TEST(ShouldReleaseBytesOnceAfterMove)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo source(
+                &readyQueue,
+                MakeDDisks(),
+                THostMask::MakeEmpty(),
+                123,
+                4096);
+            source.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+
+            // Move ownership. The destination keeps the accounting; the source
+            // is left inert and must not double-release on destruction.
+            TInflightInfo destination(std::move(source));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+
+            FlushAll(destination);
+            EraseAll(destination);
+        }
+
+        // Both objects are destroyed: the source released nothing, the
+        // destination released everything exactly once (no underflow).
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    // Once a write is flushed to the DDisk quorum, the ready queue must be
+    // notified via FlushCompleted with the mask of DDisks that confirmed the
+    // flush (here all three hosts).
+    Y_UNIT_TEST(ShouldNotifyFlushCompletedWhenFlushed)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // No notification before the flush completes.
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.HasFlushCompleted(123));
+
+        FlushAll(inflightInfo);
+
+        // After the flush reaches the quorum FlushCompleted fires with the full
+        // set of confirmed DDisks.
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.HasFlushCompleted(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            readyQueue.GetFlushCompletedMask(123));
+
+        EraseAll(inflightInfo);
+    }
+
+    // When a host is disabled/removed before it confirms the flush, the
+    // remaining hosts still form a quorum. FlushCompleted must report only the
+    // hosts that actually confirmed (the disabled one is excluded), so the
+    // dirty map can mark that DDisk as having missed the range.
+    Y_UNIT_TEST(ShouldReportPartialDDiskMaskInFlushCompleted)
+    {
+        TTestReadyQueue readyQueue;
+        // 4 desired DDisks so that after disabling one, 3 remain (== quorum).
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{2}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{3}));
+
+        // Confirm a quorum (hosts 0, 1, 2) but not host 3.
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.HasFlushCompleted(123));
+
+        // Disable + remove host 3. The quorum holds, the flush completes and
+        // FlushCompleted reports only the confirmed hosts.
+        auto mask = THostMask::MakeMask({THostIndex{3}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), mask, mask);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.HasFlushCompleted(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            readyQueue.GetFlushCompletedMask(123));
+
+        // Erase all still-written hosts (host 3 excluded via Disabled).
+        inflightInfo.RequestErase(THostIndex{0});
+        inflightInfo.RequestErase(THostIndex{1});
+        inflightInfo.RequestErase(THostIndex{2});
+        Y_UNUSED(inflightInfo.ConfirmErase(THostIndex{0}));
+        Y_UNUSED(inflightInfo.ConfirmErase(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.ConfirmErase(THostIndex{2}));
+    }
+
+    // While a read lock is held FlushCompleted must be suppressed: the erase is
+    // not allowed to be registered, and no completion notification may fire
+    // until the buffer is unlocked.
+    Y_UNIT_TEST(ShouldNotNotifyFlushCompletedWhileLocked)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Lock before flushing completes.
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{2}));
+        inflightInfo.LockPBuffer();
+
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+
+        // Flush completed but the lock suppresses the notification.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.HasFlushCompleted(123));
+
+        // Unlocking in the flushed state finally fires FlushCompleted.
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.HasFlushCompleted(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            readyQueue.GetFlushCompletedMask(123));
+
+        EraseAll(inflightInfo);
+    }
+
+    // A write that is only in the PBufferWritten state (not flushed yet) must
+    // never trigger FlushCompleted, even across a lock/unlock cycle.
+    Y_UNIT_TEST(ShouldNotNotifyFlushCompletedInWrittenState)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Lock/unlock while still in the written state: no flush happened, so
+        // no completion notification may fire.
+        inflightInfo.LockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.HasFlushCompleted(123));
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.HasFlushCompleted(123));
+
+        // Finish flush + erase so the destructor invariants hold.
+        FlushAll(inflightInfo);
+        EraseAll(inflightInfo);
+    }
+
+    // A failed erase drops the host back into the erase-needed set and re-runs
+    // the erase-query path, which must notify FlushCompleted again.
+    Y_UNIT_TEST(ShouldNotifyFlushCompletedAgainAfterEraseFailed)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        FlushAll(inflightInfo);
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.HasFlushCompleted(123));
+
+        // Request erase for host 0 and then fail it. Clearing the capture map
+        // lets us observe the re-notification.
+        inflightInfo.RequestErase(THostIndex{0});
+        readyQueue.FlushCompletions.clear();
+        inflightInfo.EraseFailed(THostIndex{0});
+
+        // EraseFailed re-runs the erase-query path and notifies again.
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.HasFlushCompleted(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            readyQueue.GetFlushCompletedMask(123));
+
+        EraseAll(inflightInfo);
+    }
+
+    // UnRegister now targets a single queue. Locking a written inflight must
+    // remove it only from the erase queue while keeping the clone registration
+    // of a still-incomplete write intact.
+    Y_UNIT_TEST(ShouldTargetOnlyEraseQueueOnUnRegister)
+    {
+        TTestReadyQueue readyQueue;
+        // Recovery constructor: starts in the clone queue.
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096,
+            THostIndex{0});
+        inflightInfo.RestorePBuffer(THostIndex{1});
+        inflightInfo.RestorePBuffer(THostIndex{2});
+
+        // Quorum reached: moved from clone to flush queue.
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToClone.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+
+        FlushAll(inflightInfo);
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+
+        // Locking unregisters only the erase queue, nothing else.
+        inflightInfo.LockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToClone.contains(123));
+
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         EraseAll(inflightInfo);
     }

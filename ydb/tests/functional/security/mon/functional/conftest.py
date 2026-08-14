@@ -6,8 +6,10 @@ import requests
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
-from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import grant_describe_schema_provided
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_path_id
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
+from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -207,6 +209,15 @@ def tenant_database(ydb_cluster_with_extra_sids_controls):
         database=TENANT_DATABASE,
     )
     return TENANT_DATABASE
+
+
+@pytest.fixture(scope='module')
+def tenant_describe_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    cluster = ydb_cluster_with_extra_sids_controls
+    return {
+        'path_id': get_tenant_path_id(cluster, tenant_database, tenant_database, use_tls=True),
+        'schemeshard_id': get_tenant_schemeshard_id(cluster, tenant_database, tenant_database, use_tls=True),
+    }
 
 
 @pytest.fixture

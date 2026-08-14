@@ -89,6 +89,35 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
+def describe_path_self(cluster, root_path, database_path, use_tls=False):
+    node = cluster.nodes[1]
+    if use_tls:
+        base_url = f'https://{node.host}:{node.mon_port}'
+        headers = {'Authorization': 'root@builtin'}
+        verify = False
+    else:
+        base_url = f'http://{node.host}:{node.mon_port}'
+        headers = {}
+        verify = True
+    response = requests.get(
+        base_url + '/viewer/json/describe',
+        params={'database': root_path, 'path': database_path},
+        headers=headers,
+        verify=verify,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return response.json()['PathDescription']['Self']
+
+
+def get_tenant_schemeshard_id(cluster, root_path, database_path, use_tls=False):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls)['SchemeshardId'])
+
+
+def get_tenant_path_id(cluster, root_path, database_path, use_tls=False):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls)['PathId'])
+
+
 def wait_for_viewer_ready(
     base_url,
     database=DATABASE,

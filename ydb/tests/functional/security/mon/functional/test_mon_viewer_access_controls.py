@@ -336,6 +336,44 @@ def test_viewer_describe_strict_database_token_forbidden_params(mon_base_url_wit
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
 
 
+# path_id/schemeshard_id require monitoring access; strict database and viewer tokens get 403.
+def test_viewer_describe_path_id_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_describe_ids,
+):
+    for ep in ['/viewer/describe', '/viewer/json/describe']:
+        # path_id alone is accepted for monitoring+ access level,
+        # as well as both params together: path_id and schemeshard_id
+        for extra_params in (
+            {'path_id': str(tenant_describe_ids['path_id'])},
+            {
+                'path_id': str(tenant_describe_ids['path_id']),
+                'schemeshard_id': str(tenant_describe_ids['schemeshard_id']),
+            },
+        ):
+            path = _build_endpoint_path(
+                ep,
+                with_database_cgi=True,
+                extra_params=extra_params,
+                database=tenant_database,
+            )
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'viewer@builtin', 403)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'monitoring@builtin', 200)
+
+        # schemeshard_id alone without path_id is rejected always
+        path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'schemeshard_id': str(tenant_describe_ids['schemeshard_id'])},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
+
+
 # Path outside database scope gives endpoint validation error (400), not role-denied (403).
 def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control):
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:

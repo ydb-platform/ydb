@@ -3,6 +3,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 
 namespace NKikimr::NViewer {
@@ -137,9 +138,9 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path_id")) {
+        if (Params.Has("path_id") || Params.Has("schemeshard_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-                // it's dangerous because we don't check access to specific path here
+                // it's dangerous because we don't check access to scoped ids here
                 ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
                 return;
             }

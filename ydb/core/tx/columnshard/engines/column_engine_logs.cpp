@@ -402,7 +402,7 @@ bool TColumnEngineForLogs::FinishLoading() {
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             Counters->AddPortion(*portionInfo);
-            if (portionInfo->CheckForCleanup()) {
+            if (portionInfo->HasRemoveSnapshot()) {
                 AddCleanupPortion(portionInfo);
             }
         }
@@ -598,7 +598,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 continue;
             }
             for (auto& [portion, info] : g->GetPortions()) {
-                if (info->CheckForCleanup()) {
+                if (info->HasRemoveSnapshot()) {
                     continue;
                 }
                 if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {

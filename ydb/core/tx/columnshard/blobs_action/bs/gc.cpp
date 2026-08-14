@@ -1,4 +1,5 @@
 #include "gc.h"
+#include "history_cutter.h"
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -23,6 +24,9 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
 
 bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
+    if (auto* cutter = Manager->GetHistoryCutter()) {
+        cutter->TryNominate(NActors::TActivationContext::AsActorContext());
+    }
     return true;
 }
 

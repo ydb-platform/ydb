@@ -167,9 +167,10 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         time.sleep(wait_seconds)
 
     def _do_queries(self, queries):
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for is_select, query in queries:
-                result_sets = session_pool.execute_with_retries(query)
+                result_sets = session_pool.execute_with_retries(query, retry_settings=retry_settings)
                 if is_select:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
                     for row in result_sets[0].rows:

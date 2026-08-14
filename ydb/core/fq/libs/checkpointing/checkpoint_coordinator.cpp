@@ -490,9 +490,6 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
         } else {
             CC_LOG_I("[" << checkpointId << "] Got all acks, changing checkpoint status to 'PendingCommit'");
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
-            if (InitingZeroCheckpoint) {
-                Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
-            }
         }
     }
 }
@@ -521,6 +518,11 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     UpdateInProgressMetric();
     for (const auto& [toTrigger, transport] : ActorsToNotify) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
+    }
+
+    // Fact of completed zero checkpoint must be saved after checkpoint become available for restoration as own checkpoint
+    if (InitingZeroCheckpoint) {
+        Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
     }
 }
 

@@ -85,9 +85,11 @@ void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb
         ToString(LastMergedQueryMetricsIntervalEnd.MicroSeconds()));
 }
 
-void TSysViewProcessor::PersistMetricsOneHourEvictBeforeHourEnd(NIceDb::TNiceDb& db) {
+void TSysViewProcessor::PersistMetricsOneHourEvictBeforeHourEnd(
+    NIceDb::TNiceDb& db, ui64 cutoff)
+{
     PersistSysParam(db, Schema::SysParam_MetricsOneHourEvictBeforeHourEnd,
-        ToString(MetricsOneHourEvictBeforeHourEndUs));
+        ToString(cutoff));
 }
 
 template <typename TSchema>
@@ -281,13 +283,17 @@ void TSysViewProcessor::EnforceMetricsOneHourByteLimit(
     for (ui64 hourEndUs : plan.BucketsToEvict) {
         auto it = MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
         while (it != MetricsOneHour.end() && it->first.first == hourEndUs) {
-            db.Table<Schema::MetricsOneHour>().Key(it->first).Delete();
             it = MetricsOneHour.erase(it);
         }
     }
 
-    UpdateMetricsOneHourRetentionCounters(
-        plan.RetainedBytes, plan.BucketsToEvict.size());
+    if (plan.EvictBeforeHourEnd > MetricsOneHourEvictBeforeHourEndUs) {
+        MetricsOneHourEvictBeforeHourEndUs = plan.EvictBeforeHourEnd;
+        PersistMetricsOneHourEvictBeforeHourEnd(
+            db, MetricsOneHourEvictBeforeHourEndUs);
+    }
+
+    UpdateMetricsOneHourRetentionCounters(plan.RetainedBytes, 0);
 }
 
 void TSysViewProcessor::LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const {
@@ -455,12 +461,7 @@ void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration
 }
 
 TInstant TSysViewProcessor::EndOfHourInterval(TInstant intervalEnd) {
-    auto hourUs = ONE_HOUR_BUCKET_SIZE.MicroSeconds();
-    auto hourEndUs = intervalEnd.MicroSeconds() / hourUs * hourUs;
-    if (hourEndUs != intervalEnd.MicroSeconds()) {
-        hourEndUs += hourUs;
-    }
-    return TInstant::MicroSeconds(hourEndUs);
+    return EndOfQueryMetricsHourInterval(intervalEnd);
 }
 
 void TSysViewProcessor::ClearIntervalSummaries(NIceDb::TNiceDb& db) {
@@ -485,6 +486,9 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
 
     for (const auto& node : NodesToRequest) {
         db.Table<Schema::NodesToRequest>().Key(node.NodeId).Delete();
+    }
+    for (const auto& [nodeId, _] : NodesInFlight) {
+        db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
     }
     NodesToRequest.clear();
     NodesInFlight.clear();

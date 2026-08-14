@@ -1,4 +1,5 @@
 #include "processor_impl.h"
+#include "query_metrics_retention_db.h"
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -56,91 +57,38 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
     bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
         Self->MetricsOneHour.clear();
 
-        auto rowset = db.Table<Schema::MetricsOneHour>().Reverse().Select();
-        if (!rowset.IsReady()) {
+        TQueryMetricsOneHourLoadResult loaded;
+        if (!LoadQueryMetricsOneHour(
+                db,
+                Self->CurrentHourEnd.MicroSeconds(),
+                Self->MetricsOneHourByteLimit,
+                Self->MetricsOneHourEvictBeforeHourEndUs,
+                loaded))
+        {
             return false;
         }
 
-        using TBucketEntry = std::pair<THistoryKey, TQueryToMetrics>;
-        TVector<TBucketEntry> bucket;
-        ui64 bucketHourEndUs = 0;
-        ui64 bucketBytes = 0;
-        ui64 retainedBytes = 0;
-        bool byteLimitReached = false;
-
-        auto flushBucket = [&]() {
-            if (bucket.empty()) {
-                return true;
-            }
-
-            const bool isActive = bucketHourEndUs == Self->CurrentHourEnd.MicroSeconds();
-            if (!isActive && retainedBytes + bucketBytes > Self->MetricsOneHourByteLimit) {
-                Self->MetricsOneHourEvictBeforeHourEndUs =
-                    Self->MetricsOneHour.empty()
-                        ? Self->CurrentHourEnd.MicroSeconds()
-                        : Self->MetricsOneHour.begin()->first.first;
-                return false;
-            }
-
-            retainedBytes += bucketBytes;
-            for (auto& [key, result] : bucket) {
-                Self->MetricsOneHour.emplace(key, std::move(result));
-            }
-            bucket.clear();
-            bucketBytes = 0;
-            return true;
-        };
-
-        while (!rowset.EndOfSet()) {
-            const ui64 hourEndUs = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
-            const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
-
-            // A previous cleanup may have been interrupted by a reboot. Rows
-            // below the persistent cutoff are already logically evicted and
-            // must not become visible again while their batched deletion
-            // resumes.
-            if (Self->MetricsOneHourEvictBeforeHourEndUs &&
-                hourEndUs < Self->MetricsOneHourEvictBeforeHourEndUs)
-            {
-                break;
-            }
-
-            if (!bucket.empty() && bucketHourEndUs != hourEndUs) {
-                if (!flushBucket()) {
-                    byteLimitReached = true;
-                    break;
-                }
-            }
-            if (bucket.empty()) {
-                bucketHourEndUs = hourEndUs;
-            }
-
+        Self->MetricsOneHourEvictBeforeHourEndUs = loaded.EvictBeforeHourEnd;
+        for (auto& row : loaded.Rows) {
             TQueryToMetrics result;
-            result.Text = rowset.GetValue<Schema::MetricsOneHour::Text>();
-            TString data = rowset.GetValue<Schema::MetricsOneHour::Data>();
-            if (data) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
+            result.Text = std::move(row.Text);
+            if (row.Data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD
+                    result.Metrics.ParseFromString(row.Data);
             }
-            bucketBytes += result.Text.size() + data.size();
-            bucket.emplace_back(std::make_pair(hourEndUs, rank), std::move(result));
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-
-        if (!bucket.empty() && !byteLimitReached) {
-            flushBucket();
+            Self->MetricsOneHour.emplace(
+                std::make_pair(row.HourEnd, row.Rank), std::move(result));
         }
 
         if (Self->MetricsOneHourEvictBeforeHourEndUs) {
-            Self->PersistMetricsOneHourEvictBeforeHourEnd(db);
+            Self->PersistMetricsOneHourEvictBeforeHourEnd(
+                db, Self->MetricsOneHourEvictBeforeHourEndUs);
         }
 
-        Self->UpdateMetricsOneHourRetentionCounters(retainedBytes, 0);
+        Self->UpdateMetricsOneHourRetentionCounters(loaded.RetainedBytes, 0);
         SVLOG_D("[" << Self->TabletID() << "] Loading byte-bounded hour metrics: "
             << "result count# " << Self->MetricsOneHour.size()
-            << ", retained bytes# " << retainedBytes
+            << ", retained bytes# " << loaded.RetainedBytes
             << ", evict before# " << Self->MetricsOneHourEvictBeforeHourEndUs);
         return true;
     }
@@ -508,8 +456,19 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
 
             size_t totalHashesCount = 0;
+            size_t staleRequestsCount = 0;
             while (!rowset.EndOfSet()) {
                 TNodeId nodeId = rowset.GetValue<Schema::NodesToRequest::NodeId>();
+                const ui64 requestIntervalEndUs =
+                    rowset.GetValueOrDefault<Schema::NodesToRequest::IntervalEnd>(0);
+                if (requestIntervalEndUs != Self->IntervalEnd.MicroSeconds()) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
+                    ++staleRequestsCount;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 TString hashes = rowset.GetValue<Schema::NodesToRequest::QueryHashes>();
                 TString textsToGet = rowset.GetValue<Schema::NodesToRequest::TextsToGet>();
                 TString byDuration = rowset.GetValue<Schema::NodesToRequest::ByDuration>();
@@ -540,7 +499,8 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
             SVLOG_D("[" << Self->TabletID() << "] Loading nodes to request: "
                 << "nodes count# " << Self->NodesToRequest.size()
-                << ", hashes count# " << totalHashesCount);
+                << ", hashes count# " << totalHashesCount
+                << ", stale requests deleted# " << staleRequestsCount);
         }
 
         // Metrics...

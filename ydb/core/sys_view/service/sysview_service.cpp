@@ -287,7 +287,7 @@ public:
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
-            hFunc(TEvSysView::TEvFailNextIntervalMetricsRequest, Handle);
+            hFunc(TEvSysView::TEvSetNextIntervalMetricsRequestFault, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -607,6 +607,10 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
+        if (TestMode && DropNextIntervalMetricsRequest) {
+            DropNextIntervalMetricsRequest = false;
+            return;
+        }
         if (TestMode && FailNextIntervalMetricsRequestCount) {
             for (ui32 i = 0; i < FailNextIntervalMetricsRequestCount; ++i) {
                 Send(ev->Sender,
@@ -673,9 +677,16 @@ private:
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void Handle(TEvSysView::TEvFailNextIntervalMetricsRequest::TPtr& ev) {
+    void Handle(TEvSysView::TEvSetNextIntervalMetricsRequestFault::TPtr& ev) {
         if (TestMode) {
-            FailNextIntervalMetricsRequestCount = ev->Get()->DuplicateFailure ? 2 : 1;
+            using EAction = TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction;
+            if (ev->Get()->Action == EAction::Drop) {
+                DropNextIntervalMetricsRequest = true;
+                FailNextIntervalMetricsRequestCount = 0;
+            } else {
+                DropNextIntervalMetricsRequest = false;
+                FailNextIntervalMetricsRequestCount = ev->Get()->FailureCount;
+            }
         }
     }
 
@@ -1025,6 +1036,7 @@ private:
     TExtCountersConfig Config;
     const bool HasExternalCounters;
     const bool TestMode;
+    bool DropNextIntervalMetricsRequest = false;
     ui32 FailNextIntervalMetricsRequestCount = 0;
     const TDuration TotalInterval;
     const TDuration CollectInterval;

@@ -2584,8 +2584,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
             /* cpuTimeUs */ 10, /* durationMs */ 1, /* readRows */ 100);
-        SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
-            /* cpuTimeUs */ 20, /* durationMs */ 3, /* readRows */ 200);
 
         TDriver driver(TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
@@ -2593,7 +2591,20 @@ Y_UNIT_TEST_SUITE(SystemView) {
             .SetDatabase(database));
         NQuery::TQueryClient client(driver);
 
-        WaitFor(TDuration::Minutes(1), "first hour aggregate", [&](TString& error) {
+        WaitFor(TDuration::Minutes(1), "first minute in hour aggregate", [&](TString& error) {
+            const ui64 count = ReadUint64(client, R"(
+                SELECT Count
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = 'synthetic-aggregate';
+            )", true);
+            error = TStringBuilder() << "hour count = " << count << ", expected 1";
+            return count == 1;
+        });
+
+        SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
+            /* cpuTimeUs */ 20, /* durationMs */ 3, /* readRows */ 200);
+
+        WaitFor(TDuration::Minutes(1), "second minute in hour aggregate", [&](TString& error) {
             const ui64 count = ReadUint64(client, R"(
                 SELECT Count
                 FROM `.sys/query_metrics_one_hour`
@@ -2637,8 +2648,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
         const ui32 failedNodeId = failedActorSystem.NodeId;
         failedActorSystem.Send(
             MakeSysViewServiceID(failedNodeId),
-            new TEvSysView::TEvFailNextIntervalMetricsRequest(
-                /* duplicateFailure */ true));
+            new TEvSysView::TEvSetNextIntervalMetricsRequestFault(
+                TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction::Undelivered,
+                /* failureCount */ 2));
 
         const ui64 endTimeMs = TInstant::Now().MilliSeconds();
         SendQueryMetric(env, goodNodeIdx, database, queryHash,
@@ -2685,6 +2697,83 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )", true);
                 error = TStringBuilder() << "count after restart = " << count;
                 return count == 1;
+            });
+    }
+
+    Y_UNIT_TEST(QueryMetricsOneHourTimeoutAndReboot) {
+        TTestEnv env(1, 3, {.EnableSVP = true});
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 2);
+
+        const TString database = "/Root/Tenant1";
+        const auto& tenantNodes = env.GetTenants().List(database);
+        UNIT_ASSERT_VALUES_EQUAL(tenantNodes.size(), 2);
+        constexpr ui64 queryHash = 91'002;
+        const TString queryText = "synthetic-timeout";
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto& droppedActorSystem = *runtime.GetActorSystem(tenantNodes[1]);
+        droppedActorSystem.Send(
+            MakeSysViewServiceID(droppedActorSystem.NodeId),
+            new TEvSysView::TEvSetNextIntervalMetricsRequestFault(
+                TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction::Drop));
+
+        const ui64 endTimeMs = TInstant::Now().MilliSeconds();
+        SendQueryMetric(env, tenantNodes[0], database, queryHash, queryText,
+            /* cpuTimeUs */ 10, /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+        SendQueryMetric(env, tenantNodes[1], database, queryHash, queryText,
+            /* cpuTimeUs */ 20, /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase(database));
+        NQuery::TQueryClient client(driver);
+
+        WaitFor(TDuration::Minutes(1), "partial hour result after timeout",
+            [&](TString& error) {
+                const ui64 count = ReadUint64(client, R"(
+                    SELECT Count
+                    FROM `.sys/query_metrics_one_hour`
+                    WHERE QueryText = 'synthetic-timeout';
+                )", true);
+                error = TStringBuilder() << "partial count = " << count;
+                return count == 1;
+            });
+
+        env.GetTenants().Free(database);
+        env.GetTenants().Add(database);
+
+        WaitFor(TDuration::Minutes(1), "partial timeout result after restart",
+            [&](TString& error) {
+                const ui64 count = ReadUint64(client, R"(
+                    SELECT Count
+                    FROM `.sys/query_metrics_one_hour`
+                    WHERE QueryText = 'synthetic-timeout';
+                )", true);
+                error = TStringBuilder() << "count after restart = " << count;
+                return count == 1;
+            });
+
+        // Let the new SysViewServices register before sending synthetic input.
+        Sleep(TDuration::Seconds(6));
+        const auto& restartedNodes = env.GetTenants().List(database);
+        UNIT_ASSERT_VALUES_EQUAL(restartedNodes.size(), 2);
+        const ui64 restartedEndTimeMs = TInstant::Now().MilliSeconds();
+        for (ui32 nodeIdx : restartedNodes) {
+            SendQueryMetric(env, nodeIdx, database, queryHash, queryText,
+                /* cpuTimeUs */ 30, /* durationMs */ 1, /* readRows */ 0,
+                restartedEndTimeMs);
+        }
+
+        WaitFor(TDuration::Minutes(1), "next interval after timeout and restart",
+            [&](TString& error) {
+                const ui64 count = ReadUint64(client, R"(
+                    SELECT Count
+                    FROM `.sys/query_metrics_one_hour`
+                    WHERE QueryText = 'synthetic-timeout';
+                )", true);
+                error = TStringBuilder() << "final count = " << count;
+                return count == 3;
             });
     }
 

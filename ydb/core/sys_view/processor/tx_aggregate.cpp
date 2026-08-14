@@ -149,7 +149,9 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
                 NIceDb::TUpdate<Schema::NodesToRequest::ByCpuTime>(
                     serializeHashes(queries.ByCpuTime)),
                 NIceDb::TUpdate<Schema::NodesToRequest::ByRequestUnits>(
-                    serializeHashes(queries.ByRequestUnits)));
+                    serializeHashes(queries.ByRequestUnits)),
+                NIceDb::TUpdate<Schema::NodesToRequest::IntervalEnd>(
+                    Self->IntervalEnd.MicroSeconds()));
 
             Self->NodesToRequest.emplace_back(std::move(queries));
         }

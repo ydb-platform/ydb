@@ -331,7 +331,16 @@ void TFlowControlManager::Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, 
 
 void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    const ui32 nodeId = record.GetNodeId();
+    // The publisher is the sender. OM is looked up as a node-0 local service, but its SelfId
+    // (and therefore Sender after delivery) is node-scoped, which is what the rest of the product
+    // relies on. Sender.NodeId()==0 is empty-sender / local-service delivery to this FCM: us.
+    ui32 nodeId = ev->Sender.NodeId();
+    if (!nodeId) {
+        nodeId = ctx.SelfID.NodeId();
+    }
+    if (!nodeId) {
+        return;
+    }
     const ui64 generation = record.GetGeneration();
     const TInstant now = TActivationContext::Now();
 

@@ -387,9 +387,11 @@ message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
 }
 
-// Sent by OverloadManager to FlowControlManagers when local node overload status changes
+// Sent by OverloadManager to FlowControlManagers when local node overload status changes.
+// The publishing node is ev->Sender.NodeId() (local-service Sender.NodeId()==0 means this node).
 message TEvNodeOverloadStatus {
-    optional uint32 NodeId = 1;
+    reserved 1;
+    reserved "NodeId";
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_OVERLOADED = 1;

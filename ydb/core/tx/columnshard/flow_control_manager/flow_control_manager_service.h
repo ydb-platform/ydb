@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_types.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -42,7 +44,7 @@ public:
 
     // Header-only: libraries that only need to address the FCM (tx/data_events) must not take a
     // link dependency on this library — it already PEERDIRs data_events, so the reverse edge
-    // would be a cycle.
+    // would be a cycle. IsEnabled is inline for the same reason (shard_writer calls it).
     static NActors::TActorId MakeServiceId(ui32 nodeId) {
         return NActors::TActorId(nodeId, "FlowCtrlMng");
     }
@@ -50,7 +52,9 @@ public:
     // Single source of truth for "is flow control on". Read from four subsystems (the write path,
     // the shard writer, and both halves of the overload manager), so any future qualification of
     // this condition has one place to happen rather than four.
-    static bool IsEnabled();
+    static bool IsEnabled() {
+        return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+    }
 
     static std::unique_ptr<NActors::IActor> CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 

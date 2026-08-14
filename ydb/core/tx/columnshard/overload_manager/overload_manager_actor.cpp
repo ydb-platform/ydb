@@ -5,8 +5,6 @@
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
-#include <ydb/library/services/services.pb.h>
-
 namespace NKikimr::NColumnShard::NOverload {
 
 TOverloadManager::TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
@@ -46,27 +44,13 @@ bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNod
         return false;
     }
 
-    ui32 selfNodeId = SelfId().NodeId();
-    if (!selfNodeId && CachedNodeIds.size() == 1) {
-        // LocalServices may register OM as TActorId(0, "OverloadMng"); SelfId can still be node-scoped,
-        // but if not, single-node caches uniquely identify this node for the status payload.
-        selfNodeId = *CachedNodeIds.begin();
-    }
-    if (!selfNodeId) {
-        // Not a delay: every later attempt re-derives the same zero, so flow control never learns
-        // this node's status and the only symptom is a gauge that never moves. Say so out loud.
-        NeedPublicationFlush = true;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "overload_status_publication_skipped")("reason", "self_node_id_unresolved")(
-            "cached_nodes", CachedNodeIds.size());
-        return false;
-    }
-
     ++OverloadStatusGeneration;
     // Generation is monotonic within a process and starts at Now().GetValue(), so a restarted OM
     // supersedes any LastGeneration a remote FCM retained from the previous incarnation.
+    // The publishing node is this actor's Sender (SelfId), not a payload field.
     for (const ui32 nodeId : CachedNodeIds) {
         Send(NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(nodeId),
-            new NFlowControl::TEvNodeOverloadStatus(selfNodeId, status, OverloadStatusGeneration));
+            new NFlowControl::TEvNodeOverloadStatus(status, OverloadStatusGeneration));
     }
     LastSentStatus = status;
     NeedPublicationFlush = false;

@@ -204,7 +204,11 @@ public:
             generation = Max(TInstant::Now().GetValue(), LastSeededOverloadGeneration) + 1;
         }
         LastSeededOverloadGeneration = Max(LastSeededOverloadGeneration, generation);
-        SendToFlowControlManager(new TEvNodeOverloadStatus(nodeId, status, generation));
+        // FCM takes the publishing node from Sender, not from the payload. ReplyTo lives on the
+        // local test node, so a fake service Sender is what lets tests heat node 42.
+        const TActorId sender(nodeId, TStringBuf("seedFcmStat"));
+        Runtime.Send(new IEventHandle(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), sender,
+                         new TEvNodeOverloadStatus(status, generation)), 0, true);
         return generation;
     }
 
@@ -2009,7 +2013,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvNodeOverloadStatus::EventType) {
                 const auto& record = event->Get<TEvNodeOverloadStatus>()->Record;
-                if (record.GetNodeId() == localNodeId && record.GetStatus() == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)
+                if (event->Sender.NodeId() == localNodeId &&
+                    record.GetStatus() == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)
                 {
                     statusSeen = true;
                 }

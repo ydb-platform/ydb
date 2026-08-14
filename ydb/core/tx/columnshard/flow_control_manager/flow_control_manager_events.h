@@ -106,8 +106,7 @@ struct TEvNodeOverloadStatus
     : public NActors::TEventPB<TEvNodeOverloadStatus, NKikimrTxColumnShard::TEvNodeOverloadStatus, EvNodeOverloadStatus> {
     TEvNodeOverloadStatus() = default;
 
-    TEvNodeOverloadStatus(ui32 nodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status, ui64 generation) {
-        Record.SetNodeId(nodeId);
+    TEvNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status, ui64 generation) {
         Record.SetStatus(status);
         Record.SetGeneration(generation);
     }

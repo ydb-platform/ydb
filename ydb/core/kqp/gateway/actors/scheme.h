@@ -76,13 +76,18 @@ public:
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request",
                     {"txId", response.GetTxId()});
 
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(response.GetIssues(), issues);
-                if (issues.Empty()) {
-                    issues.AddIssue(NYql::TIssue(NYql::TPosition(), "Access denied."));
+                // Keep the historical "Access denied." issue (and KIKIMR_ACCESS_DENIED) so existing
+                // clients/tests that match on that text and status still work. Attach tx_proxy
+                // details as subissues — they name the object the user has no rights on
+                // (and, for DLQ MOVE, the required AlterSchema/UpdateRow rights).
+                NYql::TIssue issue(NYql::TPosition(), "Access denied.");
+                NYql::TIssues proxyIssues;
+                NYql::IssuesFromMessage(response.GetIssues(), proxyIssues);
+                for (const auto& proxyIssue : proxyIssues) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(proxyIssue));
                 }
                 Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
-                    "Access denied for scheme request", issues));
+                    "Access denied for scheme request", {issue}));
                 this->Die(ctx);
                 return;
             }

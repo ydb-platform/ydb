@@ -1912,6 +1912,40 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
     }
 }
 
+// Extract an equality binding for a prefix column from an `==` node: one side must be
+// Member(row, prefixCol), the other a parameter or literal. Returns true if captured.
+void TryExtractPrefixValues(const TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet, TVector<std::pair<TString, TExprNode::TPtr>>& prefixValues)
+{
+    if (prefixColumnsSet.empty()) {
+        return;
+    }
+    auto eq = TExprBase(expr).Maybe<TCoCmpEqual>();
+    if (!eq) {
+        return;
+    }
+    auto trySide = [&](TExprBase member, TExprBase value) {
+        auto m = member.Maybe<TCoMember>();
+        if (!m) {
+            return false;
+        }
+        TString col = m.Cast().Name().StringValue();
+        if (!prefixColumnsSet.contains(col)) {
+            return false;
+        }
+        auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+        if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>()) {
+            return false;
+        }
+        if (AnyOf(prefixValues, [&](const auto& p) { return p.first == col; })) {
+            return true; // already captured
+        }
+        prefixValues.emplace_back(col, value.Ptr());
+        return true;
+    };
+    if (!trySide(eq.Cast().Left(), eq.Cast().Right()))
+        trySide(eq.Cast().Right(), eq.Cast().Left());
+}
+
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
     const THashSet<TString>& indexedColumns = {}, const TVector<TString>& prefixColumns = {},
     const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {})
@@ -1933,38 +1967,6 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         "Coalesce",
     };
 
-    // Extract an equality binding for a prefix column from an `==` node: one side must be
-    // Member(row, prefixCol), the other a parameter or literal. Returns true if captured.
-    auto tryExtractPrefixEq = [&] (const TExprNode::TPtr& expr) {
-        if (prefixColumnsSet.empty()) {
-            return;
-        }
-        auto eq = TExprBase(expr).Maybe<TCoCmpEqual>();
-        if (!eq) {
-            return;
-        }
-        auto trySide = [&] (TExprBase member, TExprBase value) {
-            auto m = member.Maybe<TCoMember>();
-            if (!m) {
-                return false;
-            }
-            TString col = m.Cast().Name().StringValue();
-            if (!prefixColumnsSet.contains(col)) {
-                return false;
-            }
-            auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-            if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>()) {
-                return false;
-            }
-            if (AnyOf(result.PrefixColumns, [&](const auto& p) { return p.first == col; })) {
-                return true; // already captured
-            }
-            result.PrefixColumns.emplace_back(col, value.Ptr());
-            return true;
-        };
-        trySide(eq.Cast().Left(), eq.Cast().Right()) || trySide(eq.Cast().Right(), eq.Cast().Left());
-    };
-
     TNodeSet visitedNodes;
 
     VisitExprSkipOptionalIfValue(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
@@ -1975,7 +1977,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             isGreenNode = false;
         }
 
-        tryExtractPrefixEq(expr);
+        TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns);
 
         if (auto match = TFulltextQuery::Match(expr, ctx, indexedColumns) ; match.IsValid()) {
             if (match.IsScoreQuery()) {
@@ -2006,7 +2008,6 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         if (!isGreenNode) {
             return false;
         }
-
 
         return true;
     }, visitedNodes, result.ScoreRestriction);
@@ -2142,6 +2143,29 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
         node.Ref(), TCoTopSort::idx_Input, std::move(input));
 };
 
+TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read, TConstArrayRef<TString> prefixColumns)
+{
+    // An equality predicate on a prefix (leading key) column is usually pushed into the index read
+    // as a point key range (KqlReadTableIndex with PointPrefixLen). Extract those values here; any
+    // prefix equality that stayed in the lambda is picked up by FindMatchingApply below.
+    TVector<std::pair<TString, TExprNode::TPtr>> seedPrefixColumns;
+    if (!prefixColumns.empty() && read.Read.IsValid()) {
+        auto range = read.Read.Cast().Range();
+        auto from = range.From();
+        auto to = range.To();
+        if (from.Maybe<TKqlKeyInc>() && from.Raw() == to.Raw() && from.ArgCount() >= prefixColumns.size()) {
+            for (size_t i = 0; i < prefixColumns.size(); ++i) {
+                auto value = from.Arg(i);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
+                    seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
+                }
+            }
+        }
+    }
+    return seedPrefixColumns;
+}
+
 TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     if (!node.Maybe<TCoFlatMap>()) {
@@ -2182,25 +2206,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         prefixColumns.assign(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end() - 1);
     }
 
-    // An equality predicate on a prefix (leading key) column is usually pushed into the index read
-    // as a point key range (KqlReadTableIndex with PointPrefixLen). Extract those values here; any
-    // prefix equality that stayed in the lambda is picked up by FindMatchingApply below.
-    TVector<std::pair<TString, TExprNode::TPtr>> seedPrefixColumns;
-    if (!prefixColumns.empty() && read.Read.IsValid()) {
-        auto range = read.Read.Cast().Range();
-        auto from = range.From();
-        auto to = range.To();
-        if (from.Maybe<TKqlKeyInc>() && from.Raw() == to.Raw() && from.ArgCount() >= prefixColumns.size()) {
-            for (size_t i = 0; i < prefixColumns.size(); ++i) {
-                auto value = from.Arg(i);
-                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
-                    seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
-                }
-            }
-        }
-    }
-
+    auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
     auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns, prefixColumns, seedPrefixColumns);
     if (result.HasErrors) {
         return {};
@@ -2310,8 +2316,12 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
             continue;
         }
 
-        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
-        jsonIndexedColumns.insert(indexInfo.KeyColumns.at(0));
+        if (indexInfo.KeyColumns.size() > 1) {
+            // FIXME: Prefixed indexes are not supported in auto-selection yet
+            continue;
+        }
+
+        jsonIndexedColumns.insert(indexInfo.KeyColumns.back());
     }
 
     auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
@@ -2331,10 +2341,11 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
             continue;
         }
 
-        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
-        const auto& keyCol = indexInfo.KeyColumns.at(0);
+        if (indexInfo.KeyColumns.size() > 1) {
+            continue;
+        }
 
-        if (keyCol == columnName) {
+        if (indexInfo.KeyColumns.back() == columnName) {
             selectedIndex = indexInfo.Name;
             break;
         }
@@ -2392,10 +2403,15 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(
     }
 
     THashSet<TString> jsonIndexedColumns;
-    YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
-    jsonIndexedColumns.insert(indexDesc->KeyColumns.at(0));
+    jsonIndexedColumns.insert(indexDesc->KeyColumns.back());
 
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
+    TVector<TString> prefixColumns;
+    if (indexDesc->KeyColumns.size() > 1) {
+        prefixColumns.assign(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end() - 1);
+    }
+
+    auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns, prefixColumns, seedPrefixColumns);
     if (!expectedSettings.has_value()) {
         ctx.AddError(expectedSettings.error());
         return {};

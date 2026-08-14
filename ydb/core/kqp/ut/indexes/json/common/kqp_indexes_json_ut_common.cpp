@@ -20,6 +20,14 @@ TKikimrRunner Kikimr(bool enableJsonIndex, bool enableJsonIndexAutoSelect) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner KikimrJsonPrefix() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    return TKikimrRunner(settings);
+}
+
 void CreateTestTable(TQueryClient& db, const std::string& type, bool withIndex) {
     const auto query = std::format(R"(
         CREATE TABLE TestTable (

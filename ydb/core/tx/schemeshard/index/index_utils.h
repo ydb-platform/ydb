@@ -331,7 +331,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // operations or older clients cannot bypass the KQP-side check.
             if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
                 status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-                error = "Fulltext index prefix columns support is disabled";
+                error = "Prefixed fulltext index support is disabled";
                 return false;
             }
 
@@ -379,9 +379,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 }
             }
 
-            if (indexKeys.KeyColumns.size() != 1) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "JSON index requires exactly one key column, but " << indexKeys.KeyColumns.size() << " are requested";
+            // JSON index key columns are [prefix..., json]; more than one key column means the
+            // index has prefix columns. Enforce the feature flag server-side.
+            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "Prefixed JSON index support is disabled";
                 return false;
             }
 
@@ -391,13 +393,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
 
-            for (const auto& column : indexKeys.KeyColumns) {
-                auto typeInfo = baseColumnTypes.at(column);
+            // Only the last key column must be Json/JsonDocument (prefix columns can be any type).
+            {
+                const auto& jsonColumn = indexKeys.KeyColumns.back();
+                auto typeInfo = baseColumnTypes.at(jsonColumn);
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
                     typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument)
                 {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder() << "JSON column '" << column <<
+                    error = TStringBuilder() << "JSON column '" << jsonColumn <<
                         "' must have type 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);
                     return false;
                 }

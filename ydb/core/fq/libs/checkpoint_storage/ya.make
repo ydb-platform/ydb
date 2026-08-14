@@ -11,6 +11,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    library/cpp/streams/zstd
     ydb/library/actors/core
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage

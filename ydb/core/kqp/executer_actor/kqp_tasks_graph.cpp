@@ -1112,6 +1112,15 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
     }
+<<<<<<< HEAD
+=======
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinShuffleMode()) {
+        Y_ENSURE(
+            dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT || dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF,
+            TStringBuilder{} << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << static_cast<NDq::EShuffleMode>(dqSourceStreamLookup.GetShuffleMode()));
+    }
+    /* ShuffleMode intentionally omitted */
+>>>>>>> a46b9b677fc (dq streamlookupjoin: correctly fix multi-partition: add feature-flag and tests (#41442))
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());

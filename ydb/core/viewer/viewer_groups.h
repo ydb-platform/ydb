@@ -159,7 +159,7 @@ public:
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterPDiskIds; // may be cleared while applying filters
-    std::unordered_set<ui32> InitialFilterPDiskIds; // copy of initialyy sent FilterPDiskIds
+    std::unordered_set<ui32> InitialFilterPDiskIds; // copy of initially sent FilterPDiskIds
 
     enum class EWith {
         Everything,

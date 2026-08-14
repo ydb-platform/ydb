@@ -319,21 +319,12 @@ def test_viewer_describe_out_of_scope_path(mon_base_url_with_extra_sids_control)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
 
 
-# Only CGI params that bypass regular path validation (e.g. path_id, schemeshard_id) are forbidden.
+# Extra CGI params (e.g. merge) are forbidden for strict database tokens on describe.
 def test_viewer_describe_strict_database_token_extra_params(mon_base_url_with_extra_sids_control):
     for ep in ['/viewer/describe', '/viewer/json/describe']:
         path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'merge': 'true'})
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
-
-
-# path_id CGI param bypasses regular path validation, so handler validation rejects it as a bad request.
-def test_viewer_describe_strict_database_token_forbidden_params(mon_base_url_with_extra_sids_control):
-    for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path_id': '1'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-        # path_id is rejected only for some access levels
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
 
 
 # path_id/schemeshard_id params require monitoring+ level access; strict database and viewer tokens get 4xx.
@@ -363,7 +354,7 @@ def test_viewer_describe_path_id_forbidden_for_strict_database_token(
             _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
             _assert_status(mon_base_url_with_extra_sids_control, path, 'monitoring@builtin', 200)
 
-        # schemeshard_id alone without path_id is rejected always
+        # schemeshard_id alone without path_id: handler gives 403 for strict database users and rejects other with 400
         path = _build_endpoint_path(
             ep,
             with_database_cgi=True,
@@ -371,6 +362,7 @@ def test_viewer_describe_path_id_forbidden_for_strict_database_token(
             database=tenant_database,
         )
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'viewer@builtin', 403)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
 
 
@@ -379,15 +371,6 @@ def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control)
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:
         path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path': '/Other'})
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-
-
-# schemeshard_id CGI param bypasses regular path validation, so handler validation rejects it as a bad request.
-def test_viewer_describe_schemeshard_id_forbidden(mon_base_url_with_extra_sids_control):
-    for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'schemeshard_id': '1'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-        # An administrator also gets 400, but from handler validation
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
 
 
 def test_viewer_direct_forbidden_for_strict_database_token(

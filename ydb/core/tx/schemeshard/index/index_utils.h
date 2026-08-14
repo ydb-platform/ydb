@@ -290,6 +290,45 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     implTableColumns = CalcTableImplDescription(GetIndexType(indexDesc), baseTableColumns, indexKeys);
 
+    auto checkInvertedIndex = [&](const char* typeName) {
+        // We have already checked this in IsCompatibleIndex
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+
+        // Fulltext index key columns are [prefix..., text]; more than one key column means the
+        // index has prefix columns. Enforce the feature flag server-side so direct scheme
+        // operations or older clients cannot bypass the KQP-side check.
+        if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+            error = "Prefixed fulltext/json index support is disabled";
+            return false;
+        }
+
+        if (indexKeys.KeyColumns.size() > 1) {
+            // Prefix columns must be disjoint from the primary key (doc-id) columns:
+            // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
+            const THashSet<TString> pkColumns{baseTableColumns.Keys.begin(), baseTableColumns.Keys.end()};
+            for (size_t i = 0; i < indexKeys.KeyColumns.size()-1; ++i) {
+                if (pkColumns.contains(indexKeys.KeyColumns[i])) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder() << typeName << " index prefix column '" << indexKeys.KeyColumns[i]
+                        << "' must not be a primary key column";
+                    return false;
+                }
+            }
+        }
+
+        // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
+        // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
+        if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, typeName, error)) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                return false;
+            }
+        }
+
+        return true;
+    };
+
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -323,27 +362,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
-            // We have already checked this in IsCompatibleIndex
-            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-
-            // Fulltext index key columns are [prefix..., text]; more than one key column means the
-            // index has prefix columns. Enforce the feature flag server-side so direct scheme
-            // operations or older clients cannot bypass the KQP-side check.
-            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
-                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-                error = "Prefixed fulltext index support is disabled";
+            if (!checkInvertedIndex("Fulltext")) {
                 return false;
             }
-
-            // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
-            // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
-            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
-                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    return false;
-                }
-            }
-
 
             // Here we only check that fulltext index columns matches table description
             // the rest will be checked in NFulltext::ValidateSettings (called separately outside of CommonCheck)
@@ -367,23 +388,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
-            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-
-            // __ydb_row_id opt-in: when the rowid mode has been enabled (ClassifyFulltextRowId /
-            // MaybeEnableFulltextRowIdMode), skip the single-integer-PK requirement - the doc_id is
-            // __ydb_row_id, not the PK. Mirrors the fulltext case above.
-            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
-                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    return false;
-                }
-            }
-
-            // JSON index key columns are [prefix..., json]; more than one key column means the
-            // index has prefix columns. Enforce the feature flag server-side.
-            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
-                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-                error = "Prefixed JSON index support is disabled";
+            if (!checkInvertedIndex("JSON")) {
                 return false;
             }
 

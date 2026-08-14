@@ -1707,32 +1707,6 @@ private:
                 dataColumns.emplace_back(TString(dataCol.Value()));
             }
 
-            const bool isFulltextIndex =
-                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
-                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
-            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
-            // More than one key column means the index has prefix columns.
-            if (isFulltextIndex && indexColumns.size() > 1) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                        "Prefixed fulltext index support is disabled"));
-                    return TStatus::Error;
-                }
-                // Prefix columns must be disjoint from the primary key (doc-id) columns:
-                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
-                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
-                for (size_t i = 0; i + 1 < indexColumns.size(); ++i) {
-                    if (pkColumns.contains(indexColumns[i])) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
-                            << "Fulltext index prefix column '" << indexColumns[i]
-                            << "' must not be a primary key column"));
-                        return TStatus::Error;
-                    }
-                }
-            }
-
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;

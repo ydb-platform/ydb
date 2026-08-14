@@ -682,18 +682,12 @@ const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool
         return rawInputIUs;
     }
 
-    const ui32 index = ui32(includeSubplanVars) * 2 + ui32(includeCorrelatedDeps);
-    auto& result = ResolvedInputIUs[index];
-    if (!result) {
-        result.emplace();
-    } else {
-        result->clear();
-    }
+    ResolvedInputIUs.clear();
 
     for (const auto& iu : rawInputIUs) {
-        AddResolvedInfoUnit(iu, *result, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+        AddResolvedInfoUnit(iu, ResolvedInputIUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
     }
-    return *result;
+    return ResolvedInputIUs;
 }
 
 const TVector<TInfoUnit>& TExpression::GetRawInputIUs() const {

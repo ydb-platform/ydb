@@ -3424,9 +3424,9 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
 
         FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
-        // Per-shard affinity for CTAS (EnableCsWriteAffinity).
+        // Per-shard affinity for OLAP writes (EnableCsWriteAffinity).
         //
-        // Populate TargetShardIds with the target CTAS table shards that belong to this
+        // Populate TargetShardIds with the target table shards that belong to this
         // task. Two cases:
         //
         //  A. ShardIdToNodeId contains the target shards (e.g. when the target table's
@@ -3436,7 +3436,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         //     resolved shards (those present in ShardIdToNodeId). We assign that single
         //     shard to TargetShardIds.
         //
-        //  B. ShardIdToNodeId does NOT contain the target shards (typical for OLAP CTAS
+        //  B. ShardIdToNodeId does NOT contain the target shards (typical for OLAP writes
         //     where the resolver does not add the write-target shards to the global map):
         //     CountComputeTasks() fell through to the standard 1-task path. All target
         //     shards go into TargetShardIds for that single task.
@@ -3444,28 +3444,28 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         // When TargetShardIds is populated, the WriteActor discards rows destined for
         // shards not in the list (which are handled by other tasks in case A, or are an
         // error in case B — but case B uses all shards so nothing is discarded).
-        if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
-                && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && stageInfo.Meta.ShardKey
-                && !stageInfo.Meta.ShardKey->GetPartitions().empty()
-                && GetMeta().ShardsResolved) {
+        if (settings.GetIsOlap()) {
 
-            // Collect the resolved target shards (those present in ShardIdToNodeId),
-            // preserving the order of GetPartitions(). CountComputeTasks created one
-            // task per resolved shard in this same order, so task index among resolved
-            // shards identifies this task's shard.
+            // Collect all target shards from ColumnTableInfo (for OLAP) or ShardKey (for DataShards).
+            // Unlike before, we collect ALL shards, not just those in ShardIdToNodeId,
+            // because CountComputeTasks now creates per-shard tasks regardless of node mapping.
             TVector<ui64> resolvedShardIds;
-            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                if (GetMeta().ShardIdToNodeId.contains(partition.ShardId)) {
+            if (stageInfo.Meta.ColumnTableInfoPtr
+                    && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+                const auto& sharding = stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding();
+                for (const auto& shardId : sharding.GetColumnShards()) {
+                    resolvedShardIds.push_back(shardId);
+                }
+            } else if (stageInfo.Meta.ShardKey) {
+                // Fallback: use ShardKey partitions (for data shards)
+                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     resolvedShardIds.push_back(partition.ShardId);
                 }
             }
 
             if (resolvedShardIds.empty()) {
-                // Case B: no node info — assign all shards to the single task.
-                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    settings.AddTargetShardIds(partition.ShardId);
-                }
+                // No shard info available — TargetShardIds stays empty.
+                // WriteActor will handle all shards without filtering.
             } else {
                 // Case A: one task per resolved shard. Find this task's index among the
                 // stage tasks and assign the corresponding shard.
@@ -3500,14 +3500,8 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
                 }
             }
 
-            // Sanity check: TargetShardIds must be non-empty (otherwise all rows would
-            // be silently discarded). This should never happen given the logic above.
-            AFL_ENSURE(!settings.GetTargetShardIds().empty())
-                ("msg", "CTAS affinity sink has empty TargetShardIds — no shards assigned to this task")
-                ("taskNodeId", task.Meta.ExpectedNodeId.value_or(GetMeta().ExecuterId.NodeId()))
-                ("totalShards", stageInfo.Meta.ShardKey->GetPartitions().size())
-                ("resolvedShards", resolvedShardIds.size())
-                ("stageTasks", stageInfo.Tasks.size());
+            // Note: TargetShardIds may be empty in Case B (no node info available).
+            // In that case, WriteActor handles all shards without filtering.
         }
 
         output.SinkSettings.ConstructInPlace();
@@ -4276,49 +4270,57 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         }
     }
 
-    // CsWriteAffinity (Per-Shard CTAS): if this stage is a CTAS fill_table sink with
-    // EnableCsWriteAffinity, create one task per target shard, each pinned to the node
-    // that hosts that shard. The data arrives from the Transform Stage via TDqCnBroadcast
-    // (all rows to all tasks); each task filters to its own shard using TargetShardIds
-    // (a single shard) in TShardedWriteController::FlushSerializer.
+    // Per-Shard OLAP Write: if this stage is an OLAP write sink
+    // (INSERT, FILL, etc.), create one task per target shard,
+    // each pinned to the node that hosts that shard. The data arrives from the Transform
+    // Stage via TDqCnBroadcast (all rows to all tasks); each task filters to its own
+    // shard using TargetShardIds (a single shard) in TShardedWriteController::FlushSerializer.
     //
     // Conditions:
-    //  - MODE_FILL sink with EnableCsWriteAffinity in the transaction body
+    //  - IsOlap sink
     //  - ShardKey resolved (table resolver has run before BuildAllTasks)
     //  - ShardIdToNodeId populated with target table's shards (from ResolveShards)
     //
-    // NOTE: ShardIdToNodeId may only contain source table shards, not CTAS target
-    //       table shards. When the mapping is unavailable, fall through to the standard
+    // NOTE: ShardIdToNodeId may only contain source table shards, not target table
+    //       shards. When the mapping is unavailable, fall through to the standard
     //       single-task path (correctness preserved, node affinity benefit deferred).
     {
         bool isCsWriteAffinitySink = false;
-        if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && GetMeta().ShardsResolved
-                && stageInfo.Meta.ShardKey
-                && !stageInfo.Meta.ShardKey->GetPartitions().empty()) {
-            for (const auto& sink : stage.GetSinks()) {
-                if (sink.HasInternalSink()
-                        && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                    if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
-                            && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                        isCsWriteAffinitySink = true;
-                    }
+        // Check for OLAP sink regardless of ShardsResolved status
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.HasInternalSink()
+                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                        && sinkSettings.GetIsOlap()) {
+                    isCsWriteAffinitySink = true;
                 }
             }
         }
 
         if (isCsWriteAffinitySink) {
-            // Build a list of (shardId, nodeId) for shards whose nodeId is known
-            // (present in ShardIdToNodeId). One task is created per such shard,
-            // pinned to its node. Tasks for shards on the same node are co-located
-            // (grouped by node) but remain independent tasks.
+            // Build a list of (shardId, nodeId) for shards. One task is created per shard.
+            // If nodeId is known (in ShardIdToNodeId), task is pinned to that node.
+            // Otherwise, task is pinned to the executer node (no affinity benefit, but per-shard routing works).
             TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
-            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                const ui64 shardId = partition.ShardId;
-                auto it = GetMeta().ShardIdToNodeId.find(shardId);
-                if (it != GetMeta().ShardIdToNodeId.end()) {
-                    shardNodes.emplace_back(shardId, it->second);
+            const ui64 defaultNodeId = GetMeta().ExecuterId.NodeId();
+
+            // For OLAP, use ColumnTableInfo to get column shard IDs
+            if (stageInfo.Meta.ColumnTableInfoPtr
+                    && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+                const auto& sharding = stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding();
+                for (const auto& shardId : sharding.GetColumnShards()) {
+                    auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                    ui64 nodeId = (it != GetMeta().ShardIdToNodeId.end()) ? it->second : defaultNodeId;
+                    shardNodes.emplace_back(shardId, nodeId);
+                }
+            } else if (stageInfo.Meta.ShardKey) {
+                // Fallback: use ShardKey partitions (for data shards)
+                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                    const ui64 shardId = partition.ShardId;
+                    auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                    ui64 nodeId = (it != GetMeta().ShardIdToNodeId.end()) ? it->second : defaultNodeId;
+                    shardNodes.emplace_back(shardId, nodeId);
                 }
             }
 

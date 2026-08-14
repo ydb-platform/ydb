@@ -6,7 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
-namespace NKikimr::NMiniKQL::GraceJoin {
+namespace NKikimr::NMiniKQL::NGraceJoin {
 
 // Determines whether the right input can be safely skipped when the left input is empty.
 // For certain join kinds, the result will always be empty if the left side is empty,
@@ -453,12 +453,12 @@ public:
     void Clear();
 
     // Creates new table with key columns and data columns
-    TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,
-           ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
-           ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
-           ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
-           ui64 nullsBitmapSize = 1, TColTypeInterface* colInterfaces = nullptr,
-           bool isAny = false);
+    explicit TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,
+                    ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
+                    ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
+                    ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
+                    ui64 nullsBitmapSize = 1, TColTypeInterface* colInterfaces = nullptr,
+                    bool isAny = false);
 
     enum class EAddTupleResult { Added,
                                  Unmatched,
@@ -466,7 +466,7 @@ public:
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns,
     // stringsSizes - sizes of strings columns.  Indexes of null-value columns
     // in the form of bit array should be first values of intColumns.
-    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue* iColumns = nullptr, const TTable& other = {});
+    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue* iColumns = nullptr, const TTable& other = TTable{});
 
     ~TTable();
 
@@ -485,4 +485,4 @@ public:
     ui64 BloomFalsePositives = 0;
 };
 
-} // namespace NKikimr::NMiniKQL::GraceJoin
+} // namespace NKikimr::NMiniKQL::NGraceJoin

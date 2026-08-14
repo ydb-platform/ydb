@@ -488,6 +488,63 @@ HWY_API V InterleaveEven(V a, V b) {
 }
 #endif
 
+// ------------------------------ MinMagnitude/MaxMagnitude
+
+#if (defined(HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE) == defined(HWY_TARGET_TOGGLE))
+#ifdef HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#undef HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#else
+#define HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#endif
+
+template <class V, HWY_IF_FLOAT_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  const auto abs_a = Abs(a);
+  const auto abs_b = Abs(b);
+  return IfThenElse(Lt(abs_a, abs_b), a,
+                    Min(IfThenElse(Eq(abs_a, abs_b), a, b), b));
+}
+
+template <class V, HWY_IF_FLOAT_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  const auto abs_a = Abs(a);
+  const auto abs_b = Abs(b);
+  return IfThenElse(Lt(abs_a, abs_b), b,
+                    Max(IfThenElse(Eq(abs_a, abs_b), b, a), a));
+}
+
+#endif  // HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+
+template <class V, HWY_IF_SIGNED_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  const DFromV<V> d;
+  const RebindToUnsigned<decltype(d)> du;
+  const auto abs_a = BitCast(du, Abs(a));
+  const auto abs_b = BitCast(du, Abs(b));
+  return IfThenElse(RebindMask(d, Lt(abs_a, abs_b)), a,
+                    Min(IfThenElse(RebindMask(d, Eq(abs_a, abs_b)), a, b), b));
+}
+
+template <class V, HWY_IF_SIGNED_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  const DFromV<V> d;
+  const RebindToUnsigned<decltype(d)> du;
+  const auto abs_a = BitCast(du, Abs(a));
+  const auto abs_b = BitCast(du, Abs(b));
+  return IfThenElse(RebindMask(d, Lt(abs_a, abs_b)), b,
+                    Max(IfThenElse(RebindMask(d, Eq(abs_a, abs_b)), b, a), a));
+}
+
+template <class V, HWY_IF_UNSIGNED_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  return Min(a, b);
+}
+
+template <class V, HWY_IF_UNSIGNED_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  return Max(a, b);
+}
+
 // ------------------------------ AddSub
 
 template <class V, HWY_IF_LANES_D(DFromV<V>, 1)>
@@ -2760,15 +2817,7 @@ template <class D, typename T = TFromD<D>>
 HWY_API VFromD<D> GatherIndexN(D d, const T* HWY_RESTRICT base,
                                VFromD<RebindToSigned<D>> index,
                                const size_t max_lanes_to_load) {
-  const RebindToSigned<D> di;
-  using TI = TFromD<decltype(di)>;
-  static_assert(sizeof(T) == sizeof(TI), "Index/lane size must match");
-
-  VFromD<D> v = Zero(d);
-  for (size_t i = 0; i < HWY_MIN(MaxLanes(d), max_lanes_to_load); ++i) {
-    v = InsertLane(v, i, base[ExtractLane(index, i)]);
-  }
-  return v;
+  return GatherIndexNOr(Zero(d), d, base, index, max_lanes_to_load);
 }
 
 template <class D, typename T = TFromD<D>>
@@ -2780,8 +2829,9 @@ HWY_API VFromD<D> GatherIndexNOr(VFromD<D> no, D d, const T* HWY_RESTRICT base,
   static_assert(sizeof(T) == sizeof(TI), "Index/lane size must match");
 
   VFromD<D> v = no;
-  for (size_t i = 0; i < HWY_MIN(MaxLanes(d), max_lanes_to_load); ++i) {
-    v = InsertLane(v, i, base[ExtractLane(index, i)]);
+  for (size_t i = 0; i < MaxLanes(d); ++i) {
+    if (i < max_lanes_to_load)
+      v = InsertLane(v, i, base[ExtractLane(index, i)]);
   }
   return v;
 }
@@ -5606,13 +5656,6 @@ HWY_API V CompressNot(V v, M mask) {
 
 namespace detail {
 
-#if HWY_IDE
-template <class M>
-HWY_INLINE uint64_t BitsFromMask(M /* mask */) {
-  return 0;
-}
-#endif  // HWY_IDE
-
 template <size_t N>
 HWY_INLINE Vec128<uint8_t, N> IndicesForExpandFromBits(uint64_t mask_bits) {
   static_assert(N <= 8, "Should only be called for half-vectors");
@@ -5886,7 +5929,7 @@ template <typename T, size_t N, HWY_IF_T_SIZE(T, 1), HWY_IF_V_SIZE_LE(T, N, 8)>
 HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const DFromV<decltype(v)> d;
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
   const Vec128<uint8_t, N> indices =
       detail::IndicesForExpandFromBits<N>(mask_bits);
   return BitCast(d, TableLookupBytesOr0(v, indices));
@@ -5900,7 +5943,7 @@ HWY_API Vec128<T> Expand(Vec128<T> v, Mask128<T> mask) {
   const Half<decltype(du)> duh;
   const Vec128<uint8_t> vu = BitCast(du, v);
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
   const uint64_t maskL = mask_bits & 0xFF;
   const uint64_t maskH = mask_bits >> 8;
 
@@ -5932,7 +5975,7 @@ HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const RebindToUnsigned<decltype(d)> du;
 
   const Rebind<uint8_t, decltype(d)> du8;
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
 
   // Storing as 8-bit reduces table size from 4 KiB to 2 KiB. We cannot apply
   // the nibble trick used below because not all indices fit within one lane.
@@ -6214,7 +6257,7 @@ HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const DFromV<decltype(v)> d;
   const RebindToUnsigned<decltype(d)> du;
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
 
   alignas(16) static constexpr uint32_t packed_array[16] = {
       // PrintExpand64x4Nibble - same for 32x4.
@@ -7371,6 +7414,18 @@ HWY_API auto Le(V a, V b) -> decltype(a == b) {
 #endif  // HWY_NATIVE_OPERATOR_REPLACEMENTS
 
 #undef HWY_GENERIC_IF_EMULATED_D
+
+// TODO: remove once callers are updated.
+// SVE and RVV do not support DFromM because their masks are loosely typed.
+#if HWY_MAX_BYTES <= 64 && !HWY_TARGET_IS_SVE && HWY_TARGET != HWY_RVV
+namespace detail {
+template <class M>
+uint64_t BitsFromMask(M m) {
+  const DFromM<M> d;
+  return ::hwy::HWY_NAMESPACE::BitsFromMask(d, m);
+}
+}  // namespace detail
+#endif  // !HWY_HAVE_SCALABLE && HWY_MAX_BYTES <= 64
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE

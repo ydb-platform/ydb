@@ -85,6 +85,10 @@ Y_UNIT_TEST_SUITE(SpaceDataKind) {
         UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::Coordinator), TDataKind::SYSTEM);
         UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::BSController), TDataKind::SYSTEM);
 
+        // BlobDepot implements a whole group, and its index is what records the barriers and the
+        // trash, so it has to keep writing for anything in that group to be deletable.
+        UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::BlobDepot), TDataKind::SYSTEM);
+
         UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::DataShard), TDataKind::USER);
         UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::ColumnShard), TDataKind::USER);
         UNIT_ASSERT_EQUAL(DataKindByTabletType(TTabletTypes::PersQueue), TDataKind::USER);

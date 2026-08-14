@@ -113,8 +113,6 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
         , HasOwnSharedThread(cfg.HasSharedThread)
-        , MaxLocalQueueSize(cfg.MaxLocalQueueSize)
-        , MinLocalQueueSize(cfg.MinLocalQueueSize)
         , SharedOnly(cfg.ForcedForeignSlotCount || cfg.AdjacentPools.size() || (!cfg.Threads && !cfg.MaxThreadCount))
         , Priority(cfg.Priority)
         , Jail(jail)
@@ -132,10 +130,6 @@ namespace NActors {
                 threads = 0;
             }
 
-            if (MaxLocalQueueSize) {
-                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-                LocalQueueSize = MinLocalQueueSize;
-            }
             if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
                 for (ui32 idx = 0; idx < threads; ++idx) {
                     SpinThresholdCyclesPerThread[idx].store(0);
@@ -161,10 +155,6 @@ namespace NActors {
                 threads = threads - 1;
             }
 
-            if (MaxLocalQueueSize) {
-                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-                LocalQueueSize = MinLocalQueueSize;
-            }
             if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
                 for (ui32 idx = 0; idx < threads; ++idx) {
                     SpinThresholdCyclesPerThread[idx].store(0);
@@ -317,31 +307,9 @@ namespace NActors {
         return nullptr;
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationLocalQueue(ui64 revolvingCounter) {
-        TWorkerId workerId = TlsThreadContext->WorkerId();
-        Y_DEBUG_ABORT_UNLESS(workerId < static_cast<i32>(MaxFullThreadCount));
-
-        if (workerId >= 0 && LocalQueues[workerId].size()) {
-            ui32 activation = LocalQueues[workerId].front();
-            LocalQueues[workerId].pop();
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue: activation found");
-            return MailboxTable->Get(activation);
-        } else {
-            TlsThreadContext->LocalQueueContext.WriteTurn = 0;
-            TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
-        }
-        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to ring queue");
-        return GetReadyActivationRingQueue(revolvingCounter);
-    }
-
     TMailbox* TBasicExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
-        if (MaxLocalQueueSize) {
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
-            return GetReadyActivationLocalQueue(revolvingCounter);
-        } else {
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
-            return GetReadyActivationRingQueue(revolvingCounter);
-        }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
+        return GetReadyActivationRingQueue(revolvingCounter);
     }
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
@@ -414,47 +382,8 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        if (TlsThreadContext && TlsThreadContext->Pool() == this) {
-            TWorkerId workerId = TlsThreadContext->WorkerId();
-            if (++TlsThreadContext->LocalQueueContext.WriteTurn < TlsThreadContext->LocalQueueContext.LocalQueueSize) {
-                LocalQueues[workerId].push(mailbox->Hint);
-                return;
-            }
-            if (ActorSystemProfile != EASProfile::Default) {
-                TAtomic x = AtomicGet(Semaphore);
-                TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-                if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseIfAllOtherThreadsAreSleeping) {
-                    if (semaphore.CurrentSleepThreadCount == semaphore.CurrentThreadCount - 1 && semaphore.OldSemaphore == 0) {
-                        if (LocalQueues[workerId].empty()) {
-                            LocalQueues[workerId].push(mailbox->Hint);
-                            return;
-                        }
-                    }
-                }
-
-                if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseOnMicroburst) {
-                    if (semaphore.OldSemaphore >= semaphore.CurrentThreadCount) {
-                        if (LocalQueues[workerId].empty() && TlsThreadContext->LocalQueueContext.WriteTurn < 1) {
-                            TlsThreadContext->LocalQueueContext.WriteTurn++;
-                            LocalQueues[workerId].push(mailbox->Hint);
-                            return;
-                        }
-                    }
-                }
-                ScheduleActivationExRingQueue(mailbox, revolvingWriteCounter, x);
-                return;
-            }
-        }
-        ScheduleActivationExRingQueue(mailbox, revolvingWriteCounter, std::nullopt);
-    }
-
     void TBasicExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) {
-        if (MaxLocalQueueSize) {
-            ScheduleActivationExLocalQueue(mailbox, revolvingCounter);
-        } else {
-            ScheduleActivationExRingQueue(mailbox, revolvingCounter, std::nullopt);
-        }
+        ScheduleActivationExRingQueue(mailbox, revolvingCounter, std::nullopt);
     }
 
     void TBasicExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
@@ -695,11 +624,6 @@ namespace NActors {
         return Priority;
     }
 
-    void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {
-        size = std::min(size, MaxLocalQueueSize);
-        LocalQueueSize.store(size, std::memory_order_relaxed);
-    }
-
     void TBasicExecutorPool::Initialize() {
         TlsThreadContext->WaitingStats = &WaitingStats[TlsThreadContext->WorkerId()];
     }
@@ -817,18 +741,6 @@ namespace NActors {
 
     ui32 TBasicExecutorPool::EventsPerMailbox() const {
         return EventsPerMailboxValue;
-    }
-
-    ui16 TBasicExecutorPool::GetLocalQueueSize() const {
-        return LocalQueueSize.load(std::memory_order_relaxed);
-    }
-
-    ui16 TBasicExecutorPool::GetMaxLocalQueueSize() const {
-        return MaxLocalQueueSize;
-    }
-
-    ui16 TBasicExecutorPool::GetMinLocalQueueSize() const {
-        return MinLocalQueueSize;
     }
 
 }

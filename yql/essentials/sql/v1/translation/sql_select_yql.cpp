@@ -1214,6 +1214,10 @@ private:
             return TNonNull(node);
         }
 
+        if (node->GetSource()) {
+            return Unsupported("bind parameter referencing a legacy source");
+        }
+
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = std::move(cluster),

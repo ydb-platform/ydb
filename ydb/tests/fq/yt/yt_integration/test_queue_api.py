@@ -27,7 +27,6 @@ Steps from documentation:
 21. Cleanup
 """
 
-import time
 from collections import Counter
 
 import pytest
@@ -54,7 +53,6 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     yt.remove(consumer_path)
     yt.remove(producer_path)
     yt.remove(queue_path)
-    time.sleep(2)
 
     # --- 1. Create queue (dynamic table with queue schema) ---
     # Doc: yt --proxy pythia create table //tmp/$USER-test-queue \
@@ -99,9 +97,6 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     # Note: queue is already mounted by create_queue(); mounting again is idempotent.
     yt.mount_table(consumer_path, sync=True)
 
-    # Wait for tablets to be ready (as in documentation)
-    time.sleep(5)
-
     # --- 8. Check @queue_partitions after mount (errors should be gone) ---
     # Doc: yt --proxy pythia get //tmp/$USER-test-queue/@queue_partitions
     queue_partitions = yt.get_attribute_cli(f"{queue_path}/@queue_partitions")
@@ -139,9 +134,6 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     # Total expected rows: 5 rows per batch × 20 batches = 100 rows
     expected_row_count = len(written_rows) * batches_written  # 100
     expected_data_values = sorted([row["data"] for row in written_rows] * batches_written)
-
-    # Wait for data to be committed
-    time.sleep(5)
 
     # --- 12. Check write_row_count_rate from @queue_status ---
     # Doc: yt --proxy pythia get //tmp/$USER-test-queue/@queue_status/write_row_count_rate

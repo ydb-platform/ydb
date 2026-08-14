@@ -25,8 +25,7 @@ void TPredicateFilter::ReportTracing(
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TPredicateFilter::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
@@ -85,8 +84,7 @@ void TConflictDetector::ReportTracing(const std::shared_ptr<NCommon::IDataSource
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TConflictDetector::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TConflictDetector::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     VerifyConflictingPortion(source);
     // it is not empty (not filtered everything out by other filters) and conflicting, so we must mark the conflict here
     AFL_VERIFY(source->AddTxConflict());
@@ -101,8 +99,7 @@ void TSnapshotFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>&
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TSnapshotFilter::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     auto filter = MakeSnapshotFilter(
         source->GetStageData().GetTable().ToTable(
             std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
@@ -125,8 +122,7 @@ void TDeletionFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>&
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TDeletionFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TDeletionFilter::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     if (!source->GetStageData().GetTable().HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
         ReportTracing(source, step);
         return true;
@@ -156,8 +152,7 @@ void TShardingFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>&
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TShardingFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TShardingFilter::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
     const std::set<ui32> ids = source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdsSetVerified(shardingInfo->GetColumnNames());
@@ -176,7 +171,7 @@ void TFilterCutLimit::ReportTracing(const std::shared_ptr<NCommon::IDataSource>&
 }
 
 NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
     ReportTracing(source, step);
     return true;
@@ -190,8 +185,7 @@ void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>
         source->IsSourceInMemory(), source->GetRecordsCount(), source->GetReservedMemory());
 }
 
-TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     if (!source->NeedPortionData()) {
         source->SetSourceInMemory(true);
         source->MutableAs<IDataSource>()->InitUsedRawBytes();
@@ -222,8 +216,8 @@ private:
     TFetchingScriptCursor Step;
 
 public:
-    TApplySourceResult(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
-        : Source(source)
+    TApplySourceResult(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step)
+        : Source(std::move(source))
         , Step(step)
     {
     }
@@ -252,7 +246,7 @@ void TUpdateAggregatedMemoryStep::ReportTracing(const std::shared_ptr<NCommon::I
 }
 
 TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     if (auto* portionSource = source->MutableOptionalAs<TPortionDataSource>()) {
         portionSource->ActualizeAggregatedMemoryGuards();
     }
@@ -268,7 +262,7 @@ void TInitializeSourceStep::ReportTracing(const std::shared_ptr<NCommon::IDataSo
 }
 
 TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     auto* trivialSource = source->MutableAs<IDataSource>();
     trivialSource->InitializeProcessing(source);
     ReportTracing(source, step);
@@ -283,7 +277,7 @@ void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::I
 }
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     source->MutableAs<IDataSource>()->InitUsedRawBytes();
     ReportTracing(source, step);
     return true;
@@ -297,7 +291,7 @@ void TStepAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IData
 }
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     std::vector<std::unique_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
@@ -321,7 +315,7 @@ void TCleanAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDat
 }
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
@@ -378,8 +372,7 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
     return resultBatch->num_rows() ? resultBatch : nullptr;
 }
 
-TConclusion<bool> TBuildResultStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TBuildResultStep::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const TMonotonic startExecution = TMonotonic::Now();
     auto context = source->GetContext();
     auto resultBatch = BuildPageResultBatch(source);
@@ -398,10 +391,16 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
-    NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
-            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
-            sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory()));
+    const ui64 portionId = source->GetDeprecatedPortionId();
+    const ui64 usedRawBytes = sSource->GetUsedRawBytes();
+    const ui32 totalRows = source->GetRecordsCount();
+    const ui64 reservedMemory = source->GetReservedMemory();
+    auto resultsGuard = source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard();
+    const auto scanActorId = context->GetCommonContext()->GetScanActorId();
+    NActors::TActivationContext::AsActorContext().Send(
+        scanActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(std::move(source), step),
+                         std::move(resultsGuard), portionId, blobBytes, usedRawBytes, recordsCount, totalRows, reservedMemory));
+    AFL_VERIFY(!source);
     return false;
 }
 
@@ -413,8 +412,7 @@ void TPrepareResultStep::ReportTracing(
         source->GetFilteredRowsCount(), source->GetReservedMemory(), source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
-TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TPrepareResultStep::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const TMonotonic startExecution = TMonotonic::Now();
     const auto context = source->GetContext();
     NCommon::TFetchingScriptBuilder acc(*context);
@@ -452,16 +450,22 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         source->MutableStageResult().SetEmptyResultChunk();
         context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), 0);
         const ui64 blobBytes = source->GetTotalBytesRead();
-        NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
-                source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
-                sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory()));
+        const ui64 portionId = source->GetDeprecatedPortionId();
+        const ui64 usedRawBytes = sSource->GetUsedRawBytes();
+        const ui32 totalRows = source->GetRecordsCount();
+        const ui64 reservedMemory = source->GetReservedMemory();
+        auto resultsGuard = source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard();
+        const auto scanActorId = context->GetCommonContext()->GetScanActorId();
+        NActors::TActivationContext::AsActorContext().Send(
+            scanActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(std::move(source), step),
+                             std::move(resultsGuard), portionId, blobBytes, usedRawBytes, 0, totalRows, reservedMemory));
+        AFL_VERIFY(!source);
         return false;
     }
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
     if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
-        return cursor.Execute(source);
+        return cursor.Execute(std::move(source));
     } else {
         return true;
     }
@@ -475,48 +479,50 @@ void TDuplicateFilter::TFilterSubscriber::ReportTracing(const std::shared_ptr<NC
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
-    if (auto source = Source.lock()) {
-        YDB_LOG_TRACE("",
-            {"event", "fetch_filter"},
-            {"source", source->GetSourceIdx()},
-            {"filter", filter.DebugString()},
-            {"aborted", source->GetContext()->IsAborted()});
-        if (source->GetContext()->IsAborted()) {
-            return;
-        }
-        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
-                                                         "source", source->GetRecordsCount());
-
-        ReportTracing(source);
-
-        if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
-            filter = filter.ApplyFilterFrom(*appliedFilter);
-        }
-        source->MutableStageData().AddFilter(std::move(filter));
-        Step.Next();
-        const auto convActorId = source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        const auto scanActorId = source->GetContext()->GetCommonContext()->GetScanActorId();
-        auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
+    AFL_VERIFY(Source);
+    auto source = std::move(Source);
+    YDB_LOG_TRACE("",
+        {"event", "fetch_filter"},
+        {"source", source->GetSourceIdx()},
+        {"filter", filter.DebugString()},
+        {"aborted", source->GetContext()->IsAborted()});
+    if (source->GetContext()->IsAborted()) {
+        return;
     }
+    AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
+                                                     "source", source->GetRecordsCount());
+
+    ReportTracing(source);
+
+    if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
+        filter = filter.ApplyFilterFrom(*appliedFilter);
+    }
+    source->MutableStageData().AddFilter(std::move(filter));
+    Step.Next();
+    const auto convActorId = source->GetContext()->GetCommonContext()->GetConveyorProcessId();
+    const auto scanActorId = source->GetContext()->GetCommonContext()->GetScanActorId();
+    auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
-    if (auto source = Source.lock()) {
-        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
+    if (Source) {
+        Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
     }
 }
 
-TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
-    : Source(source)
+TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step)
+    : Source(std::move(source))
     , Step(step)
-    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard())
+    , TaskGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard())
 {
+    AFL_VERIFY(Source);
 }
 
-TConclusion<bool> TDuplicateFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    source->MutableAs<TPortionDataSource>()->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
+TConclusion<bool> TDuplicateFilter::DoExecuteInplace(std::shared_ptr<NCommon::IDataSource>&& source, const TFetchingScriptCursor& step) const {
+    auto* portion = source->MutableAs<TPortionDataSource>();
+    portion->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(std::move(source), step));
+    AFL_VERIFY(!source);
     return false;
 }
 

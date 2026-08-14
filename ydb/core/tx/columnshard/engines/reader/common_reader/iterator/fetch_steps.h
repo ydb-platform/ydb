@@ -31,7 +31,7 @@ private:
         const ui64 size) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
 
     virtual TString DoDebugString() const override {
@@ -48,7 +48,7 @@ public:
     class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
     private:
         using TBase = NGroupedMemoryManager::IAllocation;
-        std::weak_ptr<IDataSource> Source;
+        std::shared_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TasksGuard;
         const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
@@ -59,7 +59,7 @@ public:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
     public:
-        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
+        TFetchingStepAllocation(std::shared_ptr<IDataSource>&& source, const ui64 mem, const TFetchingScriptCursor& step,
             const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true,
             const bool scheduleContinuation = true);
     };
@@ -107,7 +107,7 @@ private:
 
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const override;
 
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -123,7 +123,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& /*step*/) const override;
 
     TBuildStageResultStep()
         : TBase("BUILD_STAGE_RESULT")
@@ -143,7 +143,7 @@ private:
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
 
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const override;
 
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -162,7 +162,7 @@ private:
         const ui64 blobBytes, const ui64 rawBytes) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";

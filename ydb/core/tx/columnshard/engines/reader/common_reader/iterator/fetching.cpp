@@ -25,7 +25,8 @@ bool TStepAction::DoApply(IDataReader& owner) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "apply"});
     Source->StartSyncSection();
-    Source->OnSourceFetchingFinishedSafe(owner, Source);
+    auto source = std::move(Source);
+    source->OnSourceFetchingFinishedSafe(owner, std::move(source));
     return true;
 }
 
@@ -37,17 +38,21 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
         CacheSourceStats();
         return true;
     }
-    auto executeResult = Cursor.Execute(Source);
+    auto executeResult = Cursor.Execute(std::move(Source));
     if (executeResult.IsFail()) {
+        AFL_VERIFY(Source);
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
         CacheSourceStats();
         return executeResult;
     }
     if (*executeResult) {
+        AFL_VERIFY(Source);
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
         CacheSourceStats();
+    } else {
+        AFL_VERIFY(!Source);
     }
     return FinishedFlag;
 }
@@ -74,7 +79,6 @@ TStepAction::TStepAction(
     }
 }
 
-NO_SANITIZE_THREAD
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
     const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
     const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
@@ -246,14 +250,16 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #undef PROGRAM_PROBE_TAIL
 }
 
-NO_SANITIZE_THREAD
-TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TProgramStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {
         source->MutableExecutionContext().Start(source, Program, step);
     }
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
     if (!started) {
+        const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult> backgroundResult =
+            NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground;
+        source->MutableExecutionContext().SetPrevNodeTracing(iterator->GetCurrentNodeId(), backgroundResult);
         iterator->Next();
         source->MutableExecutionContext().OnFinishProgramStepExecution();
     }
@@ -280,11 +286,21 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 
         // Snapshot before Execute(): allocation callbacks may mutate ResourceGuards concurrently afterwards.
         const ui64 reservedMemoryBeforeExecute = source->GetReservedMemory();
+        const auto commonContext = source->GetContext()->GetCommonContext();
         const TMonotonic start = TMonotonic::Now();
-        auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
+        IDataSource* sourceRaw = source.get();
+        auto ownershipGuard = sourceRaw->MutableExecutionContext().GuardSourceOwnership(std::move(source), source);
+        auto conclusion = sourceRaw->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
         const TDuration executionDurationMs = TMonotonic::Now() - start;
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
+        commonContext->GetCounters().AddExecutionDuration(executionDurationMs);
         signals->AddExecutionDuration(executionDurationMs);
+        if (conclusion.IsSuccess() && *conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+            // Ownership was transferred before background work was armed. Do not touch sourceRaw here:
+            // a synchronously executed continuation may already have destroyed the source.
+            return false;
+        }
+        ownershipGuard.Restore();
+        AFL_VERIFY(source);
         source->AddExecutionDuration(executionDurationMs);
 
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
@@ -301,11 +317,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().
         const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
         if (!visitor || !visitor->MutableContext().HasResources()) {
-            return false;
-        }
-
-        if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
-            return false;
+            source->MutableExecutionContext().OnFailedProgramStepExecution();
+            return TConclusionStatus::Fail("program execution visitor lost its resources on a synchronous result");
         }
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
@@ -319,8 +332,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
     const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
     if (!visitor || !visitor->MutableContext().HasResources()) {
-        // Nested continuation already took ownership of progress — do not advance this cursor.
-        return false;
+        return TConclusionStatus::Fail("program execution visitor lost its resources before result extraction");
     }
     YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
         {"graphConstructed", Program->DebugDOT(visitor->GetExecutedIds())});

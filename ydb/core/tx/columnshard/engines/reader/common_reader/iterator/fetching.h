@@ -65,7 +65,7 @@ public:
 
     template <class T>
     TStepAction(std::shared_ptr<T>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection)
+        : TStepAction(std::static_pointer_cast<IDataSource>(std::move(source)), std::move(cursor), ownerActorId, changeSyncSection)
     {
     }
 
@@ -84,7 +84,7 @@ private:
         const ui64 reservedMemory) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const override;
 
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")

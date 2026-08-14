@@ -24,7 +24,7 @@ private:
 
     class TSourceIterator {
     private:
-        std::shared_ptr<NCommon::IDataSource> Source;
+        ui32 SourceIdx = 0;
         bool Reverse;
         int Delta = 0;
         i64 Start = 0;
@@ -33,6 +33,8 @@ private:
         std::shared_ptr<NArrow::TColumnFilter> Filter;
         std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
         bool IsValidFlag = true;
+        TString StartDebug;
+        TString FinishDebug;
 
         bool ShiftWithFilter() const {
             AFL_VERIFY(IsValidFlag);
@@ -50,35 +52,36 @@ private:
     public:
         TString DebugString() const;
 
-        const std::shared_ptr<NCommon::IDataSource>& GetSource() const {
-            AFL_VERIFY(Source);
-            return Source;
-        }
-
+        // Unfilled: peek at source to build PK prefix, do not retain ownership.
         TSourceIterator(const std::shared_ptr<NCommon::IDataSource>& source)
-            : Source(source)
-            , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
+            : SourceIdx(source->GetSourceIdx())
+            , Reverse(source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
+            , StartDebug(source->GetAs<TPortionDataSource>()->GetStart().DebugString())
+            , FinishDebug(source->GetAs<TPortionDataSource>()->GetFinish().DebugString())
         {
-            AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
-            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(source);
+            AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion)("type", source->GetType());
+            auto batch = source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
+        // Filled: built from exclusive source argument; does not retain ownership.
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
             const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::shared_ptr<NCommon::IDataSource>& source)
-            : Source(source)
-            , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
+            : SourceIdx(source->GetSourceIdx())
+            , Reverse(source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
             , Start(Reverse ? (arrs.front()->GetRecordsCount() - 1) : 0)
             , Finish(Reverse ? 0 : (arrs.front()->GetRecordsCount() - 1))
             , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()))
+            , StartDebug(source->GetAs<TPortionDataSource>()->GetStart().DebugString())
+            , FinishDebug(source->GetAs<TPortionDataSource>()->GetFinish().DebugString())
         {
             AFL_VERIFY(arrs.size());
             AFL_VERIFY(arrs.front()->GetRecordsCount());
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));
-            auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
+            auto prefixSchema = source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse);
@@ -86,8 +89,7 @@ private:
         }
 
         ui32 GetSourceIdx() const {
-            AFL_VERIFY(Source);
-            return Source->GetSourceIdx();
+            return SourceIdx;
         }
 
         bool IsFilled() const {
@@ -113,7 +115,7 @@ private:
         bool operator<(const TSourceIterator& item) const {
             const auto cmp = SortableRecord->Compare(*item.SortableRecord);
             if (cmp == std::partial_ordering::equivalent) {
-                return item.Source->GetSourceIdx() < Source->GetSourceIdx();
+                return item.SourceIdx < SourceIdx;
             }
             return cmp == std::partial_ordering::greater;
         }
@@ -130,14 +132,14 @@ private:
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(std::shared_ptr<NCommon::IDataSource>&& source) override;
 
     virtual void DoAbort() override {
         FilledIterators.clear();
         UnfilledIterators.clear();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
+    virtual ESourceAction OnSourceReady(std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
 
     bool DrainToLimit();
 

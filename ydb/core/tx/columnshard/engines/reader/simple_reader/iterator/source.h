@@ -63,7 +63,7 @@ private:
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<NCommon::IDataSource>&& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
 
@@ -79,7 +79,7 @@ protected:
         return NJson::JSON_MAP;
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual bool DoStartFetchingAccessor(std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
     static bool CheckTypeCast(const EType type) {
@@ -187,16 +187,17 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
-    void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    // Moves ownership into a conveyor task only when the cursor advances.
+    void ContinueCursor(std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
-    void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    void StartProcessing(std::shared_ptr<NCommon::IDataSource>&& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
-    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-        return DoStartFetchingAccessor(sourcePtr, step);
+    bool StartFetchingAccessor(std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step) {
+        return DoStartFetchingAccessor(std::move(sourcePtr), step);
     }
 
     virtual TInternalPathId GetPathId() const override = 0;
@@ -254,7 +255,7 @@ private:
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+        std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
@@ -309,7 +310,7 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual bool DoStartFetchingAccessor(std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
     virtual void InitUsedRawBytes() override {
@@ -446,7 +447,7 @@ private:
         AFL_VERIFY(false);
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
+    virtual bool DoStartFetchingColumns(std::shared_ptr<NCommon::IDataSource>&& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
         const TColumnsSetIds& /*columns*/) override {
         AFL_VERIFY(false);
         return true;
@@ -511,8 +512,7 @@ private:
         return Sources.front()->GetAs<IDataSource>()->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
+    virtual bool DoStartFetchingAccessor(std::shared_ptr<NCommon::IDataSource>&& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         AFL_VERIFY(false);
         return false;
     }

@@ -21,7 +21,7 @@ private:
     std::shared_ptr<TFetchingStepSignals> Signals;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+    virtual TConclusion<bool> DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const = 0;
 
     virtual TString DoDebugString() const {
         return "";
@@ -44,8 +44,8 @@ public:
 
     virtual ~IFetchingStep() = default;
 
-    [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-        return DoExecuteInplace(source, step);
+    [[nodiscard]] TConclusion<bool> ExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
+        return DoExecuteInplace(std::move(source), step);
     }
 
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const {

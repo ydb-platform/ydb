@@ -26,7 +26,7 @@ private:
         return source->IsSyncSection() && source->HasStageResult();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) override;
+    virtual ESourceAction OnSourceReady(std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) override;
 
     virtual void DoAbort() override {
         Seen.clear();

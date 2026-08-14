@@ -34,14 +34,15 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
 }
 
 TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
+    std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step,
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer, const TString& externalTaskId)
     : TBase(readActions, taskCustomer, externalTaskId)
-    , Source(sourcePtr)
+    , Source(std::move(sourcePtr))
     , Step(step)
     , Context(context)
     , Guard(Context->GetCommonContext()->GetCounters().GetFetchBlobsGuard())
 {
+    AFL_VERIFY(Source);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("sbf"));
 }
 
@@ -68,13 +69,13 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
             Source->MutableStageData().AddFetcher(i.second);
         }
         auto convProcessId = Source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        auto task = std::make_shared<TStepAction>(
-            std::move(Source), std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
+        auto scanActorId = Source->GetContext()->GetCommonContext()->GetScanActorId();
+        auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Cursor), scanActorId, false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcessId);
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_next"));
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(
-            std::move(readActions), DataFetchers, Source, std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
+            std::move(readActions), DataFetchers, std::move(Source), std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
         NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
     }
     if (signals) {

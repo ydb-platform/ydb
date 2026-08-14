@@ -32,12 +32,12 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::StartProcessing(std::shared_ptr<NCommon::IDataSource>&& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
+    AFL_VERIFY(sourcePtr);
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     const auto& commonContext = *GetContext()->GetCommonContext();
-    auto sourceCopy = sourcePtr;
-    auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+    auto task = std::make_shared<TStepAction>(std::move(sourcePtr), std::move(cursor), commonContext.GetScanActorId(), true);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
@@ -60,7 +60,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
     }
 }
 
-void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::ContinueCursor(std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
     if (ScriptCursor->Next()) {
         YDB_LOG_DEBUG("",
@@ -69,8 +70,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         const auto& commonContext = *GetContext()->GetCommonContext();
-        auto sourceCopy = sourcePtr;
-        auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+        auto task = std::make_shared<TStepAction>(std::move(sourcePtr), std::move(cursor), commonContext.GetScanActorId(), true);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         YDB_LOG_WARN("",
@@ -79,10 +79,10 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
     }
 }
 
-void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<NCommon::IDataSource>&& sourcePtr) {
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
-    auto sourceTrivial = std::static_pointer_cast<IDataSource>(sourcePtr);
-    plainReader->MutableScanner().GetSyncPoint(sourceTrivial->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceTrivial, *plainReader);
+    const ui32 syncPointIndex = GetPurposeSyncPointIndex();
+    plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(sourcePtr), *plainReader);
 }
 
 void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
@@ -160,7 +160,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+    std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
     AFL_VERIFY(columns.GetColumnsCount());
@@ -183,7 +183,7 @@ bool TPortionDataSource::DoStartFetchingColumns(
     }
 
     auto constructor =
-        std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
+        std::make_shared<NCommon::TBlobsFetcherTask>(readActions, std::move(sourcePtr), step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -202,8 +202,8 @@ std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
 TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
-    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), *GetStageData().GetIndexes(), source);
+    auto sourceForContext = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), *GetStageData().GetIndexes(), sourceForContext);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -220,9 +220,10 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
     for (auto&& i : fetchersExt) {
         AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
+    auto source = MutableExecutionContext().ExtractSourceOwnership();
     NActors::TActivationContext::AsActorContext().Register(
         new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
-            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+            std::move(readActions), fetchers, std::move(source), GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 
@@ -428,7 +429,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+bool TPortionDataSource::DoStartFetchingAccessor(std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -438,7 +439,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
-    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
+    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, std::move(sourcePtr)));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
 }

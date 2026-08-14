@@ -21,7 +21,7 @@ bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSour
     }
 }
 
-ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
+ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
     const ui32 resultChunkRowsCount =
         (source->HasStageResult() && !source->GetStageResult().IsEmpty()) ? source->GetStageResult().GetResultChunkRowsCount() : 0;
     LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
@@ -63,6 +63,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 {"sourceIdx", source->GetSourceIdx()},
                 {"#_dup_source_idx", source->GetSourceIdx()});
             source->MutableAs<IDataSource>()->ContinueCursor(source);
+            AFL_VERIFY(!source);
         }
         if (!isFinished) {
             return ESourceAction::Wait;

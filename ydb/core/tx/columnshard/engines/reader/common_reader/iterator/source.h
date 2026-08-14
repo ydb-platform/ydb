@@ -61,6 +61,14 @@ private:
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     std::atomic<TPrevNodeState> PrevNode = {};
 
+    struct TSourceOwnershipState {
+        std::shared_ptr<IDataSource> Source;
+    };
+
+    // Logical ownership of the source while a program node Execute() is on the stack. Async work must
+    // extract it before arming a callback, leaving the caller with no source to touch while unwinding.
+    std::shared_ptr<TSourceOwnershipState> SourceOwnership;
+
     TString RenderCategoryName(const TPrevNodeState& state) const {
         if (!state.Defined) {
             return StartCategoryName;
@@ -72,6 +80,59 @@ private:
     }
 
 public:
+    class TSourceOwnershipGuard: TNonCopyable {
+    private:
+        TExecutionContext& Context;
+        const std::shared_ptr<TSourceOwnershipState> State;
+        std::shared_ptr<IDataSource>& RestoreTarget;
+
+    public:
+        TSourceOwnershipGuard(
+            TExecutionContext& context, const std::shared_ptr<TSourceOwnershipState>& state, std::shared_ptr<IDataSource>& restoreTarget)
+            : Context(context)
+            , State(state)
+            , RestoreTarget(restoreTarget)
+        {
+            AFL_VERIFY(State);
+            AFL_VERIFY(State->Source);
+            AFL_VERIFY(!RestoreTarget);
+        }
+
+        void Restore() {
+            AFL_VERIFY(State->Source);
+            AFL_VERIFY(Context.SourceOwnership == State);
+            AFL_VERIFY(!RestoreTarget);
+            RestoreTarget = std::move(State->Source);
+            Context.SourceOwnership.reset();
+        }
+
+        ~TSourceOwnershipGuard() {
+            // If async work extracted the token, State is empty and Context may already be gone.
+            if (State->Source) {
+                Restore();
+            }
+        }
+    };
+
+    [[nodiscard]] TSourceOwnershipGuard GuardSourceOwnership(
+        std::shared_ptr<IDataSource>&& ownership, std::shared_ptr<IDataSource>& restoreTarget) {
+        AFL_VERIFY(!SourceOwnership);
+        AFL_VERIFY(ownership);
+        SourceOwnership = std::make_shared<TSourceOwnershipState>(TSourceOwnershipState{ .Source = std::move(ownership) });
+        return TSourceOwnershipGuard(*this, SourceOwnership, restoreTarget);
+    }
+
+    std::shared_ptr<IDataSource> ExtractSourceOwnership() {
+        AFL_VERIFY(SourceOwnership);
+        AFL_VERIFY(SourceOwnership->Source);
+        auto state = std::move(SourceOwnership);
+        return std::move(state->Source);
+    }
+
+    bool HasSourceOwnership() const {
+        return SourceOwnership && !!SourceOwnership->Source;
+    }
+
     void SetStartCategoryName(TString&& name) {
         StartCategoryName = std::move(name);
     }
@@ -185,7 +246,7 @@ private:
     bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<IDataSource>&& sourcePtr) = 0;
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
@@ -196,7 +257,7 @@ private:
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+        std::shared_ptr<IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
     std::optional<NEvLog::TLogsThread> Events;
@@ -253,34 +314,28 @@ public:
                                 : GetStageResult().GetBatch()->num_rows();
     }
 
-    NO_SANITIZE_THREAD
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }
 
-    NO_SANITIZE_THREAD
     void AddBytesRead(const ui64 bytes) {
         TotalBytesRead += bytes;
     }
 
     void OnStartProcessing();
 
-    NO_SANITIZE_THREAD
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
     }
 
-    NO_SANITIZE_THREAD
     TDuration GetTotalExecutionDuration() const {
         return TotalExecutionDuration;
     }
 
-    NO_SANITIZE_THREAD
     ui64 GetTotalBytesRead() const {
         return TotalBytesRead;
     }
 
-    NO_SANITIZE_THREAD
     ui64 ExtractTotalBytesRead() {
         const ui64 result = TotalBytesRead;
         TotalBytesRead = 0;
@@ -423,8 +478,8 @@ public:
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-        return DoStartFetchingColumns(sourcePtr, step, columns);
+    bool StartFetchingColumns(std::shared_ptr<IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+        return DoStartFetchingColumns(std::move(sourcePtr), step, columns);
     }
 
     bool IsInFlightReleased() const {
@@ -438,7 +493,7 @@ public:
 
     void ResetSourceFinishedFlag();
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<IDataSource>&& sourcePtr);
 
     void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 

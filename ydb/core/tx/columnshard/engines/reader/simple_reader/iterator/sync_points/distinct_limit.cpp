@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
-    const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
+    std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
 {
     if (Seen.size() >= Limit) {
         return ESourceAction::Finish;

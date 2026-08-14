@@ -2,14 +2,65 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <reader/common_reader/iterator/fetching.h>
+#include <reader/common_reader/iterator/source.h>
 #include <reader/simple_reader/iterator/fetching.h>
 #include <scheme/versions/snapshot_scheme.h>
 
+#include <condition_variable>
+#include <cstddef>
+#include <mutex>
+#include <stdexcept>
 #include <thread>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
 using namespace NKikimr::NOlap::NReader;
+
+namespace {
+
+struct TSourceHandoffState {
+    std::mutex Mutex;
+    std::condition_variable Ready;
+    std::shared_ptr<NCommon::IDataSource> Pending;
+    const NCommon::IDataSource* Observed = nullptr;
+    bool Acquired = false;
+    bool Release = false;
+};
+
+class TAsyncOwnershipStep: public NCommon::IFetchingStep {
+private:
+    NCommon::TExecutionContext& ExecutionContext;
+    const std::shared_ptr<TSourceHandoffState> Handoff;
+
+protected:
+    virtual TConclusion<bool> DoExecuteInplace(
+        std::shared_ptr<NCommon::IDataSource>&& source, const NCommon::TFetchingScriptCursor& /*cursor*/) const override {
+        auto ownershipGuard = ExecutionContext.GuardSourceOwnership(std::move(source), source);
+        auto continuation = ExecutionContext.ExtractSourceOwnership();
+        {
+            std::lock_guard guard(Handoff->Mutex);
+            UNIT_ASSERT(!Handoff->Pending);
+            Handoff->Pending = std::move(continuation);
+        }
+        Handoff->Ready.notify_one();
+
+        std::unique_lock lock(Handoff->Mutex);
+        Handoff->Ready.wait(lock, [&]() {
+            return Handoff->Acquired;
+        });
+        return false;
+    }
+
+public:
+    TAsyncOwnershipStep(NCommon::TExecutionContext& executionContext, std::shared_ptr<TSourceHandoffState> handoff)
+        : IFetchingStep("ASYNC_OWNERSHIP_TEST")
+        , ExecutionContext(executionContext)
+        , Handoff(std::move(handoff))
+    {
+    }
+};
+
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TestScript) {
     std::shared_ptr<ISnapshotSchema> MakeTestSchema(THashMap<ui32, NTable::TColumn> columns, const std::vector<ui32> pkIds = { 0 }) {
@@ -91,5 +142,80 @@ Y_UNIT_TEST_SUITE(TestScript) {
             UNIT_ASSERT_VALUES_EQUAL((const void*)owner.GetScriptVerified().get(), (const void*)published);
             UNIT_ASSERT(!owner.GetScriptVerified()->IsFinished(0));
         }
+    }
+
+    Y_UNIT_TEST(AsyncStepTransfersSourceOwnership) {
+        NCommon::TExecutionContext executionContext;
+        auto handoff = std::make_shared<TSourceHandoffState>();
+        auto step = std::make_shared<TAsyncOwnershipStep>(executionContext, handoff);
+        std::vector<std::shared_ptr<NCommon::IFetchingStep>> steps = { step };
+        auto script = std::make_shared<NCommon::TFetchingScript>("OWNERSHIP_TEST", std::move(steps));
+        NCommon::TFetchingScriptCursor cursor(script, 0);
+
+        auto backing = std::make_shared<std::max_align_t>();
+        std::weak_ptr<std::max_align_t> weakBacking = backing;
+        auto source = std::shared_ptr<NCommon::IDataSource>(backing, reinterpret_cast<NCommon::IDataSource*>(backing.get()));
+        const auto* expected = source.get();
+        backing.reset();
+
+        std::thread continuation([handoff]() {
+            std::shared_ptr<NCommon::IDataSource> owned;
+            std::unique_lock lock(handoff->Mutex);
+            handoff->Ready.wait(lock, [&]() {
+                return !!handoff->Pending;
+            });
+            owned = std::move(handoff->Pending);
+            handoff->Observed = owned.get();
+            handoff->Acquired = true;
+            handoff->Ready.notify_one();
+            handoff->Ready.wait(lock, [&]() {
+                return handoff->Release;
+            });
+        });
+
+        const auto result = step->ExecuteInplace(std::move(source), cursor);
+        const bool sourceWasTransferred = !source;
+        const bool contextWasEmptied = !executionContext.HasSourceOwnership();
+        const NCommon::IDataSource* observed = nullptr;
+        long ownersWhileContinuationBlocked = 0;
+        {
+            std::lock_guard guard(handoff->Mutex);
+            observed = handoff->Observed;
+            ownersWhileContinuationBlocked = weakBacking.use_count();
+            handoff->Release = true;
+        }
+        handoff->Ready.notify_one();
+        continuation.join();
+
+        UNIT_ASSERT(!result.IsFail());
+        UNIT_ASSERT(!*result);
+        UNIT_ASSERT(sourceWasTransferred);
+        UNIT_ASSERT(contextWasEmptied);
+        UNIT_ASSERT_VALUES_EQUAL((const void*)observed, (const void*)expected);
+        UNIT_ASSERT_VALUES_EQUAL(ownersWhileContinuationBlocked, 1);
+        UNIT_ASSERT(weakBacking.expired());
+    }
+
+    Y_UNIT_TEST(SourceOwnershipIsRestoredOnException) {
+        NCommon::TExecutionContext executionContext;
+        auto backing = std::make_shared<std::max_align_t>();
+        std::weak_ptr<std::max_align_t> weakBacking = backing;
+        auto source = std::shared_ptr<NCommon::IDataSource>(backing, reinterpret_cast<NCommon::IDataSource*>(backing.get()));
+        const auto* expected = source.get();
+        backing.reset();
+
+        try {
+            auto ownershipGuard = executionContext.GuardSourceOwnership(std::move(source), source);
+            UNIT_ASSERT(!source);
+            UNIT_ASSERT(executionContext.HasSourceOwnership());
+            throw std::runtime_error("test exception");
+        } catch (const std::runtime_error&) {
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL((const void*)source.get(), (const void*)expected);
+        UNIT_ASSERT(!executionContext.HasSourceOwnership());
+        UNIT_ASSERT_VALUES_EQUAL(weakBacking.use_count(), 1);
+        source.reset();
+        UNIT_ASSERT(weakBacking.expired());
     }
 }

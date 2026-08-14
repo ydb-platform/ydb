@@ -25,12 +25,12 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
 }
 
-TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
-    const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
+TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, std::shared_ptr<IDataSource>&& source)
     : Step(step)
-    , Source(source)
+    , Source(std::move(source))
     , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard())
 {
+    AFL_VERIFY(Source);
     const auto& commonContext = *Source->GetContext()->GetCommonContext();
     ConveyorProcessId = commonContext.GetConveyorProcessId();
     ScanActorId = commonContext.GetScanActorId();

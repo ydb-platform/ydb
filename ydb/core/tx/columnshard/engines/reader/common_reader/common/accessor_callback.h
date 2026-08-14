@@ -17,7 +17,7 @@ private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override;
 
 public:
-    TPortionAccessorFetchingSubscriber(const NReader::NCommon::TFetchingScriptCursor& step, const std::shared_ptr<NCommon::IDataSource>& source);
+    TPortionAccessorFetchingSubscriber(const NReader::NCommon::TFetchingScriptCursor& step, std::shared_ptr<NCommon::IDataSource>&& source);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

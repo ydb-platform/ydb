@@ -17,19 +17,33 @@ using TTestDeadlineMap = TDeadlineMap<int, TTestValue>;
 
 Y_UNIT_TEST_SUITE(TDeadlineMapTest) {
 
-Y_UNIT_TEST(TryInsertSetsDeadlineAndRejectsDuplicate) {
+Y_UNIT_TEST(InsertSetsDeadlineAndRejectsDuplicate) {
     TTestDeadlineMap deadlineMap;
     const TInstant now = TInstant::Seconds(1000);
     const TDuration ttl = TDuration::Seconds(60);
 
-    TTestValue* inserted = deadlineMap.TryInsert(1, TTestValue{.Payload = 7}, now, ttl);
-    UNIT_ASSERT(inserted);
-    UNIT_ASSERT_VALUES_EQUAL(inserted->Payload, 7);
-    UNIT_ASSERT_VALUES_EQUAL(inserted->Deadline, now + ttl);
+    UNIT_ASSERT(deadlineMap.Insert(1, TTestValue{.Payload = 7}, now, ttl));
+    UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Find(1)->Payload, 7);
+    UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Find(1)->Deadline, now + ttl);
     UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Size(), 1);
 
-    UNIT_ASSERT(!deadlineMap.TryInsert(1, TTestValue{.Payload = 8}, now, ttl));
+    UNIT_ASSERT(!deadlineMap.Insert(1, TTestValue{.Payload = 8}, now, ttl));
     UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Find(1)->Payload, 7);
+}
+
+Y_UNIT_TEST(FindOrInsertReturnsExistingWithoutOverwrite) {
+    TTestDeadlineMap deadlineMap;
+    const TInstant now = TInstant::Seconds(1000);
+    const TDuration ttl = TDuration::Seconds(60);
+
+    TTestValue& first = deadlineMap.FindOrInsert(1, TTestValue{.Payload = 7}, now, ttl);
+    UNIT_ASSERT_VALUES_EQUAL(first.Payload, 7);
+    UNIT_ASSERT_VALUES_EQUAL(first.Deadline, now + ttl);
+
+    TTestValue& second = deadlineMap.FindOrInsert(1, TTestValue{.Payload = 8}, now + TDuration::Seconds(10), ttl);
+    UNIT_ASSERT_VALUES_EQUAL(second.Payload, 7);
+    UNIT_ASSERT_VALUES_EQUAL(second.Deadline, now + ttl);
+    UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Size(), 1);
 }
 
 Y_UNIT_TEST(EraseThenExpireSkipsStaleQueueEntry) {
@@ -37,7 +51,7 @@ Y_UNIT_TEST(EraseThenExpireSkipsStaleQueueEntry) {
     const TInstant now = TInstant::Seconds(1000);
     const TDuration ttl = TDuration::Seconds(60);
 
-    UNIT_ASSERT(deadlineMap.TryInsert(1, TTestValue{.Payload = 1}, now, ttl));
+    UNIT_ASSERT(deadlineMap.Insert(1, TTestValue{.Payload = 1}, now, ttl));
     UNIT_ASSERT(deadlineMap.Erase(1));
     UNIT_ASSERT(deadlineMap.Empty());
 
@@ -50,8 +64,8 @@ Y_UNIT_TEST(ExpireRemovesWhenDeadlinesMatch) {
     const TInstant now = TInstant::Seconds(1000);
     const TDuration ttl = TDuration::Seconds(60);
 
-    UNIT_ASSERT(deadlineMap.TryInsert(1, TTestValue{.Payload = 1}, now, ttl));
-    UNIT_ASSERT(deadlineMap.TryInsert(2, TTestValue{.Payload = 2}, now + TDuration::Seconds(10), ttl));
+    UNIT_ASSERT(deadlineMap.Insert(1, TTestValue{.Payload = 1}, now, ttl));
+    UNIT_ASSERT(deadlineMap.Insert(2, TTestValue{.Payload = 2}, now + TDuration::Seconds(10), ttl));
 
     UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Expire(now + ttl - TDuration::Seconds(1)), 0);
     UNIT_ASSERT_VALUES_EQUAL(deadlineMap.Size(), 2);
@@ -69,7 +83,7 @@ Y_UNIT_TEST(TouchDeadlineKeepsEntryPastOldDeadline) {
     const TInstant now = TInstant::Seconds(1000);
     const TDuration ttl = TDuration::Seconds(60);
 
-    UNIT_ASSERT(deadlineMap.TryInsert(1, TTestValue{.Payload = 1}, now, ttl));
+    UNIT_ASSERT(deadlineMap.Insert(1, TTestValue{.Payload = 1}, now, ttl));
     const TInstant firstDeadline = deadlineMap.Find(1)->Deadline;
 
     const TInstant later = now + TDuration::Seconds(30);
@@ -90,7 +104,7 @@ Y_UNIT_TEST(TouchDeadlineDoesNotMoveBackward) {
     const TInstant now = TInstant::Seconds(1000);
     const TDuration ttl = TDuration::Seconds(60);
 
-    UNIT_ASSERT(deadlineMap.TryInsert(1, TTestValue{}, now, ttl));
+    UNIT_ASSERT(deadlineMap.Insert(1, TTestValue{}, now, ttl));
     const TInstant deadline = deadlineMap.Find(1)->Deadline;
 
     UNIT_ASSERT(deadlineMap.TouchDeadline(1, now - TDuration::Seconds(10), ttl));

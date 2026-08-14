@@ -477,13 +477,8 @@ private:
     }
 
     TPendingDirectReads& GetOrCreatePending(const TReadSessionKey& key) {
-        if (auto* pending = PendingBySession.Find(key)) {
-            return *pending;
-        }
-        auto* inserted = PendingBySession.TryInsert(
+        return PendingBySession.FindOrInsert(
             key, TPendingDirectReads{}, ActorContext().Now());
-        Y_ABORT_UNLESS(inserted);
-        return *inserted;
     }
 
     // DirectReadIds can repeat across tablet generations; keep the highest generation
@@ -547,17 +542,12 @@ private:
 
     void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {
         const auto now = ActorContext().Now();
-        if (auto* retired = RetiredSessions.Find(key)) {
-            retired->Generation = Max(retired->Generation, generation);
-            RetiredSessions.TouchDeadline(key, now);
-        } else {
-            TRetiredSession entry;
-            entry.Generation = generation;
-            auto* inserted = RetiredSessions.TryInsert(key, std::move(entry), now);
-            Y_ABORT_UNLESS(inserted);
-        }
+        auto& retired = RetiredSessions.FindOrInsert(
+            key, TRetiredSession{.Generation = generation}, now);
+        retired.Generation = Max(retired.Generation, generation);
+        RetiredSessions.TouchDeadline(key, now);
 
-        const ui32 retiredGeneration = RetiredSessions.Find(key)->Generation;
+        const ui32 retiredGeneration = retired.Generation;
 
         // Drop only pending for generations <= retired. Newer Stage/Publish (e.g. Stage(N)
         // before Register, then stale Deregister(N-1)) must survive for FlushPending.

@@ -6,6 +6,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_util.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/byte_stream_split.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -102,8 +103,8 @@ public:
     }
 };
 
-bool GetBit(const TStringBuf bitmap, const ui32 index) {
-    return ((ui8)bitmap[index >> 3] >> (index & 7)) & 1;
+inline bool GetBit(const TStringBuf bitmap, const ui64 index) {
+    return arrow::BitUtil::GetBit(reinterpret_cast<const ui8*>(bitmap.data()), index);
 }
 
 ui32 CountSetBits(const TStringBuf bitmap, const ui32 count) {
@@ -183,7 +184,7 @@ struct TParsedPrefix {
     ui32 PresentCount = 0;
     size_t Position = 0;
 
-    bool IsValid(const ui32 index) const {
+    bool IsValid(const ui64 index) const {
         return !NullBitmap || GetBit(Validity, index);
     }
 };

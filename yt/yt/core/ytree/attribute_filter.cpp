@@ -31,7 +31,7 @@ using NYT::FromProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_TLOG_ALERT.
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +60,7 @@ void CanonizeAndValidatePath(TYPath& path)
             tokenizer.Advance();
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path) << ex);
+        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path).With(ex));
     }
 
     path = std::move(result);

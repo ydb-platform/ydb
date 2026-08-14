@@ -45,7 +45,7 @@ Y_UNIT_TEST(CompressBasic) {
 
 Y_UNIT_TEST(CompressAllScalars) {
     bool bitmap = true;
-    ui32 value = 42u;
+    ui32 value = 42U;
     TString tag = "solo";
 
     RunCompressTest(std::make_tuple(TVector<ui32>{value}, TVector<TString>{tag}),
@@ -53,7 +53,7 @@ Y_UNIT_TEST(CompressAllScalars) {
 }
 
 Y_UNIT_TEST(CompressScalarBitmapPassAll) {
-    TVector<TMaybe<ui32>> value = {5u, TMaybe<ui32>{}, 7u};
+    TVector<TMaybe<ui32>> value = {5U, TMaybe<ui32>{}, 7U};
     TVector<TString> tag = {"x", "y", "z"};
 
     RunCompressTest(std::make_tuple(value, tag), std::make_tuple(value, true, tag), 1);
@@ -71,11 +71,11 @@ Y_UNIT_TEST(CompressAllScalarsWithArrayBitmap) {
 }
 
 Y_UNIT_TEST(CompressMixedShapes) {
-    TVector<TMaybe<ui32>> value = {1u, TMaybe<ui32>{}, 3u, 4u};
+    TVector<TMaybe<ui32>> value = {1U, TMaybe<ui32>{}, 3U, 4U};
     TVector<bool> bitmap = {false, true, true, false};
     TString tag = "const";
 
-    TVector<TMaybe<ui32>> expectedValue = {TMaybe<ui32>{}, 3u};
+    TVector<TMaybe<ui32>> expectedValue = {TMaybe<ui32>{}, 3U};
     TVector<TString> expectedTag = {"const", "const"};
 
     RunCompressTest(std::make_tuple(expectedValue, expectedTag), std::make_tuple(value, bitmap, tag), 1);
@@ -84,10 +84,10 @@ Y_UNIT_TEST(CompressMixedShapes) {
 Y_UNIT_TEST(CompressNullableArrays) {
     TVector<TMaybe<TString>> value = {TMaybe<TString>{}, TMaybe<TString>("a"), TMaybe<TString>("b"), TMaybe<TString>{}};
     TVector<bool> bitmap = {true, true, false, true};
-    TVector<TMaybe<ui64>> num = {TMaybe<ui64>{}, 2u, 3u, TMaybe<ui64>{}};
+    TVector<TMaybe<ui64>> num = {TMaybe<ui64>{}, 2U, 3U, TMaybe<ui64>{}};
 
     TVector<TMaybe<TString>> expectedValue = {TMaybe<TString>{}, TMaybe<TString>("a"), TMaybe<TString>{}};
-    TVector<TMaybe<ui64>> expectedNum = {TMaybe<ui64>{}, 2u, TMaybe<ui64>{}};
+    TVector<TMaybe<ui64>> expectedNum = {TMaybe<ui64>{}, 2U, TMaybe<ui64>{}};
 
     RunCompressTest(std::make_tuple(expectedValue, expectedNum), std::make_tuple(value, bitmap, num), 1);
 }
@@ -103,10 +103,10 @@ Y_UNIT_TEST(CompressNestedTupleColumn) {
 
 Y_UNIT_TEST(CompressDoubleOptionalValue) {
     TVector<TMaybe<TMaybe<ui64>>> value = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4U)),
     };
     TVector<bool> bitmap = {true, false, true, true};
 

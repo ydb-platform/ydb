@@ -42,7 +42,7 @@ struct TTracingAttributes;
 using TRequestId = TGuid;
 constexpr TRequestId InvalidRequestId = {};
 
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, TracingProfiler, "/tracing");
+YT_DEFINE_LEAKY_GLOBAL(const NProfiling::TProfiler, TracingProfiler, "/tracing");
 
 ////////////////////////////////////////////////////////////////////////////////
 

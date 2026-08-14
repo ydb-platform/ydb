@@ -21,8 +21,8 @@ void ValidateMaintenanceComment(TStringBuf comment)
 
     if (comment.size() > MaxMaintenanceCommentLength) {
         THROW_ERROR_EXCEPTION("Maintenance comment is too long")
-            << TErrorAttribute("comment_length", comment.size())
-            << TErrorAttribute("max_comment_length", MaxMaintenanceCommentLength);
+            .With("comment_length", comment.size())
+            .With("max_comment_length", MaxMaintenanceCommentLength);
     }
 }
 

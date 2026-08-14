@@ -11,14 +11,15 @@
 #include <random>
 #include <ctime>
 #include <algorithm>
+#include <array>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
 ui64 g_Yield = Max<ui64>();
-ui64 g_TestStreamData[] = {0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2};
-ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
+std::array<ui64, 12> g_TestStreamData = {0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2};
+std::array<ui64, 15> g_TestYieldStreamData = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
 
 template <bool WithYields>
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper<WithYields>> {
@@ -38,7 +39,7 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            constexpr auto size = WithYields ? Y_ARRAY_SIZE(g_TestYieldStreamData) : Y_ARRAY_SIZE(g_TestStreamData);
+            constexpr auto size = WithYields ? g_TestYieldStreamData.size() : g_TestStreamData.size();
             if (Index_ == size) {
                 return NUdf::EFetchStatus::Finish;
             }

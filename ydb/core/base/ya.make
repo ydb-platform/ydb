@@ -15,6 +15,7 @@ SRCS(
     bridge.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_data_kind.h
     blobstorage_grouptype.cpp
     blobstorage_relevance.cpp
     boot_type.h
@@ -54,6 +55,7 @@ SRCS(
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    request_types.h
     resource_profile.h
     row_version.cpp
     row_version.h

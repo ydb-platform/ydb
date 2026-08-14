@@ -83,7 +83,7 @@ public:
             THeapKey oldestKey = Heap_.top().first;
             TTimestamp oldest = oldestKey.first;
             if (oldest < Latest_ + Delay_ || Heap_.size() == RowLimit_ || Terminating_) {
-                auto result = std::move(Heap_.top().second);
+                auto result = Heap_.top().second;
                 Heap_.pop();
                 return result;
             }
@@ -254,7 +254,7 @@ private:
             if (OutOfOrderColumnIndex_ == i) {
                 *itemsPtr++ = NUdf::TUnboxedValuePod{outOfOrder};
             } else {
-                *itemsPtr++ = std::move(row.GetElements()[inputColumnIndex++]);
+                *itemsPtr++ = row.GetElements()[inputColumnIndex++];
             }
         }
         return result;

@@ -496,6 +496,36 @@ bool TPartition::InitNewHeadForCompaction()
     return true;
 }
 
+void TPartition::AbortBlobsCompaction(const TString& reason, const TActorContext& ctx)
+{
+    if (!CompactionInProgress) {
+        YDB_LOG_WARN_COMP(Service, "Ignore abort blobs compaction: compaction is not in progress",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"reason", reason});
+        return;
+    }
+
+    YDB_LOG_WARN_COMP(Service, "Abort blobs compaction",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"reason", reason},
+        {"compactionInProgress", CompactionInProgress},
+        {"keysForCompaction", KeysForCompaction.size()},
+        {"compactionBlobsCount", CompactionBlobsCount});
+
+    CompactionInProgress = false;
+    KeysForCompaction.clear();
+    CompactionBlobsCount = 0;
+    // Keep FirstCompactionPart: on the read-failure path it still holds the
+    // init/restart skip marker and must not be cleared.
+    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
+    // Do not call TryRunCompaction here: a persistent KV/BS failure would loop.
+    // Compaction will be attempted again from the next write/wakeup path.
+    // Resume deferred GetWriteInfo only — that path sets StopCompaction and does
+    // not restart blobs compaction.
+    TryProcessGetWriteInfoRequest(ctx);
+}
+
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();

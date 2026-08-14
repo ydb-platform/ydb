@@ -171,7 +171,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
@@ -224,7 +224,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to de-install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 

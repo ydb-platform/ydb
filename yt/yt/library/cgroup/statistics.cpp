@@ -3,7 +3,7 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/stream/file.h>
 
@@ -15,7 +15,7 @@ namespace NYT::NCGroups {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "CGroups");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "CGroups");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,8 +54,8 @@ THashMap<std::string, i64> ReadAndParseStatFile(const TString& fileName)
         auto [_, emplaced] = statistics.emplace(fields[0], FromString<i64>(fields[1]));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Failed to collect CGroup statistics: key already exists")
-                << TErrorAttribute("filename", fileName)
-                << TErrorAttribute("key", fields[0]);
+                .With("filename", fileName)
+                .With("key", fields[0]);
         }
     }
 

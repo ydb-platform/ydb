@@ -63,15 +63,15 @@ std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniver
         if (nativeTypeDescriptor->IsTemplate() != loadTypeSchema->Template) {
             THROW_ERROR_EXCEPTION("Type %v has different template flags in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_template", nativeTypeDescriptor->IsTemplate())
-                << TErrorAttribute("load_template", loadTypeSchema->Template);
+                .With("native_template", nativeTypeDescriptor->IsTemplate())
+                .With("load_template", loadTypeSchema->Template);
         }
 
         if (loadTypeSchema->BaseTypeTags != nativeTypeDescriptor->BaseTypeTags()) {
             THROW_ERROR_EXCEPTION("Type %v has different base types in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
-                << TErrorAttribute("load_base_type_tags", loadTypeSchema->BaseTypeTags);
+                .With("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
+                .With("load_base_type_tags", loadTypeSchema->BaseTypeTags);
         }
 
         if (AreFieldSchemasEquivalent(*nativeTypeDescriptor, loadTypeSchema)) {

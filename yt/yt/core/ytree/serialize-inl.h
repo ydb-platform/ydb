@@ -749,7 +749,7 @@ void Deserialize(
     Deserialize(string, node);
     if (!TryDeserializeProto(&message, TRef::FromString(string))) {
         THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
-            << TErrorAttribute("protobuf_type", message.GetTypeName());
+            .With("protobuf_type", message.GetTypeName());
     }
 }
 

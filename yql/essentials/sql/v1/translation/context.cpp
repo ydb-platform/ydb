@@ -55,6 +55,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"RotateJoinTree", &TContext::RotateJoinTree},
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
+    {"EvaluateExprCache", &TContext::EvaluateExprCache},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
     {"DeriveColumnOrder", &TContext::DeriveColumnOrder},

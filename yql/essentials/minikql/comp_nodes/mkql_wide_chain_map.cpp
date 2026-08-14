@@ -7,7 +7,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -46,7 +48,7 @@ public:
         return CalculateOther(ctx, output);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto flagType = Type::getInt1Ty(context);
@@ -297,7 +299,8 @@ IComputationNode* WrapWideChain1Map(TCallable& callable, const TComputationNodeF
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        TComputationNodePtrVector initOutput(outputWidth, nullptr), updateOutput(outputWidth, nullptr);
+        TComputationNodePtrVector initOutput(outputWidth, nullptr);
+        TComputationNodePtrVector updateOutput(outputWidth, nullptr);
         auto index = inputWidth;
         std::generate(initOutput.begin(), initOutput.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 

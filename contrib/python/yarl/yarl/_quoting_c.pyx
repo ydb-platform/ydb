@@ -46,6 +46,20 @@ cdef inline int _is_lower_hex(Py_UCS4 v) noexcept:
     return 'a' <= v <= 'f'
 
 
+cdef inline bint _is_surrogate(Py_UCS4 ch) noexcept:
+    return 0xD800 <= ch <= 0xDFFF
+
+
+cdef inline Py_ssize_t _skip_surrogates(
+    int kind, const void *data, Py_ssize_t idx, Py_ssize_t length
+) noexcept:
+    # Advance past lone surrogates; they cannot be UTF-8 encoded and are
+    # dropped, so they must not break up a percent escape during requoting.
+    while idx < length and _is_surrogate(PyUnicode_READ(kind, data, idx)):
+        idx += 1
+    return idx
+
+
 cdef inline long _restore_ch(Py_UCS4 d1, Py_UCS4 d2):
     cdef int digit1 = _from_hex(d1)
     if digit1 < 0:
@@ -145,8 +159,12 @@ cdef inline int _write_utf8(Writer* writer, Py_UCS4 symbol):
         if _write_pct(writer, <uint8_t>(0xc0 | (utf >> 6)), True) < 0:
             return -1
         return _write_pct(writer,  <uint8_t>(0x80 | (utf & 0x3f)), True)
-    elif 0xD800 <= utf <= 0xDFFF:
-        # surogate pair, ignored
+    elif _is_surrogate(symbol):
+        # lone surrogate; invalid in UTF-8 so it is dropped, matching the
+        # pure-Python quoter's errors="ignore" encode. Mark the writer as
+        # changed so _do_quote returns the surrogate-free buffer rather than
+        # the untouched input string.
+        writer.changed = True
         return 0
     elif utf < 0x10000:
         if _write_pct(writer, <uint8_t>(0xe0 | (utf >> 12)), True) < 0:
@@ -256,21 +274,35 @@ cdef class _Quoter:
         Writer *writer
     ):
         cdef Py_UCS4 ch
+        cdef Py_UCS4 d1
+        cdef Py_UCS4 d2
         cdef long chl
         cdef int changed
+        cdef bint surrogate_skipped
         cdef Py_ssize_t idx = 0
+        cdef Py_ssize_t pos1
+        cdef Py_ssize_t pos2
 
         while idx < length:
             ch = PyUnicode_READ(kind, data, idx)
             idx += 1
-            if ch == '%' and self._requote and idx <= length - 2:
-                chl = _restore_ch(
-                    PyUnicode_READ(kind, data, idx),
-                    PyUnicode_READ(kind, data, idx + 1)
-                )
+            if ch == '%' and self._requote and idx < length:
+                # Lone surrogates are dropped (see _skip_surrogates), so look
+                # through them for the two hex digits of the "%XX" escape; this
+                # keeps the C quoter consistent with the pure-Python backend,
+                # which strips surrogates before scanning.
+                pos1 = _skip_surrogates(kind, data, idx, length)
+                pos2 = _skip_surrogates(kind, data, pos1 + 1, length)
+                if pos2 < length:
+                    d1 = PyUnicode_READ(kind, data, pos1)
+                    d2 = PyUnicode_READ(kind, data, pos2)
+                    chl = _restore_ch(d1, d2)
+                else:
+                    chl = -1
                 if chl != -1:
                     ch = <Py_UCS4>chl
-                    idx += 2
+                    surrogate_skipped = pos1 != idx or pos2 != pos1 + 1
+                    idx = pos2 + 1
                     if ch < 128:
                         if bit_at(self._protected_table, ch):
                             if _write_pct(writer, ch, True) < 0:
@@ -282,8 +314,8 @@ cdef class _Quoter:
                                 raise
                             continue
 
-                    changed = (_is_lower_hex(PyUnicode_READ(kind, data, idx - 2)) or
-                               _is_lower_hex(PyUnicode_READ(kind, data, idx - 1)))
+                    changed = (surrogate_skipped or
+                               _is_lower_hex(d1) or _is_lower_hex(d2))
                     if _write_pct(writer, ch, changed) < 0:
                         raise
                     continue

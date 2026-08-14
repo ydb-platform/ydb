@@ -198,7 +198,7 @@ public:
     explicit operator bool() const;
 
     //! Enables using |Logger| in YT_LOG_* macros as both data members and functions
-    //! (e.g. those introduced by YT_DEFINE_GLOBAL).
+    //! (e.g. those introduced by YT_DEFINE_LEAKY_GLOBAL).
     const TLogger& operator()() const;
 
     const TLoggingCategory* GetCategory() const;

@@ -79,7 +79,7 @@ void WriteUnversionedValue(const TUnversionedValue& value, IOutputStream* output
             break;
     }
     THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow, "Values of type %Qlv are not supported by the chosen format", value.Type)
-        << TErrorAttribute("value", ToString(value));
+        .With("value", ToString(value));
 }
 
 bool IsTrivialIntermediateSchema(const NTableClient::TTableSchema& schema)

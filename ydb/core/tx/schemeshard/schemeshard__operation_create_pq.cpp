@@ -179,7 +179,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (auto it = attrs.find("database_id"); it != attrs.end()) {
         tabletConfig.SetYdbDatabaseId(it->second);
     }
-    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+    if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
         tabletConfig.SetMonitoringProjectId(it->second);
     }
 

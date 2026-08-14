@@ -29,7 +29,7 @@ public:
         return NewNodes_[currentIndex]->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -77,7 +77,7 @@ class TFlowVisitAllWrapper: public TStatefulFlowCodegeneratorNode<TFlowVisitAllW
 
 public:
     TFlowVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
-        : TBaseComputation(mutables, nullptr, kind, EValueRepresentation::Embedded)
+        : TBaseComputation(mutables, /*source=*/nullptr, kind, EValueRepresentation::Embedded)
         , VarNode_(varNode)
         , Args_(std::move(args))
         , NewNodes_(std::move(newNodes))
@@ -98,7 +98,7 @@ public:
         return index < NewNodes_.size() ? NewNodes_[index]->GetValue(ctx).Release() : NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -174,7 +174,7 @@ class TWideVisitAllWrapper: public TStatefulWideFlowCodegeneratorNode<TWideVisit
 
 public:
     TWideVisitAllWrapper(TComputationMutables& mutables, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationWideFlowNodePtrVector&& newNodes)
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
+        : TBaseComputation(mutables, /*source=*/nullptr, EValueRepresentation::Embedded)
         , VarNode_(varNode)
         , Args_(std::move(args))
         , NewNodes_(std::move(newNodes))
@@ -195,7 +195,7 @@ public:
         return index < NewNodes_.size() ? NewNodes_[index]->FetchValues(ctx, output) : EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);

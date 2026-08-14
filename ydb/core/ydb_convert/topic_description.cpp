@@ -13,10 +13,33 @@
 
 namespace NKikimr {
 
+bool ResolveConsumerServiceType(
+    const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQConfig& pqConfig,
+    bool checkServiceType,
+    TString& outServiceType,
+    TString& error)
+{
+    if (consumer.HasServiceType()) {
+        outServiceType = consumer.GetServiceType();
+        return true;
+    }
+    if (!checkServiceType) {
+        outServiceType = "";
+        return true;
+    }
+    if (pqConfig.GetDisallowDefaultClientServiceType()) {
+        error = "service type must be set for all read rules";
+        return false;
+    }
+    outServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+    return true;
+}
+
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
     out.set_name(consumerName);
 
@@ -40,16 +63,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
     }
-    TString serviceType = "";
-    if (in.HasServiceType()) {
-        serviceType = in.GetServiceType();
-    } else if (checkServiceType) {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
+    TString serviceType;
+    if (!ResolveConsumerServiceType(in, pqConfig, checkServiceType, serviceType, error)) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        return false;
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
@@ -95,7 +112,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
 
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
     ConvertDirectoryEntry(inDirEntry, selfEntry, true);

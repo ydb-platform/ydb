@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/misc/finally.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/generic/buffer.h>
 
@@ -24,17 +24,17 @@ constinit const auto Logger = HttpLogger;
 
 namespace {
 
-YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
+YT_DEFINE_LEAKY_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
     "connection",
     "host",
 });
 
-YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
 
 } // namespace
 
@@ -111,8 +111,8 @@ TSharedRef THttpParser::Feed(const TSharedRef& input)
         std::string errorContext(input.Begin() + contextStart, contextEnd - contextStart);
 
         THROW_ERROR_EXCEPTION("HTTP parse error: %v", http_errno_description(http_errno))
-            << TErrorAttribute("parser_error_name", http_errno_name(http_errno))
-            << TErrorAttribute("error_context", EscapeC(TStringBuf(errorContext)));
+            .With("parser_error_name", http_errno_name(http_errno))
+            .With("error_context", EscapeC(TStringBuf(errorContext)));
     }
 
     if (http_errno == HPE_PAUSED) {
@@ -381,8 +381,8 @@ void THttpInput::Reset()
 TError THttpInput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 void THttpInput::FinishHeaders()
@@ -825,8 +825,8 @@ TFuture<void> THttpOutput::Close()
 TError THttpOutput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 TFuture<void> THttpOutput::FinishChunked()

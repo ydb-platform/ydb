@@ -511,9 +511,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     // no fulltext settings, so the column name must be taken from here rather than the index description.
     Y_ENSURE(!buildInfo.IndexColumns.empty());
     op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-        dataColumns,
-        buildInfo.IndexColumns.back(),
-        NKikimrSchemeOp::TTableDescription(),
+        dataColumns, buildInfo.IndexColumns, NKikimrSchemeOp::TTableDescription(),
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));

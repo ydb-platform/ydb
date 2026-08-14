@@ -4,8 +4,7 @@
 
 #include <util/generic/hash.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -26,8 +25,8 @@ private:
 class TMakeSleeper: public NYql::NUdf::TBoxedValue {
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("MakeSleeper");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("MakeSleeper");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -87,7 +86,11 @@ THolder<IComputationGraph> BuildSleepGraph(TSetup<LLVM>& setup, const TVector<ui
 
 TVector<TUdfModuleInfo> MakeProfileModules() {
     TVector<TUdfModuleInfo> modules;
-    modules.emplace_back(TUdfModuleInfo{"", "TestModule", new TProfileUTModule()});
+    modules.emplace_back(TUdfModuleInfo{
+        .LibraryPath = "",
+        .ModuleName = "TestModule",
+        .Module = new TProfileUTModule(),
+    });
     return modules;
 }
 
@@ -209,5 +212,4 @@ Y_UNIT_TEST_LLVM(ReportsCountersForClosureLeaf) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLUdfProfileTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

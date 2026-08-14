@@ -83,7 +83,7 @@ public:
         return empty ? NUdf::TUnboxedValuePod::MakeFinish() : State_->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -385,7 +385,7 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(stateType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(stateType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -604,7 +604,7 @@ IComputationNode* WrapSqueeze1(TCallable& callable, const TComputationNodeFactor
     }
     const auto stateType = hasSaveLoad ? callable.GetInput(6).GetStaticType() : nullptr;
 
-    return new TCondense1Wrapper<false, false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
+    return new TCondense1Wrapper<false, false>(ctx.Mutables, stream, item, state, /*outSwitch=*/nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
 }
 
 } // namespace NKikimr::NMiniKQL

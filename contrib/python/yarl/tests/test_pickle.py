@@ -1,4 +1,5 @@
 import pickle
+from urllib.parse import SplitResult
 
 from yarl import URL
 
@@ -58,3 +59,36 @@ def test_pickle_does_not_pollute_cache() -> None:
     # for empty args.
     assert URL().scheme == ""
     assert URL("").scheme == ""
+
+
+def test_pickle_legacy_splitresult_state() -> None:
+    """Pickles produced by older yarl releases embedded a ``SplitResult``.
+
+    Loading such bytes must still rebuild the URL so users upgrading from
+    pre-fix versions do not lose access to their stored data.
+    """
+    val = ("http", "example.com", "/p", "q=1", "frag")
+    legacy_state = (tuple.__new__(SplitResult, val),)
+    u = URL.__new__(URL)
+    u.__setstate__(legacy_state)
+    assert u._scheme == "http"
+    assert u._netloc == "example.com"
+    assert u._path == "/p"
+    assert u._query == "q=1"
+    assert u._fragment == "frag"
+
+
+def test_pickle_getstate_returns_plain_tuple() -> None:
+    """Regression test for gh-1632.
+
+    Python 3.15 added a ``SplitResult.__getstate__`` that touches instance
+    attributes set by ``__init__``. yarl previously embedded a ``SplitResult``
+    built via ``tuple.__new__``, bypassing init, which made pickling crash.
+    ``__getstate__`` must return a plain ``tuple`` so pickling never invokes
+    ``SplitResult.__getstate__``.
+    """
+    u = URL("http://example.com/path?q=1#frag")
+    state = u.__getstate__()
+    assert len(state) == 1
+    assert type(state[0]) is tuple
+    assert state[0] == ("http", "example.com", "/path", "q=1", "frag")

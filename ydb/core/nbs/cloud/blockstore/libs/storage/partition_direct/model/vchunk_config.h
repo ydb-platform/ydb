@@ -48,6 +48,7 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -64,6 +65,8 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).

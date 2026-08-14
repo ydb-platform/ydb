@@ -8,8 +8,16 @@ BUNDLE(
     ydb/library/actors/core/ut_fat/bundle NAME actors_core_ut_fat
 )
 
+BUNDLE(
+    ydb/tools/ydb_bench/memory NAME memory_benchmark
+)
+
 RESOURCE(
     actors_core_ut_fat actors_core_ut_fat
+)
+
+RESOURCE(
+    memory_benchmark memory_benchmark
 )
 
 RESOURCE(- ydb_bench/build_type=${BUILD_TYPE})

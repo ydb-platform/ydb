@@ -278,7 +278,7 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
                         YT_UNUSED_FUTURE(DoAbort(&guard));
                         THROW_ERROR_EXCEPTION("Error flushing transaction %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
                 }
 
@@ -373,7 +373,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                         }
                         THROW_ERROR_EXCEPTION("Error committing transaction %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
                 }
 
@@ -1162,7 +1162,7 @@ TFuture<void> TTransaction::DoAbort(
                         .With(rspOrError);
                     abortError = TError("Error aborting transaction %v",
                         GetId())
-                        << rspOrError;
+                        .With(rspOrError);
                 }
 
                 if (abortError.IsOK()) {
@@ -1238,7 +1238,7 @@ TFuture<void> TTransaction::SendPing()
                     .With(rspOrError);
                 THROW_ERROR_EXCEPTION("Error pinging transaction %v",
                     GetId())
-                    << rspOrError;
+                    .With(rspOrError);
             }
         }));
 }
@@ -1297,7 +1297,7 @@ void TTransaction::DoValidateActive()
             NTransactionClient::EErrorCode::InvalidTransactionState,
             "Transaction %v is not active",
             GetId())
-            << TErrorAttribute("state", State_);
+            .With("state", State_);
     }
 }
 
@@ -1390,7 +1390,7 @@ TFuture<void> TTransaction::FlushModifications()
                     YT_UNUSED_FUTURE(DoAbort(&guard));
                     THROW_ERROR_EXCEPTION("Error flushing transaction %v modifications",
                         GetId())
-                        << rspOrError;
+                        .With(rspOrError);
                 }
             }
 

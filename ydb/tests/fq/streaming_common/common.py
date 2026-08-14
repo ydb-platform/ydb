@@ -20,6 +20,16 @@ from ydb.tests.library.common.types import Erasure
 logger = logging.getLogger(__name__)
 
 
+def max_json_depth(value):
+    if isinstance(value, dict):
+        return 1 + max((max_json_depth(v) for v in value.values()), default=0)
+
+    if isinstance(value, list):
+        return 1 + max((max_json_depth(item) for item in value), default=0)
+
+    return 0
+
+
 def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
@@ -44,8 +54,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
-        "enable_dq_source_stream_lookup_join_shuffle_mode", False
-    )  # TODO YQ-5453
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -73,6 +83,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     if not enable_kqp_constraints_transformer:
         disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
+        extra_feature_flags.add("enable_access_service_v2_interface")
+    else:
+        disabled_feature_flags.append("enable_access_service_v2_interface")
+
+    iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
         pq_client_service_types=["yandex-query"],
@@ -93,7 +110,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         },
         replication_config={
             "iam_service_control": {
-                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "endpoint": iam_emulator_endpoint,
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
@@ -122,6 +139,8 @@ def get_ydb_config(request, enable_fq_connector=None):
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
+    config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
+    config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
 
 
@@ -379,6 +398,33 @@ class StreamingTestBase(TestYdsBase):
                 sum += sensor
         assert found or not expect_counters_exist
         return sum
+
+    def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
+        total = 0
+        for node_id in kikimr.cluster.nodes:
+            sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
+                {"type": "SchemeShard", "category": "app", "sensor": counter_name}
+            )
+            if sensor is not None:
+                total += sensor
+        return total
+
+    def wait_schemeshard_counter(
+        self,
+        kikimr: Kikimr,
+        counter_name: str,
+        expected_value: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(60, 90),
+    ) -> None:
+        deadline = time.time() + timeout
+        while True:
+            value = self.get_schemeshard_counter(kikimr, counter_name)
+            if value == expected_value:
+                break
+            assert (
+                time.time() < deadline
+            ), f"wait_schemeshard_counter failed: {counter_name}={value}, expected {expected_value}"
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_streaming_query_metric(
         self,

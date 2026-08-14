@@ -289,7 +289,7 @@ private:
         // to unclear exceptions during parsing.
         auto yamlErrorType = static_cast<EYamlErrorType>(Emitter_.error);
         auto error = TError("YAML emitter error: %v", Emitter_.problem)
-            << TErrorAttribute("yaml_error_type", yamlErrorType);
+            .With("yaml_error_type", yamlErrorType);
 
         if (!WriteError_.IsOK()) {
             error <<= WriteError_;

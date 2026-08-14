@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_function_metadata.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void RegisterStringKernelEquals(TKernelFamilyBase& kernelFamily);
 void RegisterStringKernelNotEquals(TKernelFamilyBase& kernelFamily);
@@ -19,5 +18,4 @@ void RegisterStringKernelContains(TKernelFamilyBase& kernelFamily);
 
 void RegisterSizeBuiltin(TKernelFamilyMap& kernelFamilyMap);
 void RegisterWith(TKernelFamilyMap& kernelFamilyMap);
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

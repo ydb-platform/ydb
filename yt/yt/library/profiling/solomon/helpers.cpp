@@ -49,7 +49,7 @@ TOutputEncodingContext CreateOutputEncodingContextFromHeaders(const THeadersPtr&
     if (auto isSolomonPull = headers->Find(IsSolomonPullHeaderName)) {
         if (!TryFromString<bool>(*isSolomonPull, context.IsSolomonPull)) {
             THROW_ERROR_EXCEPTION("Invalid value of %Qv header", IsSolomonPullHeaderName)
-                << TErrorAttribute("value", *isSolomonPull);
+                .With("value", *isSolomonPull);
         }
     } else {
         context.IsSolomonPull = context.Format == ::NMonitoring::EFormat::JSON || context.Format == ::NMonitoring::EFormat::SPACK;

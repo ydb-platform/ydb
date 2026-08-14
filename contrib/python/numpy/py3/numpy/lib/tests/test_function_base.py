@@ -557,13 +557,9 @@ class TestInsert:
         b = np.array([0, 1], dtype=np.float64)
         assert_equal(insert(b, 0, b[0]), [0., 0., 1.])
         assert_equal(insert(b, [], []), b)
-        # Bools will be treated differently in the future:
-        # assert_equal(insert(a, np.array([True]*4), 9), [9, 1, 9, 2, 9, 3, 9])
-        with warnings.catch_warnings(record=True) as w:
-            warnings.filterwarnings('always', '', FutureWarning)
-            assert_equal(
-                insert(a, np.array([True] * 4), 9), [1, 9, 9, 9, 9, 2, 3])
-            assert_(w[0].category is FutureWarning)
+        assert_equal(insert(a, np.array([True]*4), 9), [9, 1, 9, 2, 9, 3, 9])
+        assert_equal(insert(a, np.array([True, False, True, False]), 9),
+                     [9, 1, 2, 9, 3])
 
     def test_multidim(self):
         a = [[1, 1, 1]]
@@ -1397,6 +1393,34 @@ class TestTrimZeros:
         res = trim_zeros(self.a.tolist())
         assert isinstance(res, list)
 
+    @pytest.mark.parametrize("ndim", (0, 1, 2, 3, 10))
+    def test_nd_basic(self, ndim):
+        a = np.ones((2,) * ndim)
+        b = np.pad(a, (2, 1), mode="constant", constant_values=0)
+        res = trim_zeros(b, axis=None)
+        assert_array_equal(a, res)
+
+    @pytest.mark.parametrize("ndim", (0, 1, 2, 3))
+    def test_allzero(self, ndim):
+        a = np.zeros((3,) * ndim)
+        res = trim_zeros(a, axis=None)
+        assert_array_equal(res, np.zeros((0,) * ndim))
+
+    def test_trim_arg(self):
+        a = np.array([0, 1, 2, 0])
+
+        res = trim_zeros(a, trim='f')
+        assert_array_equal(res, [1, 2, 0])
+
+        res = trim_zeros(a, trim='b')
+        assert_array_equal(res, [0, 1, 2])
+
+    @pytest.mark.parametrize("trim", ("front", ""))
+    def test_unexpected_trim_value(self, trim):
+        arr = self.a
+        with pytest.raises(ValueError, match=r"unexpected character\(s\) in `trim`"):
+            trim_zeros(arr, trim=trim)
+
 
 class TestExtins:
 
@@ -1563,7 +1587,7 @@ class TestVectorize:
         try:
             vectorize(random.randrange)  # Should succeed
         except Exception:
-            raise AssertionError()
+            raise AssertionError
 
     def test_keywords2_ticket_2100(self):
         # Test kwarg support: enhancement ticket 2100
@@ -1935,7 +1959,7 @@ class TestVectorize:
 
     def test_datetime_conversion(self):
         otype = "datetime64[ns]"
-        arr = np.array(['2024-01-01', '2024-01-02', '2024-01-03'], 
+        arr = np.array(['2024-01-01', '2024-01-02', '2024-01-03'],
                        dtype='datetime64[ns]')
         assert_array_equal(np.vectorize(lambda x: x, signature="(i)->(j)",
                                         otypes=[otype])(arr), arr)
@@ -2513,6 +2537,12 @@ class TestCov:
         res = cov(cast_x1, dtype=test_type)
         assert test_type == res.dtype
 
+    def test_gh_27658(self):
+        x = np.ones((3, 1))
+        expected = np.cov(x, ddof=0, rowvar=True)
+        actual = np.cov(x.T, ddof=0, rowvar=False)
+        assert_allclose(actual, expected, strict=True)
+
 
 class Test_I0:
 
@@ -2895,6 +2925,27 @@ class TestBincount:
         with assert_raises(ValueError):
             np.bincount(vals)
 
+    @pytest.mark.parametrize("dt", np.typecodes["AllInteger"])
+    def test_gh_28354(self, dt):
+        a = np.array([0, 1, 1, 3, 2, 1, 7], dtype=dt)
+        actual = np.bincount(a)
+        expected = [1, 3, 1, 1, 0, 0, 0, 1]
+        assert_array_equal(actual, expected)
+
+    def test_contiguous_handling(self):
+        # check for absence of hard crash
+        np.bincount(np.arange(10000)[::2])
+
+    def test_gh_28354_array_like(self):
+        class A:
+            def __array__(self):
+                return np.array([0, 1, 1, 3, 2, 1, 7], dtype=np.uint64)
+
+        a = A()
+        actual = np.bincount(a)
+        expected = [1, 3, 1, 1, 0, 0, 0, 1]
+        assert_array_equal(actual, expected)
+
 
 class TestInterp:
 
@@ -3193,8 +3244,6 @@ class TestPercentile:
                                   input_dtype,
                                   expected_dtype):
         expected_dtype = np.dtype(expected_dtype)
-        if np._get_promotion_state() == "legacy":
-            expected_dtype = np.promote_types(expected_dtype, np.float64)
 
         arr = np.asarray([15.0, 20.0, 35.0, 40.0, 50.0], dtype=input_dtype)
         weights = np.ones_like(arr) if weighted else None

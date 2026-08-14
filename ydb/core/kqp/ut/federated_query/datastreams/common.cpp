@@ -124,10 +124,12 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
             authConfig.SetUseAccessServiceTLS(false);
         }
 
+#if 0 // [BACKPORT stable-26-2]
         {
             auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
             featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
         }
+#endif
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

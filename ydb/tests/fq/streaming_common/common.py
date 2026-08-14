@@ -50,10 +50,12 @@ def get_ydb_config(request, enable_fq_connector=None):
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
 
+    """ [BACKPORT stable-26-2]
     if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
         extra_feature_flags.add("enable_access_service_v2_interface")
     else:
         disabled_feature_flags.append("enable_access_service_v2_interface")
+    """
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 

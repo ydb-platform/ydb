@@ -143,7 +143,7 @@ namespace {
             }
 
             if (const auto s = (*input)->Streaming) {
-                streaming = s;
+                streaming = s->RenameFields(ctx, rename);
             }
 
             return IGraphTransformer::TStatus::Ok;

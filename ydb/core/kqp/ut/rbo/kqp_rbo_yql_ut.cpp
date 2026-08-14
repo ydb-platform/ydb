@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
     }
-    
+
     Y_UNIT_TEST(PushConstantConditionOnJoinKeyBothSides) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -3109,29 +3109,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- должен использоваться Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 > 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -3151,8 +3151,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- используется Index12, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -3285,50 +3285,50 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- должен использоваться Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 > 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212, still re-order is expected
-                SELECT Value2 
-                FROM Table 
+                SELECT Value2
+                FROM Table
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;
             )",
             R"(
                 -- используется Index12, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -3457,7 +3457,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 (1, 0, "0", "15", "15"),
                 (1, 0, "1", "16", "16"),
                 (1, 1, "0", "17", "17"),
-                (1, 1, "1", "18", "18");    
+                (1, 1, "1", "18", "18");
             )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -4691,7 +4691,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
 
         TKikimrRunner kikimr(kikimrSettings);
-        
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
@@ -8246,7 +8246,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             InsertIntoSchema0(db, table, rowsNum);
         }
 
-        const std::string queryPrefix = 
+        const std::string queryPrefix =
             R"(
                 PRAGMA ydb.HashJoinMode='map';
                 PRAGMA ydb.CostBasedOptimizationLevel='0';
@@ -8479,7 +8479,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT t2.a FROM `/Root/t2` as t2 right semi join `/Root/t1` as t1 on t1.a = t2.a order by t2.a;
             )",
-            */ 
+            */
         };
 
         std::vector<std::string> results = {
@@ -8533,9 +8533,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                SELECT t1.a, t2.a FROM 
+                SELECT t1.a, t2.a FROM
                 (SELECT * FROM `/Root/t1` as t1
-                WHERE t1.a < 3) as t1 full outer join 
+                WHERE t1.a < 3) as t1 full outer join
                 (SELECT * FROM `/Root/t2` as t2
                 WHERE t2.a > 2) as t2 on t1.a = t2.a order by t1.a, t2.a;
             )",

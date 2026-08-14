@@ -77,7 +77,9 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
         return *ChunksPKOrder;
     }
     ChunksPKOrder.emplace();
-    // only sorted scans consume the PK order; skip the permutation work otherwise
+    // only sorted scans consume the PK order; skip the permutation work otherwise. The flag check is
+    // belt-and-suspenders: IsSorted() already implies the flag (OrderByLimitAllowed gates it), kept explicit
+    // so the permutation never builds if the two ever diverge.
     if (!GetContext()->GetReadMetadata()->IsSorted() || !HasAppData() ||
         !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
         return *ChunksPKOrder;

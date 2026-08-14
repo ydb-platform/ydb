@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    dq_task_runner_exec_ctx.cpp
     dq_async_compute_actor.cpp
+    dq_checkpoints_states.cpp
     dq_compute_actor_async_io_factory.cpp
     dq_compute_actor_channels.cpp
     dq_compute_actor_checkpoints.cpp
@@ -12,6 +12,7 @@ SRCS(
     dq_compute_issues_buffer.cpp
     dq_request_context.h
     dq_request_context.cpp
+    dq_task_runner_exec_ctx.cpp
 )
 
 PEERDIR(

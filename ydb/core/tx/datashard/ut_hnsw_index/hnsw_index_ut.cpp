@@ -241,6 +241,40 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT_C(index, error);
         UNIT_ASSERT_VALUES_EQUAL(index->Size(), 2u);
     }
+
+    Y_UNIT_TEST(AppliesPostingTableChanges) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({0.0f, 0.0f})},
+            {"b", SerializeFloatVector({10.0f, 10.0f})},
+        };
+
+        TString error;
+        auto index = THnswIndex::Build(settings, data, /* maxMemoryBytes */ 0, error);
+        UNIT_ASSERT_C(index, error);
+
+        UNIT_ASSERT(index->Upsert("b", SerializeFloatVector({0.1f, 0.1f})));
+        UNIT_ASSERT(index->Upsert("c", SerializeFloatVector({0.2f, 0.2f})));
+        index->Erase("a");
+
+        TString vector;
+        UNIT_ASSERT(!index->GetVector("a", vector));
+        UNIT_ASSERT(index->GetVector("b", vector));
+        UNIT_ASSERT_VALUES_EQUAL(vector, SerializeFloatVector({0.1f, 0.1f}));
+
+        // The immutable graph can still yield erased keys. DataShard validates
+        // all candidates against MVCC before producing rows.
+        const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 2);
+        THashSet<TString> keys;
+        for (const auto& [key, _] : result.Results) {
+            keys.insert(key);
+        }
+        UNIT_ASSERT(keys.contains("b"));
+        UNIT_ASSERT(keys.contains("c"));
+    }
 }
 
 } // namespace NKikimr::NDataShard

@@ -63,7 +63,7 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
             if (useTransactions) {
                 props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId);
                 props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1");
-                props.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, "30000");
+                props.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, "120000");
             }
 
             AtomicReference<Exception> error = new AtomicReference<>();
@@ -77,7 +77,8 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
             };
 
             boolean transactionStarted = false;
-            try (KafkaProducer<String, byte[]> producer = new KafkaProducer<>(props)) {
+            KafkaProducer<String, byte[]> producer = new KafkaProducer<>(props);
+            try {
                 if (useTransactions) {
                     producer.initTransactions();
                     producer.beginTransaction();
@@ -86,7 +87,10 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
 
                 for (int i = 0; i < messageCount; ++i) {
                     producer.send(
-                        new ProducerRecord<>(topic, "key-" + (i % keyCount), makePayload(payloadPrefix, i, messageSize)),
+                        new ProducerRecord<>(
+                            topic,
+                            "key-" + (i % keyCount),
+                            makePayload(payloadPrefix, i, messageSize)),
                         callback);
                 }
 
@@ -107,9 +111,15 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
                 }
             } catch (Exception e) {
                 if (useTransactions && transactionStarted) {
-                    System.err.println("KafkaBatchProducer failed before transaction finished: " + e);
+                    try {
+                        producer.abortTransaction();
+                    } catch (Exception abortError) {
+                        e.addSuppressed(abortError);
+                    }
                 }
                 throw e;
+            } finally {
+                producer.close();
             }
 
             System.out.println(
@@ -185,7 +195,7 @@ class Workload(unittest.TestCase):
         java_path = TEST_FILES_DIRECTORY + "/bin/java"
         jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME
 
-        if self.source_writer == "kafka":
+        if self.source_writer == "kafka-direct":
             self.run_direct_kafka_batch_tests(java_path, jar_file_path)
             return
 
@@ -197,6 +207,10 @@ class Workload(unittest.TestCase):
             ("0", "1", False),
             ("0", "0", False),
         ]
+        if self.source_writer == "kafka":
+            testOptions = [
+                ("0", "0", False),
+            ]
         checkerConsumer = "targetCheckerConsumer"
         self.create_topic(
             self.test_topic_path,
@@ -369,22 +383,45 @@ class Workload(unittest.TestCase):
             )
 
             if scenario["expected_count"] == 0:
-                self.assert_no_messages(scenario["topic"], scenario["consumer"], timeout=10)
+                self.assert_no_messages(scenario["topic"], scenario["consumer"], timeout=self.duration)
                 print(f"Scenario {scenario['name']} produced no readable messages as expected")
                 continue
 
-            messages_info = self.read_messages(
-                scenario["topic"],
-                scenario["consumer"],
-                expected_count=scenario["expected_count"],
-                timeout=self.duration,
-                expected_prefix=scenario["name"].encode("utf-8"),
-            )
+            expected_prefix = scenario["name"].encode("utf-8")
+            if scenario["transaction_mode"] == "none":
+                messages_info = self.read_messages_until_quiet(
+                    scenario["topic"],
+                    scenario["consumer"],
+                    min_count=scenario["expected_count"],
+                    timeout=self.duration,
+                    quiet_timeout=10,
+                    expected_prefix=expected_prefix,
+                )
+            else:
+                messages_info = self.read_messages(
+                    scenario["topic"],
+                    scenario["consumer"],
+                    expected_count=scenario["expected_count"],
+                    timeout=self.duration,
+                    expected_prefix=expected_prefix,
+                )
             total_count = self.count_messages(messages_info)
-            assert total_count == scenario["expected_count"], (
-                f"Scenario {scenario['name']} expected {scenario['expected_count']} readable messages, "
-                f"got {total_count}"
+            self.assert_payload_indexes(
+                messages_info,
+                expected_prefix,
+                scenario["expected_count"],
+                allow_duplicates=scenario["transaction_mode"] == "none",
             )
+            if scenario["transaction_mode"] == "none":
+                assert total_count >= scenario["expected_count"], (
+                    f"Scenario {scenario['name']} expected at least {scenario['expected_count']} readable messages, "
+                    f"got {total_count}"
+                )
+            else:
+                assert total_count == scenario["expected_count"], (
+                    f"Scenario {scenario['name']} expected {scenario['expected_count']} readable messages, "
+                    f"got {total_count}"
+                )
             print(f"Scenario {scenario['name']} read {total_count} messages")
 
     def compile_kafka_batch_producer(self, java_path, jar_file_path):
@@ -433,6 +470,8 @@ class Workload(unittest.TestCase):
     def start_source_writer(self, java_path, jar_file_path):
         if self.source_writer == "topic":
             return self.start_topic_source_writer()
+        if self.source_writer == "kafka":
+            return self.start_kafka_source_writer(java_path, jar_file_path)
         raise ValueError(f"Unknown source writer: {self.source_writer}")
 
     def start_topic_source_writer(self):
@@ -446,6 +485,30 @@ class Workload(unittest.TestCase):
         ]
         print("Write command:", write_command)
         return subprocess.Popen(write_command, start_new_session=True)
+
+    def start_kafka_source_writer(self, java_path, jar_file_path):
+        print("Running Kafka batch producer source writer")
+        self.compile_kafka_batch_producer(java_path, jar_file_path)
+        producer_class_dir = "./kafka-batch-producer"
+        producer_command = [
+            java_path,
+            "-cp",
+            f"{jar_file_path}:{producer_class_dir}",
+            "KafkaBatchProducer",
+            self.kafka_bootstrap(),
+            self.test_topic_path,
+            str(SOURCE_MESSAGE_COUNT),
+            "256",
+            "32768",
+            "100",
+            "none",
+            "none",
+            "none",
+            "kafka-source",
+            "16",
+        ]
+        print("Kafka source writer command:", producer_command)
+        return subprocess.Popen(producer_command, start_new_session=True)
 
     def clean_streams_state_dirs(self, count):
         for i in range(count):
@@ -505,6 +568,53 @@ class Workload(unittest.TestCase):
                 except TimeoutError:
                     pass
 
+    def read_messages_until_quiet(
+            self,
+            topic: str,
+            consumer: str,
+            min_count: int,
+            timeout: int,
+            quiet_timeout: int,
+            expected_prefix=None):
+        with self.driver.topic_client.reader(topic, consumer) as reader:
+            messages_info = defaultdict(list)
+            total_count = 0
+            deadline = time.time() + timeout
+            quiet_deadline = None
+            while True:
+                now = time.time()
+                if now >= deadline:
+                    break
+                if quiet_deadline is not None and now >= quiet_deadline:
+                    break
+
+                receive_timeout = min(1, deadline - now)
+                if quiet_deadline is not None:
+                    receive_timeout = min(receive_timeout, quiet_deadline - now)
+
+                try:
+                    mess = reader.receive_message(timeout=receive_timeout)
+                    data = bytes(mess.data)
+                    if expected_prefix is not None and not data.startswith(expected_prefix):
+                        raise AssertionError(
+                            f"{topic} exposed message with unexpected payload prefix: "
+                            f"partition_id={mess.partition_id}, seqno={mess.seqno}"
+                        )
+                    messages_info[mess.partition_id].append([mess.partition_id, mess.seqno, mess.created_at, data])
+                    total_count += 1
+                    reader.commit(mess)
+                    if total_count >= min_count:
+                        quiet_deadline = time.time() + quiet_timeout
+                except TimeoutError:
+                    if total_count >= min_count:
+                        quiet_deadline = time.time() + quiet_timeout if quiet_deadline is None else quiet_deadline
+
+            if total_count < min_count:
+                raise AssertionError(
+                    f"{topic} did not expose at least {min_count} readable messages: got {total_count}"
+                )
+            return messages_info
+
     def read_messages(self, topic: str, consumer: str, expected_count=None, timeout=1, expected_prefix=None):
         with self.driver.topic_client.reader(topic, consumer) as reader:
             messages_info = defaultdict(list)
@@ -519,12 +629,13 @@ class Workload(unittest.TestCase):
                     receive_timeout = min(receive_timeout, remaining)
                 try:
                     mess = reader.receive_message(timeout=receive_timeout)
-                    if expected_prefix is not None and not bytes(mess.data).startswith(expected_prefix):
+                    data = bytes(mess.data)
+                    if expected_prefix is not None and not data.startswith(expected_prefix):
                         raise AssertionError(
                             f"{topic} exposed message with unexpected payload prefix: "
                             f"partition_id={mess.partition_id}, seqno={mess.seqno}"
                         )
-                    messages_info[mess.partition_id].append([mess.partition_id, mess.seqno, mess.created_at])
+                    messages_info[mess.partition_id].append([mess.partition_id, mess.seqno, mess.created_at, data])
                     total_count += 1
                     reader.commit(mess)
                 except TimeoutError:
@@ -591,6 +702,44 @@ class Workload(unittest.TestCase):
             )
 
         return messages_info
+
+    def assert_payload_indexes(
+            self,
+            messages_info,
+            expected_prefix: bytes,
+            expected_count: int,
+            allow_duplicates: bool):
+        indexes = []
+        for messages in messages_info.values():
+            for message in messages:
+                indexes.append(self.extract_payload_index(message[3], expected_prefix))
+
+        expected_indexes = set(range(expected_count))
+        actual_indexes = set(indexes)
+        missing_indexes = sorted(expected_indexes - actual_indexes)
+        unexpected_indexes = sorted(actual_indexes - expected_indexes)
+        if missing_indexes or unexpected_indexes:
+            raise AssertionError(
+                "Direct Kafka producer payload indexes mismatch: "
+                f"missing={missing_indexes[:10]}, unexpected={unexpected_indexes[:10]}, "
+                f"expected_count={expected_count}, actual_unique_count={len(actual_indexes)}"
+            )
+
+        if not allow_duplicates and len(indexes) != len(actual_indexes):
+            raise AssertionError(
+                "Direct Kafka transactional producer exposed duplicate payload indexes: "
+                f"message_count={len(indexes)}, unique_count={len(actual_indexes)}"
+            )
+
+    def extract_payload_index(self, payload: bytes, expected_prefix: bytes):
+        marker = expected_prefix + b"-message-"
+        if not payload.startswith(marker):
+            raise AssertionError(f"Unexpected payload prefix: {payload[:64]!r}")
+
+        end = payload.find(b"-", len(marker))
+        if end == -1:
+            raise AssertionError(f"Cannot parse payload index: {payload[:64]!r}")
+        return int(payload[len(marker):end])
 
     def count_messages(self, messages_info):
         return sum(len(messages) for messages in messages_info.values())

@@ -62,10 +62,6 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     ListsByGroupId.erase(itGroup);
 }
 
-namespace {
-static TAtomicCounter PerGenerationCounter = 1;
-}
-
 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
@@ -84,13 +80,12 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
         {"currentGen", CurrentGen},
         {"gen", CollectGenStepInFlight},
         {"count", it->second.RequestsCount});
-    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, PerGenerationCounter.Val(), address.GetChannelId(),
-        !!CollectGenStepInFlight, CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0,
-        CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
+    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, 0, address.GetChannelId(), !!CollectGenStepInFlight,
+        CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0, CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true,
         TWriteSource::ColumnShardGC);
-    result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
+    result->PerGenerationCounter = TBlobManager::AllocateGCPerGenerationCounter(result->PerGenerationCounterStepSize());
     return std::move(result);
 }
 

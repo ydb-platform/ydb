@@ -244,6 +244,12 @@ public:
     // blob with the given channel and generation in [fromGen, nextFromGen).
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
 
+    // Shared monotonic PerGenerationCounter for all TEvCollectGarbage requests sent by this
+    // tablet's blob operations (both regular GC and CutHistory barriers).  Callers pass the
+    // event's PerGenerationCounterStepSize() as `step` and store the returned value into
+    // result->PerGenerationCounter.
+    static ui32 AllocateGCPerGenerationCounter(ui32 step);
+
     // Access to the cut history cutter (null if not initialized).
     NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
 

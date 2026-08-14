@@ -108,8 +108,12 @@ public:
         return GetNextFromGeneration(key);
     }
 
+    // Pure function: returns true if no earlier entry in `hist` (all entries before the one
+    // with fromGeneration == key.FromGeneration) uses the same GroupID as that entry.
+    // Testable without an actor context or THistoryCutterWrapper instance.
+    static bool SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration);
+
 private:
-    bool IsActiveEntry(const TEntryKey& key) const;
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
     bool IsDrained(const TEntryKey& key) const;
     ui32 GetNextFromGeneration(const TEntryKey& key) const;

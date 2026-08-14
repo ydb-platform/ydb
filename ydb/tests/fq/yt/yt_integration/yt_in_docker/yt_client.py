@@ -318,15 +318,16 @@ class YtClient:
         ``$cumulative_data_weight``).  The table is mounted synchronously so
         it is ready for queue operations immediately after this call returns.
         """
-        attrs = (
-            "{dynamic=%true;schema=["
-            "{name=" + data_column + ";type=string};"
-            '{name="$timestamp";type=uint64};'
-            '{name="$cumulative_data_weight";type=int64}'
-            "]}"
-        )
+        attrs = json.dumps({
+            "dynamic": True,
+            "schema": [
+                {"name": data_column, "type": "string"},
+                {"name": "$timestamp", "type": "uint64"},
+                {"name": "$cumulative_data_weight", "type": "int64"},
+            ],
+        })
         self._run_yt_cli(
-            ["create", "table", path, "--attributes", attrs],
+            ["create", "table", path, "--attributes-format", "json", "--attributes", attrs],
             check=True, timeout=timeout,
         )
         self._run_yt_cli(
@@ -380,12 +381,28 @@ class YtClient:
             args.append("--sync")
         self._run_yt_cli(args, check=True, timeout=timeout)
 
-    def set_attribute(self, path: str, value: str, timeout: int = 60) -> None:
-        """Set an attribute value at the given path."""
-        self._run_yt_cli(
-            ["set", path, value],
-            check=True, timeout=timeout,
-        )
+    def set_attribute(
+        self,
+        path: str,
+        value: Any,
+        as_json: bool = False,
+        timeout: int = 60,
+    ) -> None:
+        """Set an attribute value at the given path.
+
+        If *as_json* is True, *value* will be serialized as JSON and passed
+        with --attributes-format=json to the yt CLI.
+        """
+        if as_json:
+            self._run_yt_cli(
+                ["set", "--attributes-format", "json", path, json.dumps(value)],
+                check=True, timeout=timeout,
+            )
+        else:
+            self._run_yt_cli(
+                ["set", path, str(value)],
+                check=True, timeout=timeout,
+            )
 
     def create_node(self, path: str, type_: str, timeout: int = 60) -> None:
         """Create a node of the given type at the specified path."""
@@ -516,11 +533,18 @@ class YtClient:
         queue_path: str,
         session_id: str,
         epoch: int = 0,
-        input_data: str = "",
-        input_format: str = "yson",
+        rows: Optional[List[Dict[str, Any]]] = None,
+        input_data: Optional[str] = None,
+        input_format: str = "json",
         timeout: int = 60,
     ) -> None:
-        """Push rows via queue producer."""
+        """Push rows via queue producer.
+
+        If *rows* is provided, it will be serialized as newline-delimited JSON.
+        Otherwise *input_data* is used as-is (raw YSON or other format).
+        """
+        if rows is not None:
+            input_data = "\n".join(json.dumps(row) for row in rows) + "\n"
         self._run_yt_cli([
             "push-queue-producer", producer_path, queue_path,
             "--session-id", session_id,

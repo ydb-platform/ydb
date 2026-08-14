@@ -114,7 +114,7 @@ def test_full_queue_scenario(yt: YtClient) -> None:
 
     # --- 10. Enable automatic trimming based on vital consumers ---
     # Doc: yt --proxy pythia set //tmp/$USER-test-queue/@auto_trim_config '{enable=true}'
-    yt.set_attribute(f"{queue_path}/@auto_trim_config", "{enable=%true}")
+    yt.set_attribute(f"{queue_path}/@auto_trim_config", {"enable": True}, as_json=True)
     config = yt.get_attribute(f"{queue_path}/@auto_trim_config")
     assert config is not None
 
@@ -216,8 +216,10 @@ def test_full_queue_scenario(yt: YtClient) -> None:
         queue_path=queue_path,
         session_id="session_123",
         epoch=0,
-        input_data='{data=value1;"$sequence_number"=1};{data=value2;"$sequence_number"=2}',
-        input_format="yson",
+        rows=[
+            {"data": "value1", "$sequence_number": 1},
+            {"data": "value2", "$sequence_number": 2},
+        ],
     )
 
     # --- 18. Check written rows via pull-queue at offset 100 ---
@@ -246,8 +248,10 @@ def test_full_queue_scenario(yt: YtClient) -> None:
         queue_path=queue_path,
         session_id="session_123",
         epoch=0,
-        input_data='{data=value2;"$sequence_number"=2};{data=value3;"$sequence_number"=10}',
-        input_format="yson",
+        rows=[
+            {"data": "value2", "$sequence_number": 2},
+            {"data": "value3", "$sequence_number": 10},
+        ],
     )
 
     # --- 20. Verify deduplication ---

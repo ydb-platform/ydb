@@ -121,7 +121,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
     if (!CutHistoryCutter) {
         return;
     }
-    if (!CutHistoryCutter->SweepInFlight()) {
+    if (!CutHistoryCutter->IsSweepInFlight()) {
         return;
     }
 

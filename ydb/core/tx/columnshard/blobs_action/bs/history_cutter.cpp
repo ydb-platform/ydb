@@ -77,12 +77,12 @@ private:
 
     TActorId TabletActorId;
     TActorId LauncherActorId;
-    ui64 TabletId;
-    ui32 CurrentGen;
-    ui32 Channel;
-    ui32 Group;
-    ui32 FromGen;
-    ui32 NextFromGen;
+    ui64 TabletId = 0;
+    ui32 CurrentGen = 0;
+    ui32 Channel = 0;
+    ui32 Group = 0;
+    ui32 FromGen = 0;
+    ui32 NextFromGen = 0;
     int Retries = 0;
 };
 
@@ -102,13 +102,7 @@ bool THistoryCutterWrapper::IsEnabled() const {
     if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
         return true;
     }
-    if (!HasAppData()) {
-        return false;
-    }
-    if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
-        return false;
-    }
-    return AppData()->ColumnShardConfig.GetCutHistoryEnabled();
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->ColumnShardConfig.GetCutHistoryEnabled();
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration) {
@@ -127,18 +121,18 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChann
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
-    if (key.Channel >= (ui32)TabletInfo->Channels.size()) {
+    if (key.Channel >= static_cast<ui32>(TabletInfo->Channels.size())) {
         return false;
     }
     return SeenGroupsCheckPasses(TabletInfo->Channels[key.Channel].History, key.FromGeneration);
 }
 
 ui32 THistoryCutterWrapper::GetNextFromGeneration(const TEntryKey& key) const {
-    if (key.Channel >= (ui32)TabletInfo->Channels.size()) {
+    if (key.Channel >= static_cast<ui32>(TabletInfo->Channels.size())) {
         return 0;
     }
     const auto& hist = TabletInfo->Channels[key.Channel].History;
-    for (int i = 0; i < (int)hist.size() - 1; ++i) {
+    for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
         if (hist[i].FromGeneration == key.FromGeneration) {
             return hist[i + 1].FromGeneration;
         }
@@ -154,22 +148,22 @@ bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
     return Manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen);
 }
 
-bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& lid, TEntryKey& out) const {
-    if (lid.TabletID() != TabletInfo->TabletID) {
+bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const {
+    if (blobId.TabletID() != TabletInfo->TabletID) {
         return false;
     }
-    const ui32 ch = lid.Channel();
-    if (ch < 2 || ch >= (ui32)TabletInfo->Channels.size()) {
+    const ui32 ch = blobId.Channel();
+    if (ch < 2 || ch >= static_cast<ui32>(TabletInfo->Channels.size())) {
         return false;
     }
-    if (lid.Generation() == CurrentGen) {
+    if (blobId.Generation() == CurrentGen) {
         return false;
     }
     const auto& hist = TabletInfo->Channels[ch].History;
-    for (int i = (int)hist.size() - 2; i >= 0; --i) {
-        if (hist[i].FromGeneration <= lid.Generation()) {
+    for (int i = static_cast<int>(hist.size()) - 2; i >= 0; --i) {
+        if (hist[i].FromGeneration <= blobId.Generation()) {
             // Check it falls in [hist[i].FromGen, hist[i+1].FromGen).
-            if (lid.Generation() < hist[i + 1].FromGeneration) {
+            if (blobId.Generation() < hist[i + 1].FromGeneration) {
                 out = TEntryKey{ ch, hist[i].FromGeneration };
                 return true;
             }
@@ -216,14 +210,14 @@ void THistoryCutterWrapper::OnPortionRemoved(const ui64 portionId) {
     if (!IsEnabled()) {
         return;
     }
-    auto it = PortionKeys.find(portionId);
-    if (it == PortionKeys.end()) {
+    const THashSet<TEntryKey>* keys = PortionKeys.FindPtr(portionId);
+    if (!keys) {
         return;
     }
-    for (const auto& key : it->second) {
+    for (const auto& key : *keys) {
         DecrementCounter(key);
     }
-    PortionKeys.erase(it);
+    PortionKeys.erase(portionId);
 }
 
 void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {
@@ -231,11 +225,11 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     CutState.clear();
     PoisonedChannels.clear();
     PortionKeys.clear();
-    SweepInFlight_ = false;
-    SweepCandidates_.clear();
-    SweepSurvivors_.clear();
-    SweepPortionIds_.clear();
-    SweepPortionOffset_ = 0;
+    SweepInFlight = false;
+    SweepCandidates.clear();
+    SweepSurvivors.clear();
+    SweepPortionIds.clear();
+    SweepPortionOffset = 0;
 
     if (!IsEnabled()) {
         return;
@@ -258,18 +252,18 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     if (!IsEnabled()) {
         return false;
     }
-    if (SweepInFlight_) {
+    if (SweepInFlight) {
         return false;
     }
 
     TVector<TEntryKey> batch;
-    for (ui32 ch = 2; ch < (ui32)TabletInfo->Channels.size(); ++ch) {
+    for (ui32 ch = 2; ch < static_cast<ui32>(TabletInfo->Channels.size()); ++ch) {
         if (PoisonedChannels.contains(ch)) {
             continue;
         }
         const auto& hist = TabletInfo->Channels[ch].History;
         // All entries except the last (active) are candidates.
-        for (int i = 0; i < (int)hist.size() - 1; ++i) {
+        for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
             const TEntryKey key{ ch, hist[i].FromGeneration };
             const auto stateIt = CutState.find(key);
             if (stateIt != CutState.end() && stateIt->second != ECutState::None) {
@@ -297,30 +291,30 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     for (const auto& key : batch) {
         CutState[key] = ECutState::Verifying;
     }
-    SweepInFlight_ = true;
-    SweepCandidates_ = batch;
-    SweepSurvivors_ = std::move(batch);
-    SweepPortionIds_.clear();
-    SweepPortionOffset_ = 0;
+    SweepInFlight = true;
+    SweepCandidates = batch;
+    SweepSurvivors = std::move(batch);
+    SweepPortionIds.clear();
+    SweepPortionOffset = 0;
 
     ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
     return true;
 }
 
 void THistoryCutterWrapper::SetPortionSnapshot(TVector<std::pair<TInternalPathId, ui64>>&& ids) {
-    SweepPortionIds_ = std::move(ids);
-    SweepPortionOffset_ = 0;
+    SweepPortionIds = std::move(ids);
+    SweepPortionOffset = 0;
 }
 
 TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(size_t batchSize, bool& isLast) {
     TVector<std::pair<TInternalPathId, ui64>> batch;
-    const size_t remaining = SweepPortionIds_.size() - SweepPortionOffset_;
+    const size_t remaining = SweepPortionIds.size() - SweepPortionOffset;
     const size_t take = (remaining > batchSize) ? batchSize : remaining;
     for (size_t i = 0; i < take; ++i) {
-        batch.push_back(SweepPortionIds_[SweepPortionOffset_ + i]);
+        batch.push_back(SweepPortionIds[SweepPortionOffset + i]);
     }
-    SweepPortionOffset_ += take;
-    isLast = (SweepPortionOffset_ >= SweepPortionIds_.size());
+    SweepPortionOffset += take;
+    isLast = (SweepPortionOffset >= SweepPortionIds.size());
     return batch;
 }
 
@@ -328,13 +322,13 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
         TVector<TEntryKey> kept;
-        kept.reserve(SweepSurvivors_.size());
-        for (const auto& key : SweepSurvivors_) {
+        kept.reserve(SweepSurvivors.size());
+        for (const auto& key : SweepSurvivors) {
             if (!disproved.contains(key)) {
                 kept.push_back(key);
             }
         }
-        SweepSurvivors_ = std::move(kept);
+        SweepSurvivors = std::move(kept);
     }
 
     if (!exhausted) {
@@ -344,12 +338,12 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
 
     // Cursor exhausted: re-check each survivor and send hard barrier if still safe.
-    SweepInFlight_ = false;
-    SweepCandidates_.clear();
-    SweepPortionIds_.clear();
-    SweepPortionOffset_ = 0;
+    SweepInFlight = false;
+    SweepCandidates.clear();
+    SweepPortionIds.clear();
+    SweepPortionOffset = 0;
 
-    for (const auto& key : SweepSurvivors_) {
+    for (const auto& key : SweepSurvivors) {
         // Re-check: counter must still be zero and no blobs in flight.
         const auto cntIt = Counters.find(key);
         if (cntIt != Counters.end() && cntIt->second != 0) {
@@ -368,7 +362,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         }
 
         ui32 groupId = 0;
-        if (key.Channel < (ui32)TabletInfo->Channels.size()) {
+        if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
             for (const auto& e : TabletInfo->Channels[key.Channel].History) {
                 if (e.FromGeneration == key.FromGeneration) {
                     groupId = e.GroupID;
@@ -385,7 +379,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         ctx.Register(new TCutHistoryBarrierActor(
             TabletActorId, LauncherActorId, TabletInfo->TabletID, CurrentGen, key.Channel, groupId, key.FromGeneration, nextFromGen));
     }
-    SweepSurvivors_.clear();
+    SweepSurvivors.clear();
 
     // Reset any remaining Verifying entries (disproved during scan).
     for (auto& [key, state] : CutState) {

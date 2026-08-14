@@ -276,16 +276,6 @@ struct TPartitionOffsetsInfo {
     THashMap<TString, PartitionConsumerOffset> Consumers;
 };
 
-struct TGetOffsetsRequest : public NKikimr::NGRpcProxy::V1::TLocalRequestBase {
-    TGetOffsetsRequest() = default;
-    TGetOffsetsRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
-        : TLocalRequestBase(topic, database, token)
-        , PartitionIds(partitionIds)
-    {}
-
-    TVector<ui32> PartitionIds;
-};
-
 struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResponse, EvTopicOffsetsResponse>
                                , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {

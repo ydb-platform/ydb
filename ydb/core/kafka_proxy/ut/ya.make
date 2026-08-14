@@ -21,6 +21,7 @@ SRCS(
     ut_serialization.cpp
     metarequest_ut.cpp
     topic_location_actor_ut.cpp
+    topic_offsets_actor_ut.cpp
     ut_transaction_coordinator.cpp
     ut_transaction_actor.cpp
     ut_produce_actor.cpp

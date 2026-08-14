@@ -8,12 +8,9 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/actors/core/log.h>
 
+#include <absl/container/flat_hash_set.h>
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
 using namespace NKikimr;
@@ -39,6 +36,10 @@ public:
     }
 
     void Bootstrap() {
+        if (Settings.RequireAuthentication && Settings.Token.empty()) {
+            return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");
+        }
+
         RequestStart = TActivationContext::Now();
         Schedule(RequestTimeout, new TEvents::TEvWakeup(TimeoutTag));
 
@@ -70,7 +71,6 @@ private:
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
         if (!Response) {
-            PassAway();
             return;
         }
         Response->Status = status;
@@ -81,7 +81,6 @@ private:
 
     void ReplySuccess() {
         if (!Response) {
-            PassAway();
             return;
         }
         Response->Status = Ydb::StatusIds::SUCCESS;
@@ -109,25 +108,17 @@ private:
             }
             return ReplyError(status, NDescriber::Description(Settings.Path, topicInfo.Status));
         }
-        if (!topicInfo.Self || !topicInfo.Info) {
-            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Incomplete describer response");
-        }
 
-        if (Settings.RequireAuthentication && Settings.Token.empty()) {
-            return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");
-        }
         // Anonymous access (no token) skips SelectRow, matching the previous OffsetFetch actor.
         if (Settings.RequireSelectRow && !Settings.Token.empty()) {
             TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(Settings.Token);
-            if (!topicInfo.SecurityObject ||
-                !topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken))
-            {
+            if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
                 return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");
             }
         }
 
         const auto& description = topicInfo.Info->Description;
-        THashSet<ui32> foundPartitions;
+        absl::flat_hash_set<ui32> foundPartitions;
         for (const auto& partition : description.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             if (!RequestedPartitions.empty() && !RequestedPartitions.contains(partitionId)) {
@@ -153,6 +144,9 @@ private:
 
         for (auto tabletId : Tablets) {
             RequestStatus(tabletId);
+            if (!Response) {
+                return;
+            }
         }
     }
 
@@ -262,9 +256,6 @@ private:
         if (!StatusRetryPending.erase(tabletId) || !Inflight.contains(tabletId)) {
             return;
         }
-        if (!Remaining()) {
-            return ReplyError(Ydb::StatusIds::TIMEOUT, "Request timed out");
-        }
         RequestStatus(tabletId);
     }
 
@@ -285,10 +276,10 @@ private:
     THolder<TEvKafka::TEvTopicOffsetsResponse> Response;
     TActorId DescriberId;
     TInstant RequestStart;
-    THashSet<ui32> RequestedPartitions;
-    THashSet<ui64> Tablets;
-    THashSet<ui64> Inflight;
-    THashSet<ui64> StatusRetryPending;
+    absl::flat_hash_set<ui32> RequestedPartitions;
+    absl::flat_hash_set<ui64> Tablets;
+    absl::flat_hash_set<ui64> Inflight;
+    absl::flat_hash_set<ui64> StatusRetryPending;
     THashMap<ui64, TBackoff> StatusBackoff;
 };
 

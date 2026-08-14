@@ -101,9 +101,6 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
         }
         auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
         for (const auto& topicPartition : topicResponse.Partitions) {
-            if (topicNotCreatedYet) {
-                break;
-            }
             TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
             TString topicPath = NormalizePath(DatabasePath, topicName);
             if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&

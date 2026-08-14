@@ -417,7 +417,7 @@ Y_UNIT_TEST(ReadAfterSplit) {
 Y_UNIT_TEST(LockRowsWithImmediateWritesAboveMediatorTime) {
     // This is a regression test that checks behavior in case of rows written by immediate
     // writes "into the future" (i.e. after the current mediator time).
-    // A transactions should be able to observe these rows immediately after successfully
+    // A transaction should be able to observe these rows immediately after successfully
     // locking corresponding keys.
 
     TTestEnv env;

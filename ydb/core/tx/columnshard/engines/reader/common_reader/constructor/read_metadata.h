@@ -43,8 +43,8 @@ public:
         DoFillReadStats(*stats);
     }
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
-        return std::vector<TInsertWriteId>();
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const {
+        return std::vector<TPortionInfo::TConstPtr>();
     }
 
     TString DebugString() const {

@@ -51,11 +51,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
 
     switch (readerClass) {
         case NReader::EReaderClass::Plain: {
-            std::vector<std::shared_ptr<TPortionInfo>> sources;
-            for (auto&& i : portions) {
-                sources.emplace_back(i.GetPortion());
-            }
-            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));
         }
         case NReader::EReaderClass::Simple: {
             std::deque<NReader::NSimple::TSourceConstructor> sources;
@@ -80,7 +76,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::Sel
     const NReader::TReadDescription& /*readDescription*/, const NReader::EReaderClass readerClass) const {
     switch (readerClass) {
         case NReader::EReaderClass::Plain:
-            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<std::shared_ptr<TPortionInfo>>());
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<IColumnEngine::TSelectedPortionInfo>());
         case NReader::EReaderClass::Simple:
             return NReader::NSimple::TPortionsSources::BuildEmpty();
         case NReader::EReaderClass::Trivial:

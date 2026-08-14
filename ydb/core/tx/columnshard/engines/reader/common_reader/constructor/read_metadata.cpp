@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
@@ -49,12 +50,20 @@ TConclusionStatus TReadMetadata::Init(
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }
     if (readDescription.readConflictingPortions) {
-        for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
-            auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
-            // we do not need to check our own uncommitted writes
-            if (op->GetLockId() != *LockId) {
-                AddMaybeConflictingWrite(i, op->GetLockId());
+        auto& opManager = owner->GetOperationsManager();
+        for (const TPortionInfo::TConstPtr& p : SourcesConstructor->GetConflictingPortions()) {
+            // add maybe conflicting writes
+            if (!p->IsCommitted()) {
+                AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
+                auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
+                auto writeId = written->GetInsertWriteId();
+                auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
+                // we do not need to check our own uncommitted writes
+                if (op->GetLockId() != *LockId) {
+                    AddMaybeConflictingWrite(writeId, op->GetLockId());
+                }
             }
+            // add the portion to the scan lock
         }
     }
     SourcesConstructor->InitCursor(readDescription.GetScanCursorVerified());

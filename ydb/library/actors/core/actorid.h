@@ -74,8 +74,13 @@ namespace NActors {
             bool operator()(const TActorId &left, const TActorId &right) const noexcept;
         };
 
+        // Attention! The actor identifier does not contain all the necessary information
+        // to restore it using Parse(). Use Print() only for debugging purposes.
         TString ToString() const;
         void Out(IOutputStream& o) const;
+        // Attention! The printed actor identifier does not contain all the necessary information
+        // for restoring it using Parse().
+        // Please do not use it.
         bool Parse(const char* buf, ui32 sz);
     };
 

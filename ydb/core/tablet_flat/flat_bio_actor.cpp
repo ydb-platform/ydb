@@ -208,7 +208,7 @@ void TBlockIO::Terminate(EStatus code)
         auto data = (code == NKikimrProto::OK)
             ? std::move(BlockStates.at(index).Data)
             : TSharedData{};
-        ev->Pages.emplace_back(Pages[index], std::move(data));
+        ev->Pages.emplace_back(Pages[index].Offset, std::move(data));
     }
 
     if (StatActorId)

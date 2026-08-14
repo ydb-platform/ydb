@@ -31,5 +31,25 @@ namespace NPageCollection {
         TSharedData Data;
     };
 
+    // Lightweight: offset+data only; Size/Type/Crc32 are authoritative in the cache's PageSet.
+    struct TLoadedPageData {
+        TLoadedPageData() = default;
+
+        TLoadedPageData(TPageOffset offset, TSharedData data)
+            : Offset(offset)
+            , Data(std::move(data))
+        {
+
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return Data && bool(Offset);
+        }
+
+        TPageOffset Offset;
+        TSharedData Data;
+    };
+
 }
 }

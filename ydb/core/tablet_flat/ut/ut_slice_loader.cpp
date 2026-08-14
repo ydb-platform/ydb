@@ -91,7 +91,7 @@ namespace {
             return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
         }
 
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
             return Bounds(location.Offset.AsPageIndex());
         }
 
@@ -105,7 +105,7 @@ namespace {
             Y_TABLET_ERROR("Unexpected Verify(...) call");
         }
 
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
             return data.size() == location.Size;
         }
 
@@ -172,7 +172,7 @@ namespace {
                     auto pageId = location.GetPageIndex();
                     auto* page = part->Store->GetPage(0, pageId);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
-                    env.Save({ location, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                    env.Save({ location.Offset, location.Size, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

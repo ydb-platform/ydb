@@ -116,6 +116,7 @@ Y_UNIT_TEST_SUITE(TQueryIntervalTest) {
         UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 80);
         UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
+        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
     }
 
     Y_UNIT_TEST(HourMetricsRetentionNeverEvictsActiveBucket) {
@@ -130,6 +131,29 @@ Y_UNIT_TEST_SUITE(TQueryIntervalTest) {
         UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 100);
         UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
+        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
+    }
+
+    Y_UNIT_TEST(HourIntervalChangesOnlyAfterExactBoundary) {
+        const ui64 hourUs = ONE_HOUR_BUCKET_SIZE.MicroSeconds();
+        const TInstant boundary = TInstant::MicroSeconds(11 * hourUs);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EndOfQueryMetricsHourInterval(boundary - TDuration::MicroSeconds(1)),
+            boundary);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EndOfQueryMetricsHourInterval(boundary),
+            boundary);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EndOfQueryMetricsHourInterval(boundary + TDuration::MicroSeconds(1)),
+            boundary + ONE_HOUR_BUCKET_SIZE);
+
+        // The interval ending exactly at 11:00 is the last one in the bucket
+        // ending at 11:00. Reset switches the accumulator only when the next
+        // interval end moves past that boundary.
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            EndOfQueryMetricsHourInterval(boundary),
+            EndOfQueryMetricsHourInterval(boundary + ONE_MINUTE_BUCKET_SIZE));
     }
 }
 

@@ -624,7 +624,7 @@ namespace NActors {
         };
 
         class TTcpWriteStrategy;
-        class TRdmaWriteStrategy;
+        class TRdmaSendStrategy;
 
         void WriteData(IWriteStrategy& mainWriter);
         ssize_t HandleWriteResult(ssize_t r, const TString& err);

@@ -94,11 +94,11 @@ namespace NActors {
         }
     };
 
-    class TInterconnectSessionTCP::TRdmaWriteStrategy final : public IWriteStrategy {
+    class TInterconnectSessionTCP::TRdmaSendStrategy final : public IWriteStrategy {
         TInterconnectSessionTCP& Session;
 
     public:
-        explicit TRdmaWriteStrategy(TInterconnectSessionTCP& session)
+        explicit TRdmaSendStrategy(TInterconnectSessionTCP& session)
             : Session(session)
         {}
 
@@ -767,7 +767,7 @@ namespace NActors {
             const bool useRdmaMain = UseRdmaSendReceiveTransport();
 
             if (useRdmaMain) {
-                TRdmaWriteStrategy writer(*this);
+                TRdmaSendStrategy writer(*this);
                 WriteData(writer);
             } else {
                 TTcpWriteStrategy writer(*this, Socket, PollerToken,

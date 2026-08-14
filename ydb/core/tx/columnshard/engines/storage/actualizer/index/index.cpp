@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NActualizer {
 
 void TGranuleActualizationIndex::ExtractActualizationTasks(
@@ -67,10 +69,9 @@ void TGranuleActualizationIndex::StopMoveData() {
     if (!MoveDataActualizer) {
         return;
     }
-    auto it = std::find(Actualizers.begin(), Actualizers.end(), std::static_pointer_cast<IActualizer>(MoveDataActualizer));
-    if (it != Actualizers.end()) {
-        Actualizers.erase(it);
-    }
+    EraseIf(Actualizers, [&](const std::shared_ptr<IActualizer>& actualizer) {
+        return actualizer == MoveDataActualizer;
+    });
     MoveDataActualizer.reset();
 }
 

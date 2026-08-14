@@ -598,6 +598,7 @@ ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuild_Ranges
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.DimensionMismatchError
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuild

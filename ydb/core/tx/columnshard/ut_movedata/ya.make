@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
+    ydb/core/testlib/default
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing

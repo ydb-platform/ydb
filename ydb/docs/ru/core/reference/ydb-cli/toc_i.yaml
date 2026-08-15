@@ -65,6 +65,8 @@ items:
       href: topic-consumer-drop.md
     - name: Сохранение позиции чтения
       href: topic-consumer-offset-commit.md
+    - name: Сброс позиции чтения
+      href: topic-consumer-offset-reset.md
     - name: Чтение из топика
       href: topic-read.md
     - name: Запись в топик

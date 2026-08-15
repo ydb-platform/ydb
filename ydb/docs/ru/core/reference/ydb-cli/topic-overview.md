@@ -8,5 +8,6 @@
 * [{#T}](topic-consumer-add.md).
 * [{#T}](topic-consumer-drop.md).
 * [{#T}](topic-consumer-offset-commit.md).
+* [{#T}](topic-consumer-offset-reset.md).
 * [{#T}](topic-read.md).
 * [{#T}](topic-write.md).

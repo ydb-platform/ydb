@@ -2054,7 +2054,8 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
         logLevel = NLogging::ELogLevel::Warning;
     }
 
-    YT_LOG_EVENT(Logger, logLevel, richError);
+    YT_TLOG_EVENT(Logger, logLevel, "Request failed")
+        .With(richError);
 
     auto errorMessage = CreateErrorResponseMessage(incomingRequest.RequestId, richError);
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));

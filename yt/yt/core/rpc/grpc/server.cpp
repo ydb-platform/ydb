@@ -1049,7 +1049,8 @@ private:
                     NRpc::EErrorCode::NoSuchService,
                     "Service is not registered")
                     .With("service", ServiceName_);
-                YT_LOG_WARNING(error);
+                YT_TLOG_WARNING("Request failed")
+                    .With(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
                 YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage)));

@@ -1330,14 +1330,6 @@ size_t GetStatistics(
     return count;
 }
 
-size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<TPartitionFamily>>& values) {
-    size_t result = 1;
-    for (auto& [_, v] : values)  {
-        result = std::max(result, v->ActivePartitionCount);
-    }
-    return result;
-}
-
 void TConsumer::Balance(const TActorContext& ctx) {
     YDB_LOG_DEBUG("Balancing",
         {"logPrefix", LogPrefix()},

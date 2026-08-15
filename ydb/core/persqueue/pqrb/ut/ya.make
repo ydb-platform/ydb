@@ -4,6 +4,8 @@ SIZE(MEDIUM)
 
 SRCS(
     balancing_ut.cpp
+    graph_cmp_ut.cpp
+    metrics_ut.cpp
     mlp_ut.cpp
     partitions_location_queue_ut.cpp
     scale_and_mirror_ut.cpp

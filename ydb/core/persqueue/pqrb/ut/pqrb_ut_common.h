@@ -54,6 +54,7 @@ struct TBalancerUpdate {
     absl::flat_hash_map<ui32, TVector<ui32>> ParentPartitionIds;
     absl::flat_hash_map<ui32, TVector<ui32>> ChildPartitionIds;
     ui32 NextPartitionId = 0;
+    ui32 ReceiveAttemptIdPeriodMs = 0;
 };
 
 inline ui32 NextBalancerVersion() {
@@ -124,6 +125,9 @@ inline void SendBalancerUpdate(TTestContext& tc, TBalancerUpdate params) {
             auto* consumer = record.MutableTabletConfig()->AddConsumers();
             consumer->SetName(name);
             consumer->SetType(type);
+            if (params.ReceiveAttemptIdPeriodMs) {
+                consumer->SetReadRequestAttemptIdPeriodMs(params.ReceiveAttemptIdPeriodMs);
+            }
         }
     }
 

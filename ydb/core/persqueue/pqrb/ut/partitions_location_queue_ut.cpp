@@ -276,6 +276,33 @@ Y_UNIT_TEST(StaleClientConnectedDoesNotOverridePipeLocation) {
     UNIT_ASSERT_VALUES_UNEQUAL(response->Record.GetLocations(0).GetNodeId(), 999u);
 }
 
+Y_UNIT_TEST(StaleClientDestroyedDoesNotDropLivePipe) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc);
+    WaitBalancerReady(tc);
+
+    ForwardToTablet(
+        *tc.Runtime,
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvTabletPipe::TEvClientDestroyed(
+            tc.TabletId,
+            TActorId(777, 1, 1, 1),
+            TActorId(999, 1, 1, 1)
+        )
+    );
+    DispatchFor(tc);
+
+    auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
+}
+
 Y_UNIT_TEST(RemovedTabletsDoNotBlockAllPartitionsLocation) {
     TTestContext tc;
     tc.Prepare();

@@ -132,6 +132,40 @@ Y_UNIT_TEST(DeletedMlpConsumerDoesNotRestoreReceiveAttemptAfterRestart) {
     );
 }
 
+Y_UNIT_TEST(ReceiveAttemptIdIsStickyUntilExpiry) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}, {1, {tc.TabletId, 2}}},
+        .Consumers = {{"mlp-user", NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP}},
+        .NextPartitionId = 2,
+        .ReceiveAttemptIdPeriodMs = 200,
+    });
+
+    auto getPartition = [&](const TString& attemptId) {
+        tc.Runtime->SendToPipe(
+            tc.BalancerTabletId,
+            tc.Edge,
+            new TEvPQ::TEvMLPGetPartitionRequest("topic", "mlp-user", attemptId),
+            0,
+            GetPipeConfigWithRetries()
+        );
+        auto response = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPGetPartitionResponse>(TDuration::Seconds(10));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
+        return response->GetPartitionId();
+    };
+
+    const ui32 first = getPartition("attempt-1");
+    UNIT_ASSERT_VALUES_EQUAL(getPartition("attempt-1"), first);
+
+    const ui32 other = getPartition("attempt-2");
+    UNIT_ASSERT_VALUES_UNEQUAL(other, first);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbMlp)
 
 } // namespace NKikimr::NPQ

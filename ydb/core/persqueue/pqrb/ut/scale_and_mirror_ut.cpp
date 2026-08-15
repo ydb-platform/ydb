@@ -104,6 +104,50 @@ Y_UNIT_TEST(ForeignPipeDestroyedIsIgnored) {
     UNIT_ASSERT(done);
 }
 
+Y_UNIT_TEST(ProposeStatusSendsDoneOnlyOnce) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    tc.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>& ev) {
+        if (ev->CastAsLocal<TEvTxUserProxy::TEvProposeTransaction>()) {
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto actorId = tc.Runtime->Register(new TPartitionScaleRequest(
+        "topic",
+        "/Root/topic",
+        "/Root",
+        /*pathId=*/1,
+        /*pathVersion=*/1,
+        {},
+        {},
+        {},
+        tc.Edge
+    ));
+    tc.Runtime->EnableScheduleForActor(actorId);
+    DispatchFor(tc);
+
+    for (ui32 i = 0; i < 2; ++i) {
+        auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError
+        );
+        tc.Runtime->Send(new IEventHandle(actorId, tc.Edge, status.Release()));
+    }
+
+    auto done = tc.Runtime->GrabEdgeEvent<TPartitionScaleRequest::TEvPartitionScaleRequestDone>(
+        TDuration::Seconds(10)
+    );
+    UNIT_ASSERT(done);
+
+    auto extra = tc.Runtime->GrabEdgeEvent<TPartitionScaleRequest::TEvPartitionScaleRequestDone>(
+        TDuration::MilliSeconds(200)
+    );
+    UNIT_ASSERT_C(!extra, "ReplyAndDie must send TEvPartitionScaleRequestDone only once");
+}
+
 Y_UNIT_TEST(ScaleRequestInflightIsClearedWhenSplitMergeDisabled) {
     TTestContext tc;
     tc.Prepare();

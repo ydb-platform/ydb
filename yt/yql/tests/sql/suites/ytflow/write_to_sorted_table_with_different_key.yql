@@ -1,5 +1,3 @@
-/* sort outputs */
-
 use plato;
 
 pragma Engine = "ytflow";
@@ -9,8 +7,8 @@ pragma Ytflow.PipelinePath = "pipelines/test";
 
 replace into Output
 select
-    string_field as key,
-    int64_field as kv_value
+    key_a,
+    key_b || "_b" as key_b,
+    value as kv_value
 from Input
-where int64_field >= 10
-order by key;
+order by key_a, kv_value;

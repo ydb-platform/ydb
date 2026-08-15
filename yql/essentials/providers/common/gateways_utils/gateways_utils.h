@@ -11,6 +11,7 @@
 namespace NYql {
 
 class TGatewaysConfig;
+class TStaticGatewaysConfig;
 class TActivationPercentage;
 
 using TActivator = std::function<bool(const TActivationPercentage& activation)>;
@@ -46,5 +47,8 @@ void AddClusters(const T& mappings, const TString& providerName, THashMap<TStrin
 }
 
 void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashMap<TString, TString>& clusterMapping);
+
+// TODO: remove this function when static settings will be relocated from TGatewaysConfig to TStaticGatewaysConfig
+void SyncWithStaticGateways(TStaticGatewaysConfig& staticGateways, TGatewaysConfig& gateways);
 
 } // namespace NYql

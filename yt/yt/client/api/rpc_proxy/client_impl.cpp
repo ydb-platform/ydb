@@ -5,6 +5,7 @@
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
+#include "request_info.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "row_stream.h"
@@ -36,8 +37,6 @@
 
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/distributed_file_session.h>
-
-#include <yt/yt/client/rpc/request_info.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
@@ -905,6 +904,8 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
+    SetWriteTableFragmentRequestInfo(req, cookie);
+
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
 
@@ -942,6 +943,8 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, options);
+
+    SetWriteFileFragmentRequestInfo(req, cookie);
 
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
@@ -2108,6 +2111,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
+    SetPartitionTablesRequestInfo(req, paths, *req);
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
     }));
@@ -2125,6 +2130,8 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2183,10 +2190,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    SetReadTableRequestInfo(
-        req,
-        path,
-        *req);
+    SetReadTableRequestInfo(req, path, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2215,6 +2219,8 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, format, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {

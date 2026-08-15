@@ -549,8 +549,7 @@ void LogStructuredEvent(
 // fires once the chain (the loop body) has completed.
 
 // The |for| deliberately has no condition: with no normal exit and a |[[noreturn]]| step,
-// the whole expansion is noreturn to the compiler. The body still runs exactly once, since
-// #Commit never returns.
+// the whole expansion is noreturn to the compiler.
 #define YT_TLOG_FATAL(message)                                              \
     for (::NYT::NLogging::NDetail::TTaggedFatalLoggingGuard loggingGuard__( \
             Logger(),                                                       \

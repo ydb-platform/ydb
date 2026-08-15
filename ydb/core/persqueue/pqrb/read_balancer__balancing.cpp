@@ -1434,8 +1434,8 @@ void TConsumer::Balance(const TActorContext& ctx) {
             auto* session = *it;
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
             auto families = OrderFamilies(session->Families);
-            for (auto it = session->Families.begin(); it != session->Families.end() && session->ActiveFamilyCount > targerFamilyCount; ++it) {
-                auto* f = it->second;
+            for (auto fit = families.rbegin(); fit != families.rend() && session->ActiveFamilyCount > targerFamilyCount; ++fit) {
+                auto* f = *fit;
                 if (f->IsActive()) {
                     f->Release(ctx);
                 }

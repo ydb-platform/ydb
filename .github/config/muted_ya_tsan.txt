@@ -559,15 +559,12 @@ ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[10]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[1]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[21]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[22]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[4]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[5]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[6]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
@@ -745,7 +742,6 @@ ydb/tests/sql py3test.sole chunk
 ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
-ydb/tests/stress/fulltext_workload/tests test_workload.py.TestYdbFulltextWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source

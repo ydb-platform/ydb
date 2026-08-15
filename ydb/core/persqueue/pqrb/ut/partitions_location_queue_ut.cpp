@@ -200,6 +200,42 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     UNIT_ASSERT(!expired->Record.GetStatus());
 }
 
+Y_UNIT_TEST(ShorterTimeoutExpiresWhileLongerRequestIsHead) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    const ui64 deadTabletId = MakeTabletID(false, 999);
+    PQBalancerPrepare("topic", {{0, {deadTabletId, 1}}}, /*ssId=*/1, tc);
+
+    auto* longReq = new TEvPersQueue::TEvGetPartitionsLocation();
+    longReq->Record.SetTimeoutMs(5000);
+    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, longReq, 0, GetPipeConfigWithRetries());
+
+    auto* shortReq = new TEvPersQueue::TEvGetPartitionsLocation();
+    shortReq->Record.SetTimeoutMs(200);
+    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, shortReq, 0, GetPipeConfigWithRetries());
+
+    auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::MilliSeconds(50)
+    );
+    UNIT_ASSERT_C(!earlyResponse, "Requests must stay queued while the tablet is down");
+
+    tc.Runtime->ResetScheduledCount();
+    tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(250));
+
+    auto expired = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::Seconds(10)
+    );
+    UNIT_ASSERT(expired);
+    UNIT_ASSERT(!expired->Record.GetStatus());
+
+    auto stillWaiting = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::MilliSeconds(200)
+    );
+    UNIT_ASSERT_C(!stillWaiting, "Longer request must stay queued until its own deadline");
+}
+
 Y_UNIT_TEST(StaleClientConnectedDoesNotOverridePipeLocation) {
     TTestContext tc;
     tc.Prepare();

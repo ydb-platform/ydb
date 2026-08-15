@@ -188,6 +188,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         case PARTITIONS_LOCATION_WAKEUP_TAG: {
             PartitionsLocationWakeupScheduled = false;
+            NextPartitionsLocationWakeup = TInstant::Max();
             ProcessPartitionsLocationQueue(ctx);
             break;
         }

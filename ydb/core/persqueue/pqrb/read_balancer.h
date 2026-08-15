@@ -297,6 +297,7 @@ private:
     };
     std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
     bool PartitionsLocationWakeupScheduled = false;
+    TInstant NextPartitionsLocationWakeup = TInstant::Max();
 
     using TMLPRequests = std::variant<
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr

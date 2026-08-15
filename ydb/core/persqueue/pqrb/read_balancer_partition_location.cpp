@@ -28,17 +28,25 @@ bool TPersQueueReadBalancer::AllPartitionPipesReady() const
 
 void TPersQueueReadBalancer::SchedulePartitionsLocationWakeup(const TActorContext& ctx)
 {
-    if (PartitionsLocationWakeupScheduled || PartitionsLocationQueue.empty()) {
+    if (PartitionsLocationQueue.empty()) {
         return;
     }
 
     const auto now = TAppData::TimeProvider->Now();
-    const auto& deadline = PartitionsLocationQueue.front().Deadline;
-    const auto delay = deadline > now
-        ? std::max(deadline - now, TDuration::MilliSeconds(50))
+    TInstant minDeadline = PartitionsLocationQueue.front().Deadline;
+    for (const auto& request : PartitionsLocationQueue) {
+        minDeadline = Min(minDeadline, request.Deadline);
+    }
+    if (PartitionsLocationWakeupScheduled && minDeadline >= NextPartitionsLocationWakeup) {
+        return;
+    }
+
+    const auto delay = minDeadline > now
+        ? std::max(minDeadline - now, TDuration::MilliSeconds(50))
         : TDuration::MilliSeconds(50);
 
     PartitionsLocationWakeupScheduled = true;
+    NextPartitionsLocationWakeup = minDeadline;
     ctx.Schedule(delay, new TEvents::TEvWakeup(PARTITIONS_LOCATION_WAKEUP_TAG));
 }
 

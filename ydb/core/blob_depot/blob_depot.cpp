@@ -144,6 +144,10 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
 
+                hFunc(TEvTablet::TEvMoveData, Handle);
+                cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
+                hFunc(TEvMoveDataBlobCopied, Handle);
+
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 

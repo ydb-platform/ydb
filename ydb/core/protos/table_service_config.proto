@@ -563,4 +563,7 @@ message TTableServiceConfig {
     optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableSmallComputeMemoryAllocations = 143 [default = false];
+
+    // Prune key columns
+    optional bool EnablePruneKeyColumns = 144 [default = false];
 };

@@ -104,4 +104,6 @@ enum ETxTypes {
     TXTYPE_DECOMMIT_BLOBS = 20 [(NKikimr.TxTypeOpts) = {Name: "TTxDecommitBlobs"}];
     TXTYPE_PREPARE = 21 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepare"}];
     TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS = 22 [(NKikimr.TxTypeOpts) = {Name: "TTxHardCollectAssimilatedBlobs"}];
+    TXTYPE_MOVE_DATA_SCAN = 23 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataScan"}];
+    TXTYPE_MOVE_DATA_UPDATE_INDEX = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataUpdateIndex"}];
 }

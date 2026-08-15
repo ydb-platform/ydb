@@ -83,9 +83,9 @@ static const npy_cfloat oneF = 1.0f, zeroF = 0.0f;
 #line 82
 NPY_NO_EXPORT void
 FLOAT_gemv(void *ip1, npy_intp is1_m, npy_intp is1_n,
-            void *ip2, npy_intp is2_n, npy_intp NPY_UNUSED(is2_p),
-            void *op, npy_intp op_m, npy_intp NPY_UNUSED(op_p),
-            npy_intp m, npy_intp n, npy_intp NPY_UNUSED(p))
+            void *ip2, npy_intp is2_n,
+            void *op, npy_intp op_m,
+            npy_intp m, npy_intp n)
 {
     /*
      * Vector matrix multiplication -- Level 2 BLAS
@@ -201,9 +201,9 @@ FLOAT_matmul_matrixmatrix(void *ip1, npy_intp is1_m, npy_intp is1_n,
 #line 82
 NPY_NO_EXPORT void
 DOUBLE_gemv(void *ip1, npy_intp is1_m, npy_intp is1_n,
-            void *ip2, npy_intp is2_n, npy_intp NPY_UNUSED(is2_p),
-            void *op, npy_intp op_m, npy_intp NPY_UNUSED(op_p),
-            npy_intp m, npy_intp n, npy_intp NPY_UNUSED(p))
+            void *ip2, npy_intp is2_n,
+            void *op, npy_intp op_m,
+            npy_intp m, npy_intp n)
 {
     /*
      * Vector matrix multiplication -- Level 2 BLAS
@@ -319,9 +319,9 @@ DOUBLE_matmul_matrixmatrix(void *ip1, npy_intp is1_m, npy_intp is1_n,
 #line 82
 NPY_NO_EXPORT void
 CFLOAT_gemv(void *ip1, npy_intp is1_m, npy_intp is1_n,
-            void *ip2, npy_intp is2_n, npy_intp NPY_UNUSED(is2_p),
-            void *op, npy_intp op_m, npy_intp NPY_UNUSED(op_p),
-            npy_intp m, npy_intp n, npy_intp NPY_UNUSED(p))
+            void *ip2, npy_intp is2_n,
+            void *op, npy_intp op_m,
+            npy_intp m, npy_intp n)
 {
     /*
      * Vector matrix multiplication -- Level 2 BLAS
@@ -437,9 +437,9 @@ CFLOAT_matmul_matrixmatrix(void *ip1, npy_intp is1_m, npy_intp is1_n,
 #line 82
 NPY_NO_EXPORT void
 CDOUBLE_gemv(void *ip1, npy_intp is1_m, npy_intp is1_n,
-            void *ip2, npy_intp is2_n, npy_intp NPY_UNUSED(is2_p),
-            void *op, npy_intp op_m, npy_intp NPY_UNUSED(op_p),
-            npy_intp m, npy_intp n, npy_intp NPY_UNUSED(p))
+            void *ip2, npy_intp is2_n,
+            void *op, npy_intp op_m,
+            npy_intp m, npy_intp n)
 {
     /*
      * Vector matrix multiplication -- Level 2 BLAS
@@ -1754,13 +1754,12 @@ FLOAT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                FLOAT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                FLOAT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                FLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                FLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 FLOAT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -1872,13 +1871,12 @@ DOUBLE_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                DOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                DOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                DOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                DOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 DOUBLE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -1990,13 +1988,12 @@ LONGDOUBLE_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                LONGDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                LONGDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                LONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                LONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 LONGDOUBLE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2108,13 +2105,12 @@ HALF_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                HALF_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                HALF_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                HALF_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                HALF_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 HALF_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2226,13 +2222,12 @@ CFLOAT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                CFLOAT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                CFLOAT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                CFLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                CFLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 CFLOAT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2344,13 +2339,12 @@ CDOUBLE_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, v
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                CDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                CDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                CDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                CDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 CDOUBLE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2462,13 +2456,12 @@ CLONGDOUBLE_matmul(char **args, npy_intp const *dimensions, npy_intp const *step
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                CLONGDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                CLONGDOUBLE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                CLONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                CLONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 CLONGDOUBLE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2580,13 +2573,12 @@ UBYTE_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                UBYTE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                UBYTE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                UBYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                UBYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 UBYTE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2698,13 +2690,12 @@ USHORT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                USHORT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                USHORT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                USHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                USHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 USHORT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2816,13 +2807,12 @@ UINT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                UINT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                UINT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                UINT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                UINT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 UINT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -2934,13 +2924,12 @@ ULONG_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                ULONG_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                ULONG_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                ULONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                ULONG_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 ULONG_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3052,13 +3041,12 @@ ULONGLONG_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps,
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                ULONGLONG_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                ULONGLONG_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                ULONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                ULONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 ULONGLONG_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3170,13 +3158,12 @@ BYTE_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                BYTE_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                BYTE_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                BYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                BYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 BYTE_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3288,13 +3275,12 @@ SHORT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                SHORT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                SHORT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                SHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                SHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 SHORT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3406,13 +3392,12 @@ INT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                INT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                INT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                INT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                INT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 INT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3524,13 +3509,12 @@ LONG_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                LONG_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                LONG_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                LONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                LONG_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 LONG_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3642,13 +3626,12 @@ LONGLONG_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, 
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                LONGLONG_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                LONGLONG_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                LONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                LONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 LONGLONG_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3760,13 +3743,12 @@ BOOL_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, void
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                BOOL_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                BOOL_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                BOOL_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                BOOL_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 BOOL_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3878,13 +3860,12 @@ OBJECT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
                                            op, os_m, os_p, dm, dn, dp);
             } else if (vector_matrix) {
                 /* vector @ matrix, switch ip1, ip2, p and m */
-                OBJECT_gemv(ip2, is2_p, is2_n, ip1, is1_n, is1_m,
-                            op, os_p, os_m, dp, dn, dm);
+                OBJECT_gemv(ip2, is2_p, is2_n, ip1, is1_n,
+                            op, os_p, dp, dn);
             } else if  (matrix_vector) {
                 /* matrix @ vector */
-                OBJECT_gemv(ip1, is1_m, is1_n, ip2, is2_n, is2_p,
-
-                            op, os_m, os_p, dm, dn, dp);
+                OBJECT_gemv(ip1, is1_m, is1_n, ip2, is2_n,
+                            op, os_m, dm, dn);
             } else {
                 /* column @ row, 2d output, no blas needed or non-blas-able input */
                 OBJECT_matmul_inner_noblas(ip1, is1_m, is1_n,
@@ -3938,7 +3919,7 @@ OBJECT_matmul(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
  * using the dotc functions instead of dotu).
  */
 
-#line 537
+#line 536
 NPY_NO_EXPORT void
 CFLOAT_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2,
             char *op, npy_intp n, void *NPY_UNUSED(ignore))
@@ -3984,7 +3965,7 @@ CFLOAT_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2,
     }
 }
 
-#line 537
+#line 536
 NPY_NO_EXPORT void
 CDOUBLE_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2,
             char *op, npy_intp n, void *NPY_UNUSED(ignore))
@@ -4030,7 +4011,7 @@ CDOUBLE_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2,
     }
 }
 
-#line 537
+#line 536
 NPY_NO_EXPORT void
 CLONGDOUBLE_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2,
             char *op, npy_intp n, void *NPY_UNUSED(ignore))
@@ -4120,7 +4101,7 @@ OBJECT_dotc(char *ip1, npy_intp is1, char *ip2, npy_intp is2, char *op, npy_intp
     return;
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 FLOAT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4145,7 +4126,7 @@ FLOAT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 DOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4170,7 +4151,7 @@ DOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 LONGDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4195,7 +4176,7 @@ LONGDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 HALF_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4220,7 +4201,7 @@ HALF_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 UBYTE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4245,7 +4226,7 @@ UBYTE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 USHORT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4270,7 +4251,7 @@ USHORT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 UINT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4295,7 +4276,7 @@ UINT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 ULONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4320,7 +4301,7 @@ ULONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 ULONGLONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4345,7 +4326,7 @@ ULONGLONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 BYTE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4370,7 +4351,7 @@ BYTE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 SHORT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4395,7 +4376,7 @@ SHORT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 INT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4420,7 +4401,7 @@ INT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 LONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4445,7 +4426,7 @@ LONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 LONGLONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4470,7 +4451,7 @@ LONGLONG_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 BOOL_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4495,7 +4476,7 @@ BOOL_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 CFLOAT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4520,7 +4501,7 @@ CFLOAT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 CDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4545,7 +4526,7 @@ CDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 CLONGDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4570,7 +4551,7 @@ CLONGDOUBLE_vecdot(char **args, npy_intp const *dimensions, npy_intp const *step
     }
 }
 
-#line 634
+#line 633
 NPY_NO_EXPORT void
 OBJECT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
               void *NPY_UNUSED(func))
@@ -4592,6 +4573,1671 @@ OBJECT_vecdot(char **args, npy_intp const *dimensions, npy_intp const *steps,
             return;
         }
 #endif
+    }
+}
+
+
+#if defined(HAVE_CBLAS)
+/*
+ * Blas complex vector-matrix product via gemm (gemv cannot conjugate the vector).
+ */
+#line 670
+NPY_NO_EXPORT void
+CFLOAT_vecmat_via_gemm(void *ip1, npy_intp is1_n,
+                       void *ip2, npy_intp is2_n, npy_intp is2_m,
+                       void *op, npy_intp os_m,
+                       npy_intp n, npy_intp m)
+{
+    enum CBLAS_ORDER order = CblasRowMajor;
+    enum CBLAS_TRANSPOSE trans1, trans2;
+    CBLAS_INT N, M, lda, ldb, ldc;
+    assert(n <= BLAS_MAXSIZE && m <= BLAS_MAXSIZE);
+    N = (CBLAS_INT)n;
+    M = (CBLAS_INT)m;
+
+    assert(os_m == sizeof(npy_cfloat));
+    ldc = (CBLAS_INT)m;
+
+    assert(is_blasable2d(is1_n, sizeof(npy_cfloat), n, 1, sizeof(npy_cfloat)));
+    trans1 = CblasConjTrans;
+    lda = (CBLAS_INT)(is1_n / sizeof(npy_cfloat));
+
+    if (is_blasable2d(is2_n, is2_m, n, m, sizeof(npy_cfloat))) {
+        trans2 = CblasNoTrans;
+        ldb = (CBLAS_INT)(is2_n / sizeof(npy_cfloat));
+    }
+    else {
+        assert(is_blasable2d(is2_m, is2_n, m, n, sizeof(npy_cfloat)));
+        trans2 = CblasTrans;
+        ldb = (CBLAS_INT)(is2_m / sizeof(npy_cfloat));
+    }
+    CBLAS_FUNC(cblas_cgemm)(
+        order, trans1, trans2, 1, M, N, &oneF, ip1, lda,
+        ip2, ldb, &zeroF, op, ldc);
+}
+
+#line 670
+NPY_NO_EXPORT void
+CDOUBLE_vecmat_via_gemm(void *ip1, npy_intp is1_n,
+                       void *ip2, npy_intp is2_n, npy_intp is2_m,
+                       void *op, npy_intp os_m,
+                       npy_intp n, npy_intp m)
+{
+    enum CBLAS_ORDER order = CblasRowMajor;
+    enum CBLAS_TRANSPOSE trans1, trans2;
+    CBLAS_INT N, M, lda, ldb, ldc;
+    assert(n <= BLAS_MAXSIZE && m <= BLAS_MAXSIZE);
+    N = (CBLAS_INT)n;
+    M = (CBLAS_INT)m;
+
+    assert(os_m == sizeof(npy_cdouble));
+    ldc = (CBLAS_INT)m;
+
+    assert(is_blasable2d(is1_n, sizeof(npy_cdouble), n, 1, sizeof(npy_cdouble)));
+    trans1 = CblasConjTrans;
+    lda = (CBLAS_INT)(is1_n / sizeof(npy_cdouble));
+
+    if (is_blasable2d(is2_n, is2_m, n, m, sizeof(npy_cdouble))) {
+        trans2 = CblasNoTrans;
+        ldb = (CBLAS_INT)(is2_n / sizeof(npy_cdouble));
+    }
+    else {
+        assert(is_blasable2d(is2_m, is2_n, m, n, sizeof(npy_cdouble)));
+        trans2 = CblasTrans;
+        ldb = (CBLAS_INT)(is2_m / sizeof(npy_cdouble));
+    }
+    CBLAS_FUNC(cblas_zgemm)(
+        order, trans1, trans2, 1, M, N, &oneD, ip1, lda,
+        ip2, ldb, &zeroD, op, ldc);
+}
+
+#endif
+
+/*
+ * matvec loops, using blas gemv if possible, and TYPE_dot implementations otherwise.
+ * signature is (m,n),(n)->(m)
+ */
+#line 724
+NPY_NO_EXPORT void
+FLOAT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_float));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_float));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_float), dn, 1, sizeof(npy_float));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+            FLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            FLOAT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+DOUBLE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_double));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_double));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_double), dn, 1, sizeof(npy_double));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+            DOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            DOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+LONGDOUBLE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_longdouble));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_longdouble));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_longdouble), dn, 1, sizeof(npy_longdouble));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            LONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            LONGDOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+HALF_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_half));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_half));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_half), dn, 1, sizeof(npy_half));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            HALF_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            HALF_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+CFLOAT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_cfloat));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_cfloat));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_cfloat), dn, 1, sizeof(npy_cfloat));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+            CFLOAT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            CFLOAT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+CDOUBLE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_cdouble));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_cdouble));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_cdouble), dn, 1, sizeof(npy_cdouble));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+            CDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            CDOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+CLONGDOUBLE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_clongdouble));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_clongdouble));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_clongdouble), dn, 1, sizeof(npy_clongdouble));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            CLONGDOUBLE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            CLONGDOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+UBYTE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_ubyte));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_ubyte));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_ubyte), dn, 1, sizeof(npy_ubyte));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            UBYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            UBYTE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+USHORT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_ushort));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_ushort));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_ushort), dn, 1, sizeof(npy_ushort));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            USHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            USHORT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+UINT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_uint));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_uint));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_uint), dn, 1, sizeof(npy_uint));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            UINT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            UINT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+ULONG_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_ulong));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_ulong));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_ulong), dn, 1, sizeof(npy_ulong));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            ULONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            ULONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+ULONGLONG_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_ulonglong));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_ulonglong));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_ulonglong), dn, 1, sizeof(npy_ulonglong));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            ULONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            ULONGLONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+BYTE_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_byte));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_byte));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_byte), dn, 1, sizeof(npy_byte));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            BYTE_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            BYTE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+SHORT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_short));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_short));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_short), dn, 1, sizeof(npy_short));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            SHORT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            SHORT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+INT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_int));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_int));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_int), dn, 1, sizeof(npy_int));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            INT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            INT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+LONG_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_long));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_long));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_long), dn, 1, sizeof(npy_long));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            LONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            LONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+LONGLONG_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_longlong));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_longlong));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_longlong), dn, 1, sizeof(npy_longlong));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            LONGLONG_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            LONGLONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+BOOL_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_bool));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_bool));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_bool), dn, 1, sizeof(npy_bool));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            BOOL_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            BOOL_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 724
+NPY_NO_EXPORT void
+OBJECT_matvec(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dm = dimensions[1], dn = dimensions[2];
+    npy_intp is1_m=steps[3], is1_n=steps[4], is2_n=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_c_blasable = is_blasable2d(is1_m, is1_n, dm, dn, sizeof(npy_object));
+    npy_bool i1_f_blasable = is_blasable2d(is1_n, is1_m, dn, dm, sizeof(npy_object));
+    npy_bool i2_blasable = is_blasable2d(is2_n, sizeof(npy_object), dn, 1, sizeof(npy_object));
+    npy_bool blasable = ((i1_c_blasable || i1_f_blasable) && i2_blasable
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+            OBJECT_gemv(ip1, is1_m, is1_n, ip2, is2_n, op, os_m, dm, dn);
+            continue;
+        }
+#endif
+        /*
+         * Dot the different matrix rows with the vector to get output elements.
+         * (no conjugation for complex, unlike vecdot and vecmat)
+         */
+        for (npy_intp j = 0; j < dm; j++, ip1 += is1_m, op += os_m) {
+            OBJECT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 1
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+
+/*
+ * vecmat loops, using blas gemv for float and gemm for complex if possible,
+ * and TYPE_dot[c] implementations otherwise.
+ * Note that we cannot use gemv for complex, since we need to conjugate the vector.
+ * signature is (n),(n,m)->(m)
+ */
+#line 786
+NPY_NO_EXPORT void
+FLOAT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_float), dn, 1, sizeof(npy_float));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_float));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_float));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            FLOAT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            FLOAT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            FLOAT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+DOUBLE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_double), dn, 1, sizeof(npy_double));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_double));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_double));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            DOUBLE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            DOUBLE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            DOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+LONGDOUBLE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_longdouble), dn, 1, sizeof(npy_longdouble));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_longdouble));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_longdouble));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            LONGDOUBLE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            LONGDOUBLE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            LONGDOUBLE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+HALF_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_half), dn, 1, sizeof(npy_half));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_half));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_half));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            HALF_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            HALF_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            HALF_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+CFLOAT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_cfloat), dn, 1, sizeof(npy_cfloat));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_cfloat));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_cfloat));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 1
+            /* For complex, use gemm so we can conjugate the vector */
+            CFLOAT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            CFLOAT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            CFLOAT_dotc(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+CDOUBLE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 1 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_cdouble), dn, 1, sizeof(npy_cdouble));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_cdouble));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_cdouble));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 1 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 1
+            /* For complex, use gemm so we can conjugate the vector */
+            CDOUBLE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            CDOUBLE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            CDOUBLE_dotc(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+CLONGDOUBLE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_clongdouble), dn, 1, sizeof(npy_clongdouble));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_clongdouble));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_clongdouble));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 1
+            /* For complex, use gemm so we can conjugate the vector */
+            CLONGDOUBLE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            CLONGDOUBLE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            CLONGDOUBLE_dotc(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+UBYTE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_ubyte), dn, 1, sizeof(npy_ubyte));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_ubyte));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_ubyte));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            UBYTE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            UBYTE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            UBYTE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+USHORT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_ushort), dn, 1, sizeof(npy_ushort));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_ushort));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_ushort));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            USHORT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            USHORT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            USHORT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+UINT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_uint), dn, 1, sizeof(npy_uint));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_uint));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_uint));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            UINT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            UINT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            UINT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+ULONG_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_ulong), dn, 1, sizeof(npy_ulong));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_ulong));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_ulong));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            ULONG_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            ULONG_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            ULONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+ULONGLONG_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_ulonglong), dn, 1, sizeof(npy_ulonglong));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_ulonglong));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_ulonglong));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            ULONGLONG_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            ULONGLONG_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            ULONGLONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+BYTE_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_byte), dn, 1, sizeof(npy_byte));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_byte));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_byte));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            BYTE_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            BYTE_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            BYTE_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+SHORT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_short), dn, 1, sizeof(npy_short));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_short));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_short));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            SHORT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            SHORT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            SHORT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+INT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_int), dn, 1, sizeof(npy_int));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_int));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_int));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            INT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            INT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            INT_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+LONG_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_long), dn, 1, sizeof(npy_long));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_long));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_long));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            LONG_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            LONG_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            LONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+LONGLONG_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_longlong), dn, 1, sizeof(npy_longlong));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_longlong));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_longlong));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            LONGLONG_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            LONGLONG_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            LONGLONG_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+BOOL_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_bool), dn, 1, sizeof(npy_bool));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_bool));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_bool));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 0
+            /* For complex, use gemm so we can conjugate the vector */
+            BOOL_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            BOOL_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            BOOL_dot(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 0
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
+    }
+}
+
+#line 786
+NPY_NO_EXPORT void
+OBJECT_vecmat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    npy_intp n_outer = dimensions[0];
+    npy_intp s0=steps[0], s1=steps[1], s2=steps[2];
+    npy_intp dn = dimensions[1], dm = dimensions[2];
+    npy_intp is1_n=steps[3], is2_n=steps[4], is2_m=steps[5], os_m=steps[6];
+#if 0 && defined(HAVE_CBLAS)
+    npy_bool too_big_for_blas = (dm > BLAS_MAXSIZE || dn > BLAS_MAXSIZE);
+    npy_bool i1_blasable = is_blasable2d(is1_n, sizeof(npy_object), dn, 1, sizeof(npy_object));
+    npy_bool i2_c_blasable = is_blasable2d(is2_n, is2_m, dn, dm, sizeof(npy_object));
+    npy_bool i2_f_blasable = is_blasable2d(is2_m, is2_n, dm, dn, sizeof(npy_object));
+    npy_bool blasable = (i1_blasable && (i2_c_blasable || i2_f_blasable)
+                         && !too_big_for_blas && dn > 1 && dm > 1);
+#endif
+    for (npy_intp i = 0; i < n_outer; i++,
+             args[0] += s0, args[1] += s1, args[2] += s2) {
+        char *ip1=args[0], *ip2=args[1], *op=args[2];
+#if 0 && defined(HAVE_CBLAS)
+        if (blasable) {
+#if 1
+            /* For complex, use gemm so we can conjugate the vector */
+            OBJECT_vecmat_via_gemm(ip1, is1_n, ip2, is2_n, is2_m, op, os_m, dn, dm);
+#else
+            /* For float, use gemv (hence flipped order) */
+            OBJECT_gemv(ip2, is2_m, is2_n, ip1, is1_n, op, os_m, dm, dn);
+#endif
+            continue;
+        }
+#endif
+        /* Dot the vector with different matrix columns to get output elements. */
+        for (npy_intp j = 0; j < dm; j++, ip2 += is2_m, op += os_m) {
+            OBJECT_dotc(ip1, is1_n, ip2, is2_n, op, dn, NULL);
+#if 1
+            if (PyErr_Occurred()) {
+                return;
+            }
+#endif
+        }
     }
 }
 

@@ -1210,6 +1210,41 @@ TJoinTestData LeftOnlyLeftFilterTestData() {
     return td;
 }
 
+// Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
+// several 4-byte payload columns interleaved with 1-byte flag columns, with the
+// join key sitting in the middle. Such a row is short enough for the small-tuple
+// SIMD packing path and has more packable columns than it can dispatch.
+TJoinTestData LeftJoinNarrowRowWithFlagsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui32> leftFirst = {10, 11, 12, 13};
+    TVector<bool> leftFlag0 = {true, false, true, false};
+    TVector<ui32> leftSecond = {20, 21, 22, 23};
+    TVector<bool> leftFlag1 = {false, true, false, true};
+    TVector<ui32> leftKeys = {1, 2, 3, 4};
+    TVector<bool> leftFlag2 = {true, true, false, false};
+
+    TVector<ui32> rightKeys = {2, 3, 5};
+    TVector<ui32> rightVals = {200, 300, 500};
+
+    TVector<std::optional<ui32>> expRightKeys = {std::nullopt, 2, 3, std::nullopt};
+    TVector<std::optional<ui32>> expRightVals = {std::nullopt, 200, 300, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftFirst, leftFlag0, leftSecond, leftFlag1, leftKeys, leftFlag2);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Result = ConvertVectorsToTuples(setup, leftFirst, leftFlag0, leftSecond, leftFlag1, leftKeys, leftFlag2,
+                                       expRightKeys, expRightVals);
+
+    td.LeftKeyColmns = {4};
+    td.RightKeyColmns = {0};
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft},  {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                                {3, EJoinSide::kLeft},  {4, EJoinSide::kLeft}, {5, EJoinSide::kLeft},
+                                {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -1288,6 +1323,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
         Test(LeftJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinNarrowRowWithFlags, BlockJoin) {
+        Test(LeftJoinNarrowRowWithFlagsTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {

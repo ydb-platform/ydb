@@ -931,5 +931,17 @@ TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, co
         .Done().Ptr();
 }
 
+TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoWithWorld withWorld(node);
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over WithWorld" << logSuffix;
+    return Build<TCoWithWorld>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(withWorld.Input())
+            .Members(members)
+        .Build()
+        .World(withWorld.World())
+        .Done().Ptr();
+}
+
 
 } // NYql

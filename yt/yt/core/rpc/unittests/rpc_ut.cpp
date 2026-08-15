@@ -192,6 +192,23 @@ TYPED_TEST(TRpcTest, UserTag)
     EXPECT_EQ(req->GetUserTag(), rsp->user_tag());
 }
 
+TYPED_TEST(TRpcTest, StartTime)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+
+    auto beforeInvoke = TInstant::Now();
+    auto rspOrError = WaitForFast(req->Invoke());
+    auto afterInvoke = TInstant::Now();
+
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    ASSERT_TRUE(rsp->has_start_time());
+    auto startTime = NYT::FromProto<TInstant>(rsp->start_time());
+    EXPECT_GE(startTime, beforeInvoke);
+    EXPECT_LE(startTime, afterInvoke);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYPED_TEST(TNotUdsTest, Address)

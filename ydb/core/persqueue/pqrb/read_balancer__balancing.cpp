@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/btree_set.h>
+
 #include <algorithm>
 #include <array>
 
@@ -16,7 +18,7 @@ struct LowLoadSessionComparator {
     bool operator()(const TSession* lhs, const TSession* rhs) const;
 };
 
-using TLowLoadOrderedSessions = std::set<TSession*, LowLoadSessionComparator>;
+using TLowLoadOrderedSessions = absl::btree_set<TSession*, LowLoadSessionComparator>;
 
 
 
@@ -358,7 +360,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         {"logPrefix", LogPrefix()},
         {"partitions", JoinRange(", ", partitions.begin(), partitions.end())});
 
-    std::unordered_set<ui32> existedPartitions;
+    absl::flat_hash_set<ui32> existedPartitions;
     existedPartitions.insert(Partitions.begin(), Partitions.end());
 
     std::vector<ui32> newPartitions;
@@ -404,7 +406,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         if (session->AllPartitionsReadable(newPartitions)) {
             ++it;
         } else {
-            it = SpecialSessions.erase(it);
+            SpecialSessions.erase(it++);
         }
     }
 }
@@ -531,7 +533,7 @@ bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
     });
 }
 
-template bool TPartitionFamily::CanAttach(const std::unordered_set<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const absl::flat_hash_set<ui32>& partitionsIds);
 template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
 template bool TPartitionFamily::CanAttach(const std::array<ui32, 1>& partitionsIds);
 
@@ -560,7 +562,7 @@ std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const TPartitions
 }
 
 template
-std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const std::set<ui32>& partitions);
+std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const absl::btree_set<ui32>& partitions);
 
 template
 std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const std::vector<ui32>& partitions);
@@ -732,8 +734,8 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
     return family;
 }
 
-std::unordered_set<ui32> Intercept(const std::unordered_set<ui32>& values, const std::vector<ui32>& members) {
-    std::unordered_set<ui32> result;
+absl::flat_hash_set<ui32> Intercept(const absl::flat_hash_set<ui32>& values, const std::vector<ui32>& members) {
+    absl::flat_hash_set<ui32> result;
     result.reserve(members.size());
     for (auto m : members) {
         if (values.contains(m)) {
@@ -743,7 +745,7 @@ std::unordered_set<ui32> Intercept(const std::unordered_set<ui32>& values, const
     return result;
 }
 
-bool IsRoot(const TPartitionGraph::Node* node, const std::unordered_set<ui32>& partitions) {
+bool IsRoot(const TPartitionGraph::Node* node, const absl::flat_hash_set<ui32>& partitions) {
     if (!node) {
         return false;
     }
@@ -776,13 +778,13 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
             {"family", family->DebugStr()},
             {"partition", partitionId});
 
-        std::unordered_set<ui32> partitions;
+        absl::flat_hash_set<ui32> partitions;
         partitions.insert(family->Partitions.begin(), family->Partitions.end());
 
         if (IsRoot(GetPartitionGraph().GetPartition(partitionId), partitions)) {
             partitions.erase(partitionId);
 
-            std::unordered_set<ui32> processedPartitions;
+            absl::flat_hash_set<ui32> processedPartitions;
             // There are partitions that are contained in two families at once
             bool familiesIntersect = false;
 
@@ -967,7 +969,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
 }
 
 
-std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const std::unique_ptr<TPartitionFamily>>& families) {
+std::vector<TPartitionFamily*> Snapshot(const absl::flat_hash_map<size_t, std::unique_ptr<TPartitionFamily>>& families) {
     std::vector<TPartitionFamily*> result;
     result.reserve(families.size());
 
@@ -1322,7 +1324,7 @@ TLowLoadOrderedSessions OrderSessions(const TSessions& values) {
     return OrderSessions(values, [](const TSession*) { return true; });
 }
 
-TString DebugStr(const std::unordered_map<size_t, TPartitionFamily*>& values) {
+TString DebugStr(const absl::flat_hash_map<size_t, TPartitionFamily*>& values) {
     TStringBuilder sb;
     for (auto& [id, family] : values) {
         sb << id << " (" << JoinRange(", ", family->Partitions.begin(), family->Partitions.end()) << "), ";
@@ -1331,7 +1333,7 @@ TString DebugStr(const std::unordered_map<size_t, TPartitionFamily*>& values) {
 }
 
 std::vector<TPartitionFamily*> OrderFamilies(
-    const std::unordered_map<size_t, TPartitionFamily*>& values
+    const absl::flat_hash_map<size_t, TPartitionFamily*>& values
 ) {
     std::vector<TPartitionFamily*> result;
     result.reserve(values.size());
@@ -1474,13 +1476,13 @@ void TConsumer::Balance(const TActorContext& ctx) {
                     {"logPrefix", LogPrefix()},
                     {"family", family->DebugStr()});
 
-                it = FamiliesRequireBalancing.erase(it);
+                FamiliesRequireBalancing.erase(it++);
                 continue;
             }
 
             if (!family->SpecialSessions.contains(family->Session->Pipe)) {
                 family->Release(ctx);
-                it = FamiliesRequireBalancing.erase(it);
+                FamiliesRequireBalancing.erase(it++);
                 continue;
             }
 
@@ -1489,7 +1491,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                     {"logPrefix", LogPrefix()},
                     {"family", family->DebugStr()});
 
-                it = FamiliesRequireBalancing.erase(it);
+                FamiliesRequireBalancing.erase(it++);
                 continue;
             }
 
@@ -1498,7 +1500,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                     {"logPrefix", LogPrefix()},
                     {"family", family->DebugStr()});
 
-                it = FamiliesRequireBalancing.erase(it);
+                FamiliesRequireBalancing.erase(it++);
                 continue;
             }
 
@@ -1516,7 +1518,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (hasGoodestSession) {
                 family->Release(ctx);
-                it = FamiliesRequireBalancing.erase(it);
+                FamiliesRequireBalancing.erase(it++);
             } else {
                 YDB_LOG_DEBUG("Skip balancing because it is already being read by the best session",
                     {"logPrefix", LogPrefix()},
@@ -1573,7 +1575,7 @@ bool TSession::AllPartitionsReadable(const TCollection& partitions) const {
 }
 
 template bool TSession::AllPartitionsReadable(const std::vector<ui32>& partitions) const;
-template bool TSession::AllPartitionsReadable(const std::unordered_set<ui32>& partitions) const;
+template bool TSession::AllPartitionsReadable(const absl::flat_hash_set<ui32>& partitions) const;
 
 TString TSession::DebugStr() const {
     return TStringBuilder() << "ReadingSession \"" << SessionName << "\" (Sender=" << Sender << ", Pipe=" << Pipe
@@ -1611,7 +1613,7 @@ const TPartitionInfo* TBalancer::GetPartitionInfo(ui32 partitionId) const {
     return &it->second;
 }
 
-const std::unordered_map<ui32, TPartitionInfo>& TBalancer::GetPartitionsInfo() const {
+const absl::flat_hash_map<ui32, TPartitionInfo>& TBalancer::GetPartitionsInfo() const {
     return TopicActor.PartitionsInfo;
 }
 
@@ -1635,11 +1637,11 @@ TConsumer* TBalancer::GetConsumer(const TString& consumerName) {
     return it->second.get();
 }
 
-const std::unordered_map<TString, std::unique_ptr<TConsumer>>& TBalancer::GetConsumers() const {
+const absl::flat_hash_map<TString, std::unique_ptr<TConsumer>>& TBalancer::GetConsumers() const {
     return Consumers;
 }
 
-const std::unordered_map<TActorId, std::unique_ptr<TSession>>& TBalancer::GetSessions() const {
+const absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>& TBalancer::GetSessions() const {
     return Sessions;
 }
 
@@ -1974,7 +1976,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
     const auto& r = ev->Get()->Record;
 
-    std::unordered_set<ui32> partitionsRequested;
+    absl::flat_hash_set<ui32> partitionsRequested;
     partitionsRequested.insert(r.GetPartitions().begin(), r.GetPartitions().end());
 
     auto response = std::make_unique<TEvPersQueue::TEvReadSessionsInfoResponse>();

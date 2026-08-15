@@ -17,7 +17,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <map>
+#include <library/cpp/containers/absl/btree_map.h>
 #include <utility>
 
 namespace NKikimr {
@@ -77,7 +77,7 @@ private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
     using TPartitionBoundary = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary;
-    using TPartitionsToSplitMap = std::map<ui32, TPartitionScaleOperationInfo>;
+    using TPartitionsToSplitMap = absl::btree_map<ui32, TPartitionScaleOperationInfo>;
 
     class TScaleRequest {
     public:

@@ -17,7 +17,8 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <absl/container/flat_hash_set.h>
+#include <library/cpp/containers/absl/btree_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
@@ -361,14 +362,14 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         for (auto it = TabletsInfo.begin(); it != TabletsInfo.end();) {
             if (!liveTabletIds.contains(it->first)) {
                 ClosePipe(it->first, ctx);
-                it = TabletsInfo.erase(it);
+                TabletsInfo.erase(it++);
             } else {
                 ++it;
             }
         }
     }
 
-    std::map<ui32, TPartitionInfo> partitionsInfo;
+    absl::btree_map<ui32, TPartitionInfo> partitionsInfo;
     std::vector<TPartInfo> newPartitions;
     std::vector<ui32> newPartitionsIds;
     newPartitions.reserve(record.PartitionsSize());
@@ -404,7 +405,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             deletedPartitions.push_back(p.first);
         }
     }
-    PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
+    PartitionsInfo = absl::flat_hash_map<ui32, TPartitionInfo>(partitionsInfo.begin(), partitionsInfo.end());
 
     Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
     auto receiveAttemptDeletes = MLPBalancer->UpdateConfig(newPartitionsIds);

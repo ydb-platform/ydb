@@ -18,7 +18,8 @@
 
 #include <util/system/hp_timer.h>
 
-#include <unordered_map>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -225,14 +226,14 @@ public:
     };
 
 private:
-    std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
+    absl::flat_hash_map<ui32, TPartitionInfo> PartitionsInfo;
 
     struct TTabletInfo {
         ui64 Owner;
         ui64 Idx;
     };
 
-    std::unordered_map<ui64, TTabletInfo> TabletsInfo;
+    absl::flat_hash_map<ui64, TTabletInfo> TabletsInfo;
     ui64 MaxIdx;
 
     ui32 NextPartitionId;
@@ -262,8 +263,8 @@ private:
         bool Ready = false;
     };
 
-    std::unordered_map<ui64, TPipeLocation> TabletPipes;
-    std::unordered_set<ui64> PipesRequested;
+    absl::flat_hash_map<ui64, TPipeLocation> TabletPipes;
+    absl::flat_hash_set<ui64> PipesRequested;
     ui32 ReadyPartitionTablets = 0;
 
     TDatabaseInfo DatabaseInfo;
@@ -271,7 +272,7 @@ private:
     std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
     struct TStatsRequestTracker {
-        std::unordered_map<ui64, ui64> Cookies;
+        absl::flat_hash_map<ui64, ui64> Cookies;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;

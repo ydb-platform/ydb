@@ -23,12 +23,14 @@
 #include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <variant>
+#include <deque>
 
 namespace NKikimr::NPQ {
 
@@ -440,6 +442,7 @@ private:
 
 
     void ScheduleReplyOk(const ui64 dst, bool internal);
+    void ScheduleReplyOk(const TEvPQ::TEvSetClientInfo& act);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
                                         const TInstant writeTimestamp,
@@ -447,6 +450,9 @@ private:
                                         bool consumerHasAnyCommits,
                                         const std::optional<TString>& committedMetadata=std::nullopt);
     void ScheduleReplyError(const ui64 dst, bool internal,
+                            NPersQueue::NErrorCode::EErrorCode errorCode,
+                            const TString& error);
+    void ScheduleReplyError(const TEvPQ::TEvSetClientInfo& act,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
@@ -670,6 +676,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+            hFuncTraced(TEvPQ::TEvResetOffsetRequest, HandleOnInit);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
@@ -756,6 +763,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+            hFuncTraced(TEvPQ::TEvResetOffsetRequest, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
@@ -1307,6 +1315,7 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void HandleOnInit(TEvPQ::TEvResetOffsetRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
@@ -1315,6 +1324,7 @@ private:
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void Handle(TEvPQ::TEvResetOffsetRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
@@ -1355,6 +1365,13 @@ private:
 
 
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
+
+    ui64 ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
+    bool TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error);
+    void ProcessResetOffsetPendingEvents();
+    static Ydb::StatusIds::StatusCode PqErrorToYdbStatus(NPersQueue::NErrorCode::EErrorCode errorCode);
+
+    std::deque<TEvPQ::TEvResetOffsetRequest::TPtr> ResetOffsetPendingEvents;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
 

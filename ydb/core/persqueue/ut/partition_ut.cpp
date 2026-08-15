@@ -2323,6 +2323,40 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+// ResetOffset used to key its reply by SetClientInfo.Cookie, which shares the
+// tablet/compaction cookie space. A SetOffset with cookie=1 in flight while
+// ResetOffset registered dst=1 made ScheduleReplyOk steal the commit reply.
+Y_UNIT_TEST_F(ResetOffsetDoesNotStealSetOffsetReply, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=10});
+    CreateSession(client, session);
+
+    SendSetOffset(1, client, 5, session);
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=5}}}});
+
+    SendEvent(new TEvPQ::TEvResetOffsetRequest(
+        "topic", client, partition.OriginalPartitionId,
+        NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 1));
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
+    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(reset);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetPartitionId(), partition.OriginalPartitionId);
+
+    SendGetOffset(2, client);
+    WaitProxyResponse({.Cookie=2, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=0});
+}
+
 // Compactification replies with IsInternal=true. Those must not be treated as timestamp-read
 // completions: otherwise ReadingTimestamp/ReadScheduled get out of sync and the next
 // TEvProxyResponse hits PQ_ENSURE(userInfo->ReadScheduled) (issue #49357).

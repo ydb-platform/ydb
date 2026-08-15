@@ -62,6 +62,8 @@ message TS3BackendSettings {
     optional uint32 BalancerProxyPort = 7 [default = 4080];
     // ProxyScheme for connections via the balancer-provided host.
     optional NKikimrSchemeOp.TS3Settings.EScheme BalancerProxyScheme = 8 [default = HTTP];
+    // How often the per-node S3 router pushes aggregated metrics to the tablet.
+    optional uint32 MetricsPushIntervalMs = 9 [default = 2500];
 }
 
 message TBlobDepotConfig {

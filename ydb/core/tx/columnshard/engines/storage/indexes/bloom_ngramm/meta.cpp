@@ -290,7 +290,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             const double requestedBitsSizeDouble =
                 std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(falsePositiveProbability, 1.0 / k)));
             const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
-            const ui32 targetSize = std::min<ui64>({ MaxBitsSize, maxTargetBits, std::bit_ceil(requestedBitsSize) });
+            const ui64 targetSize = std::min<ui64>({ MaxBitsSize, maxTargetBits, std::bit_ceil(requestedBitsSize) });
 
             auto foldedStorage = targetSize < MaxBitsSize ? maxStorage.Fold(MaxBitsSize / targetSize) : std::move(maxStorage);
 
@@ -319,7 +319,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         ui32 size = filterSizeBytes * CHAR_BIT;
         if ((size & (size - 1)) == 0) {
             ui32 recordsCountBase = resolvedRecordsCount;
-            while (recordsCountBase < records && size * 2 <= TConstants::MaxFilterSizeBits) {
+            while (recordsCountBase < records && size * 2 <= TConstants::MaxFilterSizeBytes) {
                 size <<= 1;
                 recordsCountBase *= 2;
             }

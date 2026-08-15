@@ -1,34 +1,8 @@
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include "pqrb_ut_common.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 namespace NKikimr::NPQ {
-namespace {
-
-THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
-    TTestContext& tc,
-    TEvPersQueue::TEvGetPartitionsLocation* request,
-    TDuration timeout = TDuration::Seconds(10)
-) {
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request, 0, GetPipeConfigWithRetries());
-    return tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
-}
-
-void WaitBalancerReady(TTestContext& tc, ui32 retries = 20) {
-    for (ui32 i = 0; i < retries; ++i) {
-        auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
-        UNIT_ASSERT(response);
-        if (response->Record.GetStatus()) {
-            return;
-        }
-        tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(100));
-        tc.Runtime->DispatchEvents();
-    }
-    UNIT_ASSERT_C(false, "Could not get positive response from balancer");
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(TPartitionsLocationQueue) {
 
@@ -224,6 +198,46 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     );
     UNIT_ASSERT(expired);
     UNIT_ASSERT(!expired->Record.GetStatus());
+}
+
+Y_UNIT_TEST(StaleClientConnectedDoesNotOverridePipeLocation) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc);
+    WaitBalancerReady(tc);
+
+    auto baseline = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
+    UNIT_ASSERT(baseline);
+    UNIT_ASSERT(baseline->Record.GetStatus());
+    const ui32 realNodeId = baseline->Record.GetLocations(0).GetNodeId();
+    UNIT_ASSERT_GT(realNodeId, 0u);
+
+    const TActorId staleClient(777, 1, 1, 1);
+    const TActorId staleServer(999, 1, 1, 1);
+    ForwardToTablet(
+        *tc.Runtime,
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvTabletPipe::TEvClientConnected(
+            tc.TabletId,
+            NKikimrProto::OK,
+            staleClient,
+            staleServer,
+            /*leader=*/true,
+            /*dead=*/false,
+            /*generation=*/42
+        )
+    );
+    DispatchFor(tc);
+
+    auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetLocations(0).GetNodeId(), realNodeId);
+    UNIT_ASSERT_VALUES_UNEQUAL(response->Record.GetLocations(0).GetNodeId(), 999u);
 }
 
 } // Y_UNIT_TEST_SUITE(TPartitionsLocationQueue)

@@ -404,6 +404,15 @@ TStringBuilder TPersQueueReadBalancer::LogPrefix() const {
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientDestroyed for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
+
     YDB_LOG_DEBUG("TEvClientDestroyed",
         {"logPrefix", LogPrefix()},
         {"tabletId", tabletId});
@@ -416,6 +425,14 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientConnected for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
 
     PipesRequested.erase(tabletId);
 
@@ -432,26 +449,19 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
     Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
 
-    auto it = TabletPipes.find(tabletId);
-    if (it != TabletPipes.end()) {
-        it->second.Generation = ev->Get()->Generation;
-        it->second.NodeId = ev->Get()->ServerId.NodeId();
+    it->second.Generation = ev->Get()->Generation;
+    it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-        if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
-            it->second.Ready = true;
-            ++ReadyPartitionTablets;
-        }
-
-        YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"nodeId", ev->Get()->ServerId.NodeId()},
-            {"generation", ev->Get()->Generation});
-    } else {
-        YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId});
+    if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+        it->second.Ready = true;
+        ++ReadyPartitionTablets;
     }
+
+    YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
+        {"logPrefix", LogPrefix()},
+        {"tabletId", tabletId},
+        {"nodeId", ev->Get()->ServerId.NodeId()},
+        {"generation", ev->Get()->Generation});
 
     ProcessPartitionsLocationQueue(ctx);
 }

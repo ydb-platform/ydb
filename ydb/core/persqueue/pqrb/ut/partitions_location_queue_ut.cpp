@@ -240,6 +240,43 @@ Y_UNIT_TEST(StaleClientConnectedDoesNotOverridePipeLocation) {
     UNIT_ASSERT_VALUES_UNEQUAL(response->Record.GetLocations(0).GetNodeId(), 999u);
 }
 
+Y_UNIT_TEST(RemovedTabletsDoNotBlockAllPartitionsLocation) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc, false, false);
+    WaitBalancerReady(tc);
+
+    const ui64 extraTabletId = MakeTabletID(false, 999);
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .ExtraTablets = {extraTabletId},
+    });
+
+    auto* blocked = new TEvPersQueue::TEvGetPartitionsLocation();
+    blocked->Record.SetTimeoutMs(200);
+    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, blocked, 0, GetPipeConfigWithRetries());
+    tc.Runtime->ResetScheduledCount();
+    tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(250));
+    auto blockedResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::Seconds(10)
+    );
+    UNIT_ASSERT(blockedResponse);
+    UNIT_ASSERT_C(!blockedResponse->Record.GetStatus(), "Extra tablet in TabletsInfo must block all-partitions location");
+
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+    });
+
+    WaitBalancerReady(tc);
+    auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
+}
+
 } // Y_UNIT_TEST_SUITE(TPartitionsLocationQueue)
 
 } // namespace NKikimr::NPQ

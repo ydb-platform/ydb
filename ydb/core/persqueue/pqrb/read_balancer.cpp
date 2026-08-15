@@ -17,6 +17,8 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <absl/container/flat_hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
@@ -332,7 +334,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         }
     }
 
+    absl::flat_hash_set<ui64> liveTabletIds;
     for (auto& p : record.GetTablets()) {
+        liveTabletIds.insert(p.GetTabletId());
         auto it = TabletsInfo.find(p.GetTabletId());
         if (it == TabletsInfo.end()) {
             TTabletInfo info{p.GetOwner(), p.GetIdx()};
@@ -346,6 +350,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             }
         }
 
+    }
+
+    if (record.TabletsSize() > 0) {
+        for (auto it = TabletsInfo.begin(); it != TabletsInfo.end();) {
+            if (!liveTabletIds.contains(it->first)) {
+                ClosePipe(it->first, ctx);
+                it = TabletsInfo.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     std::map<ui32, TPartitionInfo> partitionsInfo;

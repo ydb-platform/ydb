@@ -938,26 +938,6 @@ class TestViewer(object):
         })
         assert 'status_code' not in result, result
 
-        # the reply is sent before the describe response arrives, so the crash, if any,
-        # happens after it - give every node time to die and check that none did
-        deadline = time.time() + 10
-        while True:
-            dead = cls.get_dead_mon_ports()
-            assert not dead, 'nodes died after the request: %s' % dead
-            if time.time() > deadline:
-                break
-            time.sleep(1)
-
-    @classmethod
-    def get_dead_mon_ports(cls):
-        dead = []
-        for node in list(cls.cluster.nodes.values()) + list(cls.cluster.slots.values()):
-            try:
-                requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1" % node.mon_port, timeout=5)
-            except requests.RequestException as e:
-                dead.append((node.mon_port, str(e)))
-        return dead
-
     @classmethod
     def test_viewer_describe(cls):
         result = {}

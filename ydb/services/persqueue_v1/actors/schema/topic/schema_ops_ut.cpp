@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -234,6 +235,32 @@ auto InjectFalseLocationStatusOnce(NActors::TTestActorRuntime& runtime, size_t& 
         });
 }
 
+void StripPartitionFromNavigateResult(
+    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
+    ui32 partitionId,
+    bool onlyWithoutSync)
+{
+    if (!ev || !ev->Get()->Request) {
+        return;
+    }
+    for (auto& entry : ev->Get()->Request->ResultSet) {
+        if (!entry.PQGroupInfo) {
+            continue;
+        }
+        if (onlyWithoutSync && entry.SyncVersion) {
+            continue;
+        }
+        auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*entry.PQGroupInfo);
+        auto* partitions = copy->Description.MutablePartitions();
+        for (int i = partitions->size() - 1; i >= 0; --i) {
+            if (partitions->Get(i).GetPartitionId() == partitionId) {
+                partitions->DeleteSubrange(i, 1);
+            }
+        }
+        entry.PQGroupInfo = copy;
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI) {
@@ -421,6 +448,75 @@ Y_UNIT_TEST(DescribePartitionUnauthenticatedRejectedWhenRequired) {
     auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         runtime, request, CreateDescribePartitionActor, path);
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(DescribePartitionRetriesWithSyncWhenStaleCache) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_part_stale_cache";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    size_t staleNavigates = 0;
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (!entry.PQGroupInfo) {
+                    continue;
+                }
+                if (entry.SyncVersion) {
+                    ++syncNavigates;
+                } else {
+                    ++staleNavigates;
+                }
+            }
+            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/true);
+        });
+
+    Ydb::Topic::DescribePartitionRequest request;
+    request.set_path(path);
+    request.set_partition_id(1);
+    auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        runtime, request, CreateDescribePartitionActor, path);
+
+    UNIT_ASSERT_GT(staleNavigates, 0u);
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+    UNIT_ASSERT_VALUES_EQUAL(describeResult.partition().partition_id(), 1u);
+}
+
+Y_UNIT_TEST(DescribePartitionMissingAfterSync) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_part_missing_after_sync";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.PQGroupInfo && entry.SyncVersion) {
+                    ++syncNavigates;
+                }
+            }
+            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/false);
+        });
+
+    Ydb::Topic::DescribePartitionRequest request;
+    request.set_path(path);
+    request.set_partition_id(1);
+    auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        runtime, request, CreateDescribePartitionActor, path);
+
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "No partition 1 in topic");
 }
 
 Y_UNIT_TEST(DescribeConsumerSmokeAndMissingTopic) {

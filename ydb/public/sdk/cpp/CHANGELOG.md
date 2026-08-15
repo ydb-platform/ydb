@@ -1,5 +1,7 @@
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
+* Added `TTopicClient::ResetOffset` to reset a consumer's committed offset on all topic partitions.
+
 ## v3.21.1
 
 * Fix read session close deadlock in topic sdk.

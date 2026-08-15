@@ -267,17 +267,18 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
-    size_t outputSize = Buffer.Size();
+    size_t readyOutputBytes = Buffer.Size();
     if (Compression) {
-        outputSize = Compression->GetReadyOutputBytes();
+        readyOutputBytes = Compression->GetReadyOutputBytes();
     }
     // Some formats (e.g. Parquet) keep encoded output inside the format itself
     // until a flush, so it is not yet reflected in Buffer/Compression.
-    outputSize += DataFormat->GetReadyOutputBytes();
-    if (outputSize < MinBytes) {
+    readyOutputBytes += DataFormat->GetReadyOutputBytes();
+    if (readyOutputBytes < MinBytes) {
         return false;
     }
-    return Rows >= RowsLimit || outputSize >= MaxBytes;
+    const size_t memoryBytes = Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
+    return Rows >= RowsLimit || memoryBytes >= MaxBytes;
 }
 
 TString TS3Buffer::GetError() const {

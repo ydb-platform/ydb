@@ -11,6 +11,8 @@ namespace NLongTxService {
         , AcquireReadSnapshotOutInFlight(group->GetCounter("AcquireReadSnapshotOutInFlight"))
         , TimeSinceLastRemoteSnapshotsUpdateMs(group->GetCounter("TimeSinceLastRemoteSnapshotsUpdateMs"))
         , RemoteSnapshotsInRegistry(group->GetCounter("RemoteSnapshotsInRegistry"))
+        , OldestSnapshotInRegistryAgeSeconds(group->GetCounter("OldestSnapshotInRegistryAgeSeconds"))
+        , OldestLocalSnapshotInRegistryAgeSeconds(group->GetCounter("OldestLocalSnapshotInRegistryAgeSeconds"))
         , SnapshotsCollectionTimeMs(group->GetCounter("SnapshotsCollectionTimeMs"))
         , SnapshotsPropagationTimeMs(group->GetCounter("SnapshotsPropagationTimeMs"))
         , RemoteLockSubscriptions(group->GetCounter("RemoteLockSubscriptions"))

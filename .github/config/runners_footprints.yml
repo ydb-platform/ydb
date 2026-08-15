@@ -1,0 +1,82 @@
+# Runner VM footprints (provisioned maximum resources per GitHub Actions label).
+# Used by the tests resource dashboard for recommendation ceilings and limit lines.
+# Actual usage during a run comes from resources_monitor.jsonl (/proc); it may be lower.
+
+quotas:
+  instances: 140
+  vcpu: 8000
+  ram_gb: 33000
+  nrd_ssd_gb: 300000
+
+reserved:
+  vcpu: 120
+  ram_gb: 400
+  instances: 13
+  nrd_ssd_gb: 8000
+
+static_runners:
+  tiny-worker:
+    count: 6
+    footprint:
+      vcpu: 4
+      ram_gb: 8
+      nrd_ssd_gb: 200
+  cachesrv:
+    count: 1
+    footprint:
+      vcpu: 32
+      ram_gb: 96
+      nrd_ssd_gb: 4500
+  gh-runners-controller:
+    count: 1
+    footprint:
+      vcpu: 2
+      ram_gb: 2
+      nrd_ssd_gb: 10
+  gh-runners-gw:
+    count: 1
+    footprint:
+      vcpu: 2
+      ram_gb: 1
+      nrd_ssd_gb: 10
+
+footprints:
+  build-preset-relwithdebinfo:
+    vcpu: 64
+    ram_gb: 256
+    nrd_ssd_gb: 2417
+  build-preset-release:
+    vcpu: 64
+    ram_gb: 256
+    nrd_ssd_gb: 2417
+  build-preset-release-asan:
+    vcpu: 96
+    ram_gb: 288
+    nrd_ssd_gb: 2417
+  build-preset-release-msan:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+  build-preset-release-tsan:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+  build-preset-analytic-node:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+
+default_footprint:
+  vcpu: 96
+  ram_gb: 320
+  nrd_ssd_gb: 2417
+
+# Dashboard / CPU recommendation tuning (not runner provisioning).
+dashboard:
+  # Per-suite co-resident RAM budget as a fraction of provisioned ram_gb.
+  mem_budget_fraction: 0.70
+  mem_min_chunk_gb: 24.0
+  cpu_saturation_pct: 90.0
+  near_budget_factor: 1.10
+  # Matches ya make cgroup MemoryMax in test_ya action (95% of MemTotal).
+  ya_make_mem_fraction: 0.95

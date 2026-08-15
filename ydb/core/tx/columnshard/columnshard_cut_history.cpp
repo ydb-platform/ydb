@@ -148,10 +148,32 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // Build per-path consumer map.
+    // Build per-path consumer map. The snapshot may reference portions (or whole
+    // paths) deleted since the sweep started — filter them out here, and the fetch
+    // tx additionally tolerates the erase-committed-but-still-in-memory window.
+    // A deleted portion cannot pin blobs in an old group, so skipping is correct.
+    if (!HasIndex()) {
+        CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
+        return;
+    }
+    const auto& engine = GetIndexAs<NOlap::TColumnEngineForLogs>();
     THashMap<NOlap::TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer> portionsMap;
     for (const auto& [pathId, portionId] : batch) {
+        const auto granule = engine.GetGranuleOptional(pathId);
+        if (!granule) {
+            continue;
+        }
+        const auto portion = granule->GetPortionOptional(portionId, false);
+        if (!portion || portion->HasRemoveSnapshot()) {
+            continue;
+        }
         portionsMap[pathId].UpsertConsumer(NOlap::NBlobOperations::EConsumer::SCAN).AddPortion(portionId);
+    }
+    if (portionsMap.empty()) {
+        // Every portion of this batch is gone — report an empty batch instead of
+        // sending a vacuous accessor request.
+        CutHistoryCutter->OnBatchComplete({}, isLast, ctx);
+        return;
     }
 
     // Build nextGenMap for the callback.

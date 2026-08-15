@@ -141,7 +141,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         StartFindSubDomainPathId(true);
     }
 
-    StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
+    StartPartitionIdForWrite = NextPartitionIdForWrite = TotalGroups ? rand() % TotalGroups : 0;
 
     auto getInitLog = [&]() {
         TStringBuilder s;
@@ -205,8 +205,14 @@ void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig:
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
-    NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
     THolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+    if (TotalGroups == 0) {
+        response->Record.SetPartitionId(0);
+        ctx.Send(ev->Sender, response.Release());
+        return;
+    }
+
+    NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
     response->Record.SetPartitionId(NextPartitionIdForWrite);
     ctx.Send(ev->Sender, response.Release());
     if (NextPartitionIdForWrite == StartPartitionIdForWrite) { // randomize next cycle

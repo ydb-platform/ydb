@@ -5,6 +5,7 @@ SIZE(MEDIUM)
 SRCS(
     balancing_ut.cpp
     partitions_location_queue_ut.cpp
+    write_partition_ut.cpp
 )
 
 PEERDIR(

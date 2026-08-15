@@ -1417,9 +1417,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         );
         return msg;
     }
+
     TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path) {
         return MakeAccessDeniedError(ctx, path, TString());
     }
+
     TString MakeAccessDeniedError(const TActorContext& ctx, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken);
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId

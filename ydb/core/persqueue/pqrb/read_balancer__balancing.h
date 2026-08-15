@@ -29,8 +29,8 @@ struct TPartition {
     ui64 Cookie = 0;
 
     // Generation of PQ-tablet and cookie for synchronization of commit information.
-    ui32 PartitionGeneration;
-    ui64 PartitionCookie;
+    ui32 PartitionGeneration = 0;
+    ui64 PartitionCookie = 0;
 
     // Return true if the reading of the partition has been finished and children's partitions are readable.
     bool IsInactive() const;

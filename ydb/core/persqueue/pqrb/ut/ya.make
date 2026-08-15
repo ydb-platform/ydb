@@ -3,6 +3,7 @@ UNITTEST()
 SIZE(MEDIUM)
 
 SRCS(
+    balancing_ut.cpp
     partitions_location_queue_ut.cpp
 )
 

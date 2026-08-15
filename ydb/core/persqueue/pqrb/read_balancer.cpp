@@ -337,18 +337,21 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     absl::flat_hash_set<ui64> liveTabletIds;
+    liveTabletIds.reserve(record.TabletsSize());
+    newTablets.reserve(record.TabletsSize());
+    reallocatedTablets.reserve(record.TabletsSize());
     for (auto& p : record.GetTablets()) {
         liveTabletIds.insert(p.GetTabletId());
         auto it = TabletsInfo.find(p.GetTabletId());
         if (it == TabletsInfo.end()) {
             TTabletInfo info{p.GetOwner(), p.GetIdx()};
             TabletsInfo[p.GetTabletId()] = info;
-            newTablets.push_back(std::make_pair(p.GetTabletId(), info));
+            newTablets.emplace_back(p.GetTabletId(), info);
         } else {
             if (it->second.Owner != p.GetOwner() || it->second.Idx != p.GetIdx()) {
                 TTabletInfo info{p.GetOwner(), p.GetIdx()};
                 TabletsInfo[p.GetTabletId()] = info;
-                reallocatedTablets.push_back(std::make_pair(p.GetTabletId(), info));
+                reallocatedTablets.emplace_back(p.GetTabletId(), info);
             }
         }
 
@@ -368,6 +371,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     std::map<ui32, TPartitionInfo> partitionsInfo;
     std::vector<TPartInfo> newPartitions;
     std::vector<ui32> newPartitionsIds;
+    newPartitions.reserve(record.PartitionsSize());
+    newPartitionsIds.reserve(record.PartitionsSize());
+    newGroups.reserve(record.PartitionsSize());
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
@@ -1031,6 +1037,7 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
     }
 
     TReceiveAttemptPartitionsWriteBatch batch;
+    batch.Responses.reserve(PendingMLPGetPartitionRequests.size());
     const auto now = TAppData::TimeProvider->Now();
 
     while (!PendingMLPGetPartitionRequests.empty()) {

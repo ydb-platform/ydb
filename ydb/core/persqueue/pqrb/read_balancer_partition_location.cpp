@@ -74,11 +74,9 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
 void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext& ctx)
 {
     const auto now = TAppData::TimeProvider->Now();
-    std::deque<TPartitionsLocationRequest> deferred;
-
-    while (!PartitionsLocationQueue.empty()) {
-        auto request = std::move(PartitionsLocationQueue.front());
-        PartitionsLocationQueue.pop_front();
+    size_t write = 0;
+    for (size_t read = 0; read < PartitionsLocationQueue.size(); ++read) {
+        auto& request = PartitionsLocationQueue[read];
 
         // Prefer a successful answer whenever possible, even past the deadline.
         if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
@@ -93,10 +91,12 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
             continue;
         }
 
-        deferred.push_back(std::move(request));
+        if (write != read) {
+            PartitionsLocationQueue[write] = std::move(request);
+        }
+        ++write;
     }
-
-    PartitionsLocationQueue = std::move(deferred);
+    PartitionsLocationQueue.erase(PartitionsLocationQueue.begin() + write, PartitionsLocationQueue.end());
     SchedulePartitionsLocationWakeup(ctx);
 }
 
@@ -105,9 +105,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
     const NKikimrPQ::TGetPartitionsLocation& request,
     const TActorContext& ctx)
 {
-    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-
-    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
+    auto pipeIsReady = [&](ui64 tabletId) {
         if (PipesRequested.contains(tabletId)) {
             return false;
         }
@@ -118,23 +116,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
             return false;
         }
 
-        if (!iter->second.Ready) {
-            return false;
-        }
-
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
-
-        YDB_LOG_DEBUG("The partition location was added to response",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"partitionId", partitionId},
-            {"nodeId", pResponse->GetNodeId()},
-            {"generation", pResponse->GetGeneration()});
-
-        return true;
+        return iter->second.Ready;
     };
 
     if (request.PartitionsSize() == 0) {
@@ -143,7 +125,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
         }
 
         for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
+            if (!pipeIsReady(partitionInfo.TabletId)) {
                 return false;
             }
         }
@@ -155,9 +137,36 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
                 return true; // answered with error, drop from queue
             }
 
-            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
+            if (!pipeIsReady(partitionInfoIter->second.TabletId)) {
                 return false;
             }
+        }
+    }
+
+    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+
+    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
+        auto iter = TabletPipes.find(tabletId);
+        auto* pResponse = evResponse->Record.AddLocations();
+        pResponse->SetPartitionId(partitionId);
+        pResponse->SetNodeId(iter->second.NodeId.GetRef());
+        pResponse->SetGeneration(iter->second.Generation.GetRef());
+
+        YDB_LOG_DEBUG("The partition location was added to response",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"partitionId", partitionId},
+            {"nodeId", pResponse->GetNodeId()},
+            {"generation", pResponse->GetGeneration()});
+    };
+
+    if (request.PartitionsSize() == 0) {
+        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
+            addPartitionToResponse(partitionId, partitionInfo.TabletId);
+        }
+    } else {
+        for (const auto& partitionInRequest : request.GetPartitions()) {
+            addPartitionToResponse(partitionInRequest, PartitionsInfo.find(partitionInRequest)->second.TabletId);
         }
     }
 

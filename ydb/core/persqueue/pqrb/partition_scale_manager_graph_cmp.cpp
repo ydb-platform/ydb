@@ -1,11 +1,13 @@
 #include "partition_scale_manager_graph_cmp.h"
 
+#include <absl/container/flat_hash_map.h>
 #include <format>
 
 namespace NKikimr::NPQ::NMirror {
 
-    static std::unordered_map<ui32, const NYdb::NTopic::TPartitionInfo*> BuildPartitionIndexMap(const std::span<const NYdb::NTopic::TPartitionInfo> source) {
-        std::unordered_map<ui32, const NYdb::NTopic::TPartitionInfo*> result;
+    static absl::flat_hash_map<ui32, const NYdb::NTopic::TPartitionInfo*> BuildPartitionIndexMap(const std::span<const NYdb::NTopic::TPartitionInfo> source) {
+        absl::flat_hash_map<ui32, const NYdb::NTopic::TPartitionInfo*> result;
+        result.reserve(source.size());
         for (const auto& partition : source) {
             result.emplace(partition.GetPartitionId(), &partition);
         }
@@ -14,6 +16,7 @@ namespace NKikimr::NPQ::NMirror {
 
     static std::optional<TRootPartitionsMismatch> CompareRootPartitionGraphs(const TPartitionGraph& target, const std::span<const NYdb::NTopic::TPartitionInfo> source) {
         std::vector<ui32> missingRootPartitionsIds;
+        missingRootPartitionsIds.reserve(source.size());
         for (const auto& partition : source) {
             if (!partition.GetParentPartitionIds().empty()) {
                 continue;

@@ -116,6 +116,7 @@ void TMLPConsumer::RestoreReceiveAttemptPartition(const TString& receiveAttemptI
 
 std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::CollectExpiredReceiveAttemptPartitions(TInstant now) {
     std::vector<TReceiveAttemptPartitionDelete> deletes;
+    deletes.reserve(ReceiveAttemptPartitions.size());
     absl::erase_if(ReceiveAttemptPartitions, [&](const auto& entry) {
         if (entry.second.Expiry <= now) {
             deletes.push_back(MakeDeleteKey(entry.first));

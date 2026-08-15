@@ -4,6 +4,9 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <algorithm>
+#include <array>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
 namespace NKikimr::NPQ::NBalancing {
@@ -522,6 +525,7 @@ bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
 
 template bool TPartitionFamily::CanAttach(const std::unordered_set<ui32>& partitionsIds);
 template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::array<ui32, 1>& partitionsIds);
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
@@ -713,8 +717,9 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
     return family;
 }
 
-std::unordered_set<ui32> Intercept(std::unordered_set<ui32> values, std::vector<ui32> members) {
+std::unordered_set<ui32> Intercept(const std::unordered_set<ui32>& values, const std::vector<ui32>& members) {
     std::unordered_set<ui32> result;
+    result.reserve(members.size());
     for (auto m : members) {
         if (values.contains(m)) {
             result.insert(m);
@@ -1093,7 +1098,8 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
             {"newPartitions", JoinRange(", ", newPartitions.begin(), newPartitions.end())},
             {"family", family->DebugStr()});
         for (auto id : newPartitions) {
-            if (family->CanAttach(std::vector{id})) {
+            std::array<ui32, 1> partitionIds{id};
+            if (family->CanAttach(partitionIds)) {
                 auto* node = GetPartitionGraph().GetPartition(id);
                 bool allParentsMerged = true;
                 if (node->DirectParents.size() > 1) {
@@ -1274,10 +1280,8 @@ void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
 
-TLowLoadOrderedSessions OrderSessions(
-    const std::unordered_map<TActorId, TSession*>& values,
-    std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
-) {
+template<typename TSessions, typename TPredicate>
+TLowLoadOrderedSessions OrderSessions(const TSessions& values, TPredicate predicate) {
     TLowLoadOrderedSessions result;
     for (auto& [_, v] : values) {
         if (predicate(v)) {
@@ -1288,6 +1292,11 @@ TLowLoadOrderedSessions OrderSessions(
     return result;
 }
 
+template<typename TSessions>
+TLowLoadOrderedSessions OrderSessions(const TSessions& values) {
+    return OrderSessions(values, [](const TSession*) { return true; });
+}
+
 TString DebugStr(const std::unordered_map<size_t, TPartitionFamily*>& values) {
     TStringBuilder sb;
     for (auto& [id, family] : values) {
@@ -1296,29 +1305,20 @@ TString DebugStr(const std::unordered_map<size_t, TPartitionFamily*>& values) {
     return sb;
 }
 
-TString DebugStr(const TOrderedPartitionFamilies& values) {
-    TStringBuilder sb;
-    for (auto* family : values) {
-        sb << family->DebugStr() << ", ";
-    }
-    return sb;
-}
-
-TOrderedPartitionFamilies OrderFamilies(
+std::vector<TPartitionFamily*> OrderFamilies(
     const std::unordered_map<size_t, TPartitionFamily*>& values
 ) {
-    TOrderedPartitionFamilies result;
+    std::vector<TPartitionFamily*> result;
+    result.reserve(values.size());
     for (auto& [_, v] : values) {
-        result.insert(v);
+        result.push_back(v);
     }
-
+    std::sort(result.begin(), result.end(), TPartitionFamilyComparator{});
     return result;
 }
 
-size_t GetStatistics(
-    const std::unordered_map<size_t, const std::unique_ptr<TPartitionFamily>>& values,
-    std::function<bool (const TPartitionFamily*)> predicate = [](const TPartitionFamily*) { return true; }
-) {
+template<typename TFamilies, typename TPredicate>
+size_t GetStatistics(const TFamilies& values, TPredicate predicate) {
     size_t count = 0;
 
     for (auto& [_, family] : values) {

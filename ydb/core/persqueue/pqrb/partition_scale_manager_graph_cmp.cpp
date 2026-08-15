@@ -77,15 +77,16 @@ namespace NKikimr::NPQ::NMirror {
         std::vector<TPartitionWithBounds> alterRootPartitions;
         alterRootPartitions.reserve(lastMissingRootPartitionId + 1);
         for (ui32 id = 0; id <= lastMissingRootPartitionId; ++id) {
-            const NYdb::NTopic::TPartitionInfo& sourcePartitionInfo = *sourcePartitionIndexMap.at(id);
+            const auto* sourcePartitionInfo = sourcePartitionIndexMap.at(id);
+            AFL_ENSURE(sourcePartitionInfo != nullptr)("d", "BuildPartitionIndexMap invariant failed")("id", id);
             const auto* targetNode = target.GetPartition(id);
             const bool newPart = targetNode == nullptr;
 
             TPartitionWithBounds part = TPartitionWithBounds{
                 .Id = id,
                 .Action = newPart ? EPartitionAction::Create : EPartitionAction::Modify,
-                .FromBound = sourcePartitionInfo.GetFromBound(),
-                .ToBound = sourcePartitionInfo.GetToBound(),
+                .FromBound = sourcePartitionInfo->GetFromBound(),
+                .ToBound = sourcePartitionInfo->GetToBound(),
             };
             alterRootPartitions.push_back(std::move(part));
         }

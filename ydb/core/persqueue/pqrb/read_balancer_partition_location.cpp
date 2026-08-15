@@ -116,7 +116,9 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
             return false;
         }
 
-        return iter->second.Ready;
+        return iter->second.Ready
+            && iter->second.NodeId.Defined()
+            && iter->second.Generation.Defined();
     };
 
     if (request.PartitionsSize() == 0) {
@@ -147,10 +149,13 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
 
     auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
         auto iter = TabletPipes.find(tabletId);
+        if (iter == TabletPipes.end() || !iter->second.NodeId.Defined() || !iter->second.Generation.Defined()) {
+            return false;
+        }
         auto* pResponse = evResponse->Record.AddLocations();
         pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
+        pResponse->SetNodeId(*iter->second.NodeId);
+        pResponse->SetGeneration(*iter->second.Generation);
 
         YDB_LOG_DEBUG("The partition location was added to response",
             {"logPrefix", LogPrefix()},
@@ -158,16 +163,32 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
             {"partitionId", partitionId},
             {"nodeId", pResponse->GetNodeId()},
             {"generation", pResponse->GetGeneration()});
+        return true;
     };
 
+    bool filled = true;
     if (request.PartitionsSize() == 0) {
         for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            addPartitionToResponse(partitionId, partitionInfo.TabletId);
+            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
+                filled = false;
+                break;
+            }
         }
     } else {
         for (const auto& partitionInRequest : request.GetPartitions()) {
-            addPartitionToResponse(partitionInRequest, PartitionsInfo.find(partitionInRequest)->second.TabletId);
+            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
+            if (partitionInfoIter == PartitionsInfo.end()
+                || !addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId))
+            {
+                filled = false;
+                break;
+            }
         }
+    }
+
+    if (!filled) {
+        SendPartitionsLocationError(sender, ctx);
+        return true;
     }
 
     evResponse->Record.SetStatus(true);

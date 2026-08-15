@@ -84,7 +84,7 @@ struct TPartitionFamily {
     std::unordered_set<ui32> WantedPartitions;
 
     // The reading session in which the family is currently being read.
-    TSession* Session;
+    TSession* Session = nullptr;
     // Partitions that are in the family
     std::unordered_set<ui32> LockedPartitions;
 
@@ -97,7 +97,7 @@ struct TPartitionFamily {
     std::unordered_map<TActorId, TSession*> SpecialSessions;
 
     TActorId LastPipe;
-    size_t MergeTo;
+    size_t MergeTo = 0;
 
     TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
     ~TPartitionFamily() = default;
@@ -260,30 +260,30 @@ struct TSession {
     TActorId Sender;
 
     TString ClientNode;
-    ui32 ProxyNodeId;
+    ui32 ProxyNodeId = 0;
     TInstant CreateTimestamp;
 
     // partitions which are reading
     std::unordered_set<ui32> Partitions;
     // the number of pipes connected from SessionActor to ReadBalancer
-    ui32 ServerActors;
+    ui32 ServerActors = 0;
 
     // The number of active partitions
-    size_t ActivePartitionCount;
+    size_t ActivePartitionCount = 0;
     // The number of inactive partitions
-    size_t InactivePartitionCount;
+    size_t InactivePartitionCount = 0;
     // The number of releasing partitions (active and inactive)
-    size_t ReleasingPartitionCount;
+    size_t ReleasingPartitionCount = 0;
 
     // The number of active families (the status equal Active)
-    size_t ActiveFamilyCount;
+    size_t ActiveFamilyCount = 0;
     // The number of releasing families (the status equal Releasing)
-    size_t ReleasingFamilyCount;
+    size_t ReleasingFamilyCount = 0;
 
     // The partition families that are being read by this session.
     std::unordered_map<size_t, TPartitionFamily*> Families;
 
-    size_t Order;
+    size_t Order = 0;
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;

@@ -376,6 +376,11 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
 
     if (IsActive()) {
+        if (!Session) {
+            YDB_LOG_CRIT("Attaching partitions to an active family without a session",
+                {"logPrefix", LogPrefix()});
+            return;
+        }
         if (!Session->AllPartitionsReadable(newPartitions)) {
             WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
             UpdateSpecialSessions();
@@ -463,7 +468,7 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
 
     UpdateSpecialSessions();
 
-    if (other->IsActive()) {
+    if (other->IsActive() && other->Session) {
         --other->Session->ActiveFamilyCount;
     }
 }
@@ -491,6 +496,9 @@ TPartition* TPartitionFamily::GetPartition(ui32 partitionId) {
 }
 
 bool TPartitionFamily::PossibleForBalance(TSession* session) {
+    if (!session) {
+        return false;
+    }
     if (!IsLonely()) {
         return true;
     }
@@ -581,6 +589,13 @@ void TPartitionFamily::UpdateSpecialSessions() {
 }
 
 void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx) {
+    if (!Session) {
+        YDB_LOG_CRIT("Lock partition without a session",
+            {"logPrefix", LogPrefix()},
+            {"partitionId", partitionId});
+        return;
+    }
+
     auto step = NextStep();
 
     YDB_LOG_INFO("Lock partition for generation step",
@@ -729,11 +744,14 @@ std::unordered_set<ui32> Intercept(const std::unordered_set<ui32>& values, const
 }
 
 bool IsRoot(const TPartitionGraph::Node* node, const std::unordered_set<ui32>& partitions) {
+    if (!node) {
+        return false;
+    }
     if (node->IsRoot()) {
         return true;
     }
     for (auto* p : node->DirectParents) {
-        if (partitions.contains(p->Id)) {
+        if (p && partitions.contains(p->Id)) {
             return false;
         }
     }
@@ -1101,10 +1119,17 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
             std::array<ui32, 1> partitionIds{id};
             if (family->CanAttach(partitionIds)) {
                 auto* node = GetPartitionGraph().GetPartition(id);
+                if (!node) {
+                    continue;
+                }
                 bool allParentsMerged = true;
                 if (node->DirectParents.size() > 1) {
                     // The partition was obtained as a result of the merge.
                     for (auto* c : node->DirectParents) {
+                        if (!c) {
+                            allParentsMerged = false;
+                            continue;
+                        }
                         auto* other = FindFamily(c->Id);
                         if (!other) {
                             allParentsMerged = false;
@@ -1351,7 +1376,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         if (family->Status != TPartitionFamily::EStatus::Active || family->IsCommon()) {
             continue;
         }
-        if (!family->SpecialSessions.contains(family->Session->Pipe)) {
+        if (!family->Session || !family->SpecialSessions.contains(family->Session->Pipe)) {
             YDB_LOG_DEBUG("Rebalance because exists the special session for it",
                 {"logPrefix", LogPrefix()},
                 {"family", family->DebugStr()});
@@ -1444,7 +1469,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         for (auto it = FamiliesRequireBalancing.begin(); it != FamiliesRequireBalancing.end();) {
             auto* family = it->second;
 
-            if (!family->IsActive()) {
+            if (!family->IsActive() || !family->Session) {
                 YDB_LOG_DEBUG("Skip balancing because it is not active",
                     {"logPrefix", LogPrefix()},
                     {"family", family->DebugStr()});

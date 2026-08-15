@@ -1054,10 +1054,10 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
             ev->Get()->GetReceiveAttemptId(),
             now
         );
-        if (prepared.IsError) {
+        if (prepared.IsError || !prepared.Node) {
             response.IsError = true;
-            response.ErrorStatus = prepared.ErrorStatus;
-            response.ErrorMessage = prepared.ErrorMessage;
+            response.ErrorStatus = prepared.IsError ? prepared.ErrorStatus : Ydb::StatusIds::SCHEME_ERROR;
+            response.ErrorMessage = prepared.IsError ? prepared.ErrorMessage : TString("No partitions for balancing");
         } else {
             response.PartitionId = prepared.Node->Id;
             response.TabletId = prepared.Node->TabletId;

@@ -921,6 +921,44 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_tabletinfo_path_with_foreign_node_id(cls):
+        """node_id outside the database leaves the whiteboard node filter empty, so the handler
+        replies right away and never builds the request - it must not use it afterwards."""
+        database_nodes = {node['Id'] for node in cls.get_viewer("/viewer/nodelist", {
+            'database': cls.dedicated_db,
+        })}
+        cluster_nodes = {node['Id'] for node in cls.get_viewer("/viewer/nodelist")}
+        foreign_nodes = cluster_nodes - database_nodes
+        assert foreign_nodes, 'no node outside %s: %s' % (cls.dedicated_db, cluster_nodes)
+
+        result = cls.get_viewer("/viewer/tabletinfo", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db,
+            'node_id': min(foreign_nodes),
+        })
+        assert 'status_code' not in result, result
+
+        # the reply is sent before the describe response arrives, so the crash, if any,
+        # happens after it - give every node time to die and check that none did
+        deadline = time.time() + 10
+        while True:
+            dead = cls.get_dead_mon_ports()
+            assert not dead, 'nodes died after the request: %s' % dead
+            if time.time() > deadline:
+                break
+            time.sleep(1)
+
+    @classmethod
+    def get_dead_mon_ports(cls):
+        dead = []
+        for node in list(cls.cluster.nodes.values()) + list(cls.cluster.slots.values()):
+            try:
+                requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1" % node.mon_port, timeout=5)
+            except requests.RequestException as e:
+                dead.append((node.mon_port, str(e)))
+        return dead
+
+    @classmethod
     def test_viewer_describe(cls):
         result = {}
         for name in cls.databases:

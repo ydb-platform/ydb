@@ -1031,7 +1031,11 @@ bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
 }
 
 TString TViewerPipeClient::GetUserSID() const {
-    return NACLib::TUserToken(GetRequest().GetUserTokenObject()).GetUserSID();
+    NACLibProto::TUserToken userToken;
+    if (!userToken.ParseFromString(GetRequest().GetUserTokenObject())) {
+        return {};
+    }
+    return userToken.GetUserSID();
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {

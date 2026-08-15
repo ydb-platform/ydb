@@ -67,6 +67,67 @@ Y_UNIT_TEST(DestroyFreeFamilyOnRereadParentDoesNotCrash) {
     UNIT_ASSERT_VALUES_EQUAL(info->Record.ReadSessionsSize(), 1u);
 }
 
+Y_UNIT_TEST(BalancingUnsubscribeRemovesOnlyMatchingSubscription) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc, false, false);
+
+    const TActorId subscriberA = tc.Runtime->AllocateEdgeActor();
+    const TActorId subscriberB = tc.Runtime->AllocateEdgeActor();
+    TActorId pipe = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvPersQueue::TEvBalancingSubscribe(subscriberA, "/Root/topic", "user"),
+        0,
+        GetPipeConfigWithRetries(),
+        pipe
+    );
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvPersQueue::TEvBalancingSubscribe(subscriberB, "/Root/topic", "user"),
+        0,
+        GetPipeConfigWithRetries(),
+        pipe
+    );
+
+    auto notifyA = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvBalancingSubscribeNotify>(subscriberA, TDuration::Seconds(10));
+    auto notifyB = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvBalancingSubscribeNotify>(subscriberB, TDuration::Seconds(10));
+    UNIT_ASSERT(notifyA);
+    UNIT_ASSERT(notifyB);
+
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvPersQueue::TEvBalancingUnsubscribe(subscriberA, "/Root/topic", "user"),
+        0,
+        GetPipeConfigWithRetries(),
+        pipe
+    );
+    DispatchFor(tc);
+
+    auto pipeClient = RegisterReadSession("session-notify", tc);
+    Y_UNUSED(pipeClient);
+
+    auto afterUnsubscribeA = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvBalancingSubscribeNotify>(
+        subscriberA,
+        TDuration::MilliSeconds(200)
+    );
+    UNIT_ASSERT_C(!afterUnsubscribeA, "Unsubscribed actor must not receive further notifications");
+
+    auto afterUnsubscribeB = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvBalancingSubscribeNotify>(
+        subscriberB,
+        TDuration::Seconds(10)
+    );
+    UNIT_ASSERT(afterUnsubscribeB);
+    UNIT_ASSERT(afterUnsubscribeB->Get()->Record.GetStatus() == NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbBalancing)
 
 } // namespace NKikimr::NPQ

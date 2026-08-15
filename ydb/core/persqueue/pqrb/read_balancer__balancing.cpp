@@ -2065,7 +2065,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TA
 
     std::vector<TSubscription>& subscriptions = it->second;
     std::vector<TSubscription> actualSubscriptions;
-    actualSubscriptions.resize(subscriptions.size());
+    actualSubscriptions.reserve(subscriptions.size());
 
     for (auto& [existsSender, existsConsumer] : subscriptions) {
         if (sender == existsSender && consumer == existsConsumer) {

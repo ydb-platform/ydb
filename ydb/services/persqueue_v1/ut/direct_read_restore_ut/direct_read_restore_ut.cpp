@@ -68,12 +68,17 @@ void WaitUntil(NActors::TTestActorRuntime& runtime, TCondition&& condition, TDur
     UNIT_ASSERT_C(runtime.DispatchEvents(opts, deadline), "WaitUntil condition not met before deadline");
 }
 
-TDriverConfig MakeAsyncDriverConfig(const TString& endpoint) {
+// With UseRealThreads=false the gRPC server is only served while DispatchEvents is
+// pumped, and SDK ListEndpoints (Sync/Async discovery) never completes — StreamRead
+// never opens and the read session hangs silently. EDiscoveryMode::Off routes RPCs
+// straight to the configured endpoint (like CreateSimpleWriter's
+// ClusterDiscoveryMode::Off), so StreamRead starts without any discovery round-trip.
+TDriverConfig MakeNoDiscoveryDriverConfig(const TString& endpoint) {
     TDriverConfig config;
     config.SetEndpoint(endpoint);
     config.SetDatabase("/Root");
     config.SetAuthToken("root@builtin");
-    config.SetDiscoveryMode(EDiscoveryMode::Async);
+    config.SetDiscoveryMode(EDiscoveryMode::Off);
     return config;
 }
 
@@ -240,7 +245,7 @@ struct TDirectReadRestoreEnv {
         });
 
         RunWithDispatch(runtime, [&] {
-            TDriver driver(MakeAsyncDriverConfig(Endpoint));
+            TDriver driver(MakeNoDiscoveryDriverConfig(Endpoint));
             TTopicClient client(driver);
             auto status = client.CreateTopic(
                 kTopic,
@@ -814,7 +819,7 @@ protected:
     // 1. Produce one large message so DirectRead has data to restore.
     void WriteOneMessage() {
         RunWithDispatch(Runtime(), [&] {
-            TDriver driver(MakeAsyncDriverConfig(Env.Endpoint));
+            TDriver driver(MakeNoDiscoveryDriverConfig(Env.Endpoint));
             auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
             if (!writer->Write(TString(1_MB, 'x'))) {
                 ythrow yexception() << "write failed";
@@ -1054,7 +1059,7 @@ protected:
     // Write under a reconnect storm without RunWithDispatch melting the actor queue.
     void WriteOneMessageSparse() {
         auto future = NThreading::Async([&] {
-            TDriver driver(MakeAsyncDriverConfig(Env.Endpoint));
+            TDriver driver(MakeNoDiscoveryDriverConfig(Env.Endpoint));
             auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
             if (!writer->Write(TString(1_MB, 'x'))) {
                 ythrow yexception() << "sparse write failed";
@@ -1185,7 +1190,8 @@ protected:
             driverLocal->Stop(true);
             return true;
         }, DispatchPool());
-        for (int i = 0; i < 40 && !stop.HasValue() && !stop.HasException(); ++i) {
+        // ~20s window so WaitCallbacksDrained spin logs can show stuck InFlight count.
+        for (int i = 0; i < 400 && !stop.HasValue() && !stop.HasException(); ++i) {
             Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
             Sleep(TDuration::MilliSeconds(50));
         }
@@ -1316,7 +1322,7 @@ Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
     std::shared_ptr<NTopic::IReadSession> reader;
 
     RunWithDispatch(Runtime(), [&] {
-        driver = std::make_shared<TDriver>(MakeAsyncDriverConfig(Env.Endpoint));
+        driver = std::make_shared<TDriver>(MakeNoDiscoveryDriverConfig(Env.Endpoint));
         TTopicClient topicClient(*driver);
 
         auto settings = TReadSessionSettings()
@@ -1416,7 +1422,7 @@ Y_UNIT_TEST(SdkHangWhenPublishFlushedBeforeMatchingStage) {
     std::shared_ptr<NTopic::IReadSession> reader;
 
     RunWithDispatch(Runtime(), [&] {
-        driver = std::make_shared<TDriver>(MakeAsyncDriverConfig(Env.Endpoint));
+        driver = std::make_shared<TDriver>(MakeNoDiscoveryDriverConfig(Env.Endpoint));
         TTopicClient topicClient(*driver);
 
         auto settings = TReadSessionSettings()
@@ -1511,12 +1517,8 @@ Y_UNIT_TEST(SdkHangWhenPublishFlushedBeforeMatchingStage) {
         "Stage(M) and failed Publish with no staged payload; later Stage left the read "
         "staged/unpublished; session stayed open with unread topic data but no further DataReceived");
 
-    // Do not StopSdkSparse here: after PQRB+PQ reboot with held Deregister, Close/Stop can block
-    // under UseRealThreads=false even when DataReceived recovered. Drop hooks and let fixture
-    // TearDownGrpcAndServer shut down gRPC/server (same as before this test existed).
-    Env.DropHooks();
-    reader.reset();
-    driver.reset();
+    // Repro Stop hang (InFlight drain investigation): keep StopSdkSparse.
+    StopSdkSparse(driver, reader);
 }
 
 // LOGBROKER-10590: forget-first after nested pipe restart with RestoredDirectReadId==0

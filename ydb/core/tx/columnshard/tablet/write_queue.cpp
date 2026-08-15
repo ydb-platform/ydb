@@ -35,6 +35,26 @@ TString OverloadReason(const EOverloadStatus status) {
             return {};
     }
 }
+
+// Statuses that mean "this shard cannot accept writes until compaction frees something up".
+// They are what the OverloadManager republishes as node-level overload to the flow control
+// managers, so a shard blocked on the small-blobs quota or on the metadata limit has to mark
+// its node hot exactly like a shard blocked on the compaction queue.
+bool IsCompactionWaitStatus(const EOverloadStatus status) {
+    switch (status) {
+        case EOverloadStatus::OverloadCompaction:
+        case EOverloadStatus::SmallBlobsQuota:
+        case EOverloadStatus::OverloadMetadata:
+            return true;
+        case EOverloadStatus::Disk:
+        case EOverloadStatus::ShardTxInFly:
+        case EOverloadStatus::ShardWritesInFly:
+        case EOverloadStatus::ShardWritesSizeInFly:
+        case EOverloadStatus::RejectProbability:
+        case EOverloadStatus::None:
+            return false;
+    }
+}
 }   // namespace
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
@@ -117,6 +137,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
         WriteTasksOverloadCheckerScheduled = false;
     }
     ui32 countTasks = 0;
+    bool compactionWait = false;
     const TMonotonic now = ctx.Monotonic();
     std::set<TInternalPathId> overloaded;
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
@@ -135,6 +156,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
             if (overloadStatus != EOverloadStatus::None) {
                 overloaded.emplace(it->GetInternalPathId());
                 Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
+                compactionWait |= IsCompactionWaitStatus(overloadStatus);
                 ++countTasks;
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                     {"event", "wait_overload"},
@@ -147,6 +169,18 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
             }
         } else {
             ++it;
+        }
+    }
+
+    if (compactionWait != CompactionOverloadReported) {
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        if (actorSystem) {
+            // Only advance local edge after a real send; otherwise retry next Drain. Reporting is
+            // a no-op while the feature flag is off, and advancing here would permanently hide the
+            // edge from a later runtime enablement.
+            if (NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), compactionWait)) {
+                CompactionOverloadReported = compactionWait;
+            }
         }
     }
 
@@ -166,6 +200,13 @@ void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {
+    if (CompactionOverloadReported) {
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        if (actorSystem) {
+            NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), false);
+            CompactionOverloadReported = false;
+        }
+    }
     Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(WriteTasks.size());
 }
 

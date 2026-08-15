@@ -89,9 +89,6 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
-# use_tls only picks the scheme, and token only decides whether the request is authenticated:
-# a cluster without authentication rejects a request with an Authorization header with 400,
-# and a cluster with authentication rejects a request without it with 401.
 def describe_path_self(cluster, root_path, database_path, use_tls=False, token=None):
     node = cluster.nodes[1]
     scheme = 'https' if use_tls else 'http'

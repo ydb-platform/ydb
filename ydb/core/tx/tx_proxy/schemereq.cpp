@@ -1418,10 +1418,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return msg;
     }
 
-    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path) {
-        return MakeAccessDeniedError(ctx, path, TString());
-    }
-
     TString MakeAccessDeniedError(const TActorContext& ctx, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken);
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1749,7 +1745,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 const TString errString = requestIt->RequireAnyOfAccess.empty()
                     ? MakeAccessDeniedError(ctx, entry.Path, access)
                     : TStringBuilder()
-                        << MakeAccessDeniedError(ctx, entry.Path)
+                        << MakeAccessDeniedError(ctx, entry.Path, TString())
                         << " with any of access rights AlterSchema or UpdateRow";
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

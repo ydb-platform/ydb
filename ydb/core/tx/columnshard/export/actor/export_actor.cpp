@@ -292,7 +292,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
-    ev->Record.SetTxId(tablePathId.GetRawValue());
+    ev->Record.SetTxId(*ExportSession->GetTxId());
     ev->Record.SetTablePath(backupTask.GetTableName());
     ev->Record.SetSchemaVersion(0);
 

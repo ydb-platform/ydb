@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     port_manager.cpp
     rdma_xdc_ut.cpp    
+    sync_actor_ut.cpp
 )
 
 PEERDIR(

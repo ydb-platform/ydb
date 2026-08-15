@@ -283,7 +283,9 @@ def main():
         # Second Flask app + thread: no conflict as long as nemesis_mon_port != app_port.
         monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
-        from ydb.tests.stability.nemesis.app import app
+        from ydb.tests.stability.nemesis.app import app, require_failure_model_or_die
+        # No usable cluster.yaml → no failure model → no chaos: exit instead of serving unguarded.
+        require_failure_model_or_die(app)
         app.run(
             host=settings.app_host,
             port=settings.app_port,

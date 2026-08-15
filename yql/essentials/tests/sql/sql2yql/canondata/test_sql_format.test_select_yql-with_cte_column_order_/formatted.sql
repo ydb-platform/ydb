@@ -24,29 +24,18 @@ FROM
 WITH x (a, b) AS (
     SELECT
         1 AS a,
+        '2'
+)
+SELECT
+    *
+FROM
+    x
+;
+
+WITH x (a, b) AS (
+    SELECT
+        1 AS a,
         '2' AS b
-)
-SELECT
-    *
-FROM
-    x
-;
-
-WITH x (a, b) AS (
-    SELECT
-        1 AS b,
-        '2' AS a
-)
-SELECT
-    *
-FROM
-    x
-;
-
-WITH x (a, b) AS (
-    SELECT
-        1 AS c,
-        '2' AS d
 )
 SELECT
     *

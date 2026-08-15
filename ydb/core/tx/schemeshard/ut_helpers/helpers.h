@@ -337,6 +337,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterSecret);
     GENERIC_HELPERS(DropSecret);
     DROP_BY_PATH_ID_HELPERS(DropSecret);
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
 
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery);
@@ -548,6 +549,13 @@ namespace NSchemeShardUT_Private {
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    TEvImport::TEvForgetImportRequest* ForgetImportRequest(ui64 txId, const TString& dbName, ui64 importId);
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId);
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId);
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// backup

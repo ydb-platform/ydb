@@ -499,6 +499,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
     auto type = columnDesc.GetType();
     std::optional<Ydb::TypedValue> defaultFromLiteral;
+    const NKikimrSchemeOp::TDefaultExpressionColumnDescription* generated = nullptr;
     switch (columnDesc.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             defaultFromLiteral = columnDesc.GetDefaultFromLiteral();
@@ -513,6 +514,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
             } else if (lowerType == "int16") {
                 type = "Serial2";
             }
+            break;
+        }
+        case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
+            generated = &columnDesc.GetDefaultFromExpression();
             break;
         }
         default: break;
@@ -530,6 +535,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
     if (defaultFromLiteral) {
         Stream << " DEFAULT ";
         Format(defaultFromLiteral.value());
+    }
+    if (generated) {
+        Stream << " GENERATED ALWAYS AS (" << generated->GetExprText() << ")";
+        Stream << (generated->GetStored() ? " STORED" : " VIRTUAL");
     }
 }
 
@@ -2121,6 +2130,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeName("SCAN_READER_POLICY_NAME", paramsStr);
         paramsStr << "=";
         EscapeString(options.GetScanReaderPolicyName(), paramsStr);
+        del = ", ";
+    }
+    if (options.HasDeduplicationEnabled()) {
+        paramsStr << del;
+        EscapeName("DEDUPLICATION_ENABLED", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetDeduplicationEnabled(), paramsStr);
         del = ", ";
     }
     if (options.HasCompactionPlannerConstructor()) {

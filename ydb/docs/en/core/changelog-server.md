@@ -2,6 +2,15 @@
 
 ## Version 26.1 {#26-1}
 
+### Version 26.1.1.22 {#26-1-1-22}
+
+Release date: July 27, 2026.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46894) Kafka API authentication for local users: with enabled `DomainLoginOnly` setting, users could not access tenant databases.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46946) a crash (use-after-free) when updating a vector index caused by asynchronous ReadActor destruction.
+
 ### Version 26.1.1.20 {#26-1-1-20}
 
 Release date: July 2, 2026.

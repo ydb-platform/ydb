@@ -1,3 +1,7 @@
+RECURSE(
+    upload_udf
+)
+
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

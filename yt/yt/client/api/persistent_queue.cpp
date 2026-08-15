@@ -83,17 +83,17 @@ public:
         , StateTablePath_(stateTablePath)
         , TabletIndexes_(PrepareTabletIndexes(tabletIndexes))
         , PollerId_(TGuid::Create())
-        , Logger(ApiLogger().WithTag("PollerId: %v", PollerId_))
+        , Logger(ApiLogger().WithTag("PollerId", PollerId_))
         , Invoker_(Client_->GetConnection()->GetInvoker())
     {
         YT_VERIFY(Config_);
 
         RecreateState(false);
 
-        YT_LOG_INFO("Persistent queue poller initialized (DataTablePath: %v, StateTablePath: %v, TabletIndexes: %v)",
-            DataTablePath_,
-            StateTablePath_,
-            TabletIndexes_);
+        YT_TLOG_INFO("Persistent queue poller initialized")
+            .With("DataTablePath", DataTablePath_)
+            .With("StateTablePath", StateTablePath_)
+            .With("TabletIndexes", TabletIndexes_);
 
         PollExecutors_.reserve(TabletIndexes_.size());
         for (int tabletIndex : TabletIndexes_) {
@@ -287,7 +287,7 @@ private:
 
     void DoLoadState(const TStatePtr& state)
     {
-        YT_LOG_INFO("Loading queue poller state for initialization");
+        YT_TLOG_INFO("Loading queue poller state for initialization");
 
         auto stateRows = ReadStateTable(Client_);
 
@@ -318,13 +318,13 @@ private:
         }
 
         for (const auto& [tabletIndex, tablet] : state->TabletMap) {
-            YT_LOG_DEBUG("Tablet state collected (TabletIndex: %v, ConsumedRowIndexes: %v, FetchRowIndex: %v)",
-                tabletIndex,
-                tablet.ConsumedRowIndexes,
-                tablet.FetchRowIndex);
+            YT_TLOG_DEBUG("Tablet state collected")
+                .With("TabletIndex", tabletIndex)
+                .With("ConsumedRowIndexes", tablet.ConsumedRowIndexes)
+                .With("FetchRowIndex", tablet.FetchRowIndex);
         }
 
-        YT_LOG_INFO("Queue poller state loaded");
+        YT_TLOG_INFO("Queue poller state loaded");
     }
 
     void LoadState(const TStatePtr& state)
@@ -333,7 +333,8 @@ private:
             DoLoadState(state);
         } catch (const std::exception& ex) {
             OnStateFailed(state);
-            YT_LOG_ERROR(ex, "Error loading queue poller state");
+            YT_TLOG_ERROR("Error loading queue poller state")
+                .With(ex);
         }
     }
 
@@ -371,10 +372,10 @@ private:
         {
             auto guard = Guard(state->SpinLock);
             if (tablet.FetchRowIndex > tablet.LastTrimmedRowIndex + Config_->MaxFetchedUntrimmedRowCount) {
-                YT_LOG_INFO("Number of fetched but trimmed rows exceeds the limit; fetching new rows suspended (TabletIndex: %v, RowCount: %v, Limit: %v)",
-                    tabletIndex,
-                    tablet.FetchRowIndex - tablet.LastTrimmedRowIndex,
-                    Config_->MaxFetchedUntrimmedRowCount);
+                YT_TLOG_INFO("Number of fetched but trimmed rows exceeds the limit; fetching new rows suspended")
+                    .With("TabletIndex", tabletIndex)
+                    .With("RowCount", tablet.FetchRowIndex - tablet.LastTrimmedRowIndex)
+                    .With("Limit", Config_->MaxFetchedUntrimmedRowCount);
                 return;
             }
             if (state->BatchesDataWeight > Config_->MaxPrefetchDataWeight) {
@@ -387,10 +388,10 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Started fetching data (TabletIndex: %v, FetchRowIndex: %v, RowLimit: %v)",
-            tabletIndex,
-            tablet.FetchRowIndex,
-            rowLimit);
+        YT_TLOG_DEBUG("Started fetching data")
+            .With("TabletIndex", tabletIndex)
+            .With("FetchRowIndex", tablet.FetchRowIndex)
+            .With("RowLimit", rowLimit);
 
         // TODO(babenko): escaping
         auto query = Format(
@@ -409,9 +410,9 @@ private:
         const auto& schema = rowset->GetSchema();
         auto rows = rowset->GetRows();
 
-        YT_LOG_DEBUG("Finished fetching data (TabletIndex: %v, RowCount: %v)",
-            tabletIndex,
-            rows.Size());
+        YT_TLOG_DEBUG("Finished fetching data")
+            .With("TabletIndex", tabletIndex)
+            .With("RowCount", rows.Size());
 
         if (rows.Empty()) {
             return;
@@ -449,11 +450,10 @@ private:
                 batch.DataWeight += GetDataWeight(rows[index - tablet.FetchRowIndex]);
             }
 
-            YT_LOG_DEBUG("Rows fetched (TabletIndex: %v, RowIndexes: %v-%v, DataWeight: %v)",
-                tabletIndex,
-                batchBeginRowIndex,
-                batchEndRowIndex - 1,
-                batch.DataWeight);
+            YT_TLOG_DEBUG("Rows fetched")
+                .With("TabletIndex", tabletIndex)
+                .WithFormat("RowIndexes", "%v-%v", batchBeginRowIndex, batchEndRowIndex - 1)
+                .With("DataWeight", batch.DataWeight);
 
             batches.emplace_back(std::move(batch));
             batchBeginRowIndex = -1;
@@ -509,8 +509,9 @@ private:
         try {
             DoFetchTablet(tabletIndex);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Error fetching queue data (TabletIndex: %v)",
-                tabletIndex);
+            YT_TLOG_ERROR("Error fetching queue data")
+                .With("TabletIndex", tabletIndex)
+                .With(ex);
         }
     }
 
@@ -537,10 +538,9 @@ private:
         for (auto& tuple : toFulfill) {
             const auto& rowset = std::get<0>(tuple);
             auto& promise = std::get<1>(tuple);
-            YT_LOG_DEBUG("Rows offered (TabletIndex: %v, RowIndexes: %v-%v)",
-                rowset.TabletIndex,
-                rowset.BeginRowIndex,
-                rowset.EndRowIndex - 1);
+            YT_TLOG_DEBUG("Rows offered")
+                .With("TabletIndex", rowset.TabletIndex)
+                .WithFormat("RowIndexes", "%v-%v", rowset.BeginRowIndex, rowset.EndRowIndex - 1);
             promise.Set(New<TPolledRowset>(this, state, rowset));
         }
     }
@@ -557,10 +557,9 @@ private:
 
         State_->BatchesRowCount += batch.RowCount;
         State_->BatchesDataWeight += batch.DataWeight;
-        YT_LOG_DEBUG("Rows reclaimed (TabletIndex: %v RowIndexes: %v-%v)",
-            batch.TabletIndex,
-            batch.BeginRowIndex,
-            batch.EndRowIndex - 1);
+        YT_TLOG_DEBUG("Rows reclaimed")
+            .With("TabletIndex", batch.TabletIndex)
+            .WithFormat("RowIndexes", "%v-%v", batch.BeginRowIndex, batch.EndRowIndex - 1);
         State_->Batches.emplace_back(std::move(batch));
 
         TryFulfillPromises(state, &guard);
@@ -610,7 +609,7 @@ private:
                     }
                     OnStateFailed(state);
                     THROW_ERROR_EXCEPTION("Some of the offered rows were already consumed")
-                        << TErrorAttribute("consumed_row_indexes", rowIndexes);
+                        .With("consumed_row_indexes", rowIndexes);
                 }
             }
 
@@ -642,7 +641,7 @@ private:
                     if (rowIndex >= batch.BeginRowIndex) {
                         OnStateFailed(state);
                         THROW_ERROR_EXCEPTION("Some of the offered rows were already trimmed")
-                            << TErrorAttribute("trimmed_row_index", rowIndex);
+                            .With("trimmed_row_index", rowIndex);
                     }
                 }
             }
@@ -672,31 +671,29 @@ private:
                     MakeSharedRange(std::move(rows), std::move(rowBuffer)));
             }
 
-            YT_LOG_DEBUG("Rows processing confirmed (TabletIndex: %v, RowIndexes: %v-%v, TransactionId: %v)",
-                batch.TabletIndex,
-                batch.BeginRowIndex,
-                batch.EndRowIndex - 1,
-                transaction->GetId());
+            YT_TLOG_DEBUG("Rows processing confirmed")
+                .With("TabletIndex", batch.TabletIndex)
+                .WithFormat("RowIndexes", "%v-%v", batch.BeginRowIndex, batch.EndRowIndex - 1)
+                .With("TransactionId", transaction->GetId());
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error confirming persistent queue rows")
-                << TErrorAttribute("poller_id", PollerId_)
-                << TErrorAttribute("transaction_id", transaction->GetId())
-                << TErrorAttribute("tablet_index", batch.TabletIndex)
-                << TErrorAttribute("begin_row_index", batch.BeginRowIndex)
-                << TErrorAttribute("end_row_index", batch.EndRowIndex)
-                << TErrorAttribute("data_table_path", DataTablePath_)
-                << TErrorAttribute("state_table_path", StateTablePath_)
-                << ex;
+                .With("poller_id", PollerId_)
+                .With("transaction_id", transaction->GetId())
+                .With("tablet_index", batch.TabletIndex)
+                .With("begin_row_index", batch.BeginRowIndex)
+                .With("end_row_index", batch.EndRowIndex)
+                .With("data_table_path", DataTablePath_)
+                .With("state_table_path", StateTablePath_)
+                .With(ex);
         }
     }
 
 
     void OnBatchCommitted(const TBatch& batch)
     {
-        YT_LOG_DEBUG("Rows processing committed (TabletIndex: %v RowIndexes: %v-%v)",
-            batch.TabletIndex,
-            batch.BeginRowIndex,
-            batch.EndRowIndex - 1);
+        YT_TLOG_DEBUG("Rows processing committed")
+            .With("TabletIndex", batch.TabletIndex)
+            .WithFormat("RowIndexes", "%v-%v", batch.BeginRowIndex, batch.EndRowIndex - 1);
     }
 
 
@@ -708,7 +705,7 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Getting tablet infos");
+        YT_TLOG_DEBUG("Getting tablet infos");
 
         auto asyncTabletInfos = Client_->GetTabletInfos(
             DataTablePath_,
@@ -722,21 +719,21 @@ private:
             YT_VERIFY(tabletIndexToInfo.emplace(TabletIndexes_[index], &tabletInfos[index]).second);
         }
 
-        YT_LOG_DEBUG("Tablet infos received");
+        YT_TLOG_DEBUG("Tablet infos received");
 
-        YT_LOG_DEBUG("Starting state trim transaction");
+        YT_TLOG_DEBUG("Starting state trim transaction");
 
         auto transaction = WaitFor(Client_->StartTransaction(ETransactionType::Tablet))
             .ValueOrThrow();
 
-        YT_LOG_DEBUG("State trim transaction started (TransactionId: %v)",
-            transaction->GetId());
+        YT_TLOG_DEBUG("State trim transaction started")
+            .With("TransactionId", transaction->GetId());
 
-        YT_LOG_DEBUG("Loading queue poller state for trim");
+        YT_TLOG_DEBUG("Loading queue poller state for trim");
 
         auto stateRows = ReadStateTable(transaction);
 
-        YT_LOG_DEBUG("Queue poller state loaded");
+        YT_TLOG_DEBUG("Queue poller state loaded");
 
         struct TTabletStatistics
         {
@@ -806,27 +803,27 @@ private:
                         nameTable,
                         MakeSharedRange(std::move(writeRows), std::move(rowBuffer)));
 
-                    YT_LOG_DEBUG("Tablet state update scheduled (TabletIndex: %v, TrimRowIndex: %v)",
-                        tabletIndex,
-                        stateTrimRowIndex);
+                    YT_TLOG_DEBUG("Tablet state update scheduled")
+                        .With("TabletIndex", tabletIndex)
+                        .With("TrimRowIndex", stateTrimRowIndex);
                 }
 
                 const auto& tabletInfo = GetOrCrash(tabletIndexToInfo, tabletIndex);
                 if (stateTrimRowIndex - tabletInfo->TrimmedRowCount >= Config_->UntrimmedDataRowsHigh) {
                     statistics.TrimmedRowCountRequest = stateTrimRowIndex - Config_->UntrimmedDataRowsLow;
-                    YT_LOG_DEBUG("Tablet data trim scheduled (TabletIndex: %v, TrimmedRowCount: %v)",
-                        tabletIndex,
-                        statistics.TrimmedRowCountRequest);
+                    YT_TLOG_DEBUG("Tablet data trim scheduled")
+                        .With("TabletIndex", tabletIndex)
+                        .With("TrimmedRowCount", statistics.TrimmedRowCountRequest);
                 }
             }
         }
 
-        YT_LOG_DEBUG("Committing state trim transaction");
+        YT_TLOG_DEBUG("Committing state trim transaction");
 
         WaitFor(transaction->Commit())
             .ThrowOnError();
 
-        YT_LOG_DEBUG("State trim transaction committed");
+        YT_TLOG_DEBUG("State trim transaction committed");
 
         std::vector<TFuture<void>> dataTrimAsyncResults;
         for (const auto& [tabletIndex, statistics] : tabletStatisticsMap) {
@@ -842,7 +839,7 @@ private:
             WaitFor(AllSucceeded(dataTrimAsyncResults))
                 .ThrowOnError();
 
-            YT_LOG_DEBUG("Tablet data trim completed");
+            YT_TLOG_DEBUG("Tablet data trim completed");
         }
     }
 
@@ -851,7 +848,8 @@ private:
         try {
             GuardedTrim();
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Error trimming queue poller");
+            YT_TLOG_ERROR("Error trimming queue poller")
+                .With(ex);
         }
     }
 

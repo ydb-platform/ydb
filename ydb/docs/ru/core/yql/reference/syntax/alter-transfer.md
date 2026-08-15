@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # ALTER TRANSFER
 
 Вызов `ALTER TRANSFER` изменяет параметры и состояние экземпляра [трансфера](../../../concepts/transfer.md).

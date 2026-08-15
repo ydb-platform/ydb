@@ -165,7 +165,9 @@ namespace NKikimr::NBlobDepot {
 
         void HandleBalancerTick() {
             RefreshScheduled = false;
+            RefreshInFlight = false;
             IssueBalancerRequest();
+            ScheduleNextRefresh();
         }
 
         void HandleRefreshNow() {
@@ -182,8 +184,8 @@ namespace NKikimr::NBlobDepot {
                 if (!host.empty()) {
                     ui16 port = BalancerProxyPort();
                     if (TStringBuf h, p; TStringBuf(host).TrySplit(':', h, p)) {
-                        host = TString(h);
                         TryFromString(p, port);
+                        host = TString(h);
                     }
 
                     const TString endpoint = TStringBuilder() << host << ':' << port;
@@ -217,6 +219,7 @@ namespace NKikimr::NBlobDepot {
             BuildInnerWrapper(endpoint);
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
+                ScheduleNextRefresh();
             }
             Become(&TThis::StateWork);
         }

@@ -1,5 +1,7 @@
 #include "distconf_quorum.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {

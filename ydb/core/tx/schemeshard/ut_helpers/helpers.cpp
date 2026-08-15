@@ -1126,6 +1126,13 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret)
 
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateSecretRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
     GENERIC_HELPERS(AlterStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
@@ -1516,6 +1523,34 @@ namespace NSchemeShardUT_Private {
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
             Ydb::StatusIds::StatusCode expectedStatus) {
         return TestCancelImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId, expectedStatus);
+    }
+
+    TEvImport::TEvForgetImportRequest* ForgetImportRequest(ui64 txId, const TString& dbName, ui64 importId) {
+        return new TEvImport::TEvForgetImportRequest(txId, dbName, importId);
+    }
+
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId) {
+        AsyncSend(runtime, schemeshardId, ForgetImportRequest(txId, dbName, importId));
+    }
+
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId) {
+        AsyncForgetImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId);
+    }
+
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        AsyncForgetImport(runtime, schemeshardId, txId, dbName, importId);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvImport::TEvForgetImportResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        return TestForgetImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId, expectedStatus);
     }
 
     NKikimrBackup::TEvGetIncrementalBackupResponse TestGetIncrementalBackup(TTestActorRuntime& runtime, ui64 id, const TString& dbName,

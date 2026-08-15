@@ -638,14 +638,43 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         const auto& error = result.GetError();
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
-            return PassAway();
+            auto request = Aws::S3::Model::HeadObjectRequest()
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
+            this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+            return this->Become(&TThis::StateCheckUploadedData);
         }
 
         if (CanRetry(error)) {
-            if (error.GetExceptionName() == "FsCompleteMultipartUploadFailed") {
+            if (RequiresNewUpload(error)) {
                 ForceNewUpload = true;
             }
             UploadId.Clear(); // force getting info after restart
+            Retry();
+        } else {
+            NActors::NStructuredLog::TTextWriter writer;
+
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
+            PassAway();
+        }
+    }
+
+    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
+
+        if (result.IsSuccess()) {
+            return PassAway();
+        }
+
+        const auto& error = result.GetError();
+        if (CanRetry(error)) {
+            UploadId.Clear();
             Retry();
         } else {
             NActors::NStructuredLog::TTextWriter writer;
@@ -697,6 +726,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     bool CanRetry(const Aws::S3::S3Error& error) const {
         return Attempt < Retries && NWrappers::ShouldRetry(error);
+    }
+
+    static bool RequiresNewUpload(const Aws::S3::S3Error& error) {
+        const auto& exceptionName = error.GetExceptionName();
+        return exceptionName == "FsCompleteMultipartUploadFailed"
+            || exceptionName == "InvalidPart"
+            || exceptionName == "InvalidPartOrder";
     }
 
     void Retry() {
@@ -928,6 +964,16 @@ public:
             hFunc(TEvExternalStorage::TEvUploadPartResponse, Handle);
             hFunc(TEvExternalStorage::TEvCompleteMultipartUploadResponse, Handle);
             hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateCheckUploadedData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateCheckUploadedData"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -21,13 +22,15 @@ namespace configuration
 class JaegerRemoteSamplerConfiguration : public SamplerConfiguration
 {
 public:
+  static constexpr std::size_t kDefaultIntervalMs = 60000;
+
   void Accept(SamplerConfigurationVisitor *visitor) const override
   {
     visitor->VisitJaegerRemote(this);
   }
 
   std::string endpoint;
-  std::size_t interval{0};
+  std::size_t interval{kDefaultIntervalMs};
   std::unique_ptr<SamplerConfiguration> initial_sampler;
 };
 

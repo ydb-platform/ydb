@@ -22,6 +22,7 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
+    [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
@@ -47,6 +48,7 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -63,6 +65,8 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).
@@ -81,6 +85,8 @@ public:
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
+
+    bool operator==(const TVChunkConfig& other) const;
 
     [[nodiscard]] TString DebugPrint() const;
 

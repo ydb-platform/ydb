@@ -1,7 +1,8 @@
 #pragma once
 
 #include "common.h"
-#include "default_map.h"
+
+#include <library/cpp/yt/containers/default_map.h>
 
 namespace NYT {
 

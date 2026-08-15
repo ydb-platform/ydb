@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NPQ::NPartitionChooser {
@@ -95,7 +96,7 @@ public:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ENSURE(!KqpSessionId.empty());
+        AFL_ENSURE(!KqpSessionId.empty());
 
         return true;
     }
@@ -164,7 +165,7 @@ public:
 
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
-        Y_ENSURE(!TxId.empty());
+        AFL_ENSURE(!TxId.empty());
 
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();

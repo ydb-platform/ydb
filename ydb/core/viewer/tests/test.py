@@ -985,7 +985,7 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_acl_write(cls):
-        return [
+        result = [
             cls.post_viewer("/viewer/acl", {
                 'database': cls.dedicated_db,
                 'path': cls.dedicated_db
@@ -1024,6 +1024,41 @@ class TestViewer(object):
                 'database': cls.dedicated_db,
                 'path': cls.dedicated_db
             })]
+
+        # An explicit InheritanceType posted to /viewer/acl must be reconstructed
+        # exactly, so a AddAccess -> RemoveAccess round trip removes the original ACE.
+        for inheritance_type in ['None', 'Object', 'Container', 'Only', 'Inherit']:
+            result.append(cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'AddAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read'],
+                    'InheritanceType': [inheritance_type]
+                }]
+            }))
+            result.append(cls.get_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }))
+            result.append(cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'RemoveAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read'],
+                    'InheritanceType': [inheritance_type]
+                }]
+            }))
+
+        result.append(cls.get_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }))
+
+        return result
 
     @classmethod
     def test_viewer_acl_write_invalid(cls):

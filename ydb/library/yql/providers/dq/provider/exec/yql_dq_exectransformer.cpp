@@ -1118,7 +1118,7 @@ private:
                     if (state->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues());
-                        ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
+                        ctx.IssueManager.RaiseIssues(issues);
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 

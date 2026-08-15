@@ -1028,6 +1028,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockVariantItem(blockVariantValue);
     });
 
+    AddCallable("BlockDynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.BlockDynamicVariant(item, index, varType);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();
@@ -1482,6 +1489,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto type = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto serialized = MkqlBuildExpr(node.Tail(), ctx);
         return ctx.ProgramBuilder.Unpickle(type, serialized);
+    });
+
+    AddCallable("AsErased", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return ctx.ProgramBuilder.AsErased(MkqlBuildExpr(node.Head(), ctx));
+    });
+
+    AddCallable("PeekErased", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto resource = MkqlBuildExpr(node.Head(), ctx);
+        auto expectedType = ctx.BuildType(node.Tail(), *node.Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        return ctx.ProgramBuilder.PeekErased(resource, expectedType);
     });
 
     AddCallable("Optional", [](const TExprNode& node, TMkqlBuildContext& ctx) {

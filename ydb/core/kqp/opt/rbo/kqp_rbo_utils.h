@@ -35,6 +35,8 @@ TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right)
 
 bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 
+bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen);
+
 template <class T> void AddUnique(TVector<T>& toAdd, TVector<T>& target) {
     for (const auto & e : toAdd) {
         if (std::find(target.begin(), target.end(), e) == target.end()) {

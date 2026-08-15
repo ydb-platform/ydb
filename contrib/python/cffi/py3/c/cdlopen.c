@@ -7,7 +7,7 @@ static void *cdlopen_fetch(PyObject *libname, void *libhandle,
 
     if (libhandle == NULL) {
         PyErr_Format(FFIError, "library '%s' has been closed",
-                     PyText_AS_UTF8(libname));
+                     PyUnicode_AsUTF8(libname));
         return NULL;
     }
 
@@ -16,7 +16,7 @@ static void *cdlopen_fetch(PyObject *libname, void *libhandle,
     if (address == NULL) {
         const char *error = dlerror();
         PyErr_Format(FFIError, "symbol '%s' not found in library '%s': %s",
-                     symbol, PyText_AS_UTF8(libname), error);
+                     symbol, PyUnicode_AsUTF8(libname), error);
     }
     return address;
 }
@@ -32,7 +32,7 @@ static int cdlopen_close(PyObject *libname, void *libhandle)
     if (libhandle != NULL && dlclose(libhandle) != 0) {
         const char *error = dlerror();
         PyErr_Format(FFIError, "closing library '%s': %s",
-                     PyText_AS_UTF8(libname), error);
+                     PyUnicode_AsUTF8(libname), error);
         return -1;
     }
     return 0;
@@ -195,13 +195,6 @@ static int ffiobj_init(PyObject *self, PyObject *args, PyObject *kwds)
                 _CFFI_GETOP(nglobs[i].type_op) == _CFFI_OP_ENUM) {
                 PyObject *o = PyTuple_GET_ITEM(globals, i * 2 + 1);
                 nglobs[i].address = &_cdl_realize_global_int;
-#if PY_MAJOR_VERSION < 3
-                if (PyInt_Check(o)) {
-                    nintconsts[i].neg = PyInt_AS_LONG(o) <= 0;
-                    nintconsts[i].value = (long long)PyInt_AS_LONG(o);
-                }
-                else
-#endif
                 {
                     nintconsts[i].neg = PyObject_RichCompareBool(o, Py_False,
                                                                  Py_LE);

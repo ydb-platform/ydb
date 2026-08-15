@@ -15,6 +15,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
@@ -116,7 +117,7 @@ void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
     ResourceMetrics = Executor()->GetResourceMetrics();
     Become(&TThis::StateWork);
     if (Executor()->GetStats().IsFollower())
-        Y_ABORT("is follower works well with Balancer?");
+        PQ_ENSURE(false)("reason", "is follower works well with Balancer?");
     else
         Execute(new TTxPreInit(this), ctx);
 }
@@ -370,7 +371,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     std::vector<ui32> deletedPartitions;
     for (auto& p : PartitionsInfo) {
         if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
-            Y_ABORT("deleting of partitions is not fully supported yet");
+            PQ_ENSURE(false)("reason", "deleting of partitions is not fully supported yet")("partition_id", p.first);
             deletedPartitions.push_back(p.first);
         }
     }

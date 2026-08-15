@@ -3,6 +3,7 @@
 #include "pipe_utils.h"
 
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NPQ::NPartitionChooser {
@@ -19,7 +20,7 @@ public:
     }
 
     void SendRequest(const NActors::TActorContext& ctx) {
-        Y_ENSURE(BalancerTabletId);
+        AFL_ENSURE(BalancerTabletId);
 
         if (!Pipe) {
             NTabletPipe::TClientConfig clientConfig;

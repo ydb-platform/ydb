@@ -2,6 +2,7 @@
 #include "grafana_dashboard_source.h"
 #include "grafana_dashboard_search_source.h"
 #include "grafana_logging_source.h"
+#include "url_source.h"
 
 #include <util/generic/yexception.h>
 
@@ -23,10 +24,10 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
 }
 
 void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
-    if (config.GetSource().empty()) {
-        ythrow yexception() << "source is required";
+    if (config.GetSource() == "url") {
+        ValidateUrlSourceConfig(config, metaSettings);
+        return;
     }
-
     if (config.GetSource() == "grafana/dashboard") {
         ValidateGrafanaDashboardSourceConfig(config, metaSettings);
         return;
@@ -46,6 +47,9 @@ void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMeta
 std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {
     ValidateLinkSourceConfig(config, metaSettings);
 
+    if (config.GetSource() == "url") {
+        return MakeUrlSource(std::move(config), metaSettings);
+    }
     if (config.GetSource() == "grafana/dashboard") {
         return MakeGrafanaDashboardSource(std::move(config), metaSettings);
     }

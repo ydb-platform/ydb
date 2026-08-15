@@ -47,23 +47,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockVariantItemTest) {
 Y_UNIT_TEST(TupleVariant_Ui32_TwoAlternatives) {
     using TVariant = std::variant<ui32, ui32>;
     TVector<TVariant> data = {
-        TVariant(std::in_place_index<0>, 1u),
-        TVariant(std::in_place_index<1>, 2u),
-        TVariant(std::in_place_index<0>, 3u),
+        TVariant(std::in_place_index<0>, 1U),
+        TVariant(std::in_place_index<1>, 2U),
+        TVariant(std::in_place_index<0>, 3U),
     };
-    TVector<ui32> expected = {1u, 2u, 3u};
+    TVector<ui32> expected = {1U, 2U, 3U};
     TestBlockVariantItem(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_Ui32_ThreeAlternatives) {
     using TVariant = std::variant<ui32, ui32, ui32>;
     TVector<TVariant> data = {
-        TVariant(std::in_place_index<0>, 1u),
-        TVariant(std::in_place_index<1>, 2u),
-        TVariant(std::in_place_index<2>, 3u),
-        TVariant(std::in_place_index<0>, 4u),
+        TVariant(std::in_place_index<0>, 1U),
+        TVariant(std::in_place_index<1>, 2U),
+        TVariant(std::in_place_index<2>, 3U),
+        TVariant(std::in_place_index<0>, 4U),
     };
-    TVector<ui32> expected = {1u, 2u, 3u, 4u};
+    TVector<ui32> expected = {1U, 2U, 3U, 4U};
     TestBlockVariantItem(data, expected);
 }
 
@@ -82,11 +82,11 @@ Y_UNIT_TEST(TupleVariant_NestedTuple_TwoAlternatives) {
     using TInner = std::tuple<ui32, TString>;
     using TVariant = std::variant<TInner, TInner>;
     TVector<TVariant> data = {
-        TVariant(std::in_place_index<0>, TInner{1u, "a"}),
-        TVariant(std::in_place_index<1>, TInner{2u, "b"}),
-        TVariant(std::in_place_index<0>, TInner{3u, "c"}),
+        TVariant(std::in_place_index<0>, TInner{1U, "a"}),
+        TVariant(std::in_place_index<1>, TInner{2U, "b"}),
+        TVariant(std::in_place_index<0>, TInner{3U, "c"}),
     };
-    TVector<TInner> expected = {TInner{1u, "a"}, TInner{2u, "b"}, TInner{3u, "c"}};
+    TVector<TInner> expected = {TInner{1U, "a"}, TInner{2U, "b"}, TInner{3U, "c"}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -94,9 +94,9 @@ Y_UNIT_TEST(TupleVariant_NestedVariant_TwoAlternatives) {
     using TInner = std::variant<ui32, ui32>;
     using TVariant = std::variant<TInner, TInner>;
     TVector<TVariant> data = {
-        TVariant(std::in_place_index<0>, TInner(std::in_place_index<0>, 1u)),
-        TVariant(std::in_place_index<1>, TInner(std::in_place_index<1>, 2u)),
-        TVariant(std::in_place_index<0>, TInner(std::in_place_index<1>, 3u)),
+        TVariant(std::in_place_index<0>, TInner(std::in_place_index<0>, 1U)),
+        TVariant(std::in_place_index<1>, TInner(std::in_place_index<1>, 2U)),
+        TVariant(std::in_place_index<0>, TInner(std::in_place_index<1>, 3U)),
     };
     TVector<TInner> expected = ExtractCommonAlternatives(data);
     TestBlockVariantItem(data, expected);
@@ -106,11 +106,11 @@ Y_UNIT_TEST(TupleVariant_OptionalInnerUi32_TwoAlternatives) {
     using TInner = TMaybe<ui32>;
     using TVariant = std::variant<TInner, TInner>;
     TVector<TVariant> data = {
-        TVariant(std::in_place_index<0>, TInner{10u}),
+        TVariant(std::in_place_index<0>, TInner{10U}),
         TVariant(std::in_place_index<1>, TInner{}),
-        TVariant(std::in_place_index<0>, TInner{20u}),
+        TVariant(std::in_place_index<0>, TInner{20U}),
     };
-    TVector<TMaybe<ui32>> expected = {TInner{10u}, TInner{}, TInner{20u}};
+    TVector<TMaybe<ui32>> expected = {TInner{10U}, TInner{}, TInner{20U}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -129,11 +129,11 @@ Y_UNIT_TEST(TupleVariant_OptionalInnerString_TwoAlternatives) {
 Y_UNIT_TEST(OptionalTupleVariant_Ui32_NullRows) {
     using TVariant = std::variant<ui32, ui32>;
     TVector<TMaybe<TVariant>> data = {
-        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 1u)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 1U)},
         TMaybe<TVariant>{},
-        TMaybe<TVariant>{TVariant(std::in_place_index<1>, 3u)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<1>, 3U)},
     };
-    TVector<TMaybe<ui32>> expected = {ui32{1u}, Nothing(), ui32{3u}};
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, Nothing(), ui32{3U}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -153,11 +153,11 @@ Y_UNIT_TEST(OptionalTupleVariant_NestedTuple_MixedNull) {
     using TInner = std::tuple<ui32, TString>;
     using TVariant = std::variant<TInner, TInner>;
     TVector<TMaybe<TVariant>> data = {
-        TMaybe<TVariant>{TVariant(std::in_place_index<0>, TInner{1u, "a"})},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, TInner{1U, "a"})},
         TMaybe<TVariant>{},
-        TMaybe<TVariant>{TVariant(std::in_place_index<1>, TInner{2u, "b"})},
+        TMaybe<TVariant>{TVariant(std::in_place_index<1>, TInner{2U, "b"})},
     };
-    TVector<TMaybe<TInner>> expected = {TInner{1u, "a"}, Nothing(), TInner{2u, "b"}};
+    TVector<TMaybe<TInner>> expected = {TInner{1U, "a"}, Nothing(), TInner{2U, "b"}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -165,19 +165,30 @@ Y_UNIT_TEST(OptionalTupleVariant_OptionalInnerUi32_MixedNull) {
     using TInner = TMaybe<ui32>;
     using TVariant = std::variant<TInner, TInner>;
     TVector<TMaybe<TVariant>> data = {
-        TMaybe<TVariant>{TVariant(std::in_place_index<0>, TInner{10u})},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, TInner{10U})},
         TMaybe<TVariant>{TVariant(std::in_place_index<0>, TInner{})},
         TMaybe<TVariant>{},
-        TMaybe<TVariant>{TVariant(std::in_place_index<1>, TInner{20u})},
+        TMaybe<TVariant>{TVariant(std::in_place_index<1>, TInner{20U})},
         TMaybe<TVariant>{TVariant(std::in_place_index<1>, TInner{})},
     };
     TVector<TMaybe<TInner>> expected = {
-        TMaybe<TInner>{TInner{10u}},
+        TMaybe<TInner>{TInner{10U}},
         TMaybe<TInner>{TInner{}},
         TMaybe<TInner>{},
-        TMaybe<TInner>{TInner{20u}},
+        TMaybe<TInner>{TInner{20U}},
         TMaybe<TInner>{TInner{}},
     };
+    TestBlockVariantItem(data, expected);
+}
+
+Y_UNIT_TEST(OptionalTupleVariant_Ui32_NoNull) {
+    using TVariant = std::variant<ui32, ui32>;
+    TVector<TMaybe<TVariant>> data = {
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 1U)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<1>, 2U)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 3U)},
+    };
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, ui32{2U}, ui32{3U}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -187,7 +198,7 @@ Y_UNIT_TEST(StructVariant_Ui32_TwoMembers) {
     using TVariant = NTest::TStructVariant<TMemberA, TMemberB>;
 
     TVector<TVariant> data = {TVariant{TMemberA{1}}, TVariant{TMemberB{2}}, TVariant{TMemberA{3}}};
-    TVector<ui32> expected = {1u, 2u, 3u};
+    TVector<ui32> expected = {1U, 2U, 3U};
     TestBlockVariantItem(data, expected);
 }
 
@@ -198,7 +209,7 @@ Y_UNIT_TEST(StructVariant_Ui32_ThreeMembers) {
     using TVariant = NTest::TStructVariant<TMemberA, TMemberB, TMemberC>;
 
     TVector<TVariant> data = {TVariant{TMemberA{1}}, TVariant{TMemberB{2}}, TVariant{TMemberC{3}}, TVariant{TMemberA{4}}};
-    TVector<ui32> expected = {1u, 2u, 3u, 4u};
+    TVector<ui32> expected = {1U, 2U, 3U, 4U};
     TestBlockVariantItem(data, expected);
 }
 
@@ -218,8 +229,8 @@ Y_UNIT_TEST(StructVariant_NestedTuple_TwoMembers) {
     using TMemberB = NTest::TStructMember<"b", TInner>;
     using TVariant = NTest::TStructVariant<TMemberA, TMemberB>;
 
-    TVector<TVariant> data = {TVariant{TMemberA{TInner{1u, "a"}}}, TVariant{TMemberB{TInner{2u, "b"}}}};
-    TVector<TInner> expected = {TInner{1u, "a"}, TInner{2u, "b"}};
+    TVector<TVariant> data = {TVariant{TMemberA{TInner{1U, "a"}}}, TVariant{TMemberB{TInner{2U, "b"}}}};
+    TVector<TInner> expected = {TInner{1U, "a"}, TInner{2U, "b"}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -233,7 +244,7 @@ Y_UNIT_TEST(OptionalStructVariant_Ui32_MixedNull) {
         TMaybe<TVariant>{},
         TMaybe<TVariant>{TVariant{TMemberB{2}}},
     };
-    TVector<TMaybe<ui32>> expected = {ui32{1u}, Nothing(), ui32{2u}};
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, Nothing(), ui32{2U}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -258,19 +269,33 @@ Y_UNIT_TEST(OptionalStructVariant_OptionalInnerUi32_MixedNull) {
     using TVariant = NTest::TStructVariant<TMemberA, TMemberB>;
 
     TVector<TMaybe<TVariant>> data = {
-        TMaybe<TVariant>{TVariant{TMemberA{TInner{10u}}}},
+        TMaybe<TVariant>{TVariant{TMemberA{TInner{10U}}}},
         TMaybe<TVariant>{TVariant{TMemberA{TInner{}}}},
         TMaybe<TVariant>{},
-        TMaybe<TVariant>{TVariant{TMemberB{TInner{20u}}}},
+        TMaybe<TVariant>{TVariant{TMemberB{TInner{20U}}}},
         TMaybe<TVariant>{TVariant{TMemberB{TInner{}}}},
     };
     TVector<TMaybe<TInner>> expected = {
-        TMaybe<TInner>{TInner{10u}},
+        TMaybe<TInner>{TInner{10U}},
         TMaybe<TInner>{TInner{}},
         TMaybe<TInner>{},
-        TMaybe<TInner>{TInner{20u}},
+        TMaybe<TInner>{TInner{20U}},
         TMaybe<TInner>{TInner{}},
     };
+    TestBlockVariantItem(data, expected);
+}
+
+Y_UNIT_TEST(OptionalStructVariant_Ui32_NoNull) {
+    using TMemberA = NTest::TStructMember<"a", ui32>;
+    using TMemberB = NTest::TStructMember<"b", ui32>;
+    using TVariant = NTest::TStructVariant<TMemberA, TMemberB>;
+
+    TVector<TMaybe<TVariant>> data = {
+        TMaybe<TVariant>{TVariant{TMemberA{1}}},
+        TMaybe<TVariant>{TVariant{TMemberB{2}}},
+        TMaybe<TVariant>{TVariant{TMemberA{3}}},
+    };
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, ui32{2U}, ui32{3U}};
     TestBlockVariantItem(data, expected);
 }
 

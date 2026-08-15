@@ -435,6 +435,11 @@ bool TKqpQueryState::ProcessingLastStatementPart() {
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
+    // Despite its name, this is also called once after a non-split query finishes,
+    // before PreparedQuery and CompileResult are cleared and the response is logged.
+    if (QueryTextForLogging.empty() && PreparedQuery && (!RequestEv || RequestEv->GetQuery().empty())) {
+        QueryTextForLogging = PreparedQuery->GetText();
+    }
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};

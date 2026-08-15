@@ -167,7 +167,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
                 auto guard = Guard(lock);
 
                 auto concurrentInvocations = runnedCallbacks - finishedCallbacks;
-                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations exceeds maximum (ConcurrentInvocations: %v, MaxConcurrentInvocations: %v)",
+                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations %v exceeds maximum %v",
                     concurrentInvocations,
                     maxConcurrentInvocations);
                 if (callbackIndex > maxConcurrentInvocations) {

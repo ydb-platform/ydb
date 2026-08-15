@@ -4,7 +4,7 @@ VERSION(4.33.0)
 
 LICENSE(BSD-3-Clause)
 
-ORIGINAL_SOURCE(https://repo1.maven.org/maven2)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf)
 
 JAR_RESOURCE(10028528878)
 

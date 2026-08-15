@@ -4696,6 +4696,24 @@ bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
+bool EnsureAvailable(
+    TPositionHandle p,
+    const TFeature& f,
+    TExprContext& exprCtx,
+    const TTypeAnnotationContext& typeCtx)
+{
+    if (auto x = EnsureIsAvailableOn(typeCtx.LangVer, typeCtx.BackportMode, f); !x) {
+        exprCtx.AddError(TIssue(exprCtx.GetPosition(p), x.error()));
+        return false;
+    }
+
+    return true;
+}
+
+bool IsAvailable(const TFeature& f, const TTypeAnnotationContext& typeCtx) {
+    return IsAvailableOn(typeCtx.LangVer, typeCtx.BackportMode, f);
+}
+
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx) {
     switch (sequenceKind) {
         case ETypeAnnotationKind::Optional: return ctx.MakeType<TOptionalExprType>(&itemType);
@@ -4740,11 +4758,6 @@ IGraphTransformer::TStatus TryConvertToInternal1(TExprNode::TPtr& node, const TT
 }
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
-    return TryConvertToInternal1(node, expectedType, ctx, flags, useTypeDiff, /*typeCtx=*/nullptr);
-}
-
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
     return TryConvertToInternal1(node, expectedType, ctx, flags, typeCtx.UseTypeDiffForConvertToError, &typeCtx);
 }
@@ -4769,11 +4782,6 @@ IGraphTransformer::TStatus TryConvertToInternal2(TExprNode::TPtr& node, const TT
         guard.RaiseIssueForEmptyScope();
     }
     return status;
-}
-
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
-    return TryConvertToInternal2(node, sourceType, expectedType, ctx, flags, useTypeDiff, /*typeCtx=*/nullptr);
 }
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
@@ -4814,18 +4822,8 @@ IGraphTransformer::TStatus TrySilentConvertToInternal1(TExprNode::TPtr& node, co
 }
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags) {
-    return TrySilentConvertToInternal1(node, expectedType, ctx, flags, /*typeCtx=*/nullptr);
-}
-
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
     return TrySilentConvertToInternal1(node, expectedType, ctx, flags, &typeCtx);
-}
-
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags) {
-    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags, /*raiseIssues=*/false, /*typeCtx=*/nullptr);
 }
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
@@ -5570,27 +5568,12 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
 }
 
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
-    if (!node1->GetTypeAnn() || !node2->GetTypeAnn()) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    return SilentInferCommonTypeInternal(node1, *node1->GetTypeAnn(), node2, *node2->GetTypeAnn(), ctx, commonType, flags, /*typeCtx=*/nullptr);
-}
-
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
     if (!node1->GetTypeAnn() || !node2->GetTypeAnn()) {
         return IGraphTransformer::TStatus::Error;
     }
 
     return SilentInferCommonTypeInternal(node1, *node1->GetTypeAnn(), node2, *node2->GetTypeAnn(), ctx, commonType, flags, &typeCtx);
-}
-
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
-    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
-    return SilentInferCommonTypeInternal(node1, type1, node2, type2, ctx, commonType, flags, /*typeCtx=*/nullptr);
 }
 
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
@@ -5618,10 +5601,6 @@ IGraphTransformer::TStatus ConvertChildrenToTypeInternal(const TExprNode::TPtr& 
     }
 
     return status;
-}
-
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx, bool useTypeDiff) {
-    return ConvertChildrenToTypeInternal(input, targetType, ctx, useTypeDiff, /*typeCtx=*/nullptr);
 }
 
 IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
@@ -6587,7 +6566,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 }
 
 bool IsSystemMember(const TStringBuf& memberName) {
-    return memberName.StartsWith(TStringBuf("_yql_"));
+    return memberName.StartsWith(SystemMemberPrefix);
 }
 
 template<bool Deduplicte, ui8 OrListsOfAtomsDepth>

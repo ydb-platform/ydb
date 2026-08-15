@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:15:14: Error: Converted value falls out of Uint64 range
+	    Unicode::ToUint64(value),
+	             ^

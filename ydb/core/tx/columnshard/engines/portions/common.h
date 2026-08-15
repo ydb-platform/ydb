@@ -78,13 +78,13 @@ public:
 template <>
 struct THash<NKikimr::NOlap::TChunkAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TChunkAddress& a) const {
-        return ((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx();
+        return (((ui64)a.GetEntityId()) << 16) + a.GetChunkIdx();
     }
 };
 
 template <>
 struct THash<NKikimr::NOlap::TFullChunkAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TFullChunkAddress& a) const {
-        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId().GetRawValue()), a.GetPortionId());
+        return CombineHashes(CombineHashes((((ui64)a.GetEntityId()) << 16) + a.GetChunkIdx(), a.GetPathId().GetRawValue()), a.GetPortionId());
     }
 };

@@ -1501,7 +1501,7 @@ protected:
         };
     }
 
-    bool BuildPlannerAndSubmitTasks() {
+    [[nodiscard]] bool BuildPlannerAndSubmitTasks() {
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,

@@ -35,7 +35,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
 
 namespace NKikimr::NSqsTopic::V1 {
@@ -114,7 +113,8 @@ namespace NKikimr::NSqsTopic::V1 {
             .UserToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken()),
             .AccessRights = NACLib::EAccessRights::DescribeSchema,
         };
-        std::unordered_set<TString> topicsSet(topics.size());
+        absl::flat_hash_set<TString> topicsSet;
+        topicsSet.reserve(topics.size());
         for (const auto& topic : topics) {
             TString fullTopicPath = CanonizePath(NKikimr::JoinPath({DatabaseName_, topic}));
             topicsSet.insert(std::move(fullTopicPath));

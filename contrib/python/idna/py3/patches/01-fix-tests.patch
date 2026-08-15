@@ -1,0 +1,26 @@
+--- contrib/python/idna/py3/tests/test_idna_cli.py	(index)
++++ contrib/python/idna/py3/tests/test_idna_cli.py	(working tree)
+@@ -278,6 +278,7 @@ class CLIModuleEntryTests(unittest.TestCase):
+             check=False,
+             capture_output=True,
+             text=True,
++            env={"Y_PYTHON_ENTRY_POINT": ":main"},
+         )
+         self.assertEqual(result.returncode, 0)
+         self.assertEqual(result.stdout.strip(), "テスト")
+@@ -291,6 +292,7 @@ class CLIModuleEntryTests(unittest.TestCase):
+             check=False,
+             capture_output=True,
+             text=True,
++            env={"Y_PYTHON_ENTRY_POINT": ":main"},
+         )
+         self.assertEqual(result.returncode, 0)
+         self.assertEqual(
+@@ -305,6 +307,7 @@ class CLIModuleEntryTests(unittest.TestCase):
+             check=False,
+             capture_output=True,
+             text=True,
++            env={"Y_PYTHON_ENTRY_POINT": ":main"},
+         )
+         self.assertEqual(result.returncode, 1)
+         self.assertEqual(result.stdout, "")

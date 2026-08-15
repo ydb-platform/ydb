@@ -370,6 +370,9 @@ private:
 private:
     int GetTypeIndex(int tableIndex, ui16 columnId, TStringBuf columnName, EValueType valueType)
     {
+        if (std::ssize(TableIndexToColumnIdToTypeIndex_) == 1 && tableIndex != 0) {
+            THROW_ERROR_EXCEPTION("You are probably trying to read intermediate data of a MapReduce operation with multiple intermediate streams, which is not supported yet");
+        }
         YT_VERIFY(0 <= tableIndex && tableIndex < std::ssize(TableIndexToColumnIdToTypeIndex_));
         auto& columnIdToTypeIndex = TableIndexToColumnIdToTypeIndex_[tableIndex];
         if (columnId >= columnIdToTypeIndex.size()) {
@@ -825,7 +828,7 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
             schemas,
             std::move(output));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for web JSON format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for web JSON format").With(ex);
     }
 }
 

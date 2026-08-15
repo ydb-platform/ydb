@@ -2,48 +2,47 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TLookupWrapper: public TMutableCodegeneratorPtrNode<TLookupWrapper> {
-    typedef TMutableCodegeneratorPtrNode<TLookupWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TLookupWrapper>;
 
 public:
     TLookupWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, kind)
-        , Dict(dict)
-        , Key(key)
+        , Dict_(dict)
+        , Key_(key)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        return Dict->GetValue(ctx).Lookup(Key->GetValue(ctx));
+        return Dict_->GetValue(ctx).Lookup(Key_->GetValue(ctx));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        const auto dict = GetNodeValue(Dict, ctx, block);
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
+        const auto dict = GetNodeValue(Dict_, ctx, block);
 
-        GetNodeValue(pointer, Key, ctx, block);
+        GetNodeValue(pointer, Key_, ctx, block);
         const auto keyp = new LoadInst(Type::getInt128Ty(ctx.Codegen.GetContext()), pointer, "key", block);
 
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Lookup>(pointer, dict, ctx.Codegen, block, pointer);
-        ValueUnRef(Key->GetRepresentation(), keyp, ctx, block);
-        if (Dict->IsTemporaryValue()) {
+        ValueUnRef(Key_->GetRepresentation(), keyp, ctx, block);
+        if (Dict_->IsTemporaryValue()) {
             CleanupBoxed(dict, ctx, block);
         }
     }
 #endif
 private:
     void RegisterDependencies() const final {
-        DependsOn(Dict);
-        DependsOn(Key);
+        DependsOn(Dict_);
+        DependsOn(Key_);
     }
 
-    IComputationNode* const Dict;
-    IComputationNode* const Key;
+    IComputationNode* const Dict_;
+    IComputationNode* const Key_;
 };
 
 } // namespace
@@ -56,5 +55,4 @@ IComputationNode* WrapLookup(TCallable& callable, const TComputationNodeFactoryC
     return new TLookupWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), dict, key);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

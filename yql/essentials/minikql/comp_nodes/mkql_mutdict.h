@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapToMutDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapMutDictCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -20,5 +19,4 @@ IComputationNode* WrapMutDictKeys(TCallable& callable, const TComputationNodeFac
 IComputationNode* WrapMutDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapFromMutDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

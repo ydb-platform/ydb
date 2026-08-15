@@ -703,7 +703,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
             *scheme,
             Build<TYtSection>(ctx, section.Pos())
                 .InitFrom(section)
-                .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::Unordered | EYtSettingType::Unordered, ctx))
+                .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::Unordered | EYtSettingType::NonUnique, ctx))
             .Done(),
             {}, ctx, State_,
             TCopyOrTrivialMapOpts().SetTryKeepSortness(true).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()));

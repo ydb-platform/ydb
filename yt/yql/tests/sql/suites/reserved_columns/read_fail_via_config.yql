@@ -1,0 +1,3 @@
+/* custom error:Cannot read table "Reserved": column "_yql_extra" has reserved prefix "_yql_" */
+/* yt can not: gateway patching is not supported */
+SELECT key FROM plato.Reserved;

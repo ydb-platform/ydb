@@ -5,6 +5,7 @@ SRCS(
     kqp_opt_build_phy_query.cpp
     kqp_opt_build_txs.cpp
     kqp_opt_effects.cpp
+    kqp_opt_generated_columns.cpp
     kqp_opt_kql.cpp
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp

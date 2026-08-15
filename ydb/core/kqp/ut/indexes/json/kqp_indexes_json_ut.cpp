@@ -2086,7 +2086,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(TruncateTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableJsonIndex(true);
-        featureFlags.SetEnableTruncateTable(true);
 
         auto kikimr = TKikimrRunner(TKikimrSettings().SetFeatureFlags(featureFlags));
         auto db = kikimr.GetQueryClient();

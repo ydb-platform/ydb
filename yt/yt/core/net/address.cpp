@@ -143,7 +143,7 @@ TNetworkAddress::TNetworkAddress(const TNetworkAddress& other, int port)
             break;
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", Storage_.ss_family);
+                .With("family", Storage_.ss_family);
     }
 }
 
@@ -162,7 +162,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in*>(&Storage_);
             if (size > sizeof(sockaddr_in)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin_addr, addr, size);
             Length_ = sizeof(sockaddr_in);
@@ -172,7 +172,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in6*>(&Storage_);
             if (size > sizeof(sockaddr_in6)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET6 address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin6_addr, addr, size);
             Length_ = sizeof(sockaddr_in6);
@@ -180,7 +180,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
         }
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", family);
+                .With("family", family);
     }
 }
 
@@ -356,8 +356,8 @@ TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const std::string
     sockaddr_un sockAddr = {};
     if (socketPath.size() > sizeof(sockAddr.sun_path)) {
         THROW_ERROR_EXCEPTION("Unix domain socket path is too long")
-            << TErrorAttribute("socket_path", socketPath)
-            << TErrorAttribute("max_socket_path_length", sizeof(sockAddr.sun_path));
+            .With("socket_path", socketPath)
+            .With("max_socket_path_length", sizeof(sockAddr.sun_path));
     }
 
     sockAddr.sun_family = AF_UNIX;
@@ -391,7 +391,7 @@ void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress)
 {
     if (protoAddress.size() > sizeof(address->Storage_)) {
         THROW_ERROR_EXCEPTION("Network address size is too big")
-            << TErrorAttribute("size", protoAddress.size());
+            .With("size", protoAddress.size());
     }
     address->Storage_ = {};
     memcpy(&address->Storage_, protoAddress.data(), protoAddress.size());
@@ -1031,9 +1031,9 @@ public:
 
         UpdateLocalHostName(config);
 
-        YT_LOG_INFO("Localhost name determined via system call (LocalHostName: %v, ResolveHostNameIntoFqdn: %v)",
-            GetLocalHostName(),
-            config->ResolveHostNameIntoFqdn);
+        YT_TLOG_INFO("Localhost name determined via system call")
+            .With("LocalHostName", GetLocalHostName())
+            .With("ResolveHostNameIntoFqdn", config->ResolveHostNameIntoFqdn);
     }
 
     bool IsLocalAddress(const TNetworkAddress& address)
@@ -1049,7 +1049,7 @@ public:
     void PurgeCache()
     {
         Clear();
-        YT_LOG_INFO("Address cache purged");
+        YT_TLOG_INFO("Address cache purged");
     }
 
     void Configure(TAddressResolverConfigPtr config)
@@ -1061,8 +1061,8 @@ public:
 
         if (config->LocalHostNameOverride) {
             SetLocalHostName(*config->LocalHostNameOverride);
-            YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
-                config->LocalHostNameOverride);
+            YT_TLOG_INFO("Localhost name configured via config override")
+                .With("LocalHostName", config->LocalHostNameOverride);
         }
 
         UpdateLoopbackAddress(config);
@@ -1222,7 +1222,7 @@ TIP6Address TMtnAddress::ToIP6Address() const
 ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
@@ -1239,17 +1239,17 @@ ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 void TMtnAddress::SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value)
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
 
     auto bytesInRange = rightIndex - leftIndex;
     if (value >= (1ull << (8 * bytesInRange))) {
-        THROW_ERROR_EXCEPTION("Value is too large to be set in [leftIndex; rightIndex) interval (LeftIndex: %v, RightIndex: %v, Value %v)",
+        THROW_ERROR_EXCEPTION("Value %v is too large to be set in interval [%v, %v)",
+            value,
             leftIndex,
-            rightIndex,
-            value);
+            rightIndex);
     }
 
     auto* addressBytes = Address_.GetRawBytes();

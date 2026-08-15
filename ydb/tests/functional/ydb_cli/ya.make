@@ -16,6 +16,7 @@ TEST_SRCS(
     test_ydb_sql.py
     test_ydb_table.py
     test_ydb_tools.py
+    test_ydb_topic_deferred_publish.py
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

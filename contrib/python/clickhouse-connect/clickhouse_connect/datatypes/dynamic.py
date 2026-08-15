@@ -89,6 +89,7 @@ def typed_variant(value: Any, type_name: str) -> TypedVariant:
 class Variant(ClickHouseType):
     __slots__ = ("element_types", "_python_map", "_name_index")
     python_type = object
+    valid_formats = "typed", "native"
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -128,7 +129,8 @@ class Variant(ClickHouseType):
         return VariantState(discriminator_mode, element_states)
 
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: VariantState) -> Sequence:
-        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states)
+        typed = self.read_format(ctx) == "typed"
+        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states, typed=typed)
 
     def write_column_prefix(self, dest: bytearray):
         write_uint64(0, dest)  # discriminator_mode = 0
@@ -181,6 +183,7 @@ def read_variant_column(
     ctx: QueryContext,
     variant_types: list[ClickHouseType],
     element_states: list[Any],
+    typed: bool = False,
 ) -> Sequence:
     v_count = len(variant_types)
     discriminators = source.read_array("B", num_rows)
@@ -199,12 +202,21 @@ def read_variant_column(
     sub_indexes = [0] * v_count
     col: list[Any] = []
     app_col = col.append
-    for disc in discriminators:
-        if disc == 255:
-            app_col(None)
-        else:
-            app_col(sub_columns[disc][sub_indexes[disc]])
-            sub_indexes[disc] += 1
+    if typed:
+        type_names = [t.name for t in variant_types]
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(TypedVariant(sub_columns[disc][sub_indexes[disc]], type_names[disc]))
+                sub_indexes[disc] += 1
+    else:
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(sub_columns[disc][sub_indexes[disc]])
+                sub_indexes[disc] += 1
     return col
 
 

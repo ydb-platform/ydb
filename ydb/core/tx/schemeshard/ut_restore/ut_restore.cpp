@@ -3852,9 +3852,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         assertBloomIndexes("/MyRoot/OlapBloomImported");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalMinMaxIndexes) {
-=======
     // Runs an import that names one item present in the backup and one that is not, so that
     // FillItemsFromSchemaMapping fails. It swaps the shortened list into Items regardless of the
     // error and the cancellation persists that shorter count, while every ImportItems row written
@@ -4030,8 +4027,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ImportWithExcludedItemImpl(true);
     }
 
-    Y_UNIT_TEST_FLAG(ImportStandaloneColumnTableWithLocalMinMaxIndexes, EnableDataShardDirectPartImport) {
->>>>>>> 49b4a0858e9 (keep persisted import items in sync with the item list (#49955))
+    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalMinMaxIndexes) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 

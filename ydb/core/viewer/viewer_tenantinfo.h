@@ -135,7 +135,7 @@ public:
         MetadataCache = FromStringWithDefault<bool>(Params.Get("metadata_cache"), MetadataCache);
         ShowAllDatabases = FromStringWithDefault<bool>(Params.Get("show_all_databases"), ShowAllDatabases);
         if (ShowAllDatabases && IsStrictDatabaseOnlyRequest()) {
-            YDB_LOG_INFO_COMP(NKikimrServices::VIEWER, "Access denied: `show_all_databases` is not allowed for database-scoped access",
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: `show_all_databases` is not allowed for database-scoped access",
                 {"logPrefix", GetLogPrefix()},
                 {"user", GetUserSID()},
                 {"database", Database});

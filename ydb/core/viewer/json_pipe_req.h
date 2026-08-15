@@ -342,11 +342,8 @@ protected:
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
 
-    // True for a token whose highest access level is EAccessLevel::Database: such a user is allowed
-    // to see the information about its own database only, never about the cluster.
+    // Such a user is allowed to see the information about its own database only
     bool IsStrictDatabaseOnlyRequest();
-
-    // The SID of the user who sent the request, for logging of the denied requests.
     TString GetUserSID() const;
 
     void InitConfig(const TCgiParameters& params);

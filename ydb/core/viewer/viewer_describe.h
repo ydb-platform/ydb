@@ -140,7 +140,7 @@ public:
         if (Params.Has("path_id") || Params.Has("schemeshard_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {
                 // it's dangerous because we don't check access to scoped ids here
-                YDB_LOG_INFO_COMP(NKikimrServices::VIEWER, "Access denied: `path_id`/`schemeshard_id` require the monitoring access level",
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: `path_id`/`schemeshard_id` require the monitoring access level",
                     {"logPrefix", GetLogPrefix()},
                     {"user", GetUserSID()},
                     {"database", Database},

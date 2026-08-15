@@ -15,6 +15,8 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx/scheme_cache
     ydb/core/tx/tx_proxy
+    ydb/public/sdk/cpp/src/client/iam
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 YQL_LAST_ABI_VERSION()

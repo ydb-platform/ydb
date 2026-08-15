@@ -243,8 +243,10 @@ bool TPartitionFamily::Reset(const TActorContext& ctx) {
 }
 
 bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ctx) {
-    Session->Families.erase(this->Id);
-    Session = nullptr;
+    if (Session) {
+        Session->Families.erase(this->Id);
+        Session = nullptr;
+    }
 
     TargetStatus = ETargetStatus::Free;
 

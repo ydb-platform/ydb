@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/core/tx/scheme_cache
 )
 
 YQL_LAST_ABI_VERSION()

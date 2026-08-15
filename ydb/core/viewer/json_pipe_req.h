@@ -47,6 +47,7 @@ protected:
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
+    std::optional<bool> StrictDatabaseOnlyRequest; // lazily calculated by IsStrictDatabaseOnlyRequest()
     bool UseCache = false;
     bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
@@ -340,6 +341,14 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+
+    // True for a token whose highest access level is EAccessLevel::Database: such a user is allowed
+    // to see the information about its own database only, never about the cluster.
+    bool IsStrictDatabaseOnlyRequest();
+
+    // The SID of the user who sent the request, for logging of the denied requests.
+    TString GetUserSID() const;
+
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);

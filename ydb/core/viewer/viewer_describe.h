@@ -137,9 +137,15 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path_id")) {
+        if (Params.Has("path_id") || Params.Has("schemeshard_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-                // it's dangerous because we don't check access to specific path here
+                // it's dangerous because we don't check access to scoped ids here
+                YDB_LOG_INFO_COMP(NKikimrServices::VIEWER, "Access denied: `path_id`/`schemeshard_id` require the monitoring access level",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetUserSID()},
+                    {"database", Database},
+                    {"pathId", Params.Get("path_id")},
+                    {"schemeShardId", Params.Get("schemeshard_id")});
                 ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
                 return;
             }

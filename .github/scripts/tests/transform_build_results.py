@@ -336,19 +336,17 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                         continue
                     if link_type == "logsdir":
                         continue
-                    
-                    for i, file_path in enumerate(paths):
+
+                    # Only link files we will actually upload. Fabricating a URL
+                    # for missing/empty paths produces 404s on S3 (common for
+                    # empty stdout .out while stderr/.err still exists).
+                    kept_any = False
+                    for file_path in paths:
                         if os.path.isfile(file_path) and os.stat(file_path).st_size > 0:
                             results_file_links.append((result, link_type, file_path))
-                        else:
-                            try:
-                                rel_path = os.path.relpath(file_path, ya_out_dir)
-                                quoted_path = urllib.parse.quote(rel_path)
-                                url = f"{log_url_prefix}{quoted_path}"
-                                result["links"][link_type] = [url]
-                                break
-                            except ValueError:
-                                pass
+                            kept_any = True
+                    if not kept_any and link_type in result.get("links", {}):
+                        result["links"].pop(link_type, None)
 
             if will_be_muted:
                 log_print("mute", suite_name, test_name_for_mute)

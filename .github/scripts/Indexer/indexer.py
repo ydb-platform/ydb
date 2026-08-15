@@ -312,13 +312,10 @@ def process_dir(top_dir, opts):
 
         if entry.is_dir() and not entry.is_symlink():
             entry_type = 'folder'
-            # yurchuk: add index.html to dirs if recursive
-            if opts.recursive:
-                    entry_path = os.path.join(entry.name, 'index.html')
-            else:
-                if os.name not in ('nt',):
-                    # append trailing slash to dirs, unless it's windows
-                    entry_path = os.path.join(entry.name, '')
+            # Object storage (S3) has no directory indexes: "dir/" 404s.
+            # Always link to the folder's index.html (created when -r is used,
+            # or uploaded by a sibling job for top-level artifact folders).
+            entry_path = os.path.join(entry.name, 'index.html')
 
         elif entry.is_dir() and entry.is_symlink():
             entry_type = 'folder-shortcut'

@@ -1,6 +1,7 @@
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
@@ -18,6 +19,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripShared
 ydb/library/nmslib/test/run_bunit exectest.run[bunit]
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
+ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk

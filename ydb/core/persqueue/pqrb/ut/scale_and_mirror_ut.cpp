@@ -98,6 +98,78 @@ Y_UNIT_TEST(ForeignPipeDestroyedIsIgnored) {
     UNIT_ASSERT(done);
 }
 
+Y_UNIT_TEST(ScaleRequestInflightIsClearedWhenSplitMergeDisabled) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .Strategy = NKikimrPQ::TPQTabletConfig::CAN_SPLIT,
+        .MaxPartitionCount = 10,
+    });
+    NotifyDatabasePath(tc);
+
+    ui32 scaleRequestActors = 0;
+    TTestActorRuntime::TRegistrationObserver prevRegistration;
+    prevRegistration = tc.Runtime->SetRegistrationObserverFunc(
+        [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+            if (prevRegistration) {
+                prevRegistration(runtime, parentId, actorId);
+            }
+            ++scaleRequestActors;
+        }
+    );
+
+    auto needSplit = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+    needSplit->Record.SetSplitBoundary("m");
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        needSplit.Release(),
+        0,
+        GetPipeConfigWithRetries()
+    );
+    DispatchFor(tc, TDuration::MilliSeconds(200));
+    UNIT_ASSERT_GT(scaleRequestActors, 0u);
+
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .Strategy = NKikimrPQ::TPQTabletConfig::DISABLED,
+    });
+
+    ForwardToTablet(
+        *tc.Runtime,
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TPartitionScaleRequest::TEvPartitionScaleRequestDone(
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
+        )
+    );
+    DispatchFor(tc);
+
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .Strategy = NKikimrPQ::TPQTabletConfig::CAN_SPLIT,
+        .MaxPartitionCount = 10,
+    });
+    NotifyDatabasePath(tc);
+    const ui32 afterReenable = scaleRequestActors;
+
+    auto needSplitAgain = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+    needSplitAgain->Record.SetSplitBoundary("m");
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        needSplitAgain.Release(),
+        0,
+        GetPipeConfigWithRetries()
+    );
+    DispatchFor(tc, TDuration::MilliSeconds(200));
+    UNIT_ASSERT_GT_C(scaleRequestActors, afterReenable, "A new scale request must be sent after split/merge is re-enabled");
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbScaleRequest)
 
 } // namespace NKikimr::NPQ

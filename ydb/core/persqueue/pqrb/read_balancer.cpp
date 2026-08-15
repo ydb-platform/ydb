@@ -769,7 +769,7 @@ void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
 void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (DatabaseInfo.DatabasePath.empty()) {
-        DatabaseInfo.DatabasePath = msg->Result->GetPath();
+        DatabaseInfo.DatabasePath = !msg->Path.empty() ? msg->Path : msg->Result->GetPath();
         for (const auto& attr : msg->Result->GetPathDescription().GetUserAttributes()) {
             if (attr.GetKey() == "folder_id") DatabaseInfo.FolderId = attr.GetValue();
             if (attr.GetKey() == "cloud_id") DatabaseInfo.CloudId = attr.GetValue();
@@ -781,7 +781,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
     }
 
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath);
+        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath, ctx);
     }
 
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
@@ -930,11 +930,13 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
 }
 
 void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
-    if (!SplitMergeEnabled(TabletConfig)) {
+    if (!PartitionsScaleManager) {
         return;
     }
-    if (PartitionsScaleManager) {
+    if (SplitMergeEnabled(TabletConfig)) {
         PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
+    } else {
+        PartitionsScaleManager->AbortInflightScaleRequest(ctx);
     }
 }
 

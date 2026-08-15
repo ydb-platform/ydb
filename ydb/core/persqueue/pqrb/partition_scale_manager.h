@@ -65,11 +65,12 @@ public:
         TMaybe<TString> splitBoundary,
         const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
+    void AbortInflightScaleRequest(const TActorContext& ctx);
     std::expected<void, std::string> HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
     void TrySendScaleRequest(const TActorContext& ctx);
     void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
-    void UpdateDatabasePath(const TString& dbPath);
+    void UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx);
     void Die(const TActorContext& ctx);
 
 private:
@@ -132,7 +133,6 @@ private:
 
     bool RequestInflight = false;
     bool MirroredFromSomewhere = false;
-    bool RootPartitionsResetRequestInflight = false;
 };
 
 } // namespace NPQ

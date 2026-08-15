@@ -70,7 +70,6 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     }
 
     RequestInflight = true;
-    RootPartitionsResetRequestInflight = !splitMergeRequest.SetBoundary.empty();
     YDB_LOG_DEBUG("Send split request",
         {"logPrefix", LogPrefix()});
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
@@ -315,6 +314,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
 
 void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
     RequestInflight = false;
+    CurrentScaleRequest = {};
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
     YDB_LOG_DEBUG("HandleScaleRequestResult scale request",
@@ -327,6 +327,14 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     } else {
         RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
+    }
+}
+
+void TPartitionScaleManager::AbortInflightScaleRequest(const TActorContext& ctx) {
+    RequestInflight = false;
+    if (CurrentScaleRequest) {
+        ctx.Send(CurrentScaleRequest, new TEvents::TEvPoisonPill());
+        CurrentScaleRequest = {};
     }
 }
 
@@ -406,8 +414,9 @@ void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, cons
     }
 }
 
-void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
+void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx) {
     DatabasePath = dbPath;
+    TrySendScaleRequest(ctx);
 }
 
 } // namespace NPQ

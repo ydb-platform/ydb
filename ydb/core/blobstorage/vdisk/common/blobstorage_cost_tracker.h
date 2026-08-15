@@ -349,7 +349,6 @@ private:
 
     TLockFreeBucket<TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
-    std::atomic<ui64> SeqnoBurstDetector = 0;
 
     TControlWrapper BurstThresholdNs;
     TControlWrapper DiskTimeAvailableScale;
@@ -382,7 +381,7 @@ public:
         BucketUpperLimit.store(bucketCapacity);
         BucketLowerLimit.store(bucketCapacity * -BucketRelativeMinimum);
         Bucket.FillAndTake(cost);
-        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
+        BurstDetector.Set([this] { return Bucket.IsEmpty(); });
     }
 
     void UpdatePDiskParameters(ui32 numSlots, ui32 expectedSlotCount) {
@@ -446,7 +445,7 @@ public:
     }
 
     void CountPDiskResponse() {
-        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
+        BurstDetector.Set([this] { return Bucket.IsEmpty(); });
     }
 
 private:

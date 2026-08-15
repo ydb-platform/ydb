@@ -1629,7 +1629,14 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
+            // The requested path may have been dropped between the request and this
+            // tx execution (e.g. the cut-history sweep iterates a portion snapshot
+            // without holding a read snapshot) — skip it instead of aborting.
+            const auto granulePtr = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
+            if (!granulePtr) {
+                continue;
+            }
+            const auto& granule = *granulePtr;
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
@@ -1648,9 +1655,16 @@ public:
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
-                        } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                        } else if (rowset.EndOfSet()) {
+                            // The portion's rows are already erased by cleanup while the
+                            // in-memory object still lingers (remove-marked). Only such
+                            // portions may legitimately lack rows: requesters without a
+                            // read snapshot (cut-history sweep) can race the cleanup.
+                            AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            Constructors.erase(itPortionConstructor);
+                            continue;
+                        } else {
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }

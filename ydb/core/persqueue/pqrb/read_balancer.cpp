@@ -173,6 +173,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
     ProcessPartitionsLocationQueue(ctx);
+    ProcessMLPGetPartitionRequests(ctx);
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -605,6 +606,8 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     //TODO: Decide about changing number of partitions and send request to SchemeShard
     //TODO: make AlterTopic request via TX_PROXY
 
+    StatsRequestTracker.StatsReceived = true;
+
     if (!TTxWritePartitionStatsScheduled) {
         TTxWritePartitionStatsScheduled = true;
         Execute(new TTxWritePartitionStats(this));
@@ -623,6 +626,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
 
+    ProcessPendingMLPRequests(ctx);
 }
 
 void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
@@ -967,6 +971,9 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
         {"logPrefix", LogPrefix()},
         {"ev", ev->Get()->Record.ShortDebugString()});
     PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    if (!Inited) {
+        return;
+    }
     ProcessMLPGetPartitionRequests(ActorContext());
 }
 
@@ -1112,7 +1119,6 @@ void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext& ctx)
         PendingMLPRequests.pop_front();
     }
 
-    std::exchange(PendingMLPRequests, {});
     ProcessMLPGetPartitionRequests(ctx);
 }
 

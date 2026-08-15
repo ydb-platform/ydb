@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 SRCS(
     balancing_ut.cpp
+    mlp_ut.cpp
     partitions_location_queue_ut.cpp
     scale_and_mirror_ut.cpp
     write_partition_ut.cpp

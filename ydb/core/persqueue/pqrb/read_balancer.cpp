@@ -190,7 +190,6 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         case PARTITIONS_LOCATION_WAKEUP_TAG: {
             PartitionsLocationWakeupScheduled = false;
-            NextPartitionsLocationWakeup = TInstant::Max();
             ProcessPartitionsLocationQueue(ctx);
             break;
         }
@@ -619,6 +618,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     //TODO: Decide about changing number of partitions and send request to SchemeShard
     //TODO: make AlterTopic request via TX_PROXY
 
+    // Also required on the TEvStatsWakeup timeout path, which calls CheckStat without the response handler.
     StatsRequestTracker.StatsReceived = true;
 
     if (!TTxWritePartitionStatsScheduled) {

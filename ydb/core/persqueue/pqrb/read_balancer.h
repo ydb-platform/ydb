@@ -289,6 +289,7 @@ private:
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 
     static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
+    static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);
 
     struct TPartitionsLocationRequest {
         TActorId Sender;
@@ -297,7 +298,6 @@ private:
     };
     std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
     bool PartitionsLocationWakeupScheduled = false;
-    TInstant NextPartitionsLocationWakeup = TInstant::Max();
 
     using TMLPRequests = std::variant<
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr

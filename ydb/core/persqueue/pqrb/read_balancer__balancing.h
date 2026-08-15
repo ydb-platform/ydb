@@ -170,8 +170,6 @@ struct TPartitionFamilyComparator {
     bool operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const;
 };
 
-using TOrderedPartitionFamilies = absl::btree_set<TPartitionFamily*, TPartitionFamilyComparator>;
-
 struct SessionComparator {
     bool operator()(const TSession* lhs, const TSession* rhs) const;
 };

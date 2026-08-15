@@ -79,7 +79,7 @@ Y_UNIT_TEST(ExpireQueuedRequest) {
     UNIT_ASSERT_C(!earlyResponse, "Location response must wait in queue before timeout");
 
     tc.Runtime->ResetScheduledCount();
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(1));
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(25));
 
     auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
@@ -191,8 +191,36 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     UNIT_ASSERT_C(!stillWaiting, "All-partitions request must stay queued while dead tablet is down");
 
     tc.Runtime->ResetScheduledCount();
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(1));
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(25));
 
+    auto expired = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::Seconds(10)
+    );
+    UNIT_ASSERT(expired);
+    UNIT_ASSERT(!expired->Record.GetStatus());
+}
+
+Y_UNIT_TEST(TimeoutQueueIsPolledEvery25ms) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    const ui64 deadTabletId = MakeTabletID(false, 999);
+    PQBalancerPrepare("topic", {{0, {deadTabletId, 1}}}, /*ssId=*/1, tc);
+
+    auto* req = new TEvPersQueue::TEvGetPartitionsLocation();
+    req->Record.SetTimeoutMs(10);
+    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, req, 0, GetPipeConfigWithRetries());
+
+    tc.Runtime->ResetScheduledCount();
+    tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(10));
+    auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::MilliSeconds(1)
+    );
+    UNIT_ASSERT_C(!earlyResponse, "Expired requests are collected on the 25ms poll, not immediately");
+
+    tc.Runtime->ResetScheduledCount();
+    tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(15));
     auto expired = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
     );

@@ -374,6 +374,11 @@ struct TStaticAnchorRef
     std::atomic<bool>* Registered;
 };
 
+struct TDynamicAnchorRef
+{
+    TLoggingAnchor* Anchor;
+};
+
 class TWellKnownTaggedLoggingGuard;
 
 //! Accumulates a tagged log message via a fluent |.With| chain and emits the event in
@@ -401,6 +406,23 @@ public:
             message,
             /*alwaysBuildMessage*/ false)
     { }
+
+    TTaggedLoggingGuard(
+        const TLogger& logger,
+        ELogLevel level,
+        ::TSourceLocation sourceLocation,
+        TDynamicAnchorRef anchorRef,
+        TStringBuf message)
+        : Logger_(logger)
+        , SourceLocation_(sourceLocation)
+        , Anchor_(anchorRef.Anchor)
+    {
+        if (!Logger_.IsAnchorUpToDate(*Anchor_)) [[unlikely]] {
+            Logger_.UpdateDynamicAnchor(Anchor_);
+        }
+
+        Initialize(level, message, /*alwaysBuildMessage*/ false);
+    }
 
     TTaggedLoggingGuard(const TTaggedLoggingGuard&) = delete;
     TTaggedLoggingGuard& operator=(const TTaggedLoggingGuard&) = delete;
@@ -511,6 +533,12 @@ protected:
             Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, sourceLocation, message);
         }
 
+        Initialize(level, message, alwaysBuildMessage);
+    }
+
+private:
+    void Initialize(ELogLevel level, TStringBuf message, bool alwaysBuildMessage)
+    {
         EffectiveLevel_ = TLogger::GetEffectiveLoggingLevel(level, *Anchor_);
         Enabled_ = Logger_.IsLevelEnabled(EffectiveLevel_);
         if (!Enabled_ && !alwaysBuildMessage) {
@@ -526,7 +554,6 @@ protected:
         AppendContextualTags(&Writer_, LoggingContext_, Logger_);
     }
 
-private:
     template <class TValue>
     TTaggedLoggingGuard& DoWith(TLoggingTagKey tag, const TValue& value, TStringBuf spec) &
     {

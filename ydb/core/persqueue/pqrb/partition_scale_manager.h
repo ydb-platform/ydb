@@ -17,7 +17,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <library/cpp/containers/absl/btree_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <utility>
 
 namespace NKikimr {
@@ -77,7 +77,7 @@ private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
     using TPartitionBoundary = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary;
-    using TPartitionsToSplitMap = absl::btree_map<ui32, TPartitionScaleOperationInfo>;
+    using TPartitionsToSplitMap = absl::flat_hash_map<ui32, TPartitionScaleOperationInfo>;
 
     class TScaleRequest {
     public:
@@ -105,7 +105,7 @@ private:
     TRequests<TPartitionSplit> BuildSplitRequest(size_t& allowedSplitsCount);
     TRequests<TPartitionMerge> BuildMergeRequest(size_t& allowedSplitsCount);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
-    std::vector<TPartitionsToSplitMap::const_iterator> ReorderSplits() const;
+    std::vector<ui32> ReorderSplits() const;
     TString LogPrefix() const;
     void ClearMirrorInfo();
     void UpdateMirrorRootPartitionsSet();

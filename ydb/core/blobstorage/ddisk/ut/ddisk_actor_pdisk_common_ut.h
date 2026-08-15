@@ -338,6 +338,27 @@ TString MakeDataWithTabletAndBlock(ui32 tabletId, ui32 blockIdx, ui32 size) {
     return data;
 }
 
+TString AssertReadResult(const NDDisk::TEvReadResult::TPtr& readResult, TStringBuf expected) {
+    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+
+    const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    UNIT_ASSERT_VALUES_EQUAL(expected.size() % NDDisk::IntegrityUnitSize, 0u);
+
+    const ui32 expectedChecksumCount = expected.size() / NDDisk::IntegrityUnitSize;
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        static_cast<ui32>(readResult->Get()->Record.ChecksumsSize()), expectedChecksumCount,
+        "checksum count mismatch");
+    for (ui32 i = 0; i < expectedChecksumCount; ++i) {
+        const ui64 expectedChecksum = NDDisk::CalculateRawChecksum(
+            expected.data() + i * NDDisk::IntegrityUnitSize, NDDisk::IntegrityUnitSize);
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Record.GetChecksums(i), expectedChecksum,
+            "checksum mismatch at block# " << i);
+    }
+
+    return actual;
+}
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generation) {
     NDDisk::TQueryCredentials creds;
     creds.TabletId = tabletId;
@@ -378,8 +399,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, blockSize, static_cast<ui32>(payload.size())}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+    AssertReadResult(readResult, payload);
 
     const TString payload2 = MakeData('R', 2 * blockSize);
     const ui32 secondOffset = blockSize + static_cast<ui32>(payload.size());
@@ -392,8 +412,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult2 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, secondOffset, static_cast<ui32>(payload2.size())}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult2, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->GetPayload(0).ConvertToString(), payload2);
+    AssertReadResult(readResult2, payload2);
 }
 
 [[maybe_unused]] void TestCheckVChunksArePerTablet(NDDisk::TDDiskConfig ddiskConfig) {
@@ -414,8 +433,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload1);
+        AssertReadResult(readResult, payload1);
     }
 
     NDDisk::TQueryCredentials creds2 = Connect(ctx, 102, 1);
@@ -423,10 +441,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        const TString data = rr->Get()->GetPayload(0).ConvertToString();
-        UNIT_ASSERT_VALUES_EQUAL(data.size(), MinBlockSize);
-        UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+        AssertReadResult(rr, TString(MinBlockSize, '\0'));
     }
 
     {
@@ -440,15 +455,13 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload2);
+        AssertReadResult(readResult, payload2);
     }
 
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload1);
+        AssertReadResult(readResult, payload1);
     }
 }
 
@@ -497,8 +510,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, offset, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expected);
+        AssertReadResult(readResult, expected);
     }
 }
 
@@ -522,8 +534,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), data2);
+    AssertReadResult(readResult, data2);
 }
 
 [[maybe_unused]] void TestReadUnallocatedChunk(NDDisk::TDDiskConfig ddiskConfig) {
@@ -532,11 +543,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {42, 0, 2 * MinBlockSize}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-    const TString data = readResult->Get()->GetPayload(0).ConvertToString();
-    UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * MinBlockSize);
-    UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+    AssertReadResult(readResult, TString(2 * MinBlockSize, '\0'));
 }
 
 [[maybe_unused]] void TestManyVChunks(NDDisk::TDDiskConfig ddiskConfig) {
@@ -558,8 +565,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString expected = MakeDataWithIndex(i, MinBlockSize);
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {i, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expected);
+        AssertReadResult(readResult, expected);
     }
 }
 
@@ -590,14 +596,12 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString expected1 = MakeDataWithIndex(i, MinBlockSize);
         auto rr1 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, i * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr1, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr1->Get()->GetPayload(0).ConvertToString(), expected1);
+        AssertReadResult(rr1, expected1);
 
         TString expected2 = MakeDataWithIndex(i + 1000, MinBlockSize);
         auto rr2 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, i * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr2, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr2->Get()->GetPayload(0).ConvertToString(), expected2);
+        AssertReadResult(rr2, expected2);
     }
 }
 
@@ -716,14 +720,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
                     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
                         new NDDisk::TEvRead(creds[t], {v, b * MinBlockSize, MinBlockSize}, {true}));
-                    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-                    const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+                    const TString actual = AssertReadResult(readResult, expected);
                     ui32 readTabletId = 0;
                     std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
                     UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
                         "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
-                    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
                 }
             }
         }
@@ -760,14 +761,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -833,14 +831,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -899,8 +894,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), dataB);
+        AssertReadResult(rr, dataB);
     }
 
     const TString dataC = MakeData('C', MinBlockSize);
@@ -914,8 +908,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), dataC);
+        AssertReadResult(rr, dataC);
     }
 }
 
@@ -937,8 +930,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data);
+        AssertReadResult(rr, data);
     }
 }
 
@@ -962,7 +954,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     UNIT_ASSERT(*creds.ConnectionToken != oldToken);
 
     auto currentRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(currentRead, TReplyStatus::OK);
+    AssertReadResult(currentRead, TString(MinBlockSize, '\0'));
 
     NDDisk::TQueryCredentials staleCreds = creds;
     staleCreds.ConnectionToken = oldToken;
@@ -994,14 +986,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -1131,14 +1120,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
                 auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(1,
                     new NDDisk::TEvRead(tablets[t].Dst, {v, b * MinBlockSize, MinBlockSize}, {true}));
-                AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-                const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+                const TString actual = AssertReadResult(readResult, expected);
                 ui32 readValue = 0;
                 std::memcpy(&readValue, actual.data(), sizeof(readValue));
                 UNIT_ASSERT_VALUES_EQUAL_C(readValue, tabletId,
                     "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
-                UNIT_ASSERT_VALUES_EQUAL(actual, expected);
             }
         }
     }
@@ -1205,15 +1191,12 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at disk=" << diskIdx << " tablet=" << tabletId
             << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds1 = ConnectTo(ctx, 0, baseTabletId + 0, 1);
@@ -1343,15 +1326,13 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         for (ui64 vchunk : {0u, 1u}) {
             auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
                 new NDDisk::TEvRead(c1, {vchunk, 0, MinBlockSize}, {true}));
-            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data1);
+            AssertReadResult(rr, data1);
         }
         // Tablet2 should read zeroes from both VChunks (chunks were freed)
         for (ui64 vchunk : {0u, 1u}) {
             auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
                 new NDDisk::TEvRead(c2, {vchunk, 0, MinBlockSize}, {true}));
-            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), zeroes);
+            AssertReadResult(rr, zeroes);
         }
     };
 

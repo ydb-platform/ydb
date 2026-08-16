@@ -56,6 +56,23 @@ public:
         return SelfTabletId;
     }
 
+    // True if any of OUR blobs still shared out to other tablets lives in the given
+    // channel and generation range [fromGen, nextFromGen). Such a blob is in no GC
+    // queue while shared, but a hard barrier for the range would collect it under
+    // the borrower — the cut-history drain gate must see it.
+    bool HasSharedBlobsInRange(const ui64 tabletId, const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+        for (auto it = SharedBlobIds.GetIterator(); it.IsValid(); ++it) {
+            const TLogoBlobID& logoBlobId = it.GetBlobId().GetLogoBlobId();
+            if (logoBlobId.TabletID() != tabletId || logoBlobId.Channel() != channel) {
+                continue;
+            }
+            if (logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TBlobsCategories GetBlobCategories() const {
         TBlobsCategories result(SelfTabletId);
         for (auto&& i : BorrowedBlobIds) {

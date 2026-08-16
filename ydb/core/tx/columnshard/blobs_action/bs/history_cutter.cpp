@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -102,10 +103,12 @@ private:
 }   // anonymous namespace
 
 THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui32 currentGen,
-    const std::weak_ptr<NOlap::TBlobManager>& manager, const TActorId& tabletActorId)
+    const std::weak_ptr<NOlap::TBlobManager>& manager, const std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
+    const TActorId& tabletActorId)
     : TabletInfo(tabletInfo)
     , CurrentGen(currentGen)
     , Manager(manager)
+    , SharedBlobs(sharedBlobs)
     , TabletActorId(tabletActorId)
 {
 }
@@ -172,7 +175,16 @@ bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
     if (!manager) {
         return false;
     }
-    return manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen);
+    if (!manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen)) {
+        return false;
+    }
+    // Our blobs shared out to other tablets sit in no GC queue while shared; a hard
+    // barrier would collect them under the borrower, so they pin the entry too.
+    const auto sharedBlobs = SharedBlobs.lock();
+    if (!sharedBlobs) {
+        return false;
+    }
+    return !sharedBlobs->HasSharedBlobsInRange(TabletInfo->TabletID, key.Channel, key.FromGeneration, nextGen);
 }
 
 bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const {

@@ -62,12 +62,15 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     if (info.GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
         return;
     }
+    // An aborted rewrite returns its portion through here — it is no longer in flight.
+    InFlightPortionIds.erase(portionId);
     PendingPortionIds.emplace(portionId);
 }
 
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
     InitialPortionIds.erase(portionId);
     PendingPortionIds.erase(portionId);
+    InFlightPortionIds.erase(portionId);
     RemoveFromActiveQueue(portionId);
 }
 
@@ -112,6 +115,7 @@ void TMoveDataActualizer::DoExtractTasks(
     // change is aborted the portion can re-enter PendingPortionIds via DoAddPortion.
     for (auto portionId : submitted) {
         RemoveFromActiveQueue(portionId);
+        InFlightPortionIds.emplace(portionId);
     }
 }
 
@@ -132,9 +136,9 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     }
     auto portionSchema = accessor.GetPortionInfo().GetSchema(VersionedIndex);
     const TString tierName = accessor.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto storages = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
-    auto storagesCopy = storages;
-    TRWAddress address(std::move(storagesCopy), std::move(storages));
+    auto readStorages = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
+    auto writeStorages = readStorages;
+    TRWAddress address(std::move(readStorages), std::move(writeStorages));
     AFL_VERIFY(PortionsToMove[address].emplace(portionId).second);
     AFL_VERIFY(PortionAddress.emplace(portionId, std::move(address)).second);
 }
@@ -154,7 +158,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
             continue;
         }
         if (!currentRequest) {
-            currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::TTL);
+            currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
         }
         currentRequest->AddPortion(it->second);
         if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
@@ -169,7 +173,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
 }
 
 ui64 TMoveDataActualizer::GetMoveDataPortionsCount() const {
-    ui64 total = PendingPortionIds.size();
+    ui64 total = PendingPortionIds.size() + InFlightPortionIds.size();
     for (auto& [addr, portions] : PortionsToMove) {
         total += portions.size();
     }
@@ -181,6 +185,7 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     PendingPortionIds.clear();
     PortionsToMove.clear();
     PortionAddress.clear();
+    InFlightPortionIds.clear();
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
         if (portion->HasRemoveSnapshot()) {
@@ -190,13 +195,7 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
             continue;
         }
         InitialPortionIds.emplace(portionId);
-    }
-    // F6: iterate InitialPortionIds and lookup in portions map (avoids full scan)
-    for (auto portionId : InitialPortionIds) {
-        auto it = externalContext.GetPortions().find(portionId);
-        if (it != externalContext.GetPortions().end()) {
-            AddPortion(it->second, externalContext);
-        }
+        AddPortion(portion, externalContext);
     }
 }
 

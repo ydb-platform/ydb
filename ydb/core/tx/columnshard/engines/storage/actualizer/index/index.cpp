@@ -74,13 +74,6 @@ void TGranuleActualizationIndex::StopMoveData() {
     MoveDataActualizer.reset();
 }
 
-void TGranuleActualizationIndex::RefreshMoveData(const TAddExternalContext& context) {
-    if (!MoveDataActualizer) {
-        return;
-    }
-    MoveDataActualizer->Refresh(context);
-}
-
 ui64 TGranuleActualizationIndex::GetMoveDataPortionsCount() const {
     if (!MoveDataActualizer) {
         return 0;

@@ -125,6 +125,64 @@ private:
         SendResponse(ctx, isDirectRead, readResult, partitionResponse);
     }
 
+    void DropIncompleteLastIfAny(NKikimrClient::TCmdReadResult* partResp)
+    {
+        if (!partResp || partResp->ResultSize() == 0) {
+            return;
+        }
+        const auto& last = partResp->GetResult(partResp->ResultSize() - 1);
+        if (last.HasPartNo() && last.GetPartNo() + 1 < last.GetTotalParts()) {
+            LastSkipOffset = last.GetOffset();
+            partResp->MutableResult()->RemoveLast();
+        }
+    }
+
+    void ContinueFromSkippedOffset()
+    {
+        Request.SetRequestId(TMP_REQUEST_MARKER);
+        Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
+        Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
+        THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+        req->Record = Request;
+        Send(TabletActorId, req.Release());
+        InitialRequest = true;
+    }
+
+    // Follow-up came back empty or with an error. Keep complete messages from the first portion
+    // instead of CopyFrom-ing the follow-up over them. Returns true if this call consumed the event.
+    bool FinishWithAssembledOnFailedFollowUp(const TActorContext& ctx, const NKikimrClient::TResponse& record)
+    {
+        if (InitialRequest) {
+            return false;
+        }
+        const bool isDirectRead = DirectReadKey.ReadId != 0;
+        auto& responseRecord = isDirectRead && PreparedResponse ? *PreparedResponse : Response->Record;
+        if (!responseRecord.HasPartitionResponse() || !responseRecord.GetPartitionResponse().HasCmdReadResult()) {
+            return false;
+        }
+        auto* partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
+        DropIncompleteLastIfAny(partResp);
+        if (partResp->ResultSize() == 0) {
+            if (!LastSkipOffset.Defined()) {
+                return false;
+            }
+            ContinueFromSkippedOffset();
+            return true;
+        }
+        NKikimrClient::TPersQueuePartitionResponse partitionResponse;
+        if (record.HasPartitionResponse()) {
+            partitionResponse.CopyFrom(record.GetPartitionResponse());
+        } else {
+            partitionResponse.CopyFrom(responseRecord.GetPartitionResponse());
+        }
+        const NKikimrClient::TCmdReadResult* readResult =
+            record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult()
+                ? &record.GetPartitionResponse().GetCmdReadResult()
+                : partResp;
+        TryProcessBatchOrSendResponse(ctx, isDirectRead, *readResult, partitionResponse);
+        return true;
+    }
+
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
         AFL_ENSURE(Response);
@@ -136,7 +194,9 @@ private:
             || record.GetErrorCode() != NPersQueue::NErrorCode::OK
             || (record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0 && !isDirectRead)
         ) {
-
+            if (FinishWithAssembledOnFailedFollowUp(ctx, record)) {
+                return;
+            }
             Response->Record.CopyFrom(record);
             ctx.Send(Sender, Response.Release());
             PassAway();
@@ -193,14 +253,7 @@ private:
         };
 
         auto dropIncompleteLastIfAny = [&] {
-            if (partResp->ResultSize() == 0) {
-                return;
-            }
-            const auto& last = partResp->GetResult(partResp->ResultSize() - 1);
-            if (last.HasPartNo() && last.GetPartNo() + 1 < last.GetTotalParts()) {
-                LastSkipOffset = last.GetOffset();
-                partResp->MutableResult()->RemoveLast();
-            }
+            DropIncompleteLastIfAny(partResp);
         };
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
@@ -319,13 +372,7 @@ private:
             const bool skippedAheadOnInitial = InitialRequest && (ui64)cmdRead.GetOffset() < *LastSkipOffset;
             const bool droppedIncompleteOnFollowUp = !InitialRequest;
             if (skippedAheadOnInitial || droppedIncompleteOnFollowUp) {
-                Request.SetRequestId(TMP_REQUEST_MARKER);
-                Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
-                Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
-                THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-                req->Record = Request;
-                Send(TabletActorId, req.Release());
-                InitialRequest = true;
+                ContinueFromSkippedOffset();
                 return;
             }
         }

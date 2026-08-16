@@ -212,7 +212,7 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
 ) {
     topicPath.SkipPrefix("/");
     CHECK_SET_VALID(!topicPath.empty(), "Invalid topic path (only account provided?)", return);
-    CHECK_SET_VALID(!topicPath.EndsWith("/"), "Invalid topic path 0 triling '/'", return);
+    CHECK_SET_VALID(!topicPath.EndsWith("/"), "Invalid topic path or trailing '/'", return);
     if (FstClass) {
         // No legacy names required;
         OriginalTopic = topicPath;

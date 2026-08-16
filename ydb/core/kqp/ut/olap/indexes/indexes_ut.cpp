@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
-            WITH (STORE = COLUMN);
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
         )");
 
         ExecQuery(kikimr, UseQueryService, R"(

@@ -1551,9 +1551,35 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                 BuildBroadcastChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kMap:
-                BuildMapChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+            case NKqpProto::TKqpPhyConnection::kMap: {
+                // For OLAP sink stages with per-shard affinity (multiple tasks),
+                // replace Map with Broadcast + HashShuffle to avoid task count mismatch.
+                // Map requires originTasks.size() == targetTasks.size(), but per-shard
+                // affinity creates N sink tasks while the source may have fewer.
+                bool isOlapSinkWithMultipleTasks = false;
+                if (stageInfo.Tasks.size() > 1) {
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.HasInternalSink()
+                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                    && sinkSettings.GetIsOlap()) {
+                                isOlapSinkWithMultipleTasks = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (isOlapSinkWithMultipleTasks) {
+                    // Use Broadcast instead of Map for OLAP sinks with per-shard affinity.
+                    // Each sink task will filter to its own shard using TargetShardIds.
+                    BuildBroadcastChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                } else {
+                    BuildMapChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                }
                 break;
+            }
             case NKqpProto::TKqpPhyConnection::kMerge: {
                 TVector<TSortColumn> sortColumns;
                 sortColumns.reserve(input.GetMerge().SortColumnsSize());
@@ -4286,7 +4312,9 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     //       single-task path (correctness preserved, node affinity benefit deferred).
     {
         bool isCsWriteAffinitySink = false;
-        // Check for OLAP sink regardless of ShardsResolved status
+        // Check for OLAP sink regardless of ShardsResolved status.
+        // Map connections to OLAP sinks will be converted to Broadcast in BuildKqpStageChannels
+        // to avoid task count mismatch (Map requires originTasks.size() == targetTasks.size()).
         for (const auto& sink : stage.GetSinks()) {
             if (sink.HasInternalSink()
                     && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {

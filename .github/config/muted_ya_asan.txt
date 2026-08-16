@@ -323,6 +323,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlte
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithLocalYdbJoin
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithPrecompute
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithTwoGroupByHops
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
@@ -332,6 +333,7 @@ ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
+ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,true,0,10,1000,0.5,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomMixIndexesOldSyntaxVariants[false,false,0,10,0,0.5,BLOOM_FILTER]
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
@@ -468,6 +470,7 @@ ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Datetime_1_UNIQUE_SYN
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-2-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False]
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_rolling_restart[kikimr0]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc

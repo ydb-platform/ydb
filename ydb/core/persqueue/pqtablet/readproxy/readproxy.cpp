@@ -192,6 +192,17 @@ private:
             InitialRequest = false; //So we don't make any more retries but return error;
         };
 
+        auto dropIncompleteLastIfAny = [&] {
+            if (partResp->ResultSize() == 0) {
+                return;
+            }
+            const auto& last = partResp->GetResult(partResp->ResultSize() - 1);
+            if (last.HasPartNo() && last.GetPartNo() + 1 < last.GetTotalParts()) {
+                LastSkipOffset = last.GetOffset();
+                partResp->MutableResult()->RemoveLast();
+            }
+        };
+
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             const auto& currentReadResult = readResult.GetResult(i);
             if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
@@ -214,13 +225,16 @@ private:
                     break;
                 }
                 if (currentReadResult.GetPartNo() == 0) {
-                    // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
-                    // This is fine, we can drop last message;
-                    break;
-                }
-                const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
-                if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                    break;
+                    // Partition gap-jumped to the next message: remaining parts of the previous one
+                    // were deleted by retention or compactification. Drop the incomplete tail and
+                    // keep assembling from this result — do not resend the same follow-up.
+                    dropIncompleteLastIfAny();
+                } else {
+                    const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
+                    if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                        dropIncompleteLastIfAny();
+                        break;
+                    }
                 }
             }
 
@@ -297,19 +311,23 @@ private:
                 }
             }
         }
-        // We got no data during initial request - possibly skipped all the data due to compactification.
-        if (InitialRequest && partResp->GetResult().empty() && LastSkipOffset.Defined()
-            // Check if we did actually skip anything so we don't request the same offset again.
-            && (ui64)Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
-        ) {
-            //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
-            Request.SetRequestId(TMP_REQUEST_MARKER);
-            Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
-            Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
-            THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-            req->Record = Request;
-            Send(TabletActorId, req.Release());
-            return;
+        // Nothing left to return: skipped compactified parts on the initial read, or dropped an
+        // incomplete tail whose remaining parts are gone. Continue from the next offset instead of
+        // repeating the same follow-up.
+        if (partResp->GetResult().empty() && LastSkipOffset.Defined()) {
+            const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
+            const bool skippedAheadOnInitial = InitialRequest && (ui64)cmdRead.GetOffset() < *LastSkipOffset;
+            const bool droppedIncompleteOnFollowUp = !InitialRequest;
+            if (skippedAheadOnInitial || droppedIncompleteOnFollowUp) {
+                Request.SetRequestId(TMP_REQUEST_MARKER);
+                Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
+                Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
+                THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+                req->Record = Request;
+                Send(TabletActorId, req.Release());
+                InitialRequest = true;
+                return;
+            }
         }
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);

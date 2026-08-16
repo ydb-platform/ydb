@@ -4911,6 +4911,56 @@ Y_UNIT_TEST(ReadProxyGlueErrorDoesNotStageDirectRead) {
     UNIT_ASSERT_C(!staged, "glue error staged TEvStageDirectReadData into the direct-read cache");
 }
 
+Y_UNIT_TEST(ReadProxyGlueSizeMismatchReturnsError) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    bool corrupted = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        for (auto& res : *readResult->MutableResult()) {
+            if (res.GetPartNo() == 0 && res.HasTotalParts() && res.GetTotalParts() > 1) {
+                res.SetTotalSize(res.GetTotalSize() + 1);
+                corrupted = true;
+                break;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, 10, 20_MB, 0, false, {}, 0, 0, user};
+    BeginCmdRead(readSettings, tc);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_C(corrupted, "observer failed to break TotalSize of a multipart message");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::READ_NOT_DONE),
+        result->Record.DebugString());
+}
+
 Y_UNIT_TEST(IncompleteProxyResponse) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

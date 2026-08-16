@@ -416,8 +416,16 @@ private:
                     rr->SetPartNo(currentReadResult.GetPartNo());
                     rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
                     if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
-                        // This is the last part, validate data size;
-                        AFL_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
+                        if ((ui32)rr->GetTotalSize() != (ui32)rr->GetData().size()) {
+                            YDB_LOG_WARN("Handle TEvRead glued size mismatch",
+                                {"logPrefix", NPQ_LOG_PREFIX},
+                                {"totalSize", rr->GetTotalSize()},
+                                {"dataSize", rr->GetData().size()},
+                                {"seqNo", rr->GetSeqNo()},
+                                {"partNo", rr->GetPartNo()});
+                            makeErrorResponse("Internal error - glued message size does not match TotalSize");
+                            break;
+                        }
                     }
                 }
             }

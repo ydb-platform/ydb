@@ -162,9 +162,11 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 
 TBlobManager::~TBlobManager() = default;
 
-void TBlobManager::InitHistoryCutter(const std::shared_ptr<TBlobManager>& self, const TActorId& tabletActorId) {
+void TBlobManager::InitHistoryCutter(const std::shared_ptr<TBlobManager>& self,
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId) {
     AFL_VERIFY(self.get() == this);
-    HistoryCutter = std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, self, tabletActorId);
+    HistoryCutter =
+        std::make_unique<NBlobOperations::NBlobStorage::THistoryCutterWrapper>(TabletInfo, CurrentGen, self, sharedBlobs, tabletActorId);
 }
 
 NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCutter() {

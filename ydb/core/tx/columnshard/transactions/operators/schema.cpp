@@ -225,6 +225,9 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
             break;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
+            //TODO implement me
+            break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -351,6 +354,9 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             }
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
+            //TODO implement me
+            break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

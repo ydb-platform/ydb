@@ -709,7 +709,7 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     // All three conditions must hold before responding to Hive:
     //  1. Rewriting queue is empty (pending + confirmed portions).
     //  2. No target-group blobs remain in keep/delete queues or shared-blob tables.
-    if (HasIndex() && MutableIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() != 0) {
+    if (HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() != 0) {
         return;
     }
     if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {

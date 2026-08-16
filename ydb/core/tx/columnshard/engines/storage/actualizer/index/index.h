@@ -47,7 +47,6 @@ public:
 
     void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context);
     void StopMoveData();
-    void RefreshMoveData(const TAddExternalContext& context);
     ui64 GetMoveDataPortionsCount() const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);

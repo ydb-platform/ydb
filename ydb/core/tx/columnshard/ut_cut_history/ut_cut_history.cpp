@@ -9,6 +9,7 @@
  *   3. Tier-2 sweep disproves a candidate that still has blobs on disk -> no barrier sent.
  */
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/history_cutter.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -96,6 +97,15 @@ private:
 
 using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
+using ECutState = NOlap::NBlobOperations::NBlobStorage::ECutState;
+
+// Exposes the protected sweep test hooks to this suite only.
+class TTestableHistoryCutter: public THistoryCutterWrapper {
+public:
+    using THistoryCutterWrapper::GetCutStateForTest;
+    using THistoryCutterWrapper::StartSweepForTest;
+    using THistoryCutterWrapper::THistoryCutterWrapper;
+};
 
 // ---- tests ------------------------------------------------------------------
 
@@ -137,7 +147,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // GetSweepCandidates() is non-empty only after TryNominate; since we have no actor
         // context here, just check IsSweepInFlight() is false and no candidates.
         UNIT_ASSERT(!cutter->IsSweepInFlight());
-        UNIT_ASSERT(cutter->GetSweepCandidates().empty());
+        UNIT_ASSERT(cutter->GetSweepCandidates()->empty());
     }
 
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
@@ -220,7 +230,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // Empty boot — all counters zero; entry {ch=2, fromGen=0} is drained.
         cutter->OnBootComplete({});
         UNIT_ASSERT(!cutter->IsSweepInFlight());
-        UNIT_ASSERT(cutter->GetSweepCandidates().empty());
+        UNIT_ASSERT(cutter->GetSweepCandidates()->empty());
     }
 
     Y_UNIT_TEST(DoubleBlobPerPortionDeduplicates) {
@@ -269,6 +279,41 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/10));
         // Non-existent fromGeneration → not found → false.
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/99));
+
+        // Entry {5,100} is blocked by {0,100} — unless {0,100} was already cut:
+        // cut entries are transparent for the same-group walk.
+        UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 0 }));
+        // A cut entry of a DIFFERENT generation does not unblock it.
+        UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 10 }));
+    }
+
+    // Sweep disproval path: disproved candidates return to None (with retry cooldown),
+    // and no barrier is attempted for survivors that fail the final re-check.
+    Y_UNIT_TEST(SweepDisprovalPath) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        // 3 channels; history: {fromGen=0, group=100}, {fromGen=5, group=200}, {fromGen=10, group=300 (active)}.
+        auto info = MakeTabletInfo(/*tabletId=*/777, /*nChannels=*/3, { { 0, 100 }, { 5, 200 }, { 10, 300 } });
+        // Standalone wrapper: expired manager weak_ptr makes IsDrained() false, so the
+        // final re-check can never reach the barrier-send branch in this test.
+        TTestableHistoryCutter cutter(info, /*currentGen=*/20, std::weak_ptr<NOlap::TBlobManager>(), TActorId());
+
+        const TEntryKey keyA{ /*channel=*/2, /*fromGeneration=*/0 };
+        const TEntryKey keyB{ /*channel=*/2, /*fromGeneration=*/5 };
+        cutter.StartSweepForTest({ keyA, keyB });
+        UNIT_ASSERT(cutter.IsSweepInFlight());
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetSweepCandidates()->size(), 2);
+
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+
+        // Batch 1 result: keyA disproved (blob found), cursor exhausted.
+        cutter.OnBatchComplete({ keyA }, /*exhausted=*/true, ctx);
+
+        UNIT_ASSERT(!cutter.IsSweepInFlight());
+        // Disproved entry: back to None, never SentBarrier.
+        UNIT_ASSERT(cutter.GetCutStateForTest(keyA) == ECutState::None);
+        // Survivor keyB failed the final re-check (IsDrained false) → also None, no barrier.
+        UNIT_ASSERT(cutter.GetCutStateForTest(keyB) == ECutState::None);
     }
 
 }   // TCutHistoryCutterCounters

@@ -85,10 +85,15 @@ public:
     }
 
     // Returns true if no blob in the set has the given channel and generation in [fromGen, nextFromGen).
-    bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const {
-        return FindIf(Blobs, [&](const TLogoBlobID& blob) {
-            return blob.Channel() == channel && blob.Generation() >= fromGen && blob.Generation() < nextFromGen;
-        }) == Blobs.end();
+    // The set is ordered by (generation, step), so only the [fromGen, nextFromGen) slice is scanned.
+    bool HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+        const TLogoBlobID sentinel(0, fromGen, 0, 0, 0, 0);
+        for (auto it = Blobs.lower_bound(sentinel); it != Blobs.end() && it->Generation() < nextFromGen; ++it) {
+            if (it->Channel() == channel) {
+                return false;
+            }
+        }
+        return true;
     }
 
     template <class TActor>

@@ -205,7 +205,10 @@ void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
 void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
     auto it = Counters.find(key);
     if (it == Counters.end() || it->second == 0) {
-        PoisonedChannels.insert(key.Channel);
+        if (PoisonedChannels.insert(key.Channel).second) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(
+                "from_generation", key.FromGeneration)("reason", "counter_underflow");
+        }
         return;
     }
     if (--it->second == 0) {
@@ -288,8 +291,25 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     }
     LastNominateAt = ctx.Now();
 
+    // Channel rotation + hard cap: at most MaxDrainChecksPerNomination queue scans per
+    // round; the next round resumes from the first channel that was not fully serviced.
+    ui32 drainChecks = 0;
+    const ui32 channelCount = static_cast<ui32>(TabletInfo->Channels.size());
+    if (channelCount <= 2) {
+        return false;
+    }
+    if (NextChannelToCheck < 2 || NextChannelToCheck >= channelCount) {
+        NextChannelToCheck = 2;
+    }
+    const ui32 firstChannel = NextChannelToCheck;
     TVector<TEntryKey> batch;
-    for (ui32 ch = 2; ch < static_cast<ui32>(TabletInfo->Channels.size()); ++ch) {
+    for (ui32 idx = 0; idx < channelCount - 2; ++idx) {
+        const ui32 ch = 2 + (firstChannel - 2 + idx) % (channelCount - 2);
+        if (drainChecks >= MaxDrainChecksPerNomination) {
+            NextChannelToCheck = ch;
+            break;
+        }
+        NextChannelToCheck = 2 + (ch - 2 + 1) % (channelCount - 2);
         if (PoisonedChannels.contains(ch)) {
             continue;
         }
@@ -314,6 +334,10 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
             if (!SeenGroupsCheckPasses(key)) {
                 continue;
             }
+            if (drainChecks >= MaxDrainChecksPerNomination) {
+                break;
+            }
+            ++drainChecks;
             if (!IsDrained(key)) {
                 continue;
             }

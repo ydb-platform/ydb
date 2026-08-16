@@ -81,6 +81,10 @@ public:
 
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
     static constexpr TDuration NominateCadence = TDuration::Minutes(1);
+    // Hard cap on IsDrained() queue scans per nomination round: with the cadence this
+    // bounds tablet-thread scan work to MaxDrainChecksPerNomination scans per minute
+    // regardless of how many history entries are eligible.
+    static constexpr ui32 MaxDrainChecksPerNomination = 8;
 
 protected:
     // Enters the sweeping state directly (unit tests subclass to reach this; TryNominate
@@ -178,6 +182,9 @@ private:
     THashMap<TEntryKey, TInstant> DisprovedAt;
     // Last full candidate evaluation; see NominateCadence in TryNominate.
     TInstant LastNominateAt;
+    // First channel to service in the next nomination round (rotation under the
+    // MaxDrainChecksPerNomination cap).
+    ui32 NextChannelToCheck = 2;
     TVector<TEntryKey> SweepSurvivors;
 
     // Cursor over the engine's in-memory portion snapshot (snapshotted once per sweep).

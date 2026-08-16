@@ -303,6 +303,10 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            //TODO implement me
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }

@@ -7,6 +7,7 @@
 
 #include <library/cpp/threading/future/future.h>
 #include <util/thread/lfqueue.h>
+#include <util/thread/pool.h>
 
 #include <atomic>
 #include <functional>
@@ -372,7 +373,10 @@ private:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    void RequestMainWorkerRun(std::int64_t owner);
     void RunMainWorker(std::int64_t owner);
+    bool TryAcquireMainWorker();
+    void RunMainWorkerAcquired(std::int64_t owner);
 
     void NonBlockingClose();
 
@@ -463,6 +467,7 @@ private:
     std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
     std::atomic<std::uint64_t> ReservedMemory = 0;
     TLockFreeQueue<TMessageInfo> ClientMessages;
+    std::unique_ptr<IThreadPool> MainWorkerThreadPool;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
@@ -495,8 +500,8 @@ private:
     };
     std::atomic<std::uint8_t> MainWorkerState = Idle;
     // MainWorker has an owner, which can be:
-    // - user's thread, in this case the value of MainWorkerOwner is -1
-    // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID
+    // - client-side wakeup, in this case the value of MainWorkerOwner is -1
+    // - subsession callback, in this case the value of MainWorkerOwner is the subsession's partition ID
     std::int64_t MainWorkerOwner = -1;
 
     std::uint64_t LastWrittenSeqNo = 0;

@@ -144,6 +144,18 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(1)
         .Hidden()
         .StoreResult(&Scenario.BatchFlushMessageCount);
+    config.Opts->AddLongOption("sdk-producer-threads", "Number of internal SDK producer threads for keyed producer workload.")
+        .DefaultValue(0)
+        .Hidden()
+        .StoreResult(&Scenario.SdkProducerThreads);
+    config.Opts->AddLongOption("keyed-writes", "Use keyed writes. This mode will write messages to topic, choosing partition by random generated keys.")
+        .DefaultValue(false)
+        .Hidden()
+        .StoreTrue(&Scenario.KeyedWrites);
+    config.Opts->AddLongOption("producer-keys-count", "The number of different keys to generate.")
+        .DefaultValue(0)
+        .Hidden()
+        .StoreResult(&Scenario.ProducerKeysCount);
 
     Scenario.ConfigMetadataMonitoringOptions(config);
 
@@ -158,6 +170,7 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
     Scenario.EnsureCodecOptionsAreValid();
+    Scenario.EnsureSdkProducerThreadsIsValid();
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)

@@ -2,6 +2,7 @@
 
 #include "write_session.h"
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -42,6 +43,10 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! Maximum block timeout for write. If set, write will block for up to MaxBlockTimeout when the buffer is overloaded.
     //! If not set, Write will block until the message is written to the buffer.
     FLUENT_SETTING_DEFAULT(TDuration, MaxBlockTimeout, TDuration::Max());
+
+    //! Number of internal producer threads.
+    //! 0 preserves the current inline execution mode. 1 runs client wakeups on an internal SDK thread.
+    FLUENT_SETTING_DEFAULT(std::uint32_t, ProducerThreads, 0);
 
 private:
     using TWriteSessionSettings::ProducerId;

@@ -1616,6 +1616,10 @@ TProducer::TProducer(
         ythrow TContractViolation("MessageGroupId should be empty for Producer");
     }
 
+    if (Settings.ProducerThreads_ > 1) {
+        ythrow TContractViolation("ProducerThreads can be either 0 or 1");
+    }
+
     if (IsFederation(DbDriverState->DiscoveryEndpoint)) {
         ythrow TContractViolation("Producer is not supported for federation");
     }
@@ -1713,13 +1717,23 @@ TProducer::TProducer(
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
 
+    if (Settings.ProducerThreads_ == 1) {
+        TThreadPool::TParams params;
+        params.SetBlocking(true)
+            .SetCatching(false)
+            .SetFactory(SystemThreadFactory())
+            .SetThreadName("topic_producer_main_worker");
+        MainWorkerThreadPool = std::make_unique<TThreadPool>(params);
+        MainWorkerThreadPool->Start(1);
+    }
+
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
         handlersExecutor->Start();
     }
 
     CloseFuture.Subscribe([this](const NThreading::TFuture<void>&) {
-        RunMainWorker(-1);
+        RequestMainWorkerRun(-1);
     });
 
     RunMainWorker(-1);
@@ -1808,9 +1822,6 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 TProducer::~TProducer() {
     try {
         auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
-            handlersExecutor->Stop();
-        }
 
         if (MainWorkerState.load() == Idle) {
             ShutdownPromise.TrySetValue();
@@ -1820,6 +1831,13 @@ TProducer::~TProducer() {
         // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
         // or the state machine never reaches Idle).
         ShutdownFuture.Wait(TDuration::Seconds(30));
+
+        if (MainWorkerThreadPool) {
+            MainWorkerThreadPool->Stop();
+        }
+        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+            handlersExecutor->Stop();
+        }
     } catch (...) {
         // Destructors must not throw.
     }
@@ -2099,7 +2117,7 @@ TWriteResult TProducer::WriteToExplicitPartition(
         RunUserEventLoop();
     }
 
-    RunMainWorker(-1);
+    RequestMainWorkerRun(-1);
 
     return TWriteResult{
         .Status = EWriteStatus::Queued,
@@ -2131,12 +2149,37 @@ void TProducer::DrainClientMessages() {
     }
 }
 
+void TProducer::RequestMainWorkerRun(std::int64_t owner) {
+    if (owner != -1 || !MainWorkerThreadPool) {
+        RunMainWorker(owner);
+        return;
+    }
+
+    if (!TryAcquireMainWorker()) {
+        return;
+    }
+
+    try {
+        MainWorkerThreadPool->SafeAddFunc([this] {
+            RunMainWorkerAcquired(-1);
+        });
+    } catch (...) {
+        RunMainWorkerAcquired(-1);
+    }
+}
+
 void TProducer::RunMainWorker(std::int64_t owner) {
-    // This function is both "request to run" and the runner itself.
-    // We must handle two properties:
-    // - TFuture::Subscribe may call back synchronously when future is already ready.
-    // - A callback may race with the runner trying to go idle (avoid lost wakeups).
-    // States Idle/Running/Rerun are defined in the EMainWorkerState enum on TProducer.
+    if (!TryAcquireMainWorker()) {
+        return;
+    }
+
+    RunMainWorkerAcquired(owner);
+}
+
+bool TProducer::TryAcquireMainWorker() {
+    // This state machine is both "request to run" and "try to become the runner".
+    // Running means that the runner is either already executing or scheduled on
+    // the producer main worker pool.
 
     // Try to become the runner. If already running, just request a rerun.
     std::uint8_t state = MainWorkerState.load(std::memory_order_acquire);
@@ -2145,19 +2188,21 @@ void TProducer::RunMainWorker(std::int64_t owner) {
             if (MainWorkerState.compare_exchange_weak(state, std::uint8_t(state | Rerun),
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
-                return;
+                return false;
             }
             continue;
         } else {
             if (MainWorkerState.compare_exchange_weak(state, Running,
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
-                break; // we are the runner now
+                return true;
             }
             continue;
         }
     }
+}
 
+void TProducer::RunMainWorkerAcquired(std::int64_t owner) {
     MainWorkerOwner = owner;
     NextEpoch();
 
@@ -2266,7 +2311,7 @@ TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory)
         }
 
         Metrics.IncIncomingMessages();
-        RunMainWorker(-1);
+        RequestMainWorkerRun(-1);
 
         return TWriteResult{
             .Status = EWriteStatus::Queued,
@@ -2312,7 +2357,7 @@ TWriteStats TProducer::GetWriteStats() {
 }
 
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
-    RunMainWorker(-1);
+    RequestMainWorkerRun(-1);
 
     std::unique_lock lock(GlobalLock);
     DrainClientMessages();

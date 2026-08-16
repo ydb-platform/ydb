@@ -29,6 +29,11 @@ private:
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
     THashMap<TRWAddress, THashSet<ui64>> PortionsToMove;
     THashMap<ui64, TRWAddress> PortionAddress;
+    // Portions whose rewrite task was submitted but has not finished yet. They must
+    // keep counting towards GetMoveDataPortionsCount(): the old blobs enter the
+    // delete queues only when the change commits, so dropping them from the count
+    // at submission would open a premature-TEvMoveDataResponse window.
+    THashSet<ui64> InFlightPortionIds;
 
     // Remove from PortionsToMove/PortionAddress only; keeps InitialPortionIds intact
     // so the portion can re-enter PendingPortionIds if the change is aborted.
@@ -43,9 +48,12 @@ protected:
 public:
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
 
+protected:
     // Test helpers — exercise internal state without a full TTieringProcessContext.
+    // Protected: unit tests subclass the actualizer to reach them; production code cannot.
     void SimulateTaskSubmissionForTest(ui64 portionId) {
         RemoveFromActiveQueue(portionId);
+        InFlightPortionIds.emplace(portionId);
     }
 
     bool IsInInitialPortionIds(ui64 portionId) const {
@@ -62,6 +70,8 @@ public:
 
     void AddToInitialAndPendingForTest(ui64 portionId) {
         InitialPortionIds.emplace(portionId);
+        // Mirrors DoAddPortion: a returned portion is no longer in flight.
+        InFlightPortionIds.erase(portionId);
         PendingPortionIds.emplace(portionId);
     }
 
@@ -73,6 +83,7 @@ public:
         PortionAddress.emplace(portionId, std::move(addr));
     }
 
+public:
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const;
 

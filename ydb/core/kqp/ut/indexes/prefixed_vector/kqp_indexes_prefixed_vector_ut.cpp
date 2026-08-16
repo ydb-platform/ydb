@@ -977,9 +977,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             }
         } else {
             const TString updated = ReadTablePartToYson(session, TString(PostingTablePath));
-            if (flags & F_COVERING) {
-                SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
-            }
+            SubstGlobal(orig, "[91];[\"\x76\x76\\2\"]", "[91];[\"\x76\x75\\2\"]");
             UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
         }
     }

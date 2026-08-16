@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         UNIT_ASSERT(cutter);
 
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
 
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { CurrentGen, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 3;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 3, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, TActorId());
+        bm->InitHistoryCutter(bm, nullptr, TActorId());
         auto* cutter = bm->GetHistoryCutter();
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
@@ -296,7 +296,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto info = MakeTabletInfo(/*tabletId=*/777, /*nChannels=*/3, { { 0, 100 }, { 5, 200 }, { 10, 300 } });
         // Standalone wrapper: expired manager weak_ptr makes IsDrained() false, so the
         // final re-check can never reach the barrier-send branch in this test.
-        TTestableHistoryCutter cutter(info, /*currentGen=*/20, std::weak_ptr<NOlap::TBlobManager>(), TActorId());
+        TTestableHistoryCutter cutter(info, /*currentGen=*/20, std::weak_ptr<NOlap::TBlobManager>(),
+            std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>(), TActorId());
 
         const TEntryKey keyA{ /*channel=*/2, /*fromGeneration=*/0 };
         const TEntryKey keyB{ /*channel=*/2, /*fromGeneration=*/5 };

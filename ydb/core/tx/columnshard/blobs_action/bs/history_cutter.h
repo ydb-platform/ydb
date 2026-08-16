@@ -16,6 +16,10 @@
 namespace NKikimr::NOlap {
 class TPortionDataAccessor;
 class TBlobManager;
+
+namespace NDataSharing {
+class TStorageSharedBlobsManager;
+}   // namespace NDataSharing
 }   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -52,7 +56,8 @@ enum class ECutState {
 class THistoryCutterWrapper {
 public:
     THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen,
-        const std::weak_ptr<NOlap::TBlobManager>& manager, const TActorId& tabletActorId);
+        const std::weak_ptr<NOlap::TBlobManager>& manager, const std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
+        const TActorId& tabletActorId);
 
     void SetLauncherActorId(const TActorId& id) {
         LauncherActorId = id;
@@ -163,6 +168,9 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 CurrentGen;
     std::weak_ptr<NOlap::TBlobManager> Manager;
+    // Our blobs shared out to other tablets are in no GC queue while shared; the
+    // drain gate consults this registry before a hard barrier.
+    std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> SharedBlobs;
     TActorId TabletActorId;
     TActorId LauncherActorId;
 

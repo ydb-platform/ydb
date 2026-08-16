@@ -84,6 +84,13 @@ public:
         return SweepCandidates ? SweepCandidates : empty;
     }
 
+    // Candidates still alive in the current sweep: entries disproved by earlier
+    // batches are excluded, so later batches neither re-examine nor re-disprove
+    // them (which would also inflate the disproval backoff counter).
+    std::shared_ptr<const TVector<TEntryKey>> GetActiveSweepCandidates() const {
+        return std::make_shared<const TVector<TEntryKey>>(SweepSurvivors);
+    }
+
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
     static constexpr TDuration DisprovedRetryMaxCooldown = TDuration::Hours(6);
     static constexpr TDuration NominateCadence = TDuration::Minutes(1);

@@ -67,10 +67,25 @@ private:
         bool HasKey = false;
         std::uint32_t Partition = UNKNOWN_PARTITION_ID;
         bool Sent = false;
-        NThreading::TPromise<TFlushResult> FlushPromise;
+        std::vector<NThreading::TPromise<TFlushResult>> FlushPromises;
 
         void AssignPartition(const std::string& key, const std::string& choosePartitionKey, std::uint32_t partition);
         TWriteMessage BuildMessage() const;
+    };
+
+    struct TClientRequest {
+        enum class EKind {
+            Message,
+            Flush,
+        };
+
+        TClientRequest() = default;
+        TClientRequest(TMessageInfo&& message);
+        TClientRequest(NThreading::TPromise<TFlushResult>&& flushPromise);
+
+        EKind Kind = EKind::Message;
+        TMessageInfo Message;
+        NThreading::TPromise<TFlushResult> FlushPromise;
     };
 
     struct TIdleSession;
@@ -403,7 +418,9 @@ private:
     void ReleaseReservedMemory(std::uint64_t size);
     std::optional<TWriteResult> ReserveMemoryForWrite(std::uint64_t size, bool checkMemory);
     void ValidateSeqNoStrategy(const std::optional<uint64_t>& seqNo);
-    void DrainClientMessages();
+    void DrainClientRequests();
+    void HandleClientMessage(TMessageInfo&& message);
+    void HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise);
 
     TWriteResult WriteInternal(TWriteMessage&& message, bool checkMemory);
     TWriteResult WriteToExplicitPartition(
@@ -466,7 +483,7 @@ private:
     TProducerSettings Settings;
     std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
     std::atomic<std::uint64_t> ReservedMemory = 0;
-    TLockFreeQueue<TMessageInfo> ClientMessages;
+    TLockFreeQueue<TClientRequest> ClientRequests;
     std::unique_ptr<IThreadPool> MainWorkerThreadPool;
 
     NThreading::TPromise<void> ClosePromise;

@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_settings.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -36,7 +37,7 @@ public:
         : Alloc(__LOCATION__)
     {}
 
-    TStateStoragePtr GetStateStorage(const char* tablePrefix) {
+    TStateStoragePtr GetStateStorage(const char* tablePrefix, bool enableCompression = false) {
         NConfig::TCheckpointCoordinatorConfig config;
         auto& stateStorageConfig = *config.MutableStorage();
         stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
@@ -48,7 +49,9 @@ public:
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
         YdbConnection = CreateSdkYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
-        auto storage = NewYdbStateStorage(config, YdbConnection);
+        TCheckpointStorageSettings settings(config);
+        settings.SetEnableCompression(enableCompression);
+        auto storage = NewYdbStateStorage(settings, YdbConnection);
         storage->Init({}).GetValueSync();
         return storage;
     }
@@ -480,7 +483,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
     Y_UNIT_TEST_F(ShouldSaveGetCompressedState, TFixture)
     {
-        auto storage = GetStateStorage("ShouldSaveGet20MBCompressedState");
+        auto storage = GetStateStorage("ShouldSaveGetCompressedState", /* enableCompression */ true);
         const size_t stateSize = YdbRowSizeLimit + 42;
         TString blob(stateSize, 'a');
         auto originalState = MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));

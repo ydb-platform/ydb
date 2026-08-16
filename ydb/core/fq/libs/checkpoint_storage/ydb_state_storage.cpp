@@ -476,7 +476,7 @@ size_t TStateStorage::SerializeState(
     auto originalSize = serializedState.size();
 
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
-    if (rowLimit && originalSize > rowLimit) {
+    if (rowLimit && originalSize > rowLimit && Config.GetEnableCompression()) {
         serializedState = CompressBlob(serializedState);
         outIsCompressed = true;
     }

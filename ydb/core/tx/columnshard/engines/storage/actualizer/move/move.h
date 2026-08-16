@@ -74,7 +74,7 @@ public:
     }
 
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(
-        const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self);
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const;
 
     ui64 GetMoveDataPortionsCount() const;
 

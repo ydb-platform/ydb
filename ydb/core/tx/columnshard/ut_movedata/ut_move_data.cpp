@@ -15,37 +15,37 @@ static constexpr ui32 ChannelsCount = 5;
 static TIntrusivePtr<TTabletStorageInfo> CreateReassignedTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
     TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId, ui32 groupId2, ui32 fromGeneration)
 {
-    auto x = MakeIntrusive<TTabletStorageInfo>();
-    x->TabletID = tabletId;
-    x->TabletType = tabletType;
-    x->Channels.resize(ChannelsCount);
-    for (ui64 ch = 0; ch < x->Channels.size(); ++ch) {
-        x->Channels[ch].Channel = ch;
-        x->Channels[ch].Type = TBlobStorageGroupType(erasure);
-        x->Channels[ch].History.resize(2);
-        x->Channels[ch].History[0].FromGeneration = 0;
-        x->Channels[ch].History[0].GroupID = groupId;
-        x->Channels[ch].History[1].FromGeneration = fromGeneration;
-        x->Channels[ch].History[1].GroupID = groupId2;
+    auto tabletInfo = MakeIntrusive<TTabletStorageInfo>();
+    tabletInfo->TabletID = tabletId;
+    tabletInfo->TabletType = tabletType;
+    tabletInfo->Channels.resize(ChannelsCount);
+    for (ui64 ch = 0; ch < tabletInfo->Channels.size(); ++ch) {
+        tabletInfo->Channels[ch].Channel = ch;
+        tabletInfo->Channels[ch].Type = TBlobStorageGroupType(erasure);
+        tabletInfo->Channels[ch].History.resize(2);
+        tabletInfo->Channels[ch].History[0].FromGeneration = 0;
+        tabletInfo->Channels[ch].History[0].GroupID = groupId;
+        tabletInfo->Channels[ch].History[1].FromGeneration = fromGeneration;
+        tabletInfo->Channels[ch].History[1].GroupID = groupId2;
     }
-    return x;
+    return tabletInfo;
 }
 
 static TIntrusivePtr<TTabletStorageInfo> CreateInitialTabletInfo(
     ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId)
 {
-    auto x = MakeIntrusive<TTabletStorageInfo>();
-    x->TabletID = tabletId;
-    x->TabletType = tabletType;
-    x->Channels.resize(ChannelsCount);
-    for (ui64 ch = 0; ch < x->Channels.size(); ++ch) {
-        x->Channels[ch].Channel = ch;
-        x->Channels[ch].Type = TBlobStorageGroupType(erasure);
-        x->Channels[ch].History.resize(1);
-        x->Channels[ch].History[0].FromGeneration = 0;
-        x->Channels[ch].History[0].GroupID = groupId;
+    auto tabletInfo = MakeIntrusive<TTabletStorageInfo>();
+    tabletInfo->TabletID = tabletId;
+    tabletInfo->TabletType = tabletType;
+    tabletInfo->Channels.resize(ChannelsCount);
+    for (ui64 ch = 0; ch < tabletInfo->Channels.size(); ++ch) {
+        tabletInfo->Channels[ch].Channel = ch;
+        tabletInfo->Channels[ch].Type = TBlobStorageGroupType(erasure);
+        tabletInfo->Channels[ch].History.resize(1);
+        tabletInfo->Channels[ch].History[0].FromGeneration = 0;
+        tabletInfo->Channels[ch].History[0].GroupID = groupId;
     }
-    return x;
+    return tabletInfo;
 }
 
 static NOlap::TUnifiedBlobId MakeDsBlobId(ui32 dsGroup, ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {

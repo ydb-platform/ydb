@@ -2228,6 +2228,10 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         BlobsForCompactionWereRead(response->GetBlobs());
         return;
     }
+    if (cookie == ERequestCookie::ReadBlobForResetOffset) {
+        HandleResetOffsetBlobResponse(ev);
+        return;
+    }
     auto it = ReadInfo.find(cookie);
 
     // If there is no such cookie, then read was canceled.

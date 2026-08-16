@@ -304,7 +304,12 @@ Y_UNIT_TEST(TimestampBeforeInsideAfter) {
     setup.CreateTopic(topic, "consumer");
     const auto before = TInstant::Now() - TDuration::Hours(1);
     setup.Write(topic, "m1", 0);
-    Sleep(TDuration::MilliSeconds(50));
+    // Cross a second boundary so second-precision skip-obsolete-timestamp still
+    // distinguishes m1 from the target (and so both messages can share a blob).
+    const auto afterM1Second = TInstant::Seconds(TInstant::Now().Seconds() + 1);
+    while (TInstant::Now() < afterM1Second) {
+        Sleep(TDuration::MilliSeconds(10));
+    }
     const auto middle = TInstant::Now();
     Sleep(TDuration::MilliSeconds(50));
     setup.Write(topic, "m2", 0);
@@ -324,8 +329,7 @@ Y_UNIT_TEST(TimestampBeforeInsideAfter) {
     };
 
     UNIT_ASSERT_VALUES_EQUAL(resetAt(before), 0);
-    const auto middleOffset = resetAt(middle);
-    UNIT_ASSERT(middleOffset == 1 || middleOffset == 0);
+    UNIT_ASSERT_VALUES_EQUAL(resetAt(middle), 1);
     UNIT_ASSERT_VALUES_EQUAL(resetAt(after), 2);
 }
 

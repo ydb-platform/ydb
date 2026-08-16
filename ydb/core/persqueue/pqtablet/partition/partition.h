@@ -31,6 +31,7 @@
 
 #include <variant>
 #include <deque>
+#include <optional>
 
 namespace NKikimr::NPQ {
 
@@ -177,6 +178,7 @@ public:
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
         CompactificationWrite,
+        ReadBlobForResetOffset,
         End
     };
 
@@ -1367,11 +1369,43 @@ private:
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
 
     ui64 ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
+    TInstant ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
     bool TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error);
     void ProcessResetOffsetPendingEvents();
+    void BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev);
+    void FinishResetOffset(const TActorId& sender, ui64 cookie, ui32 partitionId, const TString& consumer, ui64 offset);
+    void ReplyResetOffset(const TActorId& sender, ui32 partitionId, Ydb::StatusIds::StatusCode status, TString message, ui64 cookie);
+    void RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev, TInstant timestamp);
+    void HandleResetOffsetBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev);
+    TMaybe<ui64> ScanHeadForResetOffset(const THead& head, TInstant timestamp) const;
+    TMaybe<ui64> ScanRequestedBlobsForResetOffset(const TVector<TRequestedBlob>& blobs, ui32 begin, ui32 end, TInstant timestamp) const;
     static Ydb::StatusIds::StatusCode PqErrorToYdbStatus(NPersQueue::NErrorCode::EErrorCode errorCode);
 
     std::deque<TEvPQ::TEvResetOffsetRequest::TPtr> ResetOffsetPendingEvents;
+
+    struct TResetOffsetBlobRead {
+        struct TKeyRef {
+            ui64 Offset = 0;
+            TInstant Timestamp;
+            TMaybe<ui32> RequestedIndex;
+        };
+
+        TActorId Sender;
+        ui64 Cookie = 0;
+        ui32 PartitionId = 0;
+        TString Consumer;
+        TInstant Timestamp;
+        TVector<TKeyRef> CompactionKeys;
+        TVector<TKeyRef> FastWriteKeys;
+        TBlobKeyTokens BlobKeyTokens;
+    };
+    std::optional<TResetOffsetBlobRead> ResetOffsetBlobRead;
+
+    TMaybe<ui64> ResolveResetOffsetFromWrittenAt(
+        const TVector<TResetOffsetBlobRead::TKeyRef>& compactionRefs,
+        const TVector<TResetOffsetBlobRead::TKeyRef>& fastWriteRefs,
+        const TVector<TRequestedBlob>* blobs,
+        TInstant timestamp) const;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
 

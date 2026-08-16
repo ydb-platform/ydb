@@ -2357,6 +2357,195 @@ Y_UNIT_TEST_F(ResetOffsetDoesNotStealSetOffsetReply, TPartitionFixture)
     WaitProxyResponse({.Cookie=2, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=0});
 }
 
+namespace {
+
+TClientBlob MakeResetOffsetTestBlob(const TString& data, ui64 seqNo, TInstant writeTs) {
+    TString sourceId = "src";
+    TString payload = data;
+    return TClientBlob(
+        std::move(sourceId), seqNo, std::move(payload), TMaybe<TPartData>(),
+        writeTs, writeTs, 0, TString(), TString());
+}
+
+TString PackResetOffsetBatch(ui64 offset, const TVector<TClientBlob>& messages) {
+    TBatch batch(offset, 0);
+    for (const auto& message : messages) {
+        batch.AddBlob(message);
+    }
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+    return raw;
+}
+
+TString PackResetOffsetBatches(const TVector<std::pair<ui64, TClientBlob>>& batches) {
+    TString raw;
+    for (const auto& [offset, message] : batches) {
+        TBatch batch(offset, 0);
+        batch.AddBlob(message);
+        batch.Pack();
+        batch.SerializeTo(raw);
+    }
+    return raw;
+}
+
+THolder<TEvPQ::TEvBlobResponse> MakeResetOffsetBlobResponse(
+    TEvPQ::TEvBlobRequest& request,
+    const TString& packed)
+{
+    TVector<TRequestedBlob> blobs;
+    for (auto& src : request.Blobs) {
+        UNIT_ASSERT_C(packed.size() <= src.Size, "packed blob does not fit TRequestedBlob.Size");
+        blobs.push_back(TRequestedBlob(
+            src.Offset,
+            src.PartNo,
+            src.Count,
+            src.InternalPartsCount,
+            src.Size,
+            packed,
+            src.Key,
+            src.CreationUnixTime));
+    }
+    return MakeHolder<TEvPQ::TEvBlobResponse>(request.Cookie, std::move(blobs));
+}
+
+} // namespace
+
+// FROM_WRITTEN_AT must read a multi-message blob and commit to the first message
+// whose WriteTimestamp is >= target — not to the blob start.
+Y_UNIT_TEST_F(ResetOffsetFromWrittenAtCommitsInsideBlob, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=3});
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 3u);
+    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
+
+    CreateSession(client, session);
+
+    const auto ts0 = TInstant::Seconds(100);
+    const auto ts1 = TInstant::Seconds(200);
+    const auto ts2 = TInstant::Seconds(300);
+
+    SendEvent(new TEvPQ::TEvResetOffsetRequest(
+        "topic", client, partition.OriginalPartitionId,
+        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, ts1.MilliSeconds(), 1));
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(blobRequest);
+    UNIT_ASSERT_VALUES_EQUAL(
+        blobRequest->Cookie, static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset));
+    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
+
+    SendEvent(MakeResetOffsetBlobResponse(*blobRequest, PackResetOffsetBatch(0, {
+        MakeResetOffsetTestBlob("m0", 1, ts0),
+        MakeResetOffsetTestBlob("m1", 2, ts1),
+        MakeResetOffsetTestBlob("m2", 3, ts2),
+    })).Release());
+
+    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(reset);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
+
+    SendGetOffset(2, client);
+    WaitProxyResponse({.Cookie=2, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=1});
+}
+
+// A blob with Count == 1 is a single message: do not read it from KV.
+Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSkipsReadOfSingleMessageBlob, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 1u);
+    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(100);
+
+    CreateSession(client, session);
+
+    ui32 resetOffsetBlobReads = 0;
+    auto observer = Ctx->Runtime->AddObserver<TEvPQ::TEvBlobRequest>([&](TEvPQ::TEvBlobRequest::TPtr& ev) {
+        if (ev->Get()->Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset)) {
+            ++resetOffsetBlobReads;
+        }
+    });
+
+    SendEvent(new TEvPQ::TEvResetOffsetRequest(
+        "topic", client, partition.OriginalPartitionId,
+        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        TInstant::Seconds(50).MilliSeconds(), 1));
+    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    {
+        auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(reset);
+        UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
+    }
+
+    SendEvent(new TEvPQ::TEvResetOffsetRequest(
+        "topic", client, partition.OriginalPartitionId,
+        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        TInstant::Seconds(200).MilliSeconds(), 2));
+    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    {
+        auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(reset);
+        UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 2u);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(resetOffsetBlobReads, 0u);
+}
+
+// Offset holes inside a blob (two batches at 0 and 5) must not be collapsed to 0,1.
+// Persist is not completed: committing into a hole would start an endless timestamp-read.
+Y_UNIT_TEST_F(ResetOffsetFromWrittenAtHonorsOffsetGapsInsideBlob, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=2});
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 2u);
+    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(200);
+    TPartitionTestWrapper::BlobEncoder(*actor).EndOffset = 10;
+
+    CreateSession(client, session);
+
+    const auto tsEarly = TInstant::Seconds(100);
+    const auto tsLate = TInstant::Seconds(200);
+
+    SendEvent(new TEvPQ::TEvResetOffsetRequest(
+        "topic", client, partition.OriginalPartitionId,
+        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, tsLate.MilliSeconds(), 1));
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(blobRequest);
+    UNIT_ASSERT_VALUES_EQUAL(
+        blobRequest->Cookie, static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset));
+
+    SendEvent(MakeResetOffsetBlobResponse(*blobRequest, PackResetOffsetBatches({
+        {0, MakeResetOffsetTestBlob("early", 1, tsEarly)},
+        {5, MakeResetOffsetTestBlob("late", 2, tsLate)},
+    })).Release());
+
+    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=5}}}});
+}
+
 // Compactification replies with IsInternal=true. Those must not be treated as timestamp-read
 // completions: otherwise ReadingTimestamp/ReadScheduled get out of sync and the next
 // TEvProxyResponse hits PQ_ENSURE(userInfo->ReadScheduled) (issue #49357).

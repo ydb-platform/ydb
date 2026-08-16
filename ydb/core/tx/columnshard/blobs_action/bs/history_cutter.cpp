@@ -109,13 +109,13 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChann
     ui32 targetGroup = 0;
     bool found = false;
     std::unordered_set<ui32> seenGroups;
-    for (const auto& e : hist) {
-        if (e.FromGeneration == fromGeneration) {
-            targetGroup = e.GroupID;
+    for (const auto& entry : hist) {
+        if (entry.FromGeneration == fromGeneration) {
+            targetGroup = entry.GroupID;
             found = true;
             break;
         }
-        seenGroups.insert(e.GroupID);
+        seenGroups.insert(entry.GroupID);
     }
     return found && !seenGroups.contains(targetGroup);
 }
@@ -367,9 +367,9 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
         ui32 groupId = 0;
         if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
-            for (const auto& e : TabletInfo->Channels[key.Channel].History) {
-                if (e.FromGeneration == key.FromGeneration) {
-                    groupId = e.GroupID;
+            for (const auto& entry : TabletInfo->Channels[key.Channel].History) {
+                if (entry.FromGeneration == key.FromGeneration) {
+                    groupId = entry.GroupID;
                     break;
                 }
             }

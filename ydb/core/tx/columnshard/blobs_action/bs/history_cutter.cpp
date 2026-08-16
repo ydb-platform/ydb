@@ -402,6 +402,9 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         auto& state = DisprovedAt[key];
         state.At = ctx.Now();
         ++state.Attempts;
+        // Settle the entry now: otherwise it lingers as Verifying until the exhausted
+        // batch and the safety-net reset below would bump Attempts a second time.
+        CutState[key] = ECutState::None;
     }
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
@@ -467,13 +470,12 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
     SweepSurvivors.clear();
 
-    // Reset any remaining Verifying entries (disproved during scan).
+    // Safety net: disproved entries were already settled (and their backoff bumped)
+    // in the disproved loop above, so any Verifying leftover here is an unexpected
+    // state — reset it without counting a disproval attempt.
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;
-            auto& disprovalState = DisprovedAt[key];
-            disprovalState.At = ctx.Now();
-            ++disprovalState.Attempts;
         }
     }
 }

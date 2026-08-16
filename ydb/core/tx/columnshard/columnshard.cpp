@@ -335,9 +335,11 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 
-    // When MoveData is active and vacuum has completed, retry the completion gate on
-    // every wakeup until both rewriting and GC queues are clean.
-    if (MoveDataState.Active && MoveDataState.VacuumCompleted) {
+    // When MoveData is active and vacuum has completed, retry the completion gate
+    // until both rewriting and GC queues are clean — at most once per cadence, since
+    // the gate scans the GC queues.
+    if (MoveDataState.Active && MoveDataState.VacuumCompleted && ctx.Now() - MoveDataState.LastGateCheckAt >= MoveDataGateCheckCadence) {
+        MoveDataState.LastGateCheckAt = ctx.Now();
         MoveDataCompleted(ctx);
     }
 }

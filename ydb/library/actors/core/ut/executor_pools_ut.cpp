@@ -222,9 +222,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
     Y_UNIT_TEST(ReceiveActivationForEachRevolvingCounter) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
-            .Threads = 1,
-            .MinLocalQueueSize = 0,
-            .MaxLocalQueueSize = 0
+            .Threads = 1
         }, nullptr);
         PreparePool(pool.get());
 
@@ -269,9 +267,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
     Y_UNIT_TEST(OrderingOfRingQueue) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
-            .Threads = 1,
-            .MinLocalQueueSize = 0,
-            .MaxLocalQueueSize = 0
+            .Threads = 1
         }, nullptr);
 
         PreparePool(pool.get());
@@ -309,44 +305,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         }
     }
 
-    Y_UNIT_TEST(CorrectnessOfLocalQueue) {
-        std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
-            .Threads = 1,
-            .MinLocalQueueSize = 8,
-            .MaxLocalQueueSize = 8
-        }, nullptr);
-
-        PreparePool(pool.get());
-
-        TThreadEmulator emulator({pool.get()}, nullptr);
-        TOverriddenThreadContext turnOffWaiting{
-            .IsNeededToWaitNextActivation = false
-        };
-
-        TMailbox* mailbox = pool->GetMailboxTable()->Allocate();
-        TWorkerIdentity workerIdentity{pool.get(), 0};
-
-        UNIT_ASSERT(!emulator.GetReadyActivation(workerIdentity, 0, turnOffWaiting));
-        for (ui64 i = 0; i < 8; ++i) {
-            emulator.ScheduleActivation(workerIdentity, pool.get(), mailbox, i);
-        }
-
-        TMailbox* outerMailbox = pool->GetMailboxTable()->Allocate();
-        emulator.ScheduleActivation(workerIdentity, pool.get(), outerMailbox, 8);
-
-        for (ui64 i = 0; i < 8; ++i) {
-            TMailbox* activation = emulator.GetReadyActivation(workerIdentity, i);
-            UNIT_ASSERT(activation);
-            UNIT_ASSERT_EQUAL(activation, mailbox);
-        }
-
-        {
-            TMailbox* activation = emulator.GetReadyActivation(workerIdentity, 8);
-            UNIT_ASSERT(activation);
-            UNIT_ASSERT_EQUAL(activation, outerMailbox);
-        }
-    }
-
     Y_UNIT_TEST(SharedPoolWith1Thread1Pool) {
         std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
             .Threads = 1
@@ -361,9 +319,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
         std::unique_ptr<TBasicExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1,
-            .HasSharedThread = true,
-            .MinLocalQueueSize = 0,
-            .MaxLocalQueueSize = 0,
+            .HasSharedThread = true
         }, nullptr);
 
         TieBasicPoolsAndSharedPool({pool.get()}, sharedPool.get());
@@ -424,9 +380,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolId = i,
                 .PoolName = "Pool" + ToString(i),
                 .Threads = 1,
-                .HasSharedThread = true,
-                .MinLocalQueueSize = 0,
-                .MaxLocalQueueSize = 0,
+                .HasSharedThread = true
             }, nullptr));
         }
 
@@ -545,9 +499,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolId = i,
                 .PoolName = i < 2 ? "WorkerPool" + ToString(i) : "TaskPool" + ToString(i),
                 .Threads = 1,
-                .HasSharedThread = true,
-                .MinLocalQueueSize = 0,
-                .MaxLocalQueueSize = 0,
+                .HasSharedThread = true
             }, nullptr));
         }
 

@@ -380,6 +380,7 @@ void TColumnShard::RunEnsureTable(
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunAlterTable(
@@ -415,6 +416,7 @@ void TColumnShard::RunAlterTable(
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunDropTable(
@@ -483,6 +485,7 @@ void TColumnShard::RunAlterStore(
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -1265,9 +1268,18 @@ void TColumnShard::Die(const TActorContext& ctx) {
     IActor::Die(ctx);
 }
 
-void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            YDB_LOG_WARN("",
+                {"event", "failed_to_deliver_config_subscription_request"});
+            ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryConfigSubscription());
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            YDB_LOG_ERROR("",
+                {"event", "failed_to_deliver_config_notification_response"});
+            break;
         case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:
@@ -1283,13 +1295,14 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
     auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
+    const ui64 seqNo = ev->Get()->Record.GetSeqno();
 
     auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
     if (!op) {
         YDB_LOG_DEBUG("",
             {"event", "read_set_ignored"},
             {"proto", ev->Get()->Record.DebugString()});
-        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
+        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest, seqNo);
         return;
     }
     YDB_LOG_DEBUG("",
@@ -1299,7 +1312,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
-    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, seqNo, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
     Execute(tx.release(), ctx);
 }
 
@@ -1886,6 +1899,10 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
+        HFunc(NActors::TEvents::TEvUndelivered, Handle);
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "unexpected event in enqueue"});

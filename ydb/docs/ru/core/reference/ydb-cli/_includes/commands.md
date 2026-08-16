@@ -108,7 +108,6 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 topic consumer describe | Описание [читателя](../../../concepts/glossary.md#consumer) [топика](../../../concepts/glossary.md#topic)
 [topic consumer drop](../topic-consumer-drop.md) | Удаление [читателя](../../../concepts/glossary.md#consumer) из [топика](../../../concepts/glossary.md#topic)
 [topic consumer offset commit](../topic-consumer-offset-commit.md) | Сохранение [смещения](../../../concepts/glossary.md#offset) чтения
-[topic consumer offset reset](../topic-consumer-offset-reset.md) | Сброс [смещения](../../../concepts/glossary.md#offset) чтения во всех партициях
 [topic read](../topic-read.md) | Чтение сообщений из [топика](../../../concepts/glossary.md#topic)
 [topic write](../topic-write.md) | Запись сообщений в [топик](../../../concepts/glossary.md#topic)
 {% if ydb-cli == "ydb" %}

@@ -107,7 +107,6 @@ Command / subcommand | Brief description
 || topic consumer describe | Describing a [topic](../../../concepts/glossary.md#topic) [consumer](../../../concepts/glossary.md#consumer) |
 || [topic consumer drop](../topic-consumer-drop.md) | Deleting a [consumer](../../../concepts/glossary.md#consumer) from a [topic](../../../concepts/glossary.md#topic) |
 || [topic consumer offset commit](../topic-consumer-offset-commit.md) | Saving a reading [offset](../../../concepts/glossary.md#offset) |
-|| [topic consumer offset reset](../topic-consumer-offset-reset.md) | Resetting a reading [offset](../../../concepts/glossary.md#offset) on all partitions |
 || [topic read](../topic-read.md) | Reading messages from a [topic](../../../concepts/glossary.md#topic) |
 || [topic write](../topic-write.md) | Writing messages to a [topic](../../../concepts/glossary.md#topic) |
 {% if ydb-cli == "ydb" %}

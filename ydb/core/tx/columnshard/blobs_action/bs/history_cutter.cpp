@@ -343,7 +343,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
                 continue;
             }
             const auto disprovedIt = DisprovedAt.find(key);
-            if (disprovedIt != DisprovedAt.end() && ctx.Now() - disprovedIt->second < DisprovedRetryCooldown) {
+            if (disprovedIt != DisprovedAt.end() && ctx.Now() - disprovedIt->second.At < GetDisprovedCooldown(disprovedIt->second.Attempts)) {
                 continue;
             }
             // Cheap history walk first; the queue scans in IsDrained run only for
@@ -399,7 +399,9 @@ TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(si
 
 void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx) {
     for (const auto& key : disproved) {
-        DisprovedAt[key] = ctx.Now();
+        auto& state = DisprovedAt[key];
+        state.At = ctx.Now();
+        ++state.Attempts;
     }
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
@@ -444,7 +446,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             continue;
         }
 
-        ui32 groupId = 0;
+        std::optional<ui32> groupId;
         if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
             for (const auto& entry : TabletInfo->Channels[key.Channel].History) {
                 if (entry.FromGeneration == key.FromGeneration) {
@@ -458,9 +460,10 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             continue;
         }
 
+        DisprovedAt.erase(key);
         CutState[key] = ECutState::SentBarrier;
         ctx.Register(new TCutHistoryBarrierActor(
-            TabletActorId, LauncherActorId, TabletInfo->TabletID, CurrentGen, key.Channel, groupId, key.FromGeneration, nextFromGen));
+            TabletActorId, LauncherActorId, TabletInfo->TabletID, CurrentGen, key.Channel, *groupId, key.FromGeneration, nextFromGen));
     }
     SweepSurvivors.clear();
 
@@ -468,7 +471,9 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;
-            DisprovedAt[key] = ctx.Now();
+            auto& disprovalState = DisprovedAt[key];
+            disprovalState.At = ctx.Now();
+            ++disprovalState.Attempts;
         }
     }
 }

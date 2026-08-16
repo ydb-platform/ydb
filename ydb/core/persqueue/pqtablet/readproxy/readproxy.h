@@ -2,7 +2,6 @@
 
 #include <ydb/core/persqueue/public/key.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
-#include <util/generic/fwd.h>
 
 namespace NKikimrClient {
 class TPersQueueRequest;

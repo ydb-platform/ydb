@@ -14,14 +14,9 @@ namespace NKikimr::NPQ::NBatching {
 struct TReadProcessingContext {
     TString User;
     ui32 PartitionId = 0;
-    ui64 Destination = 0;
     ui64 Offset = 0;
     ui32 Count = std::numeric_limits<ui32>::max();
     ui64 LastOffset = 0;
-    ui16 PartNo = 0;
-    ui64 Size = 0;
-    bool IsInternal = false;
-    NActors::TActorId ReplyTo;
     NActors::TActorId ResponseActor;
     THolder<NActors::IEventBase> Event;
 };

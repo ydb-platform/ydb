@@ -50,7 +50,6 @@ public:
     {
         AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
         AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
-        AFL_ENSURE(!Response->Record.HasPartitionResponse());
         if (!directReadKey.SessionId.empty()) {
             DirectReadKey.ReadId = Request.GetPartitionRequest().GetCmdRead().GetDirectReadId();
         }
@@ -115,14 +114,9 @@ private:
             ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
                 .User = cmdRead.GetClientId(),
                 .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
-                .Destination = 0,
                 .Offset = InitialReadOffset,
                 .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
                 .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
-                .PartNo = 0,
-                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
-                .IsInternal = false,
-                .ReplyTo = TActorId{},
                 .ResponseActor = SelfId(),
                 .Event = std::move(proxyEvent)}));
             return;
@@ -148,7 +142,6 @@ private:
             PassAway();
             return;
         }
-        AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
         if (isDirectRead) {
             if (!PreparedResponse) {
@@ -160,8 +153,6 @@ private:
         responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        AFL_ENSURE(readResult.ResultSize() > 0 || isDirectRead);
-
         ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
                                    ? (responseRecord.HasPartitionResponse()
                                         ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
@@ -171,8 +162,8 @@ private:
         if (!responseRecord.HasPartitionResponse()) {
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
-            readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
-            readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
+            readRes->SetBlobsFromDisk(readResult.GetBlobsFromDisk());
+            readRes->SetBlobsFromCache(readResult.GetBlobsFromCache());
             if (AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
             }
@@ -190,15 +181,6 @@ private:
         partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + readResult.GetWaitQuotaTimeMs());
 
         partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), readResult.GetRealReadOffset()));
-
-        auto removeIncompleteMessageIfAny = [&] () {
-            if (partResp->ResultSize() == 0)
-                return;
-            auto& back = partResp->GetResult(partResp->ResultSize() - 1);
-            if (back.GetPartNo() + 1 < back.GetTotalParts()) {
-                partResp->MutableResult()->RemoveLast();
-            }
-        };
 
         auto makeErrorResponse = [&] (const TString& errorMessage) {
             partResp->MutableResult()->Clear();
@@ -294,7 +276,6 @@ private:
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }
-                AFL_ENSURE(rr->GetSeqNo() == currentReadResult.GetSeqNo());
                 (*rr->MutableData()) += currentReadResult.GetData();
                 rr->SetPartitionKey(currentReadResult.GetPartitionKey());
                 rr->SetExplicitHash(currentReadResult.GetExplicitHash());
@@ -342,7 +323,6 @@ private:
                 return;
             }
         }
-        removeIncompleteMessageIfAny();
         //filter old messages
         ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
         records.Swap(partResp->MutableResult());

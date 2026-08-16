@@ -28,6 +28,25 @@ bool HasBatchMessages(const NKikimrClient::TCmdReadResult& readResult) {
     });
 }
 
+bool CanStealAllResults(const NKikimrClient::TCmdReadResult& incoming,
+                        const NKikimrClient::TCmdReadResult& assembled,
+                        bool hasSkipOffset,
+                        bool skipObsoleteInLoop)
+{
+    if (assembled.ResultSize() != 0 || hasSkipOffset || skipObsoleteInLoop) {
+        return false;
+    }
+    for (const auto& result : incoming.GetResult()) {
+        if (result.GetData().empty() || result.GetPartNo() != 0) {
+            return false;
+        }
+        if (result.HasTotalParts() && result.GetTotalParts() > 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 class TReadProxy : public TBaseTabletActor<TReadProxy>, private TConstantLogPrefix {
@@ -234,7 +253,7 @@ private:
             PassAway();
             return;
         }
-        const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
+        auto* incomingRead = ev->Get()->Record.MutablePartitionResponse()->MutableCmdReadResult();
         if (isDirectRead) {
             if (!PreparedResponse) {
                 PreparedResponse = std::make_shared<NKikimrClient::TResponse>();
@@ -250,14 +269,14 @@ private:
         ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*appData)
                                    ? (responseRecord.HasPartitionResponse()
                                         ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
-                                        : readResult.GetReadFromTimestampMs())
+                                        : incomingRead->GetReadFromTimestampMs())
                                    : 0;
 
         if (!responseRecord.HasPartitionResponse()) {
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
-            readRes->SetBlobsFromDisk(readResult.GetBlobsFromDisk());
-            readRes->SetBlobsFromCache(readResult.GetBlobsFromCache());
+            readRes->SetBlobsFromDisk(incomingRead->GetBlobsFromDisk());
+            readRes->SetBlobsFromCache(incomingRead->GetBlobsFromCache());
             if (skipObsoleteTimestamps) {
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
             }
@@ -268,13 +287,14 @@ private:
 
         auto partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
 
-        partResp->SetMaxOffset(readResult.GetMaxOffset());
-        partResp->SetStartOffset(readResult.GetStartOffset());
-        partResp->SetEndOffset(readResult.GetEndOffset());
-        partResp->SetSizeLag(readResult.GetSizeLag());
-        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + readResult.GetWaitQuotaTimeMs());
+        partResp->SetMaxOffset(incomingRead->GetMaxOffset());
+        partResp->SetStartOffset(incomingRead->GetStartOffset());
+        partResp->SetEndOffset(incomingRead->GetEndOffset());
+        partResp->SetLastOffset(incomingRead->GetLastOffset());
+        partResp->SetSizeLag(incomingRead->GetSizeLag());
+        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + incomingRead->GetWaitQuotaTimeMs());
 
-        partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), readResult.GetRealReadOffset()));
+        partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), incomingRead->GetRealReadOffset()));
 
         auto makeErrorResponse = [&] (const TString& errorMessage) {
             partResp->MutableResult()->Clear();
@@ -288,111 +308,117 @@ private:
             DropIncompleteLastIfAny(partResp);
         };
 
-        for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-            const auto& currentReadResult = readResult.GetResult(i);
-            if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
-                LastSkipOffset = currentReadResult.GetOffset();
-                continue; // Skip the empty part;
-            }
-            if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
-                continue; // This is part of the message which is already being skipped due to empty parts or timestamp filtering. Skip all other parts as well;
-            }
-            if (!InitialRequest) {
-                // This is follow-up request to read missing parts;
-                // There must be some data in response already.
-                if (partResp->ResultSize() == 0) {
-                    makeErrorResponse("Internal error - got message part on followup read request with empty current response");
-                    YDB_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
-                        {"seqNo", currentReadResult.GetSeqNo()},
-                        {"partNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
-                    break;
+        const bool skipObsoleteInLoop = skipObsoleteTimestamps && readFromTimestampMs != 0;
+        if (CanStealAllResults(*incomingRead, *partResp, LastSkipOffset.Defined(), skipObsoleteInLoop)) {
+            partResp->MutableResult()->Swap(incomingRead->MutableResult());
+        } else {
+            for (ui32 i = 0; i < incomingRead->ResultSize(); ++i) {
+                auto* current = incomingRead->MutableResult(i);
+                const auto& currentReadResult = *current;
+                if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
+                    LastSkipOffset = currentReadResult.GetOffset();
+                    continue; // Skip the empty part;
                 }
-                if (currentReadResult.GetPartNo() == 0) {
-                    // Partition gap-jumped to the next message: remaining parts of the previous one
-                    // were deleted by retention or compactification. Drop the incomplete tail and
-                    // keep assembling from this result — do not resend the same follow-up.
-                    dropIncompleteLastIfAny();
-                } else {
-                    const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
-                    if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                        dropIncompleteLastIfAny();
-                        break;
-                    }
+                if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
+                    continue; // This is part of the message which is already being skipped due to empty parts or timestamp filtering. Skip all other parts as well;
                 }
-            }
-
-            // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
-            // (And throw away that message to)
-            if (partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
-                currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
-            {
-                break;
-            }
-
-            // Now actually add some data;
-            if (currentReadResult.GetPartNo() == 0) {
-                if (partResp->ResultSize()) {
-                    const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
-                    if (back.GetPartNo() + 1 < back.GetTotalParts()) {
-                        makeErrorResponse("Internal error - got message part from the middle when expecting first part");
-                        YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
+                if (!InitialRequest) {
+                    // This is follow-up request to read missing parts;
+                    // There must be some data in response already.
+                    if (partResp->ResultSize() == 0) {
+                        makeErrorResponse("Internal error - got message part on followup read request with empty current response");
+                        YDB_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now full",
                             {"logPrefix", NPQ_LOG_PREFIX},
-                            {"seqNoPartNo", back.GetSeqNo()},
-                            {"partNo", back.GetPartNo()},
                             {"seqNo", currentReadResult.GetSeqNo()},
-                            {"currentPartNo", currentReadResult.GetPartNo()},
+                            {"partNo", currentReadResult.GetPartNo()},
                             {"requestNow", Request});
                         break;
                     }
+                    if (currentReadResult.GetPartNo() == 0) {
+                        // Partition gap-jumped to the next message: remaining parts of the previous one
+                        // were deleted by retention or compactification. Drop the incomplete tail and
+                        // keep assembling from this result — do not resend the same follow-up.
+                        dropIncompleteLastIfAny();
+                    } else {
+                        const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
+                        if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                            dropIncompleteLastIfAny();
+                            break;
+                        }
+                    }
                 }
-                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && skipObsoleteTimestamps) {
-                    LastSkipOffset = currentReadResult.GetOffset();
-                    continue;
-                }
-                // Create new message for first part;
-                auto* added = partResp->AddResult();
-                added->CopyFrom(currentReadResult);
-                if (added->GetTotalSize() > added->GetData().size()) {
-                    added->MutableData()->reserve(added->GetTotalSize());
-                }
-            } else { // Glue next part to prevous otherwise
-                if(partResp->ResultSize() == 0) {
-                    // This is error, Must have some data at this point;
-                    YDB_LOG_CRIT("Handle TEvRead, have last read pos, readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
-                        {"seqNo", currentReadResult.GetSeqNo()},
-                        {"partNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
-                    makeErrorResponse("Internal error - got message part from the middle when current response if empty");
-                    break;
 
-                }
-                auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
-                if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                    YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
-                        {"seqNoPartNo", rr->GetSeqNo()},
-                        {"partNo", rr->GetPartNo()},
-                        {"seqNo", currentReadResult.GetSeqNo()},
-                        {"currentPartNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
-                    makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
+                // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
+                // (And throw away that message to)
+                if (partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
+                    currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > incomingRead->ResultSize())
+                {
                     break;
                 }
-                auto* data = rr->MutableData();
-                if (rr->GetTotalSize() > data->size()) {
-                    data->reserve(rr->GetTotalSize());
-                }
-                *data += currentReadResult.GetData();
-                rr->SetPartitionKey(currentReadResult.GetPartitionKey());
-                rr->SetExplicitHash(currentReadResult.GetExplicitHash());
-                rr->SetPartNo(currentReadResult.GetPartNo());
-                rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
-                if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
-                    // This is the last part, validate data size;
-                    AFL_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
+
+                // Now actually add some data;
+                if (currentReadResult.GetPartNo() == 0) {
+                    if (partResp->ResultSize()) {
+                        const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+                        if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                            makeErrorResponse("Internal error - got message part from the middle when expecting first part");
+                            YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
+                                {"logPrefix", NPQ_LOG_PREFIX},
+                                {"seqNoPartNo", back.GetSeqNo()},
+                                {"partNo", back.GetPartNo()},
+                                {"seqNo", currentReadResult.GetSeqNo()},
+                                {"currentPartNo", currentReadResult.GetPartNo()},
+                                {"requestNow", Request});
+                            break;
+                        }
+                    }
+                    if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && skipObsoleteTimestamps) {
+                        LastSkipOffset = currentReadResult.GetOffset();
+                        continue;
+                    }
+                    // Steal the first part from the incoming event instead of copying Data.
+                    auto* added = partResp->AddResult();
+                    added->Swap(current);
+                    if (added->GetTotalSize() > added->GetData().size()) {
+                        added->MutableData()->reserve(added->GetTotalSize());
+                    }
+                } else { // Glue next part to prevous otherwise
+                    if(partResp->ResultSize() == 0) {
+                        // This is error, Must have some data at this point;
+                        YDB_LOG_CRIT("Handle TEvRead, have last read pos, readed now full",
+                            {"logPrefix", NPQ_LOG_PREFIX},
+                            {"seqNo", currentReadResult.GetSeqNo()},
+                            {"partNo", currentReadResult.GetPartNo()},
+                            {"requestNow", Request});
+                        makeErrorResponse("Internal error - got message part from the middle when current response if empty");
+                        break;
+
+                    }
+                    auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                    if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                        YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
+                            {"logPrefix", NPQ_LOG_PREFIX},
+                            {"seqNoPartNo", rr->GetSeqNo()},
+                            {"partNo", rr->GetPartNo()},
+                            {"seqNo", currentReadResult.GetSeqNo()},
+                            {"currentPartNo", currentReadResult.GetPartNo()},
+                            {"requestNow", Request});
+                        makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
+                        break;
+                    }
+                    auto* data = rr->MutableData();
+                    if (rr->GetTotalSize() > data->size()) {
+                        data->reserve(rr->GetTotalSize());
+                    }
+                    *data += currentReadResult.GetData();
+                    rr->SetPartitionKey(currentReadResult.GetPartitionKey());
+                    rr->SetExplicitHash(currentReadResult.GetExplicitHash());
+                    rr->SetPartNo(currentReadResult.GetPartNo());
+                    rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
+                    if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
+                        // This is the last part, validate data size;
+                        AFL_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
+                    }
                 }
             }
         }
@@ -444,7 +470,7 @@ private:
                 }
             }
         }
-        TryProcessBatchOrSendResponse(ctx, isDirectRead, readResult, record.GetPartitionResponse());
+        TryProcessBatchOrSendResponse(ctx, isDirectRead, *partResp, record.GetPartitionResponse());
     }
 
     void Handle(NBatching::TEvProcessBatchResult::TPtr& ev, const TActorContext& ctx)

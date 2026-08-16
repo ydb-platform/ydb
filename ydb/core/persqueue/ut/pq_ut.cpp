@@ -5209,6 +5209,110 @@ Y_UNIT_TEST(ReadProxyEmptyFollowUpWithOnlyIncompleteTailContinues) {
         "empty follow-up with only an incomplete tail did not continue from the next offset");
 }
 
+// Follow-up CmdRead is Count=1 with Bytes/Timeout cleared. After dropping an incomplete tail
+// whose remaining parts are gone, skip-ahead must restore the original client limits; otherwise
+// the next read returns a single message (or does not wait) instead of filling Count/Bytes.
+Y_UNIT_TEST(ReadProxyContinueFromSkipRestoresOriginalCount) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(2_MB, 'b'));
+    data.emplace_back(3, TString(64, 'c'));
+    data.emplace_back(4, TString(64, 'd'));
+    data.emplace_back(5, TString(64, 'e'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    constexpr ui32 kFollowUpLoopThreshold = 8;
+    constexpr ui32 kOriginalCount = 10;
+    constexpr ui32 kOriginalBytes = 20_MB;
+    ui32 followUpReads = 0;
+    ui32 continueCount = 0;
+    ui32 continueSize = 0;
+    bool firstReadAnswer = true;
+    bool madeIncompleteTail = false;
+    bool gotContinueRead = false;
+    bool gotClientResponse = false;
+    bool clearNextInternalResponse = false;
+
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* read = ev->CastAsLocal<TEvPQ::TEvRead>()) {
+            if (read->PartNo > 0) {
+                ++followUpReads;
+                clearNextInternalResponse = true;
+            } else if (followUpReads > 0) {
+                continueCount = read->Count;
+                continueSize = read->Size;
+                gotContinueRead = true;
+            }
+        } else if (auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (!event->Record.HasPartitionResponse() ||
+                !event->Record.GetPartitionResponse().HasCmdReadResult())
+            {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (ev->Recipient == tc.Edge) {
+                gotClientResponse = true;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            if (firstReadAnswer) {
+                firstReadAnswer = false;
+                NKikimrClient::TCmdReadResult kept;
+                for (const auto& res : readResult.GetResult()) {
+                    if (res.GetPartNo() == 0 && res.HasTotalParts() && res.GetTotalParts() > 1) {
+                        kept.AddResult()->CopyFrom(res);
+                        break;
+                    }
+                }
+                readResult.MutableResult()->CopyFrom(kept.GetResult());
+                if (readResult.ResultSize() > 0) {
+                    const auto& last = readResult.GetResult(readResult.ResultSize() - 1);
+                    madeIncompleteTail = last.HasTotalParts() && last.GetPartNo() + 1 < last.GetTotalParts();
+                }
+            } else if (clearNextInternalResponse) {
+                readResult.MutableResult()->Clear();
+                clearNextInternalResponse = false;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, kOriginalCount, kOriginalBytes, 3, false, {2, 3, 4});
+    readSettings.ReadToBlobEnd = false;
+    readSettings.User = user;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return followUpReads >= kFollowUpLoopThreshold || gotClientResponse;
+    };
+    try {
+        tc.Runtime->DispatchEvents(options);
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+    }
+
+    UNIT_ASSERT_C(madeIncompleteTail,
+        "observer failed to leave only an incomplete multipart message in the first CmdReadResult");
+    UNIT_ASSERT_VALUES_EQUAL_C(followUpReads, 1,
+        "expected a single follow-up read, got " << followUpReads);
+    UNIT_ASSERT_C(gotContinueRead, "skip-ahead did not issue a PartNo==0 read after the empty follow-up");
+    UNIT_ASSERT_VALUES_EQUAL_C(continueCount, kOriginalCount,
+        "skip-ahead kept follow-up Count=1 instead of the original client Count");
+    UNIT_ASSERT_VALUES_EQUAL_C(continueSize, kOriginalBytes,
+        "skip-ahead did not restore the original client Bytes");
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc),
+        "skip-ahead after an empty follow-up did not return the remaining messages under the original Count");
+}
+
 Y_UNIT_TEST(ReadProxyFollowUpPartMismatchDropsIncompleteTail) {
     TTestContext tc;
     TFinalizer finalizer(tc);

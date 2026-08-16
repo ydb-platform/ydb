@@ -62,6 +62,7 @@ public:
         , Sender(sender)
         , TabletGeneration(tabletGeneration)
         , Request(request)
+        , OriginalCmdRead(request.GetPartitionRequest().GetCmdRead())
         , Response(new TEvPersQueue::TEvResponse)
         , DirectReadKey(directReadKey)
         , InitialReadOffset(request.GetPartitionRequest().GetCmdRead().GetOffset())
@@ -190,9 +191,14 @@ private:
 
     void ContinueFromSkippedOffset()
     {
+        // Follow-up CmdRead is Count=1 with Bytes/Timeout/MaxTimeLag cleared. Restore the
+        // client's original limits so skip-ahead is a real initial read, not a one-message peek.
+        auto* read = Request.MutablePartitionRequest()->MutableCmdRead();
+        const ui64 offset = *LastSkipOffset + 1;
+        read->CopyFrom(OriginalCmdRead);
+        read->SetOffset(offset);
+        read->SetPartNo(0);
         Request.SetRequestId(TMP_REQUEST_MARKER);
-        Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
-        Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
         THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record = Request;
         Send(TabletActorId, req.Release());
@@ -529,6 +535,7 @@ private:
     const TActorId Sender;
     const ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdRead OriginalCmdRead;
     THolder<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;

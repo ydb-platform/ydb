@@ -722,6 +722,48 @@ Y_UNIT_TEST(ReadProxyPoisonPillUnblocksClientWaitingOnBatch) {
         result->Record.DebugString());
 }
 
+Y_UNIT_TEST(ReadProxyTabletDieUnblocksClientWaitingOnBatch) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<TString> values = {"value0", "value1", "value2"};
+    CmdWriteKafkaBatch(0, "sourceid_readproxy_tablet_die", 1, values, tc, 0);
+
+    bool sentToBatch = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->CastAsLocal<NBatching::TEvProcessBatch>()) {
+            sentToBatch = true;
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, static_cast<ui32>(values.size()), 16_MB, 0, false, {}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return sentToBatch; };
+    tc.Runtime->DispatchEvents(options);
+    UNIT_ASSERT_C(sentToBatch, "ReadProxy never sent TEvProcessBatch");
+
+    PQTabletRestart(tc);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::INITIALIZING),
+        result->Record.DebugString());
+}
+
 void AssertKafkaBatchCutMessage(
     const NKikimrClient::TCmdReadResult::TResult& msg,
     ui64 expectedOffset,

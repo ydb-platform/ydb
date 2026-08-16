@@ -120,6 +120,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const TStringBuf pathInfo) const;
 
     void HandleDie(const TActorContext& ctx) override;
+    void Handle(TEvPQ::TEvReadProxyDone::TPtr& ev, const TActorContext& ctx);
 
     //response from KV on READ or WRITE config request
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
@@ -322,6 +323,7 @@ private:
 
     ui64 NextResponseCookie;
     THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy;
+    THashSet<TActorId> ReadProxies;
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 

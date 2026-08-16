@@ -479,6 +479,12 @@ private:
         };
     }
 
+    void PassAway() override
+    {
+        Send(TabletActorId, new TEvPQ::TEvReadProxyDone());
+        TBaseTabletActor::PassAway();
+    }
+
     const TActorId Sender;
     const ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;

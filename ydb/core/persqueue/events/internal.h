@@ -246,6 +246,7 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
+        EvReadProxyDone,
         EvEnd,
     };
 
@@ -1169,6 +1170,9 @@ struct TEvPQ {
         {}
 
         TString Consumer;
+    };
+
+    struct TEvReadProxyDone : public TEventLocal<TEvReadProxyDone, EvReadProxyDone> {
     };
 
     struct TEvFetchResponse : public TEventLocal<TEvFetchResponse, EvFetchResponse> {

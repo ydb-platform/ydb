@@ -1353,6 +1353,11 @@ void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvReadProxyDone::TPtr& ev, const TActorContext&)
+{
+    ReadProxies.erase(ev->Sender);
+}
+
 void TPersQueue::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx)
 {
 
@@ -2430,8 +2435,10 @@ void TPersQueue::HandleReadRequest(
             }
             auto it = ResponseProxy.find(responseCookie);
             PQ_ENSURE(it != ResponseProxy.end());
-            it->second->SetSender(ctx.RegisterWithSameMailbox(CreateReadProxy(
-                sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor)));
+            const TActorId readProxy = ctx.RegisterWithSameMailbox(CreateReadProxy(
+                sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
+            ReadProxies.insert(readProxy);
+            it->second->SetSender(readProxy);
         }
 
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
@@ -3227,6 +3234,11 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         PQ_ENSURE(res);
     }
     ResponseProxy.clear();
+
+    for (const auto& actorId : ReadProxies) {
+        ctx.Send(actorId, new TEvents::TEvPoisonPill());
+    }
+    ReadProxies.clear();
 
     StopWatchingTenantPathId(ctx);
     MediatorTimeCastUnregisterTablet(ctx);
@@ -6253,6 +6265,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
         HFuncTraced(TEvPQ::TEvError, Handle);
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
+        HFuncTraced(TEvPQ::TEvReadProxyDone, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
         HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);

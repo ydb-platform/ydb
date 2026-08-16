@@ -1296,6 +1296,9 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     if (settings.MaxTimeLagMs > 0) {
         read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
     }
+    if (settings.TimeoutMs > 0) {
+        read->SetTimeoutMs(settings.TimeoutMs);
+    }
     if (settings.ReadTimestampMs > 0) {
         read->SetReadTimestampMs(settings.ReadTimestampMs);
     }

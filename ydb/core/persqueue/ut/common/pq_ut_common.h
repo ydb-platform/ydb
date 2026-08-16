@@ -506,6 +506,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     TVector<i32> Offsets;
     ui32 MaxTimeLagMs = 0;
     ui32 ReadTimestampMs = 0;
+    ui32 TimeoutMs = 0;
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;

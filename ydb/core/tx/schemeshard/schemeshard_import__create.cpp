@@ -1451,6 +1451,7 @@ private:
             }
         }
 
+        const ui32 itemsSizeBefore = importInfo->Items.size();
         const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
         if (!fillResult.Success) {
             return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
@@ -1458,7 +1459,7 @@ private:
 
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo);
+        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 

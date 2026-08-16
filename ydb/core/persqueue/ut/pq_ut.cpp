@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -677,6 +678,48 @@ Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetCodec()), static_cast<ui32>(NPersQueueCommon::RAW));
         UNIT_ASSERT_VALUES_EQUAL(dataChunk.GetData(), values[i]);
     }
+}
+
+Y_UNIT_TEST(ReadProxyPoisonPillUnblocksClientWaitingOnBatch) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<TString> values = {"value0", "value1", "value2"};
+    CmdWriteKafkaBatch(0, "sourceid_readproxy_poison", 1, values, tc, 0);
+
+    TActorId readProxy;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* batch = ev->CastAsLocal<NBatching::TEvProcessBatch>()) {
+            readProxy = batch->Context.ResponseActor;
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, static_cast<ui32>(values.size()), 16_MB, 0, false, {}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return readProxy != TActorId{}; };
+    tc.Runtime->DispatchEvents(options);
+    UNIT_ASSERT_C(readProxy, "ReadProxy never sent TEvProcessBatch");
+
+    tc.Runtime->Send(new IEventHandle(readProxy, tc.Edge, new TEvents::TEvPoisonPill()), 0, true);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::INITIALIZING),
+        result->Record.DebugString());
 }
 
 void AssertKafkaBatchCutMessage(

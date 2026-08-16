@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/algorithm.h>
@@ -65,6 +66,32 @@ public:
     }
 
 private:
+    void ReplyErrorAndDie(const TActorContext& ctx, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
+    {
+        if (!Response) {
+            PassAway();
+            return;
+        }
+        Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        Response->Record.SetErrorCode(errorCode);
+        Response->Record.SetErrorReason(error);
+        if (Request.GetPartitionRequest().HasCookie() && !Response->Record.GetPartitionResponse().HasCookie()) {
+            Response->Record.MutablePartitionResponse()->SetCookie(Request.GetPartitionRequest().GetCookie());
+        }
+        ctx.Send(Sender, Response.Release());
+        PassAway();
+    }
+
+    void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
+    {
+        ReplyErrorAndDie(ctx, NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now");
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx)
+    {
+        ReplyErrorAndDie(ctx, NPersQueue::NErrorCode::READ_NOT_DONE, "batch processor is unavailable");
+    }
+
     void SendResponse(const TActorContext& ctx, bool isDirectRead, const NKikimrClient::TCmdReadResult& readResult,
                       const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
     {
@@ -104,6 +131,11 @@ private:
         const auto& cmdReadResult = responseRecord.GetPartitionResponse().GetCmdReadResult();
 
         if (!CanReadBatches && HasBatchMessages(cmdReadResult)) {
+            if (!BatchProcessorActor) {
+                ReplyErrorAndDie(ctx, NPersQueue::NErrorCode::READ_NOT_DONE, "batch processor is unavailable");
+                return;
+            }
+
             PendingDirectRead = isDirectRead;
             PendingPartitionResponse.CopyFrom(partitionResponse);
 
@@ -118,7 +150,7 @@ private:
                 .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
                 .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
                 .ResponseActor = SelfId(),
-                .Event = std::move(proxyEvent)}));
+                .Event = std::move(proxyEvent)}), IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -440,6 +472,8 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(NBatching::TEvProcessBatchResult, Handle);
+            HFunc(TEvents::TEvPoisonPill, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
         default:
             break;
         };

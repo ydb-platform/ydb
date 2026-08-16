@@ -29,10 +29,17 @@ public:
         , FromGen(fromGen)
         , NextFromGen(nextFromGen)
     {
+        // NextFromGen - 1 is the hard collect generation; 0 would underflow to a
+        // collect-everything barrier. Callers must resolve a real next generation.
+        AFL_VERIFY(NextFromGen > 0);
     }
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWait);
+        SendBarrier(ctx);
+    }
+
+    void HandleWakeup(const TActorContext& ctx) {
         SendBarrier(ctx);
     }
 
@@ -57,11 +64,15 @@ public:
             Die(ctx);
             return;
         }
-        SendBarrier(ctx);
+        // Linear backoff: an immediate retry against an overloaded group would only add load.
+        ctx.Schedule(TDuration::Seconds(1) * Retries, new NActors::TEvents::TEvWakeup());
     }
 
     STFUNC(StateWait) {
-        switch (ev->GetTypeRewrite()) { HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle); }
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
+        }
     }
 
 private:
@@ -105,7 +116,8 @@ bool THistoryCutterWrapper::IsEnabled() const {
     return HasAppData() && AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->ColumnShardConfig.GetCutHistoryEnabled();
 }
 
-bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration) {
+bool THistoryCutterWrapper::SeenGroupsCheckPasses(
+    const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration, const std::unordered_set<ui32>& cutFromGenerations) {
     ui32 targetGroup = 0;
     bool found = false;
     std::unordered_set<ui32> seenGroups;
@@ -114,6 +126,9 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const std::vector<TTabletChann
             targetGroup = entry.GroupID;
             found = true;
             break;
+        }
+        if (cutFromGenerations.contains(entry.FromGeneration)) {
+            continue;
         }
         seenGroups.insert(entry.GroupID);
     }
@@ -124,7 +139,13 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
     if (key.Channel >= static_cast<ui32>(TabletInfo->Channels.size())) {
         return false;
     }
-    return SeenGroupsCheckPasses(TabletInfo->Channels[key.Channel].History, key.FromGeneration);
+    std::unordered_set<ui32> cutFromGenerations;
+    for (const auto& [stateKey, state] : CutState) {
+        if (stateKey.Channel == key.Channel && state == ECutState::Cut) {
+            cutFromGenerations.insert(stateKey.FromGeneration);
+        }
+    }
+    return SeenGroupsCheckPasses(TabletInfo->Channels[key.Channel].History, key.FromGeneration, cutFromGenerations);
 }
 
 ui32 THistoryCutterWrapper::GetNextFromGeneration(const TEntryKey& key) const {
@@ -230,7 +251,7 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     PoisonedChannels.clear();
     PortionKeys.clear();
     SweepInFlight = false;
-    SweepCandidates.clear();
+    SweepCandidates.reset();
     SweepSurvivors.clear();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
@@ -277,6 +298,10 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
             if (cntIt != Counters.end() && cntIt->second != 0) {
                 continue;
             }
+            const auto disprovedIt = DisprovedAt.find(key);
+            if (disprovedIt != DisprovedAt.end() && ctx.Now() - disprovedIt->second < DisprovedRetryCooldown) {
+                continue;
+            }
             if (!IsDrained(key)) {
                 continue;
             }
@@ -296,8 +321,8 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         CutState[key] = ECutState::Verifying;
     }
     SweepInFlight = true;
-    SweepCandidates = batch;
-    SweepSurvivors = std::move(batch);
+    SweepSurvivors = batch;
+    SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(batch));
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
 
@@ -323,6 +348,9 @@ TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(si
 }
 
 void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx) {
+    for (const auto& key : disproved) {
+        DisprovedAt[key] = ctx.Now();
+    }
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
         TVector<TEntryKey> kept;
@@ -343,7 +371,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
     // Cursor exhausted: re-check each survivor and send hard barrier if still safe.
     SweepInFlight = false;
-    SweepCandidates.clear();
+    SweepCandidates.reset();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
 
@@ -355,6 +383,12 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             continue;
         }
         if (!IsDrained(key)) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        // The history may have changed between nomination and this point — the
+        // same-group safety gate must hold at barrier-send time, not only at nomination.
+        if (!SeenGroupsCheckPasses(key)) {
             CutState[key] = ECutState::None;
             continue;
         }
@@ -389,6 +423,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;
+            DisprovedAt[key] = ctx.Now();
         }
     }
 }

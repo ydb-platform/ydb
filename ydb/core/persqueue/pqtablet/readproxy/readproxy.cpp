@@ -333,15 +333,18 @@ private:
                 return;
             }
         }
-        //filter old messages
-        ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
-        records.Swap(partResp->MutableResult());
-        partResp->ClearResult();
-        for (auto & rec : records) {
-            partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), rec.GetOffset()));
-            if (rec.GetWriteTimestampMS() >= readFromTimestampMs) {
-                auto result = partResp->AddResult();
-                result->CopyFrom(rec);
+        if (readFromTimestampMs == 0) {
+            for (const auto& rec : partResp->GetResult()) {
+                partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), rec.GetOffset()));
+            }
+        } else {
+            ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
+            records.Swap(partResp->MutableResult());
+            for (auto& rec : records) {
+                partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), rec.GetOffset()));
+                if (rec.GetWriteTimestampMS() >= readFromTimestampMs) {
+                    partResp->AddResult()->Swap(&rec);
+                }
             }
         }
         TryProcessBatchOrSendResponse(ctx, isDirectRead, readResult, record.GetPartitionResponse());

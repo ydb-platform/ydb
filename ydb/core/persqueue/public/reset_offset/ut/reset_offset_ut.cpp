@@ -12,6 +12,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <atomic>
+#include <memory>
 
 using namespace NKikimr::NPQ;
 using namespace NKikimr::NPQ::NResetOffset;
@@ -26,20 +27,26 @@ namespace {
 using TCoreSettings = NKikimr::NPQ::NResetOffset::TResetOffsetSettings;
 
 std::atomic<ui64> TopicSeq{0};
+std::unique_ptr<TTopicSdkTestSetup> ClusterInstance;
 
 TString UniqueName(TStringBuf prefix) {
     return TStringBuilder() << prefix << TopicSeq.fetch_add(1);
 }
 
 TTopicSdkTestSetup& Cluster() {
-    // Leaked: destroying TTestServer at process exit aborts on real threads.
-    static auto* setup = [] {
-        auto* s = new TTopicSdkTestSetup(
+    if (!ClusterInstance) {
+        ClusterInstance = std::make_unique<TTopicSdkTestSetup>(
             "ResetOffsetActorTests", TTopicSdkTestSetup::MakeServerSettings(), false);
-        s->GetServer().EnableLogs({NKikimrServices::PQ_SCHEMA, NKikimrServices::PERSQUEUE}, NActors::NLog::PRI_DEBUG);
-        return s;
-    }();
-    return *setup;
+        // Default TTestServer logs PERSQUEUE at DEBUG (idle persist every ~100ms).
+        // Under ASAN that races with KQP compile and blows up the last test in the chunk.
+        ClusterInstance->GetServer().EnableLogs(
+            ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_ERROR);
+    }
+    return *ClusterInstance;
+}
+
+void ShutdownCluster() {
+    ClusterInstance.reset();
 }
 
 struct TRegisteredActor {
@@ -93,9 +100,31 @@ ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, const TString& topic, const T
     return stats->GetCommittedOffset();
 }
 
+ui64 DescribeTabletId(TTopicSdkTestSetup& setup, const TString& topic) {
+    auto edge = setup.GetRuntime().AllocateEdgeActor();
+    NDescriber::TDescribeSettings describeSettings;
+    setup.GetRuntime().Register(NDescriber::CreateDescriberActor(
+        edge, "/Root", { TString{setup.GetFullTopicPath(topic)} }, describeSettings));
+    auto described = setup.GetRuntime().GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(edge, TDuration::Seconds(30));
+    UNIT_ASSERT(described);
+    const auto& describedTopic = described->Get()->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(describedTopic.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT(describedTopic.Info);
+    return describedTopic.Info->Description.GetPartitions(0).GetTabletId();
+}
+
 } // namespace
 
-Y_UNIT_TEST_SUITE(TResetOffsetActorTests) {
+class TResetOffsetActorSuite: public TTestBase {
+public:
+    void GlobalSuiteTearDown() override {
+        // Destroy while the unittest runtime is still alive. A leaked TTestServer
+        // keeps KQP compiling into process-exit teardown (ASAN heap-use-after-free).
+        ShutdownCluster();
+    }
+};
+
+Y_UNIT_TEST_SUITE_IMPL(TResetOffsetActorTests, TResetOffsetActorSuite) {
 
 Y_UNIT_TEST(TopicNotExists) {
     auto& setup = Cluster();
@@ -325,30 +354,26 @@ Y_UNIT_TEST(TabletDirectEarliestLatest) {
     setup.CreateTopic(topic, "consumer");
     setup.Write(topic, "m1", 0);
 
-    auto edge = setup.GetRuntime().AllocateEdgeActor();
-    NDescriber::TDescribeSettings describeSettings;
-    auto describer = setup.GetRuntime().Register(NDescriber::CreateDescriberActor(
-        edge, "/Root", { TString{setup.GetFullTopicPath(topic)} }, describeSettings));
-    Y_UNUSED(describer);
-    auto described = setup.GetRuntime().GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(described);
-    const auto& describedTopic = described->Get()->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(describedTopic.Status, NDescriber::EStatus::SUCCESS);
-    const ui64 tabletId = describedTopic.Info->Description.GetPartitions(0).GetTabletId();
+    const ui64 tabletId = DescribeTabletId(setup, topic);
     const TString path = TString{setup.GetFullTopicPath(topic)};
+    auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
         new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::LATEST));
-    auto latest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(latest);
-    UNIT_ASSERT_VALUES_EQUAL(latest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
+    {
+        auto latest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(latest);
+        UNIT_ASSERT_VALUES_EQUAL(latest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
+    }
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 1);
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
         new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::EARLIEST));
-    auto earliest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(earliest);
-    UNIT_ASSERT_VALUES_EQUAL(earliest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
+    {
+        auto earliest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(earliest);
+        UNIT_ASSERT_VALUES_EQUAL(earliest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
+    }
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 0);
 }
 
@@ -359,17 +384,9 @@ Y_UNIT_TEST(TabletDirectUnspecifiedPosition) {
     const auto topic = UniqueName("topic_");
     setup.CreateTopic(topic, "consumer");
 
-    auto edge = setup.GetRuntime().AllocateEdgeActor();
-    NDescriber::TDescribeSettings describeSettings;
-    setup.GetRuntime().Register(NDescriber::CreateDescriberActor(
-        edge, "/Root", { TString{setup.GetFullTopicPath(topic)} }, describeSettings));
-    auto described = setup.GetRuntime().GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(described);
-    const auto& describedTopic = described->Get()->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(describedTopic.Status, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT(describedTopic.Info);
-    const ui64 tabletId = describedTopic.Info->Description.GetPartitions(0).GetTabletId();
+    const ui64 tabletId = DescribeTabletId(setup, topic);
     const TString path = TString{setup.GetFullTopicPath(topic)};
+    auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
         new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED));
@@ -385,17 +402,9 @@ Y_UNIT_TEST(TabletDirectUnknownPartition) {
     const auto topic = UniqueName("topic_");
     setup.CreateTopic(topic, "consumer");
 
-    auto edge = setup.GetRuntime().AllocateEdgeActor();
-    NDescriber::TDescribeSettings describeSettings;
-    setup.GetRuntime().Register(NDescriber::CreateDescriberActor(
-        edge, "/Root", { TString{setup.GetFullTopicPath(topic)} }, describeSettings));
-    auto described = setup.GetRuntime().GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(described);
-    const auto& describedTopic = described->Get()->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(describedTopic.Status, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT(describedTopic.Info);
-    const ui64 tabletId = describedTopic.Info->Description.GetPartitions(0).GetTabletId();
+    const ui64 tabletId = DescribeTabletId(setup, topic);
     const TString path = TString{setup.GetFullTopicPath(topic)};
+    auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
         new TEvPQ::TEvResetOffsetRequest(path, "consumer", 999, NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 42));
@@ -414,27 +423,20 @@ Y_UNIT_TEST(TabletDirectResetDoesNotStealCommit) {
     setup.Write(topic, "m1", 0);
 
     auto client = setup.MakeClient();
-    const auto path = setup.GetFullTopicPath(topic);
+    const TString path = TString{setup.GetFullTopicPath(topic)};
     UNIT_ASSERT(client.CommitOffset(path, 0, "consumer", 1).GetValueSync().IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 1);
 
+    const ui64 tabletId = DescribeTabletId(setup, topic);
     auto edge = setup.GetRuntime().AllocateEdgeActor();
-    NDescriber::TDescribeSettings describeSettings;
-    setup.GetRuntime().Register(NDescriber::CreateDescriberActor(
-        edge, "/Root", { TString{path} }, describeSettings));
-    auto described = setup.GetRuntime().GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(described);
-    const auto& describedTopic = described->Get()->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(describedTopic.Status, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT(describedTopic.Info);
-    const ui64 tabletId = describedTopic.Info->Description.GetPartitions(0).GetTabletId();
-
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(TString{path}, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 1));
-    auto reset = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
-    UNIT_ASSERT(reset);
-    UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetCookie(), 1u);
+        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 1));
+    {
+        auto reset = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(reset);
+        UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetCookie(), 1u);
+    }
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 0);
 
     UNIT_ASSERT(client.CommitOffset(path, 0, "consumer", 1).GetValueSync().IsSuccess());

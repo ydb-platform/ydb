@@ -8,6 +8,7 @@ ENDIF()
 SRCS(
     cpu_load_log_ut.cpp
     cpu_topology_ut.cpp
+    cpumask_ut.cpp
     memory_tracker_ut.cpp
     thread_load_log_ut.cpp
     rope_ut.cpp

@@ -1,4 +1,5 @@
 #include <util/system/byteorder.h>
+#include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
 #include <library/cpp/string_utils/url/url.h>
@@ -1734,13 +1735,9 @@ TProducer::TProducer(
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
 
     if (Settings.ProducerThreads_ == 1) {
-        TThreadPool::TParams params;
-        params.SetBlocking(true)
-            .SetCatching(false)
-            .SetFactory(SystemThreadFactory())
-            .SetThreadName("topic_producer_main_worker");
-        MainWorkerThreadPool = std::make_unique<TThreadPool>(params);
-        MainWorkerThreadPool->Start(1);
+        MainWorkerThread = SystemThreadFactory()->Run([this] {
+            RunMainWorkerLoop();
+        });
     }
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
@@ -1806,6 +1803,7 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     ShutdownFuture.Wait(CloseDeadline);
     RunUserEventLoop();
     Done.store(true);
+    WakeMainWorkerThread();
 
     {
         std::lock_guard lock(GlobalLock);
@@ -1828,6 +1826,7 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
 void TProducer::NonBlockingClose() {
     Closed.store(true);
     Done.store(true);
+    WakeMainWorkerThread();
 }
 
 void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
@@ -1848,8 +1847,11 @@ TProducer::~TProducer() {
         // or the state machine never reaches Idle).
         ShutdownFuture.Wait(TDuration::Seconds(30));
 
-        if (MainWorkerThreadPool) {
-            MainWorkerThreadPool->Stop();
+        Done.store(true);
+        WakeMainWorkerThread();
+        if (MainWorkerThread) {
+            MainWorkerThread->Join();
+            MainWorkerThread.Reset();
         }
         if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
             handlersExecutor->Stop();
@@ -2192,22 +2194,13 @@ void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise) 
 }
 
 void TProducer::RequestMainWorkerRun(std::int64_t owner) {
-    if (owner != -1 || !MainWorkerThreadPool) {
+    if (owner != -1 || !MainWorkerThread) {
         RunMainWorker(owner);
         return;
     }
 
-    if (!TryAcquireMainWorker()) {
-        return;
-    }
-
-    try {
-        MainWorkerThreadPool->SafeAddFunc([this] {
-            RunMainWorkerAcquired(-1);
-        });
-    } catch (...) {
-        RunMainWorkerAcquired(-1);
-    }
+    MainWorkerState.fetch_or(Rerun, std::memory_order_acq_rel);
+    WakeMainWorkerThread();
 }
 
 void TProducer::RunMainWorker(std::int64_t owner) {
@@ -2219,10 +2212,6 @@ void TProducer::RunMainWorker(std::int64_t owner) {
 }
 
 bool TProducer::TryAcquireMainWorker() {
-    // This state machine is both "request to run" and "try to become the runner".
-    // Running means that the runner is either already executing or scheduled on
-    // the producer main worker pool.
-
     // Try to become the runner. If already running, just request a rerun.
     std::uint8_t state = MainWorkerState.load(std::memory_order_acquire);
     for (;;) {
@@ -2241,6 +2230,29 @@ bool TProducer::TryAcquireMainWorker() {
             }
             continue;
         }
+    }
+}
+
+void TProducer::WakeMainWorkerThread() {
+    if (MainWorkerThread) {
+        MainWorkerEvent.NotifyOne();
+    }
+}
+
+void TProducer::RunMainWorkerLoop() {
+    TThread::SetCurrentThreadName("topic_producer");
+
+    for (;;) {
+        MainWorkerEvent.Await([this] {
+            const auto state = MainWorkerState.load(std::memory_order_acquire);
+            return Done.load(std::memory_order_acquire) || ((state & Rerun) && !(state & Running));
+        });
+
+        if (Done.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        RunMainWorker(-1);
     }
 }
 

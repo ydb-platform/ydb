@@ -6,8 +6,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 
 #include <library/cpp/threading/future/future.h>
+#include <library/cpp/yt/threading/event_count.h>
 #include <util/thread/lfqueue.h>
-#include <util/thread/pool.h>
+#include <util/thread/factory.h>
 
 #include <atomic>
 #include <functional>
@@ -391,6 +392,8 @@ private:
     void RequestMainWorkerRun(std::int64_t owner);
     void RunMainWorker(std::int64_t owner);
     bool TryAcquireMainWorker();
+    void WakeMainWorkerThread();
+    void RunMainWorkerLoop();
     void RunMainWorkerAcquired(std::int64_t owner);
 
     void NonBlockingClose();
@@ -484,7 +487,8 @@ private:
     std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
     std::atomic<std::uint64_t> ReservedMemory = 0;
     TLockFreeQueue<TClientRequest> ClientRequests;
-    std::unique_ptr<IThreadPool> MainWorkerThreadPool;
+    THolder<IThreadFactory::IThread> MainWorkerThread;
+    NYT::NThreading::TEventCount MainWorkerEvent;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;

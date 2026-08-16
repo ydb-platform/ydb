@@ -188,9 +188,8 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     InFlightPortionIds.clear();
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
-        if (portion->HasRemoveSnapshot()) {
-            continue;
-        }
+        // Remove-marked portions are rejected by IActualizer::AddPortion itself; the
+        // tier filter must stay here because InitialPortionIds feeds DoAddPortion's gate.
         if (portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
             continue;
         }

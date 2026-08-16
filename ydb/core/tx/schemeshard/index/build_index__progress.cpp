@@ -472,9 +472,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1 && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
         // When OverlapClusters is active, first build table for each level contains 2 additional columns: __ydb_distance and __ydb_foreign,
         // and its primary key has different order - original table's primary key comes first and the cluster ID comes next
-        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels) {
-            indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
-        }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
         // Prevent merging partitions
         auto& policy = *resetPartitionsSettings();

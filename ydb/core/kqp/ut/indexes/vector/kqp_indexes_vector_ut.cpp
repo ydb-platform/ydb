@@ -605,10 +605,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             return;
         }
 
-        // Selecting only key columns: the embedding is still read (the actor ranks on it) and a
-        // non-covering index does not store it in the posting table, so the main table is read
-        // after all. Regression guard: the plan used to derive "covering" from the index key and
-        // data columns, which counts the embedding as covered, and hid that read.
+        // Selecting only key columns is covered by every vector index because posting tables
+        // store the embedding used for ranking.
         const TString keyOnlyQuery(Q1_(R"(
             $target = "\x67\x71\x02";
             SELECT pk FROM `/Root/TestTable` VIEW index1
@@ -624,11 +622,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT(ValidatePlanNodeIds(keyOnlyPlan));
 
         const auto keyOnlyMainTableAccess = CountPlanNodesByKv(keyOnlyPlan, "Table", "TestTable");
-        if (flags & F_COVERING) {
-            UNIT_ASSERT_VALUES_EQUAL_C(keyOnlyMainTableAccess, 0, keyOnlyResult.GetPlan());
-        } else {
-            UNIT_ASSERT_C(keyOnlyMainTableAccess > 0, keyOnlyResult.GetPlan());
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(keyOnlyMainTableAccess, 0, keyOnlyResult.GetPlan());
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexPlanShape, EnableVectorSearchActor) {
@@ -1226,9 +1220,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
         } else {
             const TString updated = ReadTablePartToYson(session, TString(PostingTablePath));
-            if (Covered) {
-                SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
-            }
+            SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
             UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
         }
     }
@@ -1679,6 +1671,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             });
             UNIT_ASSERT(result.IsSuccess());
         }
+        runtime->SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
     }
 
     TVector<TEvStateStorage::TEvInfo::TFollowerInfo> ResolveFollowers(TTestActorRuntime & runtime, ui64 tabletId, ui32 nodeIndex) {
@@ -1729,16 +1724,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         constexpr static ui32 levelType = 1, postingType = 2, mainType = 3;
         constexpr static ui32 followerTypeFlag = 8;
-        THashMap<TActorId, ui32> actorTypes;
+        auto actorTypes = std::make_shared<THashMap<TActorId, ui32>>();
         auto resolveActors = [&](const char* tableName, ui32 type) {
             auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
             for (auto shardId: shards) {
                 auto actorId = ResolveTablet(*runtime, shardId);
-                actorTypes[actorId] = type;
+                (*actorTypes)[actorId] = type;
                 if (Followers) {
                     auto followers = ResolveFollowers(*runtime, shardId, 0);
                     for (const auto& followerInfo: followers) {
-                        actorTypes[followerInfo.FollowerTablet] = type | followerTypeFlag;
+                        (*actorTypes)[followerInfo.FollowerTablet] = type | followerTypeFlag;
                     }
                 }
             }
@@ -1747,9 +1742,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
         resolveActors("/Root/TestTable", mainType);
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto captureEvents = [actorTypes](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
+                const auto it = actorTypes->find(ev->GetRecipientRewrite());
+                if (it == actorTypes->end()) {
+                    return false;
+                }
+                ui32 shardType = it->second;
                 bool isFollower = (shardType & followerTypeFlag);
                 shardType = shardType & ~followerTypeFlag;
                 // Check that level & posting are read from followers
@@ -1758,16 +1757,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 if (shardType == levelType) {
                     // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
                     UNIT_ASSERT(!read.HasVectorTopK());
-                } else if (shardType == (Covered ? mainType : postingType)) {
-                    // Non-covering index does topK on main table, covering does it on posting
-                    UNIT_ASSERT(!read.HasVectorTopK());
                 } else {
-                    UNIT_ASSERT(shardType != 0);
                     UNIT_ASSERT(read.HasVectorTopK());
                     auto & topK = read.GetVectorTopK();
                     // Check that target and limit are pushed down
                     UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
-                    if (shardType == (Covered ? postingType : mainType)) {
+                    if (shardType == postingType || shardType == mainType) {
                         // Equal to LIMIT
                         UNIT_ASSERT(topK.GetLimit() == 3);
                     }
@@ -1795,6 +1790,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             });
             UNIT_ASSERT(result.IsSuccess());
         }
+        runtime->SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexTruncateTable, Covered, Overlap) {

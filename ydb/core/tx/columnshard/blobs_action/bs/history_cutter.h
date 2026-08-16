@@ -85,6 +85,7 @@ public:
     }
 
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
+    static constexpr TDuration DisprovedRetryMaxCooldown = TDuration::Hours(6);
     static constexpr TDuration NominateCadence = TDuration::Minutes(1);
     // Hard cap on IsDrained() queue scans per nomination round: with the cadence this
     // bounds tablet-thread scan work to MaxDrainChecksPerNomination scans per minute
@@ -187,10 +188,24 @@ private:
     // Tier-2 sweep state (all in-memory; reset on restart/completion).
     // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
     std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
-    // Sweep-disproved entries: re-nomination is pointless until state changes, so it is
-    // suppressed for DisprovedRetryCooldown to avoid a perpetual nominate/sweep cycle
-    // (tier-1 counters start empty at boot and cannot veto for boot-loaded portions).
-    THashMap<TEntryKey, TInstant> DisprovedAt;
+
+    // Sweep-disproved entries: re-nomination is pointless until state changes, so it
+    // is suppressed with exponential backoff (base cooldown doubling per consecutive
+    // disproval, capped) — an entry pinned by long-lived portions converges to one
+    // sweep per DisprovedRetryMaxCooldown instead of one per base cooldown forever.
+    struct TDisprovalState {
+        TInstant At;
+        ui32 Attempts = 0;
+    };
+
+    THashMap<TEntryKey, TDisprovalState> DisprovedAt;
+
+    TDuration GetDisprovedCooldown(const ui32 attempts) const {
+        const ui64 shift = Min<ui32>(attempts, 12);
+        const TDuration cooldown = DisprovedRetryCooldown * (1ull << shift);
+        return Min(cooldown, DisprovedRetryMaxCooldown);
+    }
+
     // Last full candidate evaluation; see NominateCadence in TryNominate.
     TInstant LastNominateAt;
     // First channel to service in the next nomination round (rotation under the

@@ -1,115 +1,155 @@
+# TEMP harness: body of Performance-tests-status-reports, kept under this
+# workflow file so it can be dispatched before the real WF is on main.
+# Use Actions → "Run and debug tests" → branch `perf_tests_report`.
+# Restore original run_and_debug_tests.yml after validation.
 name: Run and debug tests
 
 on:
   workflow_dispatch:
     inputs:
-      test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
-        required: false
+      commit_sha:
         type: string
-        default: 'ydb/tests/olap/'
-      build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
-        required: false
-        type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
-        required: false
-        type: string
-        default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
-        required: false
-        type: boolean
-        default: false
+        default: ""
+        description: "Optional commit SHA to build reports from (empty = branch HEAD)"
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+  reports:
+    name: Build and publish Now reports (debug harness)
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    permissions:
+      contents: read
+      issues: read
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 1
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Setup s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: "ydb-builds"
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+
+      - name: Install Python deps
+        run: python3 -m pip install -q "ydb[yc]>=3.20"
+
+      - name: Install GitHub CLI
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
-            done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+          set -eux
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
           fi
+          # Analytic runners often lack gh; pin a release into PATH for duty known_issues.
+          GH_VER=2.74.0
+          mkdir -p "$RUNNER_TEMP/gh-bin"
+          curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/gh-bin" --strip-components=1
+          echo "$RUNNER_TEMP/gh-bin/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/gh-bin/bin/gh" --version
 
-      - name: Format build presets
-        id: format-build-preset
+      # Same OLAP mart refresh as perfomance_tests_status.yml / collect_analytics_fast.
+      - name: Upload olap perfomance suites data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_suites_mart.sql --table_path perfomance/olap/fast_results_siutes --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite --ttl_min 43200 --ttl_key RunTs
+
+      - name: Upload olap perfomance data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Run_start_timestamp Db Suite Test Branch --ttl_min 43200 --ttl_key Run_start_timestamp
+
+      - name: Fetch data and generate reports
+        id: build
+        env:
+          # duty known_issues via `gh search` (REST fallback if gh still missing)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
+          set -eux
+          PUBLISH_DIR="${RUNNER_TEMP}/perfomance_tests_status_publish"
+          rm -rf "$PUBLISH_DIR"
+          mkdir -p "$PUBLISH_DIR"
+          set +e
+          python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-dir "$PUBLISH_DIR"
+          rc=$?
+          set -e
+          echo "publish_dir=$PUBLISH_DIR" >> "$GITHUB_OUTPUT"
+          # Avoid 0/1 GITHUB_OUTPUT (JS falsy "0" breaks env wiring) — use yes/no.
+          if [[ -f "$PUBLISH_DIR/olap-report.html" ]]; then echo "olap_ok=yes" >> "$GITHUB_OUTPUT"
+          else echo "olap_ok=no" >> "$GITHUB_OUTPUT"; fi
+          if [[ -f "$PUBLISH_DIR/tpcc-report.html" ]]; then echo "tpcc_ok=yes" >> "$GITHUB_OUTPUT"
+          else echo "tpcc_ok=no" >> "$GITHUB_OUTPUT"; fi
+          if [[ ! -f "$PUBLISH_DIR/olap-report.html" && ! -f "$PUBLISH_DIR/tpcc-report.html" ]]; then
+            echo "Both reports failed (rc=$rc)"
+            exit 1
           fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
+          if [[ ! -f "$PUBLISH_DIR/olap-report.html" || ! -f "$PUBLISH_DIR/tpcc-report.html" ]]; then
+            echo "Partial success (generator rc=$rc)"
+          fi
+
+      - name: Upload reports to S3 (debug URLs)
+        env:
+          PUBLISH_DIR: ${{ steps.build.outputs.publish_dir }}
+          OLAP_OK: ${{ steps.build.outputs.olap_ok }}
+          TPCC_OK: ${{ steps.build.outputs.tpcc_ok }}
+          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+        run: |
+          set -eux
+          S3_STABLE="s3://ydb-builds/perf_tests_report/perfomance_tests_status"
+          URL_STABLE="${AWS_ENDPOINT}/ydb-builds/perf_tests_report/perfomance_tests_status"
+
+          {
+            echo "## Performance tests status reports (debug harness)"
+            echo ""
+            echo "| Report | Status | Link |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$OLAP_OK" == "yes" ]]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+              --guess-mime-type --no-check-md5 --force \
+              "$PUBLISH_DIR/olap-report.html" "$S3_STABLE/olap-report.html"
+            echo "| OLAP Now | published | [${URL_STABLE}/olap-report.html](${URL_STABLE}/olap-report.html) |" >> "$GITHUB_STEP_SUMMARY"
           else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
+            echo "| OLAP Now | **FAILED** (previous S3 object kept) | — |" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
-    with:
-      test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
-      build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+          if [[ "$TPCC_OK" == "yes" ]]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+              --guess-mime-type --no-check-md5 --force \
+              "$PUBLISH_DIR/tpcc-report.html" "$S3_STABLE/tpcc-report.html"
+            echo "| TPC-C Now | published | [${URL_STABLE}/tpcc-report.html](${URL_STABLE}/tpcc-report.html) |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| TPC-C Now | **FAILED** (previous S3 object kept) | — |" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+          {
+            echo ""
+            echo "Debug S3 prefix under \`perf_tests_report/\` (not production \`main/\`)."
+            if [[ -f "$PUBLISH_DIR/status.json" ]]; then
+              echo ""
+              echo "<details><summary>status.json</summary>"
+              echo ""
+              echo '```json'
+              cat "$PUBLISH_DIR/status.json"
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$OLAP_OK" != "yes" || "$TPCC_OK" != "yes" ]]; then
+            exit 1
+          fi

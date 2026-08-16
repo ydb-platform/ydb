@@ -1,0 +1,25 @@
+{
+  "tokens": {
+    "SANDBOX_TOKEN": {
+      "secret_id": "sec-01fjh0j3kw5ahf5nabvw225qrk",
+      "key": "sandbox.token"
+    },
+    "GITHUB_TOKEN": {
+      "secret_id": "sec-01jqrjwt8rg4nh79cpaxgj332w",
+      "key": "github_token"
+    },
+    "AWS_KEY_ID": {
+      "secret_id": "sec-01hyx26k2mb6w56cs45hx23n5w",
+      "key": "s3.AWS_KEY_ID"
+    },
+    "AWS_KEY_VALUE": {
+      "secret_id": "sec-01hyx26k2mb6w56cs45hx23n5w",
+      "key": "s3.AWS_KEY_VALUE"
+    },
+    "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": {
+      "secret_id": "sec-01hyx26k2mb6w56cs45hx23n5w",
+      "key": "my-robot-key.json",
+      "kind": "file"
+    }
+  }
+}

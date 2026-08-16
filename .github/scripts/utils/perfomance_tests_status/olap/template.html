@@ -1,0 +1,4533 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OLAP Now</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230969da'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'%3EO%3C/text%3E%3C/svg%3E" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
+    --muted: #656d76; --bad: #cf222e; --warn: #bf8700; --ok: #1a7f37; --info: #0969da;
+    /* severity ladder: broken > missing > regression > stale > in_progress > ok */
+    --broken: #a40e26; --broken-bg: #ffd7d5;
+    --regress: #bc4c00; --regress-bg: #fff1e5;
+    --miss: #8250df; --miss-bg: #fbefff;
+  }
+  * { box-sizing: border-box; }
+  html { max-width: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+    max-width: 100%; overflow-x: hidden; /* page never grows; panes scroll inside */
+  }
+  .wrap {
+    max-width: 1400px; width: 100%; margin: 0 auto; padding: 14px 14px 48px;
+    min-width: 0;
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 15px; margin: 16px 0 8px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .note {
+    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: #0550ae; margin: 0 0 8px;
+  }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 999px; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge.broken { background: var(--broken-bg); color: var(--broken); }
+  .badge.missing { background: var(--miss-bg); color: var(--miss); }
+  .badge.regression, .badge.both { background: var(--regress-bg); color: var(--regress); }
+  .badge.failing { background: #ffebe9; color: var(--bad); }
+  .badge.slower { background: #fff8c5; color: var(--warn); }
+  .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
+  .badge.in_progress { background: #ddf4ff; color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .badge.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
+  .badge.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    background: #eaeef2; color: var(--muted); font-weight: 600;
+  }
+  .counters {
+    display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .counter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; flex: 1 1 0; min-width: 96px;
+  }
+  .counter .n {
+    font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
+    line-height: 1.1; white-space: nowrap;
+  }
+  .counter .n .sel { font-size: 0.85em; opacity: .85; }
+  .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .counter.hot .n { color: var(--broken); }
+  .counter.regress .n { color: var(--regress); }
+  .counter.miss .n { color: var(--miss); }
+  .counter.info .n { color: var(--info); }
+  .counter.warn .n { color: var(--warn); }
+  .counter.ok .n { color: var(--ok); }
+  .counter.nodata .n { color: var(--miss); }
+  .counter.noruns .n { color: var(--muted); }
+  .counter.ticket .n { color: #8250df; }
+  .counter.newfail .n { color: var(--broken); }
+  .pill.ticket { background: #ddf4ff; color: #0550ae; }
+  .pill.ticket.needs-branch { background: #fff8c5; color: #9a6700; }
+  .pill.ticket.closed { background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de; }
+  .pill.ticket.no-ticket { background: var(--broken-bg); color: var(--broken); }
+  a.pill.ticket.wait-next {
+    background: #ddf4ff; color: #0550ae; box-shadow: inset 0 0 0 1px #0969da44;
+  }
+  a.pill.ticket.wait-next:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  .run-card .run-tickets {
+    margin-top: 3px; font-size: 10px; line-height: 1.35;
+    display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%;
+  }
+  .run-card .run-tickets .pill {
+    font-size: 10px; padding: 1px 5px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .heat-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    max-width: 100%; min-width: 0; margin-bottom: 18px;
+    overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  table.heat {
+    border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px;
+  }
+  table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  table.heat th:first-child, table.heat td:first-child {
+    text-align: left; position: sticky; left: 0; z-index: 2;
+    background: #fafbfc; box-shadow: 1px 0 0 var(--border);
+  }
+  table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+  .cell {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
+  }
+  .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
+  .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
+  .cell.regression, .cell.slower, .cell.slow { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.failing, .cell.fail, .cell.both { background: #ffebe9; color: var(--bad); cursor: pointer; }
+  .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
+  .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
+  .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  /* query gaps (no data N) = critical purple; empty cell (no runs) = muted grey */
+  .cell.nodata { background: var(--miss-bg); color: var(--miss); cursor: pointer; box-shadow: inset 0 0 0 1px #8250df66; }
+  .cell.noruns { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
+  /* compare deltas: 40% was · 20% blend · 40% now (not a smear across the whole chip) */
+  .cell.delta-worse {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
+    color: var(--bad); cursor: pointer;
+  }
+  .cell.delta-better {
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; cursor: pointer;
+  }
+  /* nodata compare: green↔purple (query gaps), not red fail gradient */
+  .cell.delta-worse.delta-nodata, .cell.delta-worse-nodata {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fbefff 60%, #fbefff 100%);
+    color: var(--miss); cursor: pointer;
+  }
+  .cell.delta-better.delta-nodata, .cell.delta-better-nodata {
+    background: linear-gradient(90deg, #fbefff 0%, #fbefff 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; cursor: pointer;
+  }
+  .cell.delta-mixed {
+    background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #ddf4ff 60%, #ddf4ff 100%);
+    color: #9a6700; cursor: pointer;
+  }
+  .cell.delta-same { background: #f6f8fa; color: var(--muted); cursor: pointer; }
+  .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
+  .cell .cnt { font-size: 11px; opacity: .85; }
+  .cmp-cell { text-align: left; vertical-align: middle; min-width: 200px; }
+  .cmp-cell select {
+    max-width: 260px; width: 100%; padding: 4px 6px; font: inherit; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 6px; background: #fff;
+  }
+  .run-card { cursor: pointer; transition: box-shadow .12s, border-color .12s; }
+  .run-card:hover { border-color: var(--info); }
+  .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
+  .run-card.cmp { border-color: #9a6700; box-shadow: 0 0 0 2px #9a670033; }
+  /* Compare pills: default = fail pink↔green; typed accents below. */
+  .pill.delta-better {
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #1a7f3766;
+  }
+  .pill.delta-worse {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
+    color: var(--bad); box-shadow: inset 0 0 0 1px #cf222e66;
+  }
+  .pill.delta-better.delta-nodata, .pill.delta-better-nodata {
+    background: linear-gradient(90deg, #fbefff 0%, #fbefff 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #8250df66;
+  }
+  .pill.delta-worse.delta-nodata, .pill.delta-worse-nodata {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fbefff 60%, #fbefff 100%);
+    color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66;
+  }
+  .pill.delta-better.delta-slow, .pill.delta-better-slow {
+    background: linear-gradient(90deg, #fff1e5 0%, #fff1e5 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #bc4c0066;
+  }
+  .pill.delta-worse.delta-slow, .pill.delta-worse-slow {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fff1e5 60%, #fff1e5 100%);
+    color: var(--regress); box-shadow: inset 0 0 0 1px #bc4c0066;
+  }
+  .pill.delta-better.delta-soft, .pill.delta-better-soft, .pill.delta-soft {
+    background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #9a6700; box-shadow: inset 0 0 0 1px #9a670066;
+  }
+  .pill.delta-worse.delta-soft, .pill.delta-worse-soft {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fff8c5 60%, #fff8c5 100%);
+    color: #9a6700; box-shadow: inset 0 0 0 1px #9a670066;
+  }
+  .heat-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .heat-legend .swatch {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .heat-legend .dot {
+    width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto;
+  }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 0;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+  }
+  label { display: grid; gap: 2px; font-size: 10px; color: var(--muted); }
+  select, input[type="date"] {
+    min-width: 110px; padding: 4px 6px; border: 1px solid var(--border);
+    border-radius: 5px; background: #fff; font: inherit; font-size: 12px;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+  .toolbar button, .btn {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 5px;
+    padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
+  .top-filters {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px;
+    margin: 0 0 12px; padding: 6px 10px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .top-filters .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+  .top-filters .sep { width: 1px; height: 22px; background: var(--border); flex: 0 0 auto; }
+  .top-filters .react-btn, .top-filters .wave-btn {
+    padding: 3px 8px; font-size: 11px; border-radius: 999px;
+  }
+  .top-filters .filters { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .top-filters label { display: flex; flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
+  .top-filters select, .top-filters input[type="date"] { min-width: 0; }
+
+  #inbox {
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  table.inbox {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: transparent; border: 0;
+    table-layout: auto;
+  }
+  table.inbox th {
+    text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
+  }
+  table.inbox td {
+    padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  table.inbox tr:last-child td { border-bottom: 0; }
+  table.inbox tr.row { cursor: pointer; }
+  table.inbox tr.row:hover { filter: brightness(0.985); }
+  table.inbox tr.row.open { background: #f6f8fa; }
+  table.inbox tr.detail td {
+    background: #f6f8fa; padding: 12px 14px;
+    /* Keep dive/charts inside the visible inbox width (not clipped by page). */
+    max-width: 0; /* colspan cell inherits table width */
+    overflow-x: auto;
+  }
+  table.inbox tr.detail.hidden { display: none; }
+  .cluster { font-weight: 700; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .bad { color: var(--bad); }
+  .good { color: var(--ok); }
+  .num { text-align: right; }
+  /* Inbox metrics: big now, quiet base, loud Δ */
+  .mcell { min-width: 132px; text-align: left; line-height: 1.25; }
+  .mcell .big {
+    font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .mcell .big.bad { color: var(--bad); }
+  .mcell .big.muted { color: var(--muted); }
+  .mcell .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .mcell .delta {
+    margin-top: 4px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .mcell .delta.bad { color: var(--bad); }
+  .mcell .delta.good { color: var(--ok); }
+  .stat-cell { text-align: left; min-width: 120px; }
+  .stat-cell .qline { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .stat-cell .qline b { color: var(--text); font-weight: 650; }
+
+  .dive {
+    display: grid; gap: 12px; min-width: 0; max-width: 100%;
+  }
+  .runs {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px;
+  }
+  @media (max-width: 900px) {
+    .runs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 600px) {
+    .runs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .run-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 6px; font-size: 10px; line-height: 1.25; min-width: 0;
+  }
+  .run-card .t {
+    font-weight: 650; margin-bottom: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .run-card .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* active/hover styles declared above with delta cells */
+  .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .q-split {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px;
+    align-items: stretch; margin-top: 4px; min-height: 420px; min-width: 0; width: 100%;
+  }
+  .q-split-list {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+  }
+  .q-split-list .qlist {
+    display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+    gap: 4px; margin-top: 0; overflow-y: auto; max-height: 560px; flex: 1;
+  }
+  .q-split-list .qlist .q-row {
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    min-width: 0;
+  }
+  .q-split-list .qlist .q-row-tickets {
+    display: flex; flex-wrap: wrap; gap: 3px; padding: 0 2px 2px 8px;
+    min-height: 0;
+  }
+  .q-split-list .qlist .q-row-tickets .pill.ticket {
+    font-size: 10px; padding: 1px 6px; margin: 0;
+    max-width: 100%;
+  }
+  .q-split-list .qlist .pill,
+  .q-split-list button.pill {
+    width: 100%; border-radius: 6px; text-align: left; justify-content: flex-start;
+    white-space: normal; line-height: 1.25; padding: 5px 8px;
+  }
+  /* Compare query pills: name | was → now (centered) | extra */
+  .q-split-list .qlist .pill.q-pill-cmp {
+    display: grid;
+    grid-template-columns: minmax(64px, 26%) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 10px;
+    text-align: left;
+  }
+  .q-split-list .qlist .pill .q-name {
+    font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-cmp-mid {
+    display: flex; align-items: baseline; justify-content: center; gap: 8px;
+    min-width: 0; font-variant-numeric: tabular-nums;
+  }
+  .q-split-list .qlist .pill .q-was {
+    flex: 1 1 0; text-align: right; opacity: .78; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-arrow {
+    flex: 0 0 auto; opacity: .45; font-weight: 700;
+  }
+  .q-split-list .qlist .pill .q-now {
+    flex: 1 1 0; text-align: left; font-weight: 700;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-extra {
+    opacity: .7; font-size: 11px; white-space: nowrap;
+  }
+  .q-split-charts {
+    min-width: 0; display: flex; flex-direction: column;
+  }
+  .q-split-charts .qdetail {
+    margin-top: 0; flex: 1; display: flex; flex-direction: column; min-height: 0;
+  }
+  .q-split-charts .q-charts-stack {
+    display: grid; grid-template-columns: 1fr; gap: 10px; flex: 1;
+  }
+  .q-split-charts .chart-box { height: 240px; min-height: 200px; min-width: 0; max-width: 100%; }
+  .q-split-charts .q-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: #fff; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--muted); padding: 24px; text-align: center;
+  }
+  @media (max-width: 1000px) {
+    .q-split { grid-template-columns: 1fr; min-height: 0; }
+    .q-split-list .qlist { max-height: 220px; flex-direction: row; flex-wrap: wrap; }
+    .q-split-list .qlist .pill { width: auto; }
+  }
+  /* soft vs hard: pale amber outline vs solid orange fill */
+  .pill.watch { background: #fffdf5; color: #9a6700; box-shadow: inset 0 0 0 1.5px #d4a72c; }
+  .pill.slow { background: #e8590c; color: #fff; }
+  .pill.fail { background: #ffebe9; color: var(--bad); }
+  a.pill.ticket {
+    display: inline-block; background: #ddf4ff; color: #0969da; text-decoration: none;
+    font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: middle; margin: 2px 2px 0 0;
+  }
+  a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  a.pill.ticket.closed {
+    background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de;
+  }
+  a.pill.ticket.closed:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #8c959f66; }
+  .pill.qok { background: #dafbe1; color: var(--ok); }
+  .pill.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
+  .pill.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+  button.pill {
+    border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+  }
+  button.pill:hover { filter: brightness(0.95); box-shadow: inset 0 0 0 1px #0969da66; }
+  button.pill.active { box-shadow: inset 0 0 0 2px var(--info); }
+  .qdetail {
+    margin-top: 10px; background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .qdetail .ttl { font-weight: 650; margin-bottom: 6px; }
+  .chart-box {
+    height: 220px; min-width: 0; max-width: 100%;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  .chart-box canvas { max-width: 100% !important; }
+  .pair {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;
+    min-width: 0; width: 100%;
+  }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  a { color: var(--info); }
+  .react-btn, .wave-btn {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
+    cursor: pointer; white-space: nowrap;
+  }
+  .react-btn[aria-pressed="true"] { color: #fff; border-color: transparent; }
+  .react-btn[data-react="fail"][aria-pressed="true"] { background: var(--bad); }
+  .react-btn[data-react="new"][aria-pressed="true"] { background: var(--broken); }
+  .react-btn[data-react="hard"][aria-pressed="true"] { background: #e8590c; }
+  .react-btn[data-react="soft"][aria-pressed="true"] { background: #9a6700; }
+  .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
+  .react-btn:hover, .wave-btn:hover { filter: brightness(0.97); }
+  .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
+
+  /* Floating Save / Copy context — visible when a dive row is open */
+  .duty-fab-wrap {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1200;
+    display: none; flex-direction: column-reverse; align-items: flex-end; gap: 12px;
+  }
+  .duty-fab-wrap.visible { display: flex; }
+  .duty-fab {
+    width: 68px; height: 68px; border-radius: 50%; border: 3px solid #fff;
+    background: linear-gradient(145deg, #e5534b 0%, #a40e26 100%);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 8px 28px #cf222e88, 0 2px 8px #0004;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+  }
+  .duty-fab:hover { transform: scale(1.08); filter: brightness(1.06); }
+  .duty-fab:active { transform: scale(0.96); }
+  .duty-fab svg { width: 34px; height: 34px; display: block; }
+  .duty-fab-copy {
+    width: 48px; height: 48px; border-width: 2px;
+    background: linear-gradient(145deg, #54aeff 0%, #0969da 100%);
+    box-shadow: 0 6px 18px #0969da66, 0 2px 6px #0003;
+  }
+  .duty-fab-copy svg { width: 22px; height: 22px; }
+  .duty-fab-toast {
+    position: absolute; right: 80px; bottom: 18px;
+    background: #24292f; color: #fff; font-size: 13px; font-weight: 650;
+    padding: 8px 12px; border-radius: 8px; white-space: nowrap;
+    box-shadow: 0 4px 16px #0004; pointer-events: none;
+  }
+  .duty-fab-toast.fail { background: #a40e26; }
+  .duty-fab-hint {
+    position: absolute; right: 80px; bottom: 52px;
+    background: #fff; color: var(--text); font-size: 12px; font-weight: 650;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+    box-shadow: 0 4px 14px #0002; white-space: nowrap; pointer-events: none;
+  }
+
+  /* Mobile: keep wide tables inside scroll panes; do not grow the page width. */
+  @media (max-width: 720px) {
+    .wrap { padding: 10px 8px 80px; }
+    h1 { font-size: 18px; }
+    .note { font-size: 11px; }
+    .cell { min-width: 56px; padding: 4px 6px; gap: 4px; font-size: 11px; }
+    .cmp-cell { min-width: 140px; }
+    .cmp-cell select { max-width: 160px; }
+    .mcell { min-width: 96px; }
+    .stat-cell { min-width: 96px; }
+    table.heat { font-size: 11px; }
+    table.heat th, table.heat td { padding: 6px; }
+    table.inbox { font-size: 12px; }
+    table.inbox th, table.inbox td { padding: 8px; }
+    table.inbox th:nth-child(n+4),
+    table.inbox tr.row td:nth-child(n+4) { display: none; }
+    table.inbox tr.detail td { padding: 10px; }
+    .filters { gap: 6px; }
+    .filters label { min-width: 0; }
+    .filters select { min-width: 0; max-width: 100%; }
+    .duty-fab-wrap { right: 12px; bottom: 12px; gap: 8px; }
+    .duty-fab { width: 56px; height: 56px; }
+    .duty-fab svg { width: 28px; height: 28px; }
+    .duty-fab-copy { width: 44px; height: 44px; }
+    .duty-fab-hint, .duty-fab-toast { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OLAP Now</h1>
+  <div class="sub" id="subtitle"></div>
+
+  <div class="top-filters" id="topFilters">
+    <span class="lbl">Wave</span>
+    <span id="waveBar" style="display:inline-flex;gap:4px">
+      <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true" title="данные последнего завершённого">finished</button>
+      <button type="button" class="wave-btn" data-wave="all" aria-pressed="false" title="latest в т.ч. in progress">all</button>
+    </span>
+    <span class="sep"></span>
+    <span class="lbl">React</span>
+    <span id="reactBar" style="display:inline-flex;gap:4px" title="Каналы сигналов: inbox + скрытие строк heatmap без совпадений">
+      <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
+      <button type="button" class="react-btn" data-react="new" aria-pressed="false" title="Fail/no-data without a covering issue: uncovered, needs &lt;branch&gt; label, or only a closed issue from before this SHA/run">new issues</button>
+      <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
+      <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
+      <button type="button" class="react-btn" data-react="nodata" aria-pressed="true">no data</button>
+    </span>
+    <span class="sep"></span>
+    <div class="filters" id="branchBar">
+      <label>Branch <select id="fBranch"></select></label>
+      <label>From <input type="date" id="winFrom" /></label>
+      <label>To <input type="date" id="winTo" /></label>
+      <div class="toolbar">
+        <button type="button" id="winApply">Apply</button>
+        <button type="button" id="winReset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="counters" id="counters"></div>
+
+  <h2>Heatmap · DbAlias × family</h2>
+  <div class="heat-wrap">
+    <div class="heat-legend">
+      <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · hard fail / outlier</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>hot · label = <b>slow N fail M</b></span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>no data · query gaps</span>
+      <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
+      <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
+      <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+      <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no runs</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#ffebe9 60%,#ffebe9 100%);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#fbefff 60%,#fbefff 100%);box-shadow:inset 0 0 0 1px #8250df"></span>compare no data worse</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fbefff 0%,#fbefff 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #8250df"></span>compare no data better</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fff8c5 0%,#fff8c5 40%,#ddf4ff 60%,#ddf4ff 100%);box-shadow:inset 0 0 0 1px #9a6700"></span>compare mixed</span>
+    </div>
+    <div id="heatmap"></div>
+  </div>
+
+  <h2>Inbox</h2>
+  <div class="filters">
+    <label>Issue
+      <select id="fIssue">
+        <option value="">all hot</option>
+        <option value="ok">ok / watch</option>
+        <option value="watch">watch (soft)</option>
+        <option value="nodata">no data</option>
+        <option value="missing">missing</option>
+        <option value="in_progress">in progress</option>
+        <option value="failing">failing</option>
+        <option value="slower">slower</option>
+        <option value="both">fail+slow</option>
+        <option value="stale">stale</option>
+      </select>
+    </label>
+    <label>DbAlias
+      <select id="fDb"><option value="">all</option></select>
+    </label>
+    <label>Family
+      <select id="fFam"><option value="">all</option></select>
+    </label>
+  </div>
+  <div id="inbox"></div>
+</div>
+
+<div id="dutyFab" class="duty-fab-wrap" aria-hidden="true">
+  <span class="duty-fab-hint">Save context</span>
+  <span class="duty-fab-toast" hidden></span>
+  <button type="button" class="duty-fab" id="dutyFabSave"
+    title="Save context — скачать JSON инцидента для duty_agent"
+    aria-label="Save context">
+    <!-- floppy + alert badge = save error pack -->
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="currentColor" d="M8 6h24l8 8v28H8V6z"/>
+      <path fill="#fff" d="M14 6h16v13H14z" opacity=".95"/>
+      <path fill="#fff" d="M14 30h20v10H14z" opacity=".92"/>
+      <circle cx="36" cy="14" r="11" fill="#fff"/>
+      <path fill="#a40e26" d="M36 6.5l8.5 15h-17L36 6.5z"/>
+      <rect x="34.6" y="12" width="2.8" height="5.5" rx="1" fill="#fff"/>
+      <rect x="34.6" y="19" width="2.8" height="2.4" rx="1" fill="#fff"/>
+    </svg>
+  </button>
+  <button type="button" class="duty-fab duty-fab-copy" id="dutyFabCopy"
+    title="Copy context — скопировать JSON в буфер"
+    aria-label="Copy context">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Huge payload as JSON text (not JS AST) — much faster than const DATA = {...} -->
+<script type="application/json" id="olap-report-data">__OLAP_REPORT_DATA__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('olap-report-data').textContent);
+const charts = {};
+const UI = DATA.ui || {};
+let winFrom = UI.default_from || null;
+let winTo = UI.default_to || null;
+const REACT_KEY = 'olap_now_react_signals';
+const WAVE_KEY = 'olap_now_wave_view';
+function defaultReact() { return { fail: true, new: false, hard: false, soft: false, nodata: true }; }
+function loadReact() {
+  try {
+    const o = JSON.parse(localStorage.getItem(REACT_KEY) || '');
+    if (!o || typeof o !== 'object') return defaultReact();
+    return {
+      fail: !!o.fail,
+      new: !!o.new,
+      hard: !!o.hard,
+      soft: !!o.soft,
+      nodata: !!o.nodata,
+    };
+  } catch (_) {
+    return defaultReact();
+  }
+}
+let reactState = loadReact();
+function reactSignals() { return reactState; }
+function syncReactButtons() {
+  const s = reactSignals();
+  document.querySelectorAll('#reactBar .react-btn').forEach(btn => {
+    const k = btn.dataset.react;
+    btn.setAttribute('aria-pressed', s[k] ? 'true' : 'false');
+  });
+}
+function setReact(key) {
+  reactState = { ...reactState, [key]: !reactState[key] };
+  try { localStorage.setItem(REACT_KEY, JSON.stringify(reactState)); } catch (_) {}
+  syncReactButtons();
+  destroyCharts();
+  renderAll();
+}
+function defaultWave() { return 'finished'; }
+function loadWave() {
+  try {
+    const v = localStorage.getItem(WAVE_KEY);
+    return (v === 'all' || v === 'finished') ? v : defaultWave();
+  } catch (_) {
+    return defaultWave();
+  }
+}
+let waveState = loadWave();
+function waveView() { return waveState; }
+function syncWaveButtons() {
+  const v = waveView();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.wave === v ? 'true' : 'false');
+  });
+}
+function setWave(v) {
+  if (v !== 'all' && v !== 'finished') return;
+  waveState = v;
+  try { localStorage.setItem(WAVE_KEY, waveState); } catch (_) {}
+  syncWaveButtons();
+  destroyCharts();
+  renderAll();
+}
+
+const CMP_KEY = 'olap_now_compare_waves';
+let compareState = {};
+try { compareState = JSON.parse(sessionStorage.getItem(CMP_KEY) || '{}') || {}; } catch (_) { compareState = {}; }
+/** suiteKey → selected now_runs index (default = last) */
+const diveRunFocus = {};
+/** suiteKey → selected query test name (sticky across Last-runs focus changes) */
+const diveQueryFocus = {};
+
+function cmpKey(branch, db) { return `${branch || ''}|${db || ''}`; }
+function getCompareId(branch, db) {
+  return compareState[cmpKey(branch, db)] || '';
+}
+function setCompareId(branch, db, id) {
+  const k = cmpKey(branch, db);
+  if (!id) delete compareState[k];
+  else compareState[k] = id;
+  try { sessionStorage.setItem(CMP_KEY, JSON.stringify(compareState)); } catch (_) {}
+}
+/** Keep dive/query "now" on latest when compare changes (cards ↔ heatmap stay in sync). */
+function clearDiveFocusForDb(branch, db) {
+  const prefix = `${branch || ''}|${db || ''}|`;
+  for (const k of Object.keys(diveRunFocus)) {
+    if (k.startsWith(prefix)) delete diveRunFocus[k];
+  }
+}
+function waveListFor(branch, db) {
+  return (DATA.wave_list && DATA.wave_list[cmpKey(branch, db)]) || [];
+}
+function waveEntry(branch, db, id) {
+  if (!id) return null;
+  return waveListFor(branch, db).find(w => w.id === id || w.ci_version === id) || null;
+}
+function alertRules() {
+  const r = DATA.rules || {};
+  const ui = DATA.ui || {};
+  return {
+    failBroken: r.fail_broken ?? 0.5,
+    failHot: r.fail_hot ?? 0.1,
+    failRise: r.fail_rise ?? 0.05,
+    durTol: (r.dur_tol != null ? r.dur_tol : 0.1) * 100,
+    durHard: (r.dur_hard != null ? r.dur_hard : 0.25) * 100,
+    noiseK: r.noise_k ?? 2,
+    outlierMult: r.outlier_mult ?? 3,
+    slowPersist: r.slow_persist_min ?? 1,
+    baseline: r.baseline_runs || ui.baseline_runs || 7,
+  };
+}
+function medianNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+function avgNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number);
+  if (!a.length) return null;
+  return a.reduce((s, v) => s + v, 0) / a.length;
+}
+function pstdevNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number);
+  if (a.length < 2) return 0;
+  const m = a.reduce((s, v) => s + v, 0) / a.length;
+  return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length);
+}
+function findHistIndexForWave(hist, wave) {
+  if (!hist || !wave) return -1;
+  const civs = hist.ci_versions || [];
+  const id = wave.id || wave.ci_version;
+  for (let i = civs.length - 1; i >= 0; i--) {
+    if (civs[i] && civs[i] === id) return i;
+  }
+  const lo = Date.parse(wave.min_ts);
+  const hi = Date.parse(wave.max_ts);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return -1;
+  const labels = hist.labels || [];
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < labels.length; i++) {
+    const t = Date.parse(labels[i]);
+    if (!Number.isFinite(t)) continue;
+    if (t < lo - 120000 || t > hi + 120000) continue;
+    const d = Math.abs(t - hi);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+function findHistIndexForRun(hist, run) {
+  if (!hist || !run) return -1;
+  const reports = hist.reports || [];
+  if (run.report) {
+    const i = reports.lastIndexOf(run.report);
+    if (i >= 0) return i;
+  }
+  const civs = hist.ci_versions || [];
+  if (run.ci_version) {
+    for (let i = civs.length - 1; i >= 0; i--) {
+      if (civs[i] === run.ci_version) return i;
+    }
+  }
+  const vers = hist.versions || [];
+  if (run.version) {
+    const want = String(run.version).slice(0, 8);
+    for (let i = vers.length - 1; i >= 0; i--) {
+      if (vers[i] && String(vers[i]).slice(0, 8) === want) return i;
+    }
+  }
+  const runTs = Date.parse(run.ts || run.day);
+  if (!Number.isFinite(runTs)) return -1;
+  const labels = hist.labels || [];
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < labels.length; i++) {
+    const t = Date.parse(labels[i]);
+    if (!Number.isFinite(t)) continue;
+    const d = Math.abs(t - runTs);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return bestDist <= 6 * 3600 * 1000 ? best : -1;
+}
+/** Classify series at index idx (ydb raw, fail_rate as 0–100 from history). */
+function histPointUsable(nodataArr, markersArr, i) {
+  if (nodataArr && nodataArr[i]) return false;
+  const m = markersArr && markersArr[i];
+  if (m === 'in_progress' || m === 'missing') return false;
+  return true;
+}
+/** Last real (non-synthetic) history index. */
+function lastCompletedHistIndex(hist) {
+  const ydb = (hist && hist.ydb) || [];
+  const n = ydb.length;
+  const nodata = (hist && hist.nodata) || [];
+  const markers = (hist && hist.markers) || [];
+  for (let i = n - 1; i >= 0; i--) {
+    if (histPointUsable(nodata, markers, i)) return i;
+  }
+  return n > 0 ? n - 1 : -1;
+}
+/**
+ * Mirror generate.classify_slice at history index.
+ * @param baseEndIdx optional: take prev7 baseline ending at this index (for same-baseline compare).
+ */
+function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr, markersArr, baseEndIdx) {
+  const R = alertRules();
+  if (idx < 0 || idx >= (ydbArr || []).length) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+  }
+  if (!histPointUsable(nodataArr, markersArr, idx)) {
+    const m = markersArr && markersArr[idx];
+    if (m === 'in_progress') {
+      return { status: 'in_progress', kind: 'in_progress', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+    }
+    if (m === 'missing') {
+      return { status: 'missing', kind: 'missing', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+    }
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+  }
+  const nowY = ydbArr[idx];
+  const baseEnd = (baseEndIdx != null && baseEndIdx >= 0) ? baseEndIdx : idx;
+  const baseSlice = [];
+  for (let i = Math.max(0, baseEnd - R.baseline); i < baseEnd; i++) {
+    if (!histPointUsable(nodataArr, markersArr, i)) continue;
+    if (ydbArr[i] != null) baseSlice.push(Number(ydbArr[i]));
+  }
+  const ydb_now = nowY == null ? null : Number(nowY);
+  const ydb_base = medianNums(baseSlice);
+  let ydb_pct = null;
+  if (ydb_base != null && ydb_base > 0 && ydb_now != null) {
+    ydb_pct = ((ydb_now - ydb_base) / ydb_base) * 100;
+  }
+  const frNow = frPctArr && frPctArr[idx] != null ? Number(frPctArr[idx]) / 100 : 0;
+  const frBaseArr = [];
+  for (let i = Math.max(0, baseEnd - R.baseline); i < baseEnd; i++) {
+    if (!histPointUsable(nodataArr, markersArr, i)) continue;
+    if (frPctArr && frPctArr[i] != null) frBaseArr.push(Number(frPctArr[i]) / 100);
+  }
+  // Match generate.classify_slice: last_fr ≥ failHot (≥10%) is always hot (rise only affects reason text).
+  const is_fail = frNow >= R.failHot;
+  let durStatus = 'ok';
+  const noise = (ydb_base != null && ydb_base > 0) ? (pstdevNums(baseSlice) / ydb_base) * 100 : 0;
+  const thr = Math.max(R.durTol, R.noiseK * noise);
+  const hardFloor = Math.max(R.durHard, thr);
+  const nAbove = (ydb_base != null)
+    ? (ydb_now != null && ydb_now > ydb_base ? 1 : 0)
+    : 0;
+  const persist = nAbove >= R.slowPersist;
+  if (ydb_base != null && ydb_now != null && ydb_now > ydb_base * R.outlierMult) {
+    durStatus = 'broken';
+  } else if (ydb_pct != null && persist && ydb_pct >= hardFloor) {
+    durStatus = 'regression';
+  } else if (ydb_pct != null && persist && ydb_pct >= thr) {
+    durStatus = 'watch';
+  }
+  const is_slow = durStatus === 'regression' || durStatus === 'broken';
+  const is_watch = durStatus === 'watch';
+  let kind = 'ok';
+  let status = 'ok';
+  // Match Python: ≥50% → broken; ≥10% → failing (not broken); both keeps broken only if fail≥50% or dur outlier.
+  if (is_fail && is_slow) {
+    kind = 'both';
+    status = (frNow >= R.failBroken || durStatus === 'broken') ? 'broken' : 'both';
+  } else if (is_fail) {
+    kind = 'fail';
+    status = frNow >= R.failBroken ? 'broken' : 'failing';
+  } else if (is_slow) {
+    kind = 'slow';
+    status = durStatus === 'broken' ? 'broken' : 'regression';
+  } else if (is_watch) {
+    kind = 'watch';
+    status = 'watch';
+  }
+  return {
+    status, kind, ydb_pct, ydb_now, ydb_base,
+    fail_rate: frNow,
+    error_class: null,
+  };
+}
+function statusSeverity(st) {
+  return ({
+    ok: 0, nodata: 1, watch: 2, in_progress: 2, stale: 3,
+    regression: 4, slower: 4, failing: 5, missing: 5, broken: 6, both: 6, fail: 5, slow: 4,
+  })[st] || 0;
+}
+function shortCellStatus(st, nFail, nSlow, nSoft, nNodata, nNew) {
+  // Coverage beats query counts — avoid blue "in progress" cell labeled "fail N".
+  if (st === 'missing') return 'missing';
+  if (st === 'stale') return 'stale';
+  if (st === 'in_progress') return 'in progress';
+  if (st === 'noruns' && !(nNew > 0)) return 'no runs';
+  // Counts next — same order as fmtFS / legend (slow N fail M / new issues).
+  // Do NOT map status "regression" → "slow" when only fails are present.
+  const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0, nNew || 0);
+  if (fs) {
+    if (st === 'broken') return `broken ${fs}`;
+    return fs;
+  }
+  const nw = fmtNewIssues(nNew);
+  if (nw) return nw;
+  if (st === 'broken' || st === 'failing' || st === 'fail') return 'fail';
+  if (st === 'regression' || st === 'slower' || st === 'slow') return 'hot';
+  if (st === 'watch') return 'soft';
+  // Bare nodata without counts = empty cell → no runs (not query gaps).
+  if (st === 'nodata') return (nNodata || 0) > 0 ? 'no data' : 'no runs';
+  if (st === 'both') return 'fail+slow';
+  return 'ok';
+}
+/** Synthetic in_progress → finished twin for classify/compare (keeps branch/db/suite). */
+function unwrapFinishedTwin(r) {
+  if (!r || r.issue !== 'in_progress' || !r.finished) return r;
+  const fin = r.finished;
+  const issue = (fin.issue && fin.issue !== 'in_progress')
+    ? fin.issue
+    : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
+  return {
+    ...fin,
+    id: fin.id || r.id,
+    branch: r.branch || fin.branch,
+    db: r.db || fin.db,
+    family: r.family != null ? r.family : fin.family,
+    suite: r.suite || fin.suite,
+    ci_version: fin.ci_version || r.ci_version,
+    wave: fin.wave || r.wave,
+    issue,
+    // Duty pills live on the in_progress parent; finished twin must keep them in Wave=finished.
+    tickets: (r.tickets && r.tickets.length) ? r.tickets : (fin.tickets || []),
+  };
+}
+/**
+ * Row for compare pool:
+ * - in_progress + finished → twin (real was/now vs compare wave)
+ * - in_progress + no twin + Wave=finished → skip
+ * - in_progress + no twin + Wave=all → keep (coverage stub)
+ */
+function rowForCompare(r) {
+  if (!r || r.issue !== 'in_progress') return r;
+  if (r.finished) return unwrapFinishedTwin(r);
+  if (waveView() === 'finished') return null;
+  return r;
+}
+function allSuiteRows(branch, db, fam) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    const r = rowForCompare(raw);
+    if (!r) continue;
+    if (branch && r.branch !== branch) continue;
+    if (r.db !== db || r.family !== fam) continue;
+    if (!r.suite || r.suite === '—') continue;
+    const k = `${r.branch}|${r.db}|${r.suite}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function countQueryKindsAt(item, resolveIdx) {
+  /** resolveIdx(qh) → { nowIdx, baseEndIdx } or null to skip. */
+  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0;
+  for (const q of (item.queries || [])) {
+    const qh = q.history;
+    if (!qh) {
+      // No history: trust catalog kind (alert path uses the same).
+      if (q.kind === 'nodata' || q.kind === 'missing' || q.kind === 'in_progress') n_nodata++;
+      else if (q.kind === 'fail' || q.kind === 'both') n_fail++;
+      if (q.kind === 'slow' || q.kind === 'both') n_slow++;
+      if (q.kind === 'watch') n_soft++;
+      continue;
+    }
+    const resolved = resolveIdx(qh);
+    if (!resolved || resolved.nowIdx < 0) { n_nodata++; continue; }
+    const qm = classifyAtIndex(
+      qh.ydb, qh.fail_rate, resolved.nowIdx, qh.nodata, qh.markers, resolved.baseEndIdx
+    );
+    if (qm.kind === 'nodata' || qm.kind === 'in_progress' || qm.kind === 'missing') n_nodata++;
+    else if (qm.kind === 'fail' || qm.kind === 'both') n_fail++;
+    if (qm.kind === 'slow' || qm.kind === 'both') n_slow++;
+    if (qm.kind === 'watch') n_soft++;
+  }
+  return { n_fail, n_slow, n_soft, n_nodata };
+}
+/** Catalog kinds from generate (same source as inbox / liveCellNow). */
+function catalogKindCounts(item) {
+  const sp = querySplit(item);
+  return {
+    n_fail: sp.fail.size,
+    n_slow: sp.slow.size,
+    n_soft: sp.soft.size,
+    n_nodata: sp.nodata.size,
+  };
+}
+function mergeKindCounts(a, b) {
+  return {
+    n_fail: Math.max(a.n_fail || 0, b.n_fail || 0),
+    n_slow: Math.max(a.n_slow || 0, b.n_slow || 0),
+    n_soft: Math.max(a.n_soft || 0, b.n_soft || 0),
+    n_nodata: Math.max(a.n_nodata || 0, b.n_nodata || 0),
+  };
+}
+function classifySuiteAtWave(item, wave) {
+  if (!wave) return null;
+  const hist = item.history || {};
+  const idx = findHistIndexForWave(hist, wave);
+  if (idx < 0) {
+    const names = new Set(wave.suite_names || []);
+    if (names.size && item.suite && !names.has(item.suite)) {
+      return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
+    }
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
+  }
+  const m = classifyAtIndex(hist.ydb, hist.fail_rate, idx, hist.nodata, hist.markers, idx);
+  const counts = countQueryKindsAt(item, qh => {
+    const qi = findHistIndexForWave(qh, wave);
+    if (qi < 0) return null;
+    return { nowIdx: qi, baseEndIdx: qi };
+  });
+  return {
+    status: m.status,
+    kind: m.kind,
+    ydb_pct: m.ydb_pct,
+    ...counts,
+  };
+}
+/**
+ * Heatmap now-side: latest completed vs the *same* prev7 baseline as the compare wave.
+ * Does NOT map compare-wave suite_names → missing (that wrongly paints now).
+ * Returns null when suite has no point in compare wave (skip in aggregate).
+ * Coverage issues (missing/in_progress/stale) keep the server inbox signal.
+ */
+function classifySuiteNowVsWaveBaseline(item, wave) {
+  if (!wave) return null;
+  // Prefer finished twin metrics over synthetic in_progress coverage stub.
+  if (item.issue === 'in_progress' && item.finished) {
+    return classifySuiteNowVsWaveBaseline(unwrapFinishedTwin(item), wave);
+  }
+  if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
+    return {
+      status: item.issue,
+      kind: item.issue,
+      ydb_pct: null,
+      n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+    };
+  }
+  const hist = item.history || {};
+  const cmpIdx = findHistIndexForWave(hist, wave);
+  if (cmpIdx < 0) return null;
+  const nowIdx = lastCompletedHistIndex(hist);
+  if (nowIdx < 0) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
+  }
+  const m = classifyAtIndex(hist.ydb, hist.fail_rate, nowIdx, hist.nodata, hist.markers, cmpIdx);
+  const histCounts = countQueryKindsAt(item, qh => {
+    const qCmp = findHistIndexForWave(qh, wave);
+    const qNow = lastCompletedHistIndex(qh);
+    if (qCmp < 0 || qNow < 0) return null;
+    return { nowIdx: qNow, baseEndIdx: qCmp };
+  });
+  // Merge catalog: hist reclassify alone greenwashes "no data 73" → ok on compare.
+  const counts = mergeKindCounts(histCounts, catalogKindCounts(item));
+  let status = m.status;
+  let kind = m.kind;
+  if (counts.n_nodata && status === 'ok' && !counts.n_fail && !counts.n_slow) {
+    status = 'nodata';
+    kind = 'nodata';
+  }
+  return {
+    status,
+    kind,
+    ydb_pct: m.ydb_pct,
+    ...counts,
+  };
+}
+function aggregateSide(parts) {
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
+    failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0, fail: 5, slow: 4,
+  };
+  // best starts null — must not seed with nodata, else ok (rank 0) never wins.
+  let best = null;
+  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0, n_hot = 0;
+  if (!parts.length) return { status: 'nodata', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+  for (const p of parts) {
+    const st = p.status || 'ok';
+    if (best == null || (rank[st] || 0) > (rank[best] || 0)) best = st;
+    n_fail += p.n_fail || 0;
+    n_slow += p.n_slow || 0;
+    n_soft += p.n_soft || 0;
+    n_nodata += p.n_nodata || 0;
+    if (st !== 'ok' && st !== 'nodata') n_hot++;
+  }
+  return {
+    status: best || 'nodata',
+    n_fail, n_slow, n_soft, n_nodata, n_hot,
+    n_queries: n_fail + n_slow + n_soft + n_nodata,
+  };
+}
+function formatWaveOption(w) {
+  const t = String(w.max_ts || '').slice(11, 16) || '—';
+  return `${w.ci_version || w.id} · ${t} · ${w.sha8 || '—'} · ${w.day || '—'}`;
+}
+function compareSelectHtml(branch, db) {
+  const list = waveListFor(branch, db);
+  const older = list.filter(w => !w.current);
+  if (!older.length) {
+    return `<td class="cmp-cell"><span class="muted" style="font-size:11px">нет волн</span></td>`;
+  }
+  const nShow = (DATA.ui && DATA.ui.display_runs) || 7;
+  const recent = older.slice(0, nShow);
+  const cur = getCompareId(branch, db);
+  // Drop selection if it fell out of the recent window.
+  if (cur && !recent.some(w => w.id === cur || w.ci_version === cur)) {
+    setCompareId(branch, db, '');
+  }
+  const selNow = getCompareId(branch, db);
+  const opts = [`<option value="">— compare —</option>`]
+    .concat(recent.map(w => {
+      const sel = (selNow && (selNow === w.id || selNow === w.ci_version)) ? ' selected' : '';
+      return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
+    }));
+  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с одной из последних ${nShow} волн">${opts.join('')}</select></td>`;
+}
+
+function fmt(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function pct(v) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '+' : '';
+  return s + v.toFixed(0) + '%';
+}
+function fmtFail(r) {
+  if (r == null) return '—';
+  return (r * 100).toFixed(0) + '%';
+}
+function ticketPillsHtml(tickets, { maxTitle = 72, compact = false } = {}) {
+  if (!tickets || !tickets.length) return '';
+  return tickets.map(t => {
+    const title = String(t.title || '');
+    const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
+    const qhint = (t.queries && t.queries.length)
+      ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
+    const closed = String(t.state || 'open').toLowerCase() === 'closed';
+    const needLbl = (!closed && t.branch_match === false && t.needs_branch) ? t.needs_branch : null;
+    const cls = needLbl
+      ? 'pill ticket needs-branch'
+      : (closed ? 'pill ticket closed' : 'pill ticket');
+    const label = compact
+      ? (needLbl ? `#${t.number} · needs ${needLbl}`
+        : (closed ? `#${t.number} · closed` : `#${t.number}`))
+      : (needLbl
+        ? `#${t.number} · needs ${needLbl}`
+        : (closed ? `#${t.number} · closed · ${short}` : `#${t.number} · ${short}`));
+    const tip = needLbl
+      ? `${title}${qhint} — add GitHub label «${needLbl}» on this issue`
+      : (closed ? `[closed] ${title}${qhint}` : title + qhint);
+    return `<a class="${cls}" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(tip)}" onclick="event.stopPropagation()">${esc(label)}</a>`;
+  }).join(' ');
+}
+/** Mirror common/duty_issues.norm_query_name / classify_fail_coverage for Last-runs badges. */
+function normQueryNameJS(q) {
+  const s = String(q || '').trim();
+  if (!s) return '';
+  if (s.includes('.')) {
+    const tail = s.split('.').pop();
+    if (/^query/i.test(tail) || /^q\d+$/i.test(tail)) return tail;
+  }
+  return s;
+}
+function normBranchLabelJS(branch) {
+  let b = String(branch || '').trim().toLowerCase();
+  if (!b || b === 'unknown' || b === '—' || b === '-') return '';
+  if (b.includes('/')) b = b.split('/').pop();
+  if (b === 'trunk') return 'main';
+  return b;
+}
+function branchLabelMatchJS(labels, branch) {
+  const want = normBranchLabelJS(branch);
+  if (!want) return false;
+  const set = new Set((labels || []).map(x => String(x).trim().toLowerCase()));
+  if (set.has(want)) return true;
+  return want === 'main' && set.has('trunk');
+}
+function parseGitHubTsJS(raw) {
+  if (raw == null || raw === '') return null;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  let s = String(raw).trim();
+  if (!s) return null;
+  if (s.endsWith('Z')) s = s.slice(0, -1) + '+00:00';
+  const dt = new Date(s);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+/** Tested-point time for closed-issue coverage (version_ts → ts → day/label). */
+function runAsOfJS(run) {
+  if (!run || typeof run !== 'object') return null;
+  for (const key of ['version_ts', 'commit_ts', 'tested_at', 'ts']) {
+    const dt = parseGitHubTsJS(run[key]);
+    if (dt) return dt;
+  }
+  for (const raw of [run.day, run.label]) {
+    const m = String(raw || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) continue;
+    const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (!Number.isNaN(dt.getTime())) return dt;
+  }
+  return null;
+}
+/** Closed issue covers only when as_of ≤ closed_at (or as_of/closed unknown). */
+function closedIssueCoversAsOfJS(iss, asOf) {
+  if (String(iss && iss.state || 'open').toLowerCase() !== 'closed') return true;
+  if (!asOf) return true;
+  const closed = parseGitHubTsJS(iss.closed_at || iss.closedAt);
+  if (!closed) return true;
+  return asOf.getTime() <= closed.getTime();
+}
+function classifyFailCoverageJS(issues, opts) {
+  const suite = opts.suite || '';
+  const db = opts.db || null;
+  const branch = opts.branch || null;
+  const query = opts.query || null;
+  const kind = opts.kind || null;
+  const asOf = opts.as_of || null;
+  const covered = [];
+  const wrong = [];
+  const postClose = [];
+  for (const iss of (issues || [])) {
+    if (kind && iss.kind && String(iss.kind).toLowerCase() !== String(kind).toLowerCase()) continue;
+    let hit = false;
+    const matchedQ = [];
+    for (const aff of (iss.affected || [])) {
+      if (String(aff.suite || '') !== suite) continue;
+      if (aff.db && db && String(aff.db) !== String(db)) continue;
+      const qs = (aff.queries || []).map(normQueryNameJS).filter(Boolean);
+      if (!qs.length) { hit = true; continue; }
+      if (!query) { hit = true; matchedQ.push(...qs); continue; }
+      const nq = normQueryNameJS(query);
+      if (qs.some(q => q === nq || q.toLowerCase() === nq.toLowerCase())) {
+        hit = true;
+        if (nq && !matchedQ.includes(nq)) matchedQ.push(nq);
+      }
+    }
+    if (!hit) continue;
+    const labels = iss.labels || [];
+    const brOk = branchLabelMatchJS(labels, branch);
+    const stub = {
+      number: iss.number, title: iss.title, url: iss.url,
+      fingerprint: iss.fingerprint, queries: matchedQ, labels,
+      state: (String(iss.state || 'open').toLowerCase() === 'closed') ? 'closed' : 'open',
+      branch_match: brOk,
+      needs_branch: brOk ? null : (normBranchLabelJS(branch) || null),
+    };
+    if (iss.closed_at) stub.closed_at = iss.closed_at;
+    if (brOk) {
+      if (closedIssueCoversAsOfJS(iss, asOf)) covered.push(stub);
+      else { stub.post_close = true; postClose.push(stub); }
+    } else {
+      wrong.push(stub);
+    }
+  }
+  if (covered.length) return { status: 'covered', tickets: covered, missing_branch: null };
+  if (wrong.length) {
+    return { status: 'wrong_branch', tickets: wrong, missing_branch: normBranchLabelJS(branch) || null };
+  }
+  if (postClose.length) {
+    return { status: 'uncovered', tickets: postClose, missing_branch: null };
+  }
+  return { status: 'uncovered', tickets: [], missing_branch: null };
+}
+function parseFailTestNamesJS(raw) {
+  const names = [];
+  for (const part of String(raw || '').split(',')) {
+    let t = part.trim();
+    if (!t) continue;
+    if (/^\d+$/.test(t)) t = 'Query' + t.padStart(2, '0');
+    const nq = normQueryNameJS(t);
+    if (nq && !names.includes(nq)) names.push(nq);
+  }
+  return names;
+}
+/**
+ * Fail + nodata query names for one Last-runs card — same signals as suiteViewAtFocus
+ * (qi&lt;0 / hist nodata / fail hot) plus mart fail_tests.
+ */
+function gapQueriesForRunJS(item, run) {
+  const names = [];
+  const seen = new Set();
+  const add = (raw) => {
+    const nq = normQueryNameJS(raw);
+    if (nq && !seen.has(nq)) { seen.add(nq); names.push(nq); }
+  };
+  for (const x of (run.fail_queries || [])) add(x);
+  for (const x of parseFailTestNamesJS(run.fail_tests)) add(x);
+  for (const q of (item.queries || [])) {
+    if (!q || !q.test) continue;
+    const qh = q.history;
+    if (!qh) {
+      if (['nodata', 'fail', 'both', 'missing', 'in_progress'].includes(q.kind)) add(q.test);
+      continue;
+    }
+    const qi = findHistIndexForRun(qh, run);
+    if (qi < 0) { add(q.test); continue; }
+    const qm = metricsAtHistIndex(q, qi, qi);
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress'
+        || qm.kind === 'fail' || qm.kind === 'both') {
+      add(q.test);
+    }
+  }
+  return names;
+}
+function aggregateRunCoverageJS(qcovs, problemCount) {
+  if ((!problemCount || problemCount <= 0) && !qcovs.length) {
+    return { ticket_coverage: 'ok', tickets: [], uncovered_queries: [] };
+  }
+  if (!qcovs.length) {
+    return {
+      ticket_coverage: (problemCount || 0) > 0 ? 'uncovered' : 'ok',
+      tickets: [], uncovered_queries: [],
+    };
+  }
+  const rank = { uncovered: 3, wrong_branch: 2, covered: 1, ok: 0 };
+  let worst = 'ok';
+  const byNum = new Map();
+  const uncovered = [];
+  for (const qc of qcovs) {
+    const st = qc.status || 'uncovered';
+    if ((rank[st] || 0) > (rank[worst] || 0)) worst = st;
+    if (st === 'uncovered' && qc.query) uncovered.push(qc.query);
+    for (const t of (qc.tickets || [])) {
+      if (t.number == null) continue;
+      const prev = byNum.get(t.number);
+      if (!prev || (t.branch_match && !prev.branch_match)) byNum.set(t.number, t);
+    }
+  }
+  return {
+    ticket_coverage: worst !== 'ok' ? worst : ((problemCount || 0) > 0 ? 'uncovered' : 'ok'),
+    tickets: [...byNum.values()],
+    uncovered_queries: uncovered,
+  };
+}
+/** Merge server now_run ticket fields with live query-history gaps (nodata included). */
+function runCoverageForDisplay(item, run) {
+  if (!run) return run;
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const qnames = gapQueriesForRunJS(item, run);
+  // Catalog gaps (fail/nodata at Now) also decorate the latest card.
+  const runs = item.now_runs || [];
+  const isLatest = runs.length && run === runs[runs.length - 1];
+  if (isLatest) {
+    for (const q of [...(item.bad_queries || []), ...(item.queries || [])]) {
+      if (!q || !q.test) continue;
+      const k = String(q.kind || '').toLowerCase();
+      if (k === 'slow' || k === 'watch' || k === 'ok') continue;
+      if (!(k === 'fail' || k === 'both' || k === 'nodata' || k === 'missing' || k === 'in_progress'
+          || k === '')) continue;
+      // Empty kind: only when attach already marked coverage (legacy fail rows).
+      if (k === '' && !q.ticket_coverage) continue;
+      const nq = normQueryNameJS(q.test);
+      if (nq && !qnames.includes(nq)) qnames.push(nq);
+    }
+  }
+  if (!qnames.length && !(run.tickets || []).length
+      && (!run.ticket_coverage || run.ticket_coverage === 'ok')
+      && !(Number(run.fail || 0) > 0)) {
+    return run;
+  }
+  const asOf = runAsOfJS(run);
+  const qcovs = qnames.map(qn => {
+    const c = classifyFailCoverageJS(issues, {
+      suite: item.suite, db: item.db, branch: item.branch, query: qn, kind: 'olap',
+      as_of: asOf,
+    });
+    return { query: qn, ...c };
+  });
+  const agg = aggregateRunCoverageJS(qcovs, Math.max(Number(run.fail || 0), qnames.length));
+  // Prefer live aggregation when we found gaps; keep server tickets if live found nothing new.
+  if (!qnames.length) return run;
+  return {
+    ...run,
+    ticket_coverage: agg.ticket_coverage,
+    tickets: agg.tickets.length ? agg.tickets : (run.tickets || []),
+    uncovered_queries: agg.uncovered_queries,
+  };
+}
+function dutyDecisionPillHtml(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return '';
+  const url = dec.analysis_url || dec.result_url || '';
+  if (!url) return '';
+  const tip = dec.summary
+    ? `wait next wave · ${dec.summary}`
+    : 'wait next wave — duty report (no new ticket)';
+  return `<a class="pill ticket wait-next" href="${esc(url)}" target="_blank" rel="noopener" ` +
+    `title="${esc(tip)}" onclick="event.stopPropagation()">wait next</a>`;
+}
+/** Compact duty_decision for context JSON / pills. */
+function packDutyDecision(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return null;
+  return {
+    resolution: 'wait_next_wave',
+    summary: dec.summary || null,
+    analysis_url: dec.analysis_url || dec.result_url || null,
+    queries: Array.isArray(dec.queries) ? dec.queries.slice() : [],
+  };
+}
+/** wait_next_wave decision that applies to this query on the focused Last-runs card. */
+function waitNextAppliesToQuery(item, data, queryName) {
+  const suite = data || item || {};
+  const focusIdx = diveFocusRunIndex(item, suite);
+  const focusRun = (suite.now_runs || [])[focusIdx] || null;
+  const dec = (focusRun && focusRun.duty_decision)
+    || item.duty_decision
+    || suite.duty_decision
+    || null;
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return null;
+  const nq = normQueryNameJS(queryName);
+  if (!nq) return null;
+  const listed = (dec.queries || []).map(normQueryNameJS).filter(Boolean);
+  if (listed.length) return listed.includes(nq) ? dec : null;
+  // Legacy index rows without queries[]: uncovered fail/nodata at focus.
+  if (!focusRun) return null;
+  const cov = runCoverageForDisplay(item, focusRun);
+  const uncovered = new Set((cov.uncovered_queries || []).map(normQueryNameJS));
+  return uncovered.has(nq) ? dec : null;
+}
+
+function runTicketsHtml(run) {
+  if (!run) return '';
+  const cov = run.ticket_coverage;
+  const tickets = run.tickets || [];
+  const failN = Number(run.fail || 0);
+  const gapN = (run.uncovered_queries || []).length;
+  const waitPill = dutyDecisionPillHtml(run.duty_decision);
+  // Show on fails, nodata gaps, explicit coverage, or wait_next_wave decision.
+  if ((!cov || cov === 'ok') && !tickets.length && failN <= 0 && gapN <= 0 && !waitPill) return '';
+  const parts = [];
+  if (tickets.length) {
+    const shown = tickets.slice(0, 3);
+    parts.push(ticketPillsHtml(shown, { compact: true, maxTitle: 24 }));
+    if (tickets.length > 3) {
+      parts.push(`<span class="pill" title="${esc(tickets.slice(3).map(t => '#' + t.number).join(', '))}">+${tickets.length - 3}</span>`);
+    }
+  }
+  if (waitPill) {
+    parts.push(waitPill);
+  } else if (!tickets.length && (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
+      || (failN > 0 && cov !== 'covered' && cov !== 'wrong_branch'))) {
+    const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤10d covering this SHA/run) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+    );
+  } else if (tickets.length && cov === 'uncovered' && tickets.every(t => t.post_close || String(t.state || '').toLowerCase() === 'closed')) {
+    // Closed match after issue close → still a new issue (grey closed pill + cue).
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('closed issue predates this SHA/run — treat as new issue')}">new issue</span>`
+    );
+  }
+  if (!parts.length && cov === 'wrong_branch') {
+    parts.push(`<span class="pill ticket needs-branch">needs branch</span>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="run-tickets">${parts.join(' ')}</div>`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+/**
+ * kind 'fail'|'ydb'. Fail Δ = percentage points (not relative % — that looked random vs cards).
+ * baseHint short, e.g. "avg prev7".
+ */
+function metricCellHtml(base, now, pctVal, unit, baseHint, kind) {
+  const u = unit ? `\u00a0${unit}` : '';
+  let nowStr, baseStr, absStr, worse = false, better = false;
+  if (kind === 'fail') {
+    nowStr = fmtFail(now);
+    baseStr = fmtFail(base);
+    if (base != null && now != null) {
+      const pp = (Number(now) - Number(base)) * 100;
+      absStr = `${pp > 0 ? '+' : ''}${pp.toFixed(0)} pp`;
+      worse = pp >= 5;   // +5pp material
+      better = pp <= -5;
+    } else absStr = '—';
+    if ((now || 0) >= 0.1) worse = true;
+  } else {
+    nowStr = now == null ? '—' : (fmt(now) + u);
+    baseStr = base == null ? '—' : (fmt(base) + u);
+    if (base != null && now != null && Number.isFinite(Number(base)) && Number.isFinite(Number(now))) {
+      const abs = Number(now) - Number(base);
+      absStr = `${abs > 0 ? '+' : ''}${fmt(abs)}${u}` + (pctVal != null ? ` (${pct(pctVal)})` : '');
+      worse = pctVal != null && pctVal > 10;
+      better = pctVal != null && pctVal < -10;
+    } else absStr = '—';
+  }
+  const bigCls = now == null ? 'muted' : (worse ? 'bad' : '');
+  const dCls = worse ? 'bad' : (better ? 'good' : '');
+  return `<div class="mcell" title="${esc((baseHint || '') + ' · base is not the previous Last-runs card')}">
+    <div class="big ${bigCls}">${nowStr}</div>
+    <div class="sub">base ${baseStr} · ${esc(baseHint || '')}</div>
+    <div class="delta ${dCls}">${absStr === '—' ? 'Δ —' : 'Δ ' + absStr}</div>
+  </div>`;
+}
+/** Append soft/nodata to a primary badge so coverage gaps are not hidden behind fail/slow. */
+function badgeExtraCounts(nSoft, nNodata) {
+  const s = reactSignals();
+  const bits = [];
+  if (s.soft && nSoft) bits.push(`soft ${nSoft}`);
+  if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
+  return bits.length ? ` · ${bits.join(' · ')}` : '';
+}
+/** One badge = worst real signal + visible soft/nodata extras. Color = primary signal. */
+function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
+  const R = alertRules();
+  const nFail = nowCounts.fail || 0;
+  const nSlow = nowCounts.slow || 0;
+  const nSoft = nowCounts.soft || 0;
+  const nNodata = nowCounts.nodata || 0;
+  const nNew = nowCounts.new || 0;
+  const extra = badgeExtraCounts(nSoft, nNodata);
+  const newBit = () => {
+    // Always surface on the status pill when there are uncovered / needs-branch gaps.
+    const nw = fmtNewIssues(nNew);
+    return nw ? ` · ${nw}` : '';
+  };
+  const fr = failRateNow == null ? null : Number(failRateNow);
+  if (issue === 'missing') return { cls: 'missing', lbl: 'missing' };
+  if (issue === 'in_progress') return { cls: 'in_progress', lbl: 'in progress' };
+  if (status === 'broken' || (fr != null && fr >= R.failBroken) || (nFail && nSlow)) {
+    const bits = [];
+    if (nFail) bits.push(`fail ${nFail}`);
+    if (nSlow) bits.push(`slow ${nSlow}`);
+    if (fr != null && fr >= R.failHot) bits.push(fmtFail(fr));
+    return { cls: 'broken', lbl: (bits.length ? `broken · ${bits.join(' · ')}` : 'broken') + extra + newBit() };
+  }
+  if (nFail || issue === 'failing' || (fr != null && fr >= R.failHot)) {
+    const core = nFail
+      ? `fail ${nFail}`
+      : (fr != null ? `fail rate ${fmtFail(fr)}` : 'failing');
+    return { cls: 'failing', lbl: core + extra + newBit() };
+  }
+  if (nSlow || status === 'regression' || issue === 'slower' || issue === 'both') {
+    return { cls: 'slower', lbl: (nSlow ? `slow ${nSlow}` : 'slow') + extra + newBit() };
+  }
+  const sReact = reactSignals();
+  // Soft only when React.soft is on — else nodata counts win the badge color.
+  if (sReact.soft && (status === 'watch' || issue === 'watch' || nSoft)) {
+    const softLbl = nSoft ? `soft ${nSoft}` : 'soft';
+    // nodata still visible when soft is primary
+    const ndOnly = (sReact.nodata && nNodata) ? ` · no data ${nNodata}` : '';
+    return { cls: 'watch', lbl: softLbl + ndOnly + newBit() };
+  }
+  // Server keeps many nodata suites as status/issue=ok — badge must follow counts.
+  if (status === 'nodata' || issue === 'nodata' || nNodata) {
+    return { cls: 'nodata', lbl: (nNodata ? `no data ${nNodata}` : 'no data') + newBit() };
+  }
+  if (nNew) {
+    return { cls: 'failing', lbl: fmtNewIssues(nNew) };
+  }
+  if (status === 'noruns') return { cls: 'noruns', lbl: 'no runs' };
+  if (status === 'watch' || issue === 'watch' || nSoft) {
+    return { cls: 'watch', lbl: (nSoft ? `soft ${nSoft}` : 'soft') + newBit() };
+  }
+  if (issue === 'stale') return { cls: 'stale', lbl: 'stale' };
+  return { cls: 'ok', lbl: 'ok' };
+}
+function statusCellHtml(primary, nowCounts, prevCounts, prevLabel) {
+  const nowFs = fmtFS(
+    nowCounts.fail, nowCounts.slow, nowCounts.soft, nowCounts.nodata, nowCounts.new
+  ) || 'ok';
+  let html = `<div class="stat-cell">
+    <span class="badge ${esc(primary.cls)}">${esc(primary.lbl)}</span>
+    <div class="qline">queries: <b>${esc(nowFs)}</b></div>`;
+  if (prevCounts) {
+    const wasFs = fmtFS(
+      prevCounts.fail, prevCounts.slow, prevCounts.soft, prevCounts.nodata, prevCounts.new
+    ) || 'ok';
+    const short = (prevLabel || 'prev').replace(/^prev card\s+/i, '').replace(/^compare\s+/i, 'cmp ');
+    html += `<div class="qline">was ${esc(wasFs)} · ${esc(short)}</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function destroyCharts(prefix, opts) {
+  const exclude = (opts && opts.exclude) || null;
+  for (const k of Object.keys(charts)) {
+    if (prefix && !k.startsWith(prefix)) continue;
+    if (exclude && k.includes(exclude)) continue;
+    try { charts[k].destroy(); } catch (_) {}
+    delete charts[k];
+  }
+}
+
+function dayOf(ts) {
+  if (!ts) return null;
+  return String(ts).slice(0, 10);
+}
+function dayInRange(day, from, to) {
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+function itemInWindow(r) {
+  // keep if last activity / now-runs / history intersects [from, to]
+  const days = [dayOf(r.last_ts), dayOf(r.last_seen)].filter(Boolean);
+  for (const run of (r.now_runs || [])) {
+    if (run.day) days.push(run.day);
+    else if (run.ts) days.push(dayOf(run.ts));
+    else if (run.label) days.push(dayOf(run.label));
+  }
+  for (const lab of ((r.history && r.history.labels) || [])) {
+    days.push(dayOf(lab));
+  }
+  if (!days.length) return true;
+  return days.some(d => dayInRange(d, winFrom, winTo));
+}
+function listedSlow(r) {
+  // prefer full catalog (same classification as pills); fallback to legacy lists
+  if ((r.queries || []).length) {
+    return r.queries
+      .filter(q => q && q.test && (q.kind === 'slow' || q.kind === 'both'))
+      .slice()
+      .sort((a, b) => (b.ydb_pct || 0) - (a.ydb_pct || 0));
+  }
+  const by = new Map();
+  for (const q of (r.bad_queries || [])) {
+    if (!q || !q.test) continue;
+    if (q.kind === 'slow' || q.kind === 'both') by.set(String(q.test), q);
+  }
+  for (const q of (r.slow_queries || [])) {
+    if (!q || !q.test) continue;
+    if (q.kind && q.kind !== 'slow' && q.kind !== 'both') continue;
+    const prev = by.get(String(q.test)) || {};
+    by.set(String(q.test), Object.assign({}, prev, q));
+  }
+  return [...by.values()].sort((a, b) => (b.ydb_pct || 0) - (a.ydb_pct || 0));
+}
+function listedFail(r) {
+  if ((r.queries || []).length) {
+    return r.queries.filter(q => q && q.test && (q.kind === 'fail' || q.kind === 'both'));
+  }
+  return (r.bad_queries || []).filter(q => q && q.test && (q.kind === 'fail' || q.kind === 'both'));
+}
+function listedWatch(r) {
+  if ((r.queries || []).length) {
+    return r.queries.filter(q => q && q.test && q.kind === 'watch');
+  }
+  return [];
+}
+function listedNodata(r) {
+  if ((r.queries || []).length) {
+    // Align with heatmap countQueryKindsAt (gaps = nodata | missing | in_progress).
+    return r.queries.filter(q => q && q.test
+      && (q.kind === 'nodata' || q.kind === 'missing' || q.kind === 'in_progress'));
+  }
+  return [];
+}
+function rowKey(r) {
+  return r.id || `${r.branch || ''}|${r.db || ''}|${r.suite || ''}|${r.issue || ''}`;
+}
+function suiteKey(r) {
+  return `${r.branch || ''}|${r.db || ''}|${r.suite || ''}`;
+}
+/** Per-render cache: heatmap + React must use the same live focus view as inbox badges. */
+let _liveViewCache = new Map();
+function clearLiveViewCache() { _liveViewCache = new Map(); }
+function liveSuiteView(r) {
+  const k = suiteKey(r);
+  if (_liveViewCache.has(k)) return _liveViewCache.get(k);
+  let v = null;
+  try { v = suiteViewAtFocus(r, '_cell'); } catch (_) { v = null; }
+  _liveViewCache.set(k, v);
+  return v;
+}
+/** Static catalog kinds (generate). Fallback when live focus view is unavailable. */
+function catalogQuerySplit(r) {
+  const fail = new Set();
+  const slow = new Set();
+  const soft = new Set();
+  const nodata = new Set();
+  for (const q of listedFail(r)) fail.add(String(q.test));
+  for (const q of listedSlow(r)) slow.add(String(q.test));
+  for (const q of listedWatch(r)) soft.add(String(q.test));
+  for (const q of listedNodata(r)) nodata.add(String(q.test));
+  return { fail, slow, soft, nodata };
+}
+/**
+ * Prefer live reclassify at focus run (inbox badge path). Fixes heatmap ok while
+ * inbox shows FAIL when generate left queries[].kind=ok (e.g. single history point).
+ * Union with catalog so generate-time nodata/fail is not greenwashed when hist says ok.
+ */
+function querySplit(r) {
+  const cat = catalogQuerySplit(r);
+  const view = liveSuiteView(r);
+  if (!view) return cat;
+  const merge = (a, b) => {
+    const out = new Set(a);
+    for (const x of b) out.add(x);
+    return out;
+  };
+  return {
+    fail: merge((view.fails || []).map(q => String(q.test)), cat.fail),
+    slow: merge((view.slows || []).map(q => String(q.test)), cat.slow),
+    soft: merge((view.softs || []).map(q => String(q.test)), cat.soft),
+    nodata: merge((view.nodatas || []).map(q => String(q.test)), cat.nodata),
+  };
+}
+/** Live focus-run uncovered count (incl. closed issues that predate this SHA/run). */
+function liveNewIssueCount(r) {
+  try {
+    const data = diveData(r);
+    const focusIdx = diveFocusRunIndex(r, data);
+    const focusRun = (data.now_runs || [])[focusIdx];
+    if (!focusRun) return 0;
+    const cov = runCoverageForDisplay(data, focusRun);
+    const uq = (cov.uncovered_queries || []).length;
+    if (uq > 0) return uq;
+    if (cov.ticket_coverage === 'wrong_branch') return 1;
+    if (cov.ticket_coverage === 'uncovered'
+        && (Number(focusRun.fail || 0) > 0 || Number(data.n_nodata || 0) > 0)) {
+      return 1;
+    }
+    return 0;
+  } catch (_) {
+    return 0;
+  }
+}
+function newIssueQueryCount(r) {
+  const n = Number(r && (r.new_issue_count || r.new_fail_count) || 0);
+  const w = Number(r && (r.wrong_branch_count || 0) || 0);
+  const nFin = Number(r && r.finished && (r.finished.new_issue_count || r.finished.new_fail_count) || 0);
+  const wFin = Number(r && r.finished && (r.finished.wrong_branch_count || 0) || 0);
+  // new_issue_count already includes wrong_branch after attach; keep max for older packs.
+  // Live path catches post_close closed tickets before the next generate.
+  return Math.max(n || 0, w || 0, nFin || 0, wFin || 0, liveNewIssueCount(r));
+}
+function hasFailSignal(r) {
+  if (['failing', 'both'].includes(r.issue)) return true;
+  if (r.status === 'broken' && (r.fail_rate_now || 0) >= 0.1) return true;
+  return querySplit(r).fail.size > 0;
+}
+function hasNewIssueSignal(r) {
+  if (newIssueQueryCount(r) > 0) return true;
+  // Older packs / suite pills: "needs <branch>" while fail/nodata is active.
+  const ticks = [...(r.tickets || []), ...((r.finished && r.finished.tickets) || [])];
+  if (!ticks.some(t => t && (t.branch_match === false || t.needs_branch))) return false;
+  return hasFailSignal(r) || hasNodataSignal(r);
+}
+/** @deprecated alias */
+function hasNewFailSignal(r) { return hasNewIssueSignal(r); }
+function hasHardSlowSignal(r) {
+  if (['slower', 'both'].includes(r.issue)) return true;
+  return querySplit(r).slow.size > 0;
+}
+function hasSoftSlowSignal(r) {
+  if (r.issue === 'watch' || r.status === 'watch') return true;
+  return querySplit(r).soft.size > 0;
+}
+function hasNodataSignal(r) {
+  if (r.status === 'nodata' || r.kind === 'nodata' || r.issue === 'nodata') return true;
+  return querySplit(r).nodata.size > 0;
+}
+function isInfraIssue(r) {
+  if (r.issue === 'in_progress') return waveView() === 'all';
+  return ['missing', 'stale'].includes(r.issue);
+}
+function rowMatchesReact(r) {
+  if (isInfraIssue(r)) return true;
+  const s = reactSignals();
+  // `new issues` = fail or nodata without open issue on this branch label.
+  if (s.new) {
+    return hasNewIssueSignal(r);
+  }
+  if (s.fail && hasFailSignal(r)) return true;
+  if (s.hard && hasHardSlowSignal(r)) return true;
+  if (s.soft && hasSoftSlowSignal(r)) return true;
+  if (s.nodata && hasNodataSignal(r)) return true;
+  return false;
+}
+function fmtNewIssues(nNew) {
+  const n = Number(nNew) || 0;
+  if (n <= 0) return '';
+  return n === 1 ? 'new issue' : `new issues ${n}`;
+}
+function fmtFS(nFail, nSlow, nSoft, nNodata, nNew) {
+  const s = reactSignals();
+  const bits = [];
+  if (s.hard && nSlow) bits.push(`slow ${nSlow}`);
+  if (s.soft && nSoft) bits.push(`soft ${nSoft}`);
+  if (s.fail && nFail) bits.push(`fail ${nFail}`);
+  if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
+  // Explicit — never fall back to grey "N suites" when React "new issues" is on.
+  if (s.new && nNew) bits.push(fmtNewIssues(nNew));
+  return bits.join(' ');
+}
+function queryCountsAtRun(data, run) {
+  let fail = 0, slow = 0, soft = 0, nodata = 0;
+  if (!run) return { fail, slow, soft, nodata };
+  for (const q of (data.queries || [])) {
+    if (!q.history) continue;
+    const qi = findHistIndexForRun(q.history, run);
+    if (qi < 0) { nodata++; continue; }
+    const qm = metricsAtHistIndex(q, qi);
+    if (qm.kind === 'fail' || qm.kind === 'both') fail++;
+    if (qm.kind === 'slow' || qm.kind === 'both') slow++;
+    if (qm.kind === 'watch') soft++;
+    if (qm.kind === 'nodata') nodata++;
+  }
+  return { fail, slow, soft, nodata };
+}
+function queryCountsAtWave(data, wave) {
+  let fail = 0, slow = 0, soft = 0, nodata = 0;
+  if (!wave) return { fail, slow, soft, nodata };
+  for (const q of (data.queries || [])) {
+    if (!q.history) continue;
+    const qi = findHistIndexForWave(q.history, wave);
+    if (qi < 0) { nodata++; continue; }
+    const qm = metricsAtHistIndex(q, qi);
+    if (qm.kind === 'fail' || qm.kind === 'both') fail++;
+    if (qm.kind === 'slow' || qm.kind === 'both') slow++;
+    if (qm.kind === 'watch') soft++;
+    if (qm.kind === 'nodata') nodata++;
+  }
+  return { fail, slow, soft, nodata };
+}
+function fmtFSDelta(prev, now) {
+  const a = fmtFS(prev.fail, prev.slow, prev.soft, prev.nodata) || 'ok';
+  const b = fmtFS(now.fail, now.slow, now.soft, now.nodata) || 'ok';
+  return a === b ? b : `${a} → ${b}`;
+}
+function statusFromCounts(c) {
+  if (c.fail && c.slow) return { status: 'both', issue: 'both', kind: 'both' };
+  if (c.fail) return { status: 'failing', issue: 'failing', kind: 'fail' };
+  if (c.slow) return { status: 'regression', issue: 'slower', kind: 'slow' };
+  if (c.soft) return { status: 'watch', issue: 'watch', kind: 'watch' };
+  if (c.nodata) return { status: 'nodata', issue: 'ok', kind: 'nodata' };
+  return { status: 'ok', issue: 'ok', kind: 'ok' };
+}
+function softNodataExtras(seen) {
+  const s = reactSignals();
+  const extras = [];
+  if (!s.soft && !s.nodata) return extras;
+  for (const r of (DATA.ok || [])) {
+    if (!(s.soft && hasSoftSlowSignal(r)) && !(s.nodata && hasNodataSignal(r))) continue;
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    extras.push(r);
+  }
+  return extras;
+}
+function preferLatestBySuite(rows) {
+  // all-mode: one row per suite — prefer in_progress (latest wave) over finished twin
+  const by = new Map();
+  const passthrough = [];
+  for (const r of rows) {
+    if (!r.suite || r.suite === '—') {
+      passthrough.push(r);
+      continue;
+    }
+    const sk = suiteKey(r);
+    const prev = by.get(sk);
+    if (!prev) {
+      by.set(sk, r);
+      continue;
+    }
+    if (r.issue === 'in_progress') by.set(sk, r);
+    else if (prev.issue !== 'in_progress') by.set(sk, r);
+  }
+  return [...passthrough, ...by.values()];
+}
+function candidateRows() {
+  const mode = waveView();
+  const seen = new Set();
+  const rows = [];
+  for (const raw of (DATA.inbox || [])) {
+    let r = raw;
+    // Finished wave: use finished twin when present (do not drop the suite).
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    rows.push(r);
+  }
+  rows.push(...softNodataExtras(seen));
+  if (mode === 'all') return preferLatestBySuite(rows);
+  return rows;
+}
+function suitesInCell(branch, db, fam) {
+  const seen = new Set();
+  const out = [];
+  for (const r of [...candidateRows(), ...(DATA.ok || [])]) {
+    if (branch && r.branch !== branch) continue;
+    if (r.db !== db || r.family !== fam) continue;
+    if (!itemInWindow(r)) continue;
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function liveCellNow(branch, db, fam) {
+  const s = reactSignals();
+  const allSuites = suitesInCell(branch, db, fam);
+  const rows = allSuites.filter(r => rowMatchesReact(r));
+  if (!rows.length) {
+    // No suite matched active React channels.
+    // IMPORTANT: "no data" = mart nodata queries, NOT "hidden by React" / empty match.
+    if (!allSuites.length) {
+      return resolveAlertCell({ status: 'noruns', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 });
+    }
+    const softRows = s.soft ? allSuites.filter(r => hasSoftSlowSignal(r)) : [];
+    if (softRows.length) {
+      const softSet = new Set();
+      for (const r of softRows) {
+        for (const q of listedWatch(r)) softSet.add(String(q.test));
+      }
+      return resolveAlertCell({
+        status: 'watch',
+        n_hot: 0, n_fail: 0, n_slow: 0,
+        n_soft: softSet.size || softRows.length,
+        n_nodata: 0, n_queries: softSet.size || softRows.length,
+      });
+    }
+    // Real nodata signal only when nothing harder is present in the cell.
+    const hasQuality = allSuites.some(r =>
+      hasFailSignal(r) || hasHardSlowSignal(r) || hasSoftSlowSignal(r)
+      || ['failing', 'slower', 'both', 'broken', 'watch'].includes(r.issue));
+    if (s.nodata && !hasQuality) {
+      const ndRows = allSuites.filter(r => hasNodataSignal(r));
+      if (ndRows.length) {
+        const ndSet = new Set();
+        for (const r of ndRows) {
+          for (const q of listedNodata(r)) ndSet.add(String(q.test));
+        }
+        return resolveAlertCell({
+          status: 'nodata',
+          n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0,
+          n_nodata: ndSet.size || ndRows.length,
+          n_queries: ndSet.size || ndRows.length,
+        });
+      }
+    }
+    // Suites exist (e.g. hard-slow while React.hard is off) → ok, not "no data".
+    return resolveAlertCell({
+      status: 'ok',
+      n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0,
+    });
+  }
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
+    failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0,
+  };
+  let best = null;
+  for (const r of rows) {
+    // Prefer issue/signals over status=ok (server keeps watch suites as status=ok).
+    let st = r.issue || r.status || 'ok';
+    if (st === 'ok' && hasSoftSlowSignal(r)) st = 'watch';
+    if (st === 'ok' && hasHardSlowSignal(r)) st = 'regression';
+    if (st === 'ok' && hasFailSignal(r)) st = 'failing';
+    if (st === 'ok' && hasNodataSignal(r)) st = 'nodata';
+    if (!s.fail && (st === 'broken' || st === 'failing') && hasHardSlowSignal(r) && s.hard) st = 'regression';
+    if (!s.fail && !s.hard && s.soft && hasSoftSlowSignal(r)) st = 'watch';
+    if (!s.fail && !s.hard && !s.soft && s.nodata && hasNodataSignal(r)) st = 'nodata';
+    if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+  }
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  const failSet = new Set();
+  const slowSet = new Set();
+  const softSet = new Set();
+  const nodataSet = new Set();
+  let nNew = 0;
+  for (const r of hot) {
+    const sp = querySplit(r);
+    if (s.fail) for (const n of sp.fail) failSet.add(n);
+    if (s.hard) for (const n of sp.slow) slowSet.add(n);
+    if (s.soft) for (const n of sp.soft) softSet.add(n);
+    if (s.nodata) for (const n of sp.nodata) nodataSet.add(n);
+    if (hasNewIssueSignal(r)) nNew += newIssueQueryCount(r);
+  }
+  // Disambiguate Python status=regression (used for both fail and slow).
+  let status = best || 'ok';
+  if (failSet.size && slowSet.size) {
+    status = (status === 'broken') ? 'broken' : 'both';
+  } else if (failSet.size && (status === 'regression' || status === 'ok' || status === 'watch' || status === 'nodata')) {
+    status = 'failing';
+  } else if (slowSet.size && (status === 'ok' || status === 'watch' || status === 'nodata')) {
+    status = 'regression';
+  } else if (softSet.size && (status === 'ok' || status === 'nodata')) {
+    status = 'watch';
+  }
+  // Align paint with React label: only-nodata counts → grey "no data".
+  // Overrides ok/watch/stale/in_progress (stale suites still match React via infra,
+  // but fmtFS shows "no data N" — color must match). missing/broken stay.
+  if (nodataSet.size && !failSet.size && !slowSet.size && !softSet.size) {
+    if (!['missing', 'broken', 'failing', 'both', 'regression', 'slower'].includes(status)) {
+      status = 'nodata';
+    }
+  }
+  // Never paint "no data" when React-active fail/hard/soft counts exist.
+  // Use sets only — hasSoftSlowSignal(issue=watch) must not override when soft is off.
+  if (status === 'nodata' && (failSet.size || slowSet.size || softSet.size)) {
+    if (failSet.size && slowSet.size) status = 'both';
+    else if (failSet.size) status = 'failing';
+    else if (slowSet.size) status = 'regression';
+    else status = 'watch';
+  }
+  // React "new issues": uncovered gaps without a ticket — not anonymous "N suites".
+  if (s.new && nNew && !failSet.size && !slowSet.size && !softSet.size && !nodataSet.size) {
+    status = 'failing';
+  }
+  // Final React normalize — same contract as compare (classify_rules.resolve_alert_cell).
+  return resolveAlertCell({
+    status,
+    n_hot: hot.length,
+    n_fail: failSet.size,
+    n_slow: slowSet.size,
+    n_soft: softSet.size,
+    n_nodata: nodataSet.size,
+    n_new: nNew,
+    n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
+  });
+}
+/**
+ * Hard OLAP signals for compare paint — same React toggles as cell labels (fmtFS).
+ * Default React: fail on, hard off → slows must not paint delta while labels say "ok".
+ * Mirror: olap/classify_rules.py olap_hard_band
+ */
+function olapHardBand(side) {
+  if (!side) return 0;
+  const s = reactSignals();
+  const st = side.status || '';
+  const fails = s.fail ? (side.n_fail || 0) : 0;
+  const slows = s.hard ? (side.n_slow || 0) : 0;
+  if (s.fail && (st === 'broken' || st === 'failing' || st === 'fail' || st === 'both')) return 2;
+  if (fails > 0) return 2;
+  if (s.hard && (slows > 0 || st === 'regression' || st === 'slower' || st === 'slow')) return 1;
+  return 0;
+}
+/** React-visible nodata count; status=nodata/noruns with 0 counts → 1. */
+function nodataCount(side) {
+  const s = reactSignals();
+  if (!side || !s.nodata) return 0;
+  const n = side.n_nodata || 0;
+  if (n) return n;
+  const st = side.status || '';
+  if (st === 'nodata' || st === 'noruns') return 1;
+  return 0;
+}
+/**
+ * Compare paint (React-filtered): fail/slow/nodata up/down, hard band cross.
+ * Opposing channels → mixed. Soft/watch-only → same.
+ * Mirror: olap/classify_rules.py compare_delta_olap
+ */
+function compareDeltaOlap(prev, now) {
+  const s = reactSignals();
+  const pb = olapHardBand(prev);
+  const nb = olapHardBand(now);
+  const pf = s.fail ? (prev.n_fail || 0) : 0;
+  const ps = s.hard ? (prev.n_slow || 0) : 0;
+  const nf = s.fail ? (now.n_fail || 0) : 0;
+  const ns = s.hard ? (now.n_slow || 0) : 0;
+  const pnd = nodataCount(prev);
+  const nnd = nodataCount(now);
+  const failUp = nf > pf, failDown = nf < pf;
+  const slowUp = ns > ps, slowDown = ns < ps;
+  const ndUp = nnd > pnd, ndDown = nnd < pnd;
+  if ((failUp && slowDown) || (failDown && slowUp)) return 'mixed';
+  if ((failUp && ndDown) || (failDown && ndUp) || (slowUp && ndDown) || (slowDown && ndUp)) return 'mixed';
+  if (failUp || slowUp || ndUp || nb > pb) return 'worse';
+  if (failDown || slowDown || ndDown || nb < pb) return 'better';
+  return 'same';
+}
+/** True when compare delta is driven by nodata (not fail/hard) — purple gradient. */
+function compareDeltaIsNodataOnly(prev, now) {
+  const s = reactSignals();
+  if (!s.nodata) return false;
+  const pf = s.fail ? (prev.n_fail || 0) : 0;
+  const ps = s.hard ? (prev.n_slow || 0) : 0;
+  const nf = s.fail ? (now.n_fail || 0) : 0;
+  const ns = s.hard ? (now.n_slow || 0) : 0;
+  if (nf !== pf || ns !== ps) return false;
+  if (olapHardBand(prev) !== olapHardBand(now)) return false;
+  return nodataCount(prev) !== nodataCount(now);
+}
+/**
+ * Align status+counts with React toggles.
+ * Mirror: olap/classify_rules.py normalize_side_for_react
+ * Critical: status=failing + React.fail off → ok (else compare paints red 'fail =').
+ * noruns = empty cell; nodata = query gaps (n_nodata>0).
+ */
+function normalizeSideForReact(side) {
+  if (!side) {
+    return {
+      status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+      n_new: 0, n_hot: 0, n_queries: 0,
+    };
+  }
+  const s = reactSignals();
+  const st = side.status || 'ok';
+  const n_new = s.new ? (side.n_new || 0) : 0;
+  if (st === 'noruns' && !n_new) {
+    return {
+      status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+      n_new: 0, n_hot: 0, n_queries: 0,
+    };
+  }
+  const rawNd = side.n_nodata || 0;
+  const n_fail = s.fail ? (side.n_fail || 0) : 0;
+  const n_slow = s.hard ? (side.n_slow || 0) : 0;
+  const n_soft = s.soft ? (side.n_soft || 0) : 0;
+  const n_nodata = s.nodata ? rawNd : 0;
+  if (st === 'missing' || st === 'stale' || st === 'in_progress') {
+    let outSt = st;
+    if ((st === 'stale' || st === 'in_progress') && n_nodata && !n_fail && !n_slow && !n_soft) {
+      outSt = 'nodata';
+    }
+    return {
+      status: outSt, n_fail, n_slow, n_soft, n_nodata, n_new,
+      n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
+    };
+  }
+  const suiteFail = s.fail && (st === 'broken' || st === 'failing' || st === 'fail' || st === 'both');
+  const suiteSlow = s.hard && (st === 'regression' || st === 'slower' || st === 'slow' || st === 'both');
+  const suiteSoft = s.soft && st === 'watch';
+  const suiteNd = s.nodata && (st === 'nodata' || st === 'noruns');
+  let newSt = 'ok';
+  if (n_fail && n_slow) newSt = (st === 'broken') ? 'broken' : 'both';
+  else if (n_fail || suiteFail) newSt = (st === 'broken') ? 'broken' : 'failing';
+  else if (n_slow || suiteSlow) newSt = 'regression';
+  else if (n_soft || suiteSoft) newSt = 'watch';
+  else if (n_nodata || (suiteNd && rawNd > 0)) newSt = 'nodata';
+  else if (n_new) newSt = 'failing'; // uncovered — red cell, label via fmtFS "new issues N"
+  else if ((st === 'nodata' || st === 'noruns') && !n_fail && !n_slow && !n_soft) newSt = 'noruns';
+  return {
+    status: newSt, n_fail, n_slow, n_soft, n_nodata, n_new,
+    n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
+  };
+}
+/** Mirror: olap/classify_rules.py paint_class_for_side */
+function paintClassForSide(side) {
+  if (!side) return 'noruns';
+  const st = side.status || 'ok';
+  const nNd = side.n_nodata || 0;
+  if (st === 'noruns') return 'noruns';
+  if (st === 'nodata' || nNd > 0) return nNd > 0 ? 'nodata' : 'noruns';
+  if (String(st).startsWith('delta-')) return st;
+  return st;
+}
+/** Mirror: olap/classify_rules.py resolve_alert_cell */
+function resolveAlertCell(side) {
+  const now = normalizeSideForReact(side);
+  return {
+    ...now,
+    compare: false,
+    delta: null,
+    paint: paintClassForSide(now),
+    delta_status: now.status,
+  };
+}
+/** Mirror: olap/classify_rules.py resolve_compare_cell */
+function resolveCompareCell(prev, now) {
+  const prevN = normalizeSideForReact(prev);
+  const nowN = normalizeSideForReact(now);
+  const delta = compareDeltaOlap(prevN, nowN);
+  let paint = delta === 'same' ? paintClassForSide(nowN) : `delta-${delta}`;
+  // Purple green↔purple gradient when only nodata channel moved.
+  if (delta !== 'same' && compareDeltaIsNodataOnly(prevN, nowN)) {
+    paint = `${paint} delta-nodata`;
+  }
+  return {
+    ...nowN,
+    compare: true,
+    prev: prevN,
+    delta,
+    paint,
+    status: paint.split(/\s+/)[0], // CSS primary class for filters; full paint on cell
+    delta_status: nowN.status,
+  };
+}
+function liveCell(branch, db, fam) {
+  const alertNow = liveCellNow(branch, db, fam);
+  const cmpId = getCompareId(branch, db);
+  if (!cmpId) return alertNow;
+  const wave = waveEntry(branch, db, cmpId);
+  if (!wave) return alertNow;
+  const suites = allSuiteRows(branch, db, fam);
+  // Pair both sides on the same suite set: need a history point in the compare wave
+  // (or a coverage issue). Avoid was-only "missing" from suite_names skewing the cell.
+  const prevParts = [];
+  const nowParts = [];
+  for (const r of suites) {
+    const nowPart = classifySuiteNowVsWaveBaseline(r, wave);
+    if (!nowPart) continue;
+    let prevPart;
+    if (nowPart.status === 'missing' || nowPart.status === 'in_progress' || nowPart.status === 'stale') {
+      prevPart = { ...nowPart };
+    } else {
+      prevPart = classifySuiteAtWave(r, wave);
+      // Don't drop suite when prev hist is nodata but now has catalog query gaps —
+      // otherwise compare greenwashes "no data 73" → "ok =".
+      if (!prevPart) continue;
+      if (prevPart.status === 'nodata' && !(nowPart.n_nodata || 0)) continue;
+    }
+    prevParts.push(prevPart);
+    nowParts.push(nowPart);
+  }
+  return resolveCompareCell(aggregateSide(prevParts), aggregateSide(nowParts));
+}
+function cellLabel(st, live) {
+  if (live && live.compare && live.prev) {
+    const a = shortCellStatus(
+      live.prev.status,
+      live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata,
+      live.prev.n_new
+    );
+    const b = shortCellStatus(
+      live.delta_status || live.status,
+      live.n_fail, live.n_slow, live.n_soft, live.n_nodata,
+      live.n_new
+    );
+    if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
+    return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;
+  }
+  const fs = fmtFS(
+    live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0, live.n_new || 0
+  );
+  if (st === 'broken') {
+    if (fs) return `broken <span class="cnt">${fs}</span>`;
+    const ns = live.n_hot || 0;
+    return ns ? `broken <span class="cnt">${ns}</span>` : 'broken';
+  }
+  // failing / regression / both / slower / soft / new — prefer query counts
+  if (st === 'failing' || st === 'fail' || st === 'both'
+      || st === 'regression' || st === 'slower' || st === 'slow'
+      || st === 'watch' || st === 'nodata' || st === 'noruns'
+      || ((live.n_soft || 0) > 0) || ((live.n_fail || 0) > 0) || ((live.n_slow || 0) > 0)
+      || ((live.n_nodata || 0) > 0) || ((live.n_new || 0) > 0)) {
+    if (fs) return `<span class="cnt">${fs}</span>`;
+    const nw = fmtNewIssues(live.n_new);
+    if (nw) return `<span class="cnt">${esc(nw)}</span>`;
+    if (st === 'noruns' || (st === 'nodata' && !(live.n_nodata || 0))) return 'no runs';
+    if (st === 'nodata') return 'no data';
+    if (st === 'watch' || (live.n_soft || 0) > 0) return 'soft';
+    if (st === 'failing' || st === 'fail') return 'fail';
+    if (st === 'both') return 'fail+slow';
+    return 'hot';
+  }
+  if (st === 'noruns') return 'no runs';
+  if (st === 'missing' || st === 'stale' || st === 'in_progress') {
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  return esc(st === 'ok' ? 'ok' : st);
+}
+function sliceHist(hist) {
+  if (!hist || !(hist.labels || []).length) return hist;
+  if (!winFrom && !winTo) return hist;
+  const out = {
+    labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [],
+    markers: [], error_classes: [], nodata: [],
+    mode: hist.mode,
+  };
+  for (let i = 0; i < hist.labels.length; i++) {
+    const day = dayOf(hist.labels[i]);
+    if (!dayInRange(day, winFrom, winTo)) continue;
+    out.labels.push(hist.labels[i]);
+    out.ydb.push(hist.ydb ? hist.ydb[i] : null);
+    out.fail_rate.push(hist.fail_rate ? hist.fail_rate[i] : null);
+    out.reports.push(hist.reports ? hist.reports[i] : null);
+    out.versions.push(hist.versions ? hist.versions[i] : null);
+    out.ci_versions.push(hist.ci_versions ? hist.ci_versions[i] : null);
+    out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+    out.error_classes.push(hist.error_classes ? hist.error_classes[i] : null);
+    out.nodata.push(hist.nodata ? hist.nodata[i] : false);
+  }
+  return out;
+}
+
+function selectedBranch() {
+  return document.getElementById('fBranch')?.value || '';
+}
+
+function heatSelection() {
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  return (db || fam) ? { db, fam } : null;
+}
+function rowsForSummary({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  return candidateRows().filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return rowMatchesReact(r);
+  });
+}
+function countOkSlices({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  const base = currentSummaryBase();
+  if (!db && !fam) return base.ok_slices || 0;
+  return (DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return r.issue === 'ok' || r.issue === 'watch';
+  }).length;
+}
+function summarizeRows(rows, { db = '', fam = '' } = {}) {
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  const sReact = reactSignals();
+  const base = currentSummaryBase();
+  return {
+    missing: rows.filter(r => r.issue === 'missing').length,
+    in_progress: rows.filter(r => r.issue === 'in_progress').length,
+    failing: sReact.fail
+      ? rows.filter(r => !isInfraIssue(r) && hasFailSignal(r)).length
+      : 0,
+    slower: sReact.hard
+      ? rows.filter(r => !isInfraIssue(r) && hasHardSlowSignal(r)).length
+      : 0,
+    soft: sReact.soft
+      ? rows.filter(r => !isInfraIssue(r) && hasSoftSlowSignal(r)).length
+      : 0,
+    nodata: sReact.nodata
+      ? rows.filter(r => !isInfraIssue(r) && hasNodataSignal(r)).length
+      : 0,
+    new_issues: rows.filter(r => !isInfraIssue(r) && hasNewIssueSignal(r)).length,
+    new_fail: rows.filter(r => !isInfraIssue(r) && hasNewIssueSignal(r)).length,
+    stale: rows.filter(r => r.issue === 'stale').length,
+    ok_slices: countOkSlices({ db, fam }),
+    hot: hot.length,
+    slices: base.slices || 0,
+  };
+}
+function currentSummaryBase() {
+  const br = selectedBranch();
+  if (!br) return DATA.summary || {};
+  return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
+}
+function currentSummary() {
+  // Branch/date/react totals only — heatmap cell must not replace widgets.
+  return summarizeRows(rowsForSummary());
+}
+function selectedSummary() {
+  const sel = heatSelection();
+  if (!sel) return null;
+  return summarizeRows(rowsForSummary(sel), sel);
+}
+function fmtNM(n, m, selected) {
+  const N = n || 0;
+  const M = m || 0;
+  if (!selected) return String(M);
+  return `<span class="sel">${N}</span>/${M}`;
+}
+
+function renderHeader() {
+  const total = currentSummary();
+  const sel = selectedSummary();
+  const s = sel || total;
+  const rs = reactSignals();
+  const genAt = (DATA.generated_at || '').replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
+  document.getElementById('subtitle').innerHTML =
+    `Updated <b>${esc(genAt || '—')}</b>`;
+
+  const fifth = rs.nodata
+    ? `<div class="counter nodata"><div class="n">${fmtNM(s.nodata, total.nodata, !!sel)}</div><div class="lbl">No data</div></div>`
+    : rs.soft
+      ? `<div class="counter warn"><div class="n">${fmtNM(s.soft, total.soft, !!sel)}</div><div class="lbl">Soft slow</div></div>`
+      : `<div class="counter warn"><div class="n">${fmtNM(s.stale, total.stale, !!sel)}</div><div class="lbl">Stale</div></div>`;
+  const known = DATA.known_issues || [];
+  const nIssues = known.length;
+  const nOpen = known.filter(i => String(i.state || 'open').toLowerCase() !== 'closed').length;
+  const nClosed = nIssues - nOpen;
+  const nSuitesTick = [...(DATA.inbox || []), ...(DATA.ok || [])]
+    .filter(r => (r.tickets || []).length).length;
+  const sumNew = (DATA.summary || {}).new_issues ?? (DATA.summary || {}).new_fail;
+  const nNew = (s.new_issues != null ? s.new_issues : (s.new_fail != null ? s.new_fail : sumNew)) || 0;
+  const nNewTotal = (total.new_issues != null ? total.new_issues : (total.new_fail != null ? total.new_fail : sumNew)) || 0;
+  document.getElementById('counters').innerHTML = `
+    <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
+    <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
+    <div class="counter hot"><div class="n">${fmtNM(s.failing, total.failing, !!sel)}</div><div class="lbl">Failing</div></div>
+    <div class="counter newfail" title="Suites with fail or no-data and no covering issue (open, or closed with closed_at ≥ tested SHA/run time)">
+      <div class="n">${fmtNM(nNew, nNewTotal, !!sel)}</div>
+      <div class="lbl">New issues</div>
+    </div>
+    <div class="counter regress"><div class="n">${fmtNM(s.slower, total.slower, !!sel)}</div><div class="lbl">Hard slow</div></div>
+    ${fifth}
+    <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
+    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed ≤10d. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
+      <div class="n">${nIssues}<span class="sel">/${nSuitesTick}</span></div>
+      <div class="lbl">Issues / suites</div>
+    </div>
+  `;
+}
+
+function formatWave(w) {
+  if (!w) return '—';
+  const day = w.day || String(w.max_ts || '').slice(0, 10) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : 'activity';
+  const age = (w.age_hours != null) ? `${w.age_hours}h` : '—';
+  const only = w.activity_only ? ' <span class="pill">no wave</span>' : '';
+  return `${esc(day)} · ${esc(w.ci_version)} · ${esc(cov)} · ${esc(age)}${only}`;
+}
+
+function waveInWindow(w) {
+  if (!w) return null;
+  const day = w.day || dayOf(w.max_ts);
+  if (!dayInRange(day, winFrom, winTo)) return null;
+  return w;
+}
+function waveFor(branch, db) {
+  // Only the selected branch — no cross-branch fallback
+  const waves = DATA.waves || {};
+  const act = DATA.last_activity || {};
+  let w = null;
+  if (branch && waves[`${branch}|${db}`]) w = waves[`${branch}|${db}`];
+  else if (branch && act[`${branch}|${db}`]) w = act[`${branch}|${db}`];
+  else if (!branch) {
+    const byDb = DATA.waves_by_db || {};
+    if (byDb[db]) w = byDb[db];
+    else if (act[db]) w = act[db];
+  }
+  return waveInWindow(w);
+}
+
+function dbsForBranch(branch) {
+  const h = DATA.heatmap || {};
+  const map = h.dbs_by_branch || (DATA.ui && DATA.ui.dbs_by_branch) || {};
+  if (branch && map[branch] && map[branch].length) return map[branch];
+  if (!branch) {
+    // union of all branch dbs
+    const all = new Set(h.dbs || []);
+    Object.values(map).forEach(list => (list || []).forEach(d => all.add(d)));
+    return [...all].sort();
+  }
+  return [];
+}
+
+function renderHeatmap() {
+  const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
+  let br = selectedBranch();
+  const branches = br ? [br] : (h.branches || uiBranches());
+  let html = '';
+  for (const branch of branches) {
+    const dbs = dbsForBranch(branch);
+    if (branches.length > 1) {
+      html += `<div class="muted" style="padding:10px 12px 0;font-weight:650">${esc(branch)} · ${dbs.length} clusters</div>`;
+    }
+    if (!dbs.length) {
+      html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
+      continue;
+    }
+    // Always show every DbAlias row. React only paints hot channels (fail/hard/soft/
+    // nodata); ok / no runs cells stay visible so the grid never collapses to empty.
+    const rowLives = [];
+    for (const db of dbs) {
+      const lives = {};
+      for (const fam of h.families) {
+        lives[fam] = liveCell(branch, db, fam);
+      }
+      rowLives.push({ db, lives });
+    }
+    html += `<table class="heat"><thead><tr><th>DbAlias</th>`;
+    for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
+    html += `<th>Compare</th><th>Last wave</th></tr></thead><tbody>`;
+    for (const { db, lives } of rowLives) {
+      html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
+      for (const fam of h.families) {
+        const live = lives[fam];
+        const st = live.status || 'ok';
+        const tip = live.compare && live.prev
+          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata, live.prev.n_new)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft, live.n_nodata, live.n_new)}`
+          : ((st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata' || st === 'failing' || (live.n_new || 0) > 0)
+            ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data · ${live.n_new || 0} new issues`
+            : `${live.n_hot || 0} suites`);
+        const heat = heatSelection();
+        const selected = !!(heat && heat.db === db && heat.fam === fam
+          && (!selectedBranch() || selectedBranch() === branch));
+        // paint from resolve_alert_cell / resolve_compare_cell (React-normalized).
+        const cellCls = live.paint || ((live.compare && live.delta && live.delta !== 'same')
+          ? (st.startsWith('delta-') ? st : `delta-${live.delta}`)
+          : (live.delta_status || st));
+        html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
+      }
+      const w = waveFor(branch, db);
+      html += compareSelectHtml(branch, db);
+      html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(w)}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const root = document.getElementById('heatmap');
+  root.innerHTML = html || '<div class="empty">нет данных</div>';
+  root.querySelectorAll('select.cmp-wave').forEach(sel => {
+    sel.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      const branch = sel.dataset.cmpBranch || '';
+      const db = sel.dataset.cmpDb || '';
+      setCompareId(branch, db, sel.value || '');
+      // Compare must not steal query/dive "now" — always latest completed.
+      clearDiveFocusForDb(branch, db);
+      destroyCharts();
+      renderAll();
+    });
+    sel.addEventListener('click', (ev) => ev.stopPropagation());
+  });
+  // Bind all data cells — including failing/both/slower (not only legacy class list).
+  root.querySelectorAll('.cell[data-db][data-fam]').forEach(el => {
+    el.addEventListener('click', () => {
+      const db = el.dataset.db || '';
+      const fam = el.dataset.fam || '';
+      const branch = el.dataset.branch || '';
+      const fDb = document.getElementById('fDb');
+      const fFam = document.getElementById('fFam');
+      const fIssue = document.getElementById('fIssue');
+      const same = fDb.value === db && fFam.value === fam
+        && (!branch || selectedBranch() === branch);
+      if (same) {
+        fDb.value = '';
+        fFam.value = '';
+        fIssue.value = '';
+      } else {
+        if (branch) document.getElementById('fBranch').value = branch;
+        fDb.value = db;
+        fFam.value = fam;
+        // Always all hot: cell = db×family slice. Auto-picking Issue=failing hides
+        // issue=both/slower suites (and React.hard-off zeros n_slow in liveCell).
+        fIssue.value = '';
+      }
+      renderAll();
+      if (!same) {
+        document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+}
+/** Map heatmap cell → inbox Issue. Counts beat ambiguous status=regression. */
+function issueFilterFromLive(live) {
+  if (!live) return '';
+  const st = live.compare ? (live.delta_status || live.status) : (live.status || '');
+  const nf = live.n_fail || 0;
+  const ns = live.n_slow || 0;
+  const nSoft = live.n_soft || 0;
+  const nNd = live.n_nodata || 0;
+  // Query gaps → nodata filter. Empty cell (noruns) → leave issue empty (inbox: no runs).
+  if (st === 'noruns' || (st === 'nodata' && !nNd && live.paint === 'noruns')) return '';
+  // Cell aggregates many suites. Any multi-signal label (fail+nodata, fail+slow, …)
+  // must open Issue=all hot — a single Issue value hides the other suites.
+  const buckets = new Set();
+  if (nNd > 0 || st === 'nodata') buckets.add('nodata');
+  if (nf > 0 || st === 'broken' || st === 'failing' || st === 'fail'
+      || st === 'both' || (st === 'regression' && nf > 0)) {
+    buckets.add('failing');
+  }
+  if (ns > 0 || st === 'slower' || st === 'slow' || st === 'both'
+      || (st === 'regression' && !(nf > 0))) {
+    buckets.add('slower');
+  }
+  if (nSoft > 0 || st === 'watch') buckets.add('watch');
+  if (st === 'in_progress') buckets.add('in_progress');
+  if (st === 'missing') buckets.add('missing');
+  if (st === 'stale') buckets.add('stale');
+  if (buckets.size > 1) return '';
+  if (buckets.size === 1) return [...buckets][0];
+  if (st === 'ok') return 'ok';
+  return '';
+}
+function issueFilterFromCellStatus(nowSt) {
+  return issueFilterFromLive({ status: nowSt, n_fail: 0, n_slow: 0 });
+}
+function isHotIssue(issue) {
+  return ['failing', 'slower', 'both', 'missing', 'stale', 'in_progress', 'broken', 'nodata', 'watch'].includes(issue);
+}
+/** Inbox "all hot": classic issue buckets + React signals on issue=ok rows (no data / soft). */
+function isHotRow(r) {
+  if (isHotIssue(r.issue) || isHotIssue(effectiveIssue(r))) return true;
+  if (hasFailSignal(r) || hasHardSlowSignal(r)) return true;
+  if (hasSoftSlowSignal(r) || hasNodataSignal(r)) return true;
+  return false;
+}
+function issueFromClassifyPart(part) {
+  if (!part) return 'ok';
+  const kind = part.kind || '';
+  const st = part.status || '';
+  if (st === 'missing' || kind === 'missing') return 'missing';
+  if (st === 'in_progress' || kind === 'in_progress') return 'in_progress';
+  if (st === 'stale' || kind === 'stale') return 'stale';
+  if (kind === 'both' || st === 'both') return 'both';
+  if (kind === 'fail' || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
+  if (kind === 'slow' || st === 'regression' || st === 'slower' || st === 'slow') return 'slower';
+  if (kind === 'watch' || st === 'watch') return 'watch';
+  if (kind === 'nodata' || st === 'nodata') return 'nodata';
+  return 'ok';
+}
+/** Under active compare: issue from same-prev7 now-side reclassify. */
+function effectiveIssue(r) {
+  const cmpId = getCompareId(r.branch, r.db);
+  if (!cmpId) return r.issue;
+  const wave = waveEntry(r.branch, r.db, cmpId);
+  if (!wave) return r.issue;
+  return issueFromClassifyPart(classifySuiteNowVsWaveBaseline(r, wave));
+}
+function compareElevatedOkRows() {
+  const mode = waveView();
+  const out = [];
+  const seen = new Set();
+  for (const raw of (DATA.ok || [])) {
+    let r = raw;
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+    if (seen.has(k)) continue;
+    if (!getCompareId(r.branch, r.db)) continue;
+    if (!isHotIssue(effectiveIssue(r))) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function mergeRowPools(...pools) {
+  // Dedupe by suite (not row id): hot + unwrapped in_progress twin share suite, differ by id.
+  const seen = new Set();
+  const out = [];
+  for (const pool of pools) {
+    for (const r of (pool || [])) {
+      const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
+function uiBranches() {
+  return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
+}
+
+function inboxPool(issue) {
+  if (issue === 'ok' || issue === 'watch') return DATA.ok || [];
+  if (issue === 'in_progress') {
+    return (DATA.inbox || []).filter(r => r.issue === 'in_progress');
+  }
+  if (issue === 'nodata') {
+    const seen = new Set();
+    const out = [];
+    const mode = waveView();
+    for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+      let r = raw;
+      if (mode === 'finished' && r.issue === 'in_progress') {
+        if (!r.finished) continue;
+        r = unwrapFinishedTwin(r);
+      }
+      const k = rowKey(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+    return out;
+  }
+  return candidateRows();
+}
+
+function filteredInbox() {
+  const issue = document.getElementById('fIssue').value;
+  const db = document.getElementById('fDb').value;
+  const fam = document.getElementById('fFam').value;
+  const br = selectedBranch();
+  const drill = !!(db && fam);
+  const browseOk = issue === 'ok' || issue === 'watch' || issue === 'nodata';
+  let pool;
+  if (browseOk || issue === 'in_progress') {
+    pool = inboxPool(issue);
+  } else if (!issue && drill) {
+    // Heatmap drill: show the slice even if alert-ok (compare may paint it).
+    pool = mergeRowPools(candidateRows(), DATA.ok || []);
+  } else if (!issue) {
+    pool = mergeRowPools(candidateRows(), compareElevatedOkRows());
+  } else {
+    pool = mergeRowPools(inboxPool(issue), compareElevatedOkRows());
+  }
+  return pool.filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    if (issue === 'ok') {
+      if (r.issue !== 'ok' && r.issue !== 'watch') return false;
+    } else if (issue === 'watch') {
+      if (r.issue !== 'watch' && !hasSoftSlowSignal(r)) return false;
+    } else if (issue === 'nodata') {
+      if (!hasNodataSignal(r)) return false;
+    } else if (issue === 'in_progress') {
+      if (r.issue !== 'in_progress') return false;
+    } else if (issue === 'failing') {
+      // both/broken carry fails — exact issue==="failing" used to hide them after heatmap drill.
+      const ei = effectiveIssue(r);
+      if (!hasFailSignal(r) && r.issue !== 'failing' && ei !== 'failing'
+          && r.issue !== 'both' && ei !== 'both' && r.issue !== 'broken' && ei !== 'broken') {
+        return false;
+      }
+    } else if (issue === 'slower') {
+      const ei = effectiveIssue(r);
+      if (!hasHardSlowSignal(r) && r.issue !== 'slower' && ei !== 'slower'
+          && r.issue !== 'both' && ei !== 'both') {
+        return false;
+      }
+    } else if (issue === 'both') {
+      const ei = effectiveIssue(r);
+      if (r.issue !== 'both' && ei !== 'both'
+          && !(hasFailSignal(r) && hasHardSlowSignal(r))) {
+        return false;
+      }
+    } else if (issue) {
+      if (r.issue !== issue && effectiveIssue(r) !== issue) return false;
+    } else if (!drill) {
+      // no data / soft live on issue=ok — isHotIssue alone used to drop them from all hot.
+      if (!isHotRow(r)) return false;
+    }
+    // all hot + drill: React channels (fail/hard/soft/nodata) still gate visibility
+    if (!browseOk && !rowMatchesReact(r)) return false;
+    return true;
+  });
+}
+/** Heatmap drill safety: if Issue filter empties the slice, show all suites in that cell. */
+function filteredInboxOrDrill() {
+  const rows = filteredInbox();
+  if (rows.length) return rows;
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  if (!db || !fam) return rows;
+  const br = selectedBranch();
+  return mergeRowPools(candidateRows(), DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+
+function mountHistory(item, id) {
+  const src = (item.issue === 'in_progress' && item.finished && item.finished.history)
+    ? item.finished.history
+    : (item.history || {});
+  const hist = sliceHist(src);
+  const box = document.getElementById(id + '_hist');
+  if (!box) return;
+  if (!(hist.labels || []).length) {
+    box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
+    return;
+  }
+  // Only suite canvases (id_ydb / id_fail) — keep query charts id_q_* alive.
+  destroyCharts(id + '_', { exclude: '_q_' });
+  box.innerHTML = `<div class="pair">
+    <div class="chart-box"><canvas id="${id}_ydb"></canvas></div>
+    <div class="chart-box"><canvas id="${id}_fail"></canvas></div>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Столбики = сырые прогоны (не median Now) · цвет vs предыдущий · клик → report ·
+    цвет vs median mavg(prev7) · синий = synthetic <b>in_progress</b> · оранжевый = synthetic <b>missing</b>
+  </div>`;
+
+  const markers = hist.markers || [];
+  function bar(cid, vals, label, colors) {
+    const el = document.getElementById(cid);
+    if (!el) return;
+    charts[cid] = new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: hist.labels,
+        datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        onClick: (_e, els) => {
+          if (!els.length) return;
+          const url = hist.reports[els[0].index];
+          if (url) window.open(url, '_blank', 'noopener');
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+          tooltip: {
+            callbacks: {
+              afterLabel: (it) => {
+                const m = markers[it.dataIndex];
+                if (m === 'in_progress') return 'SYNTHETIC · wave in progress';
+                if (m === 'missing') return 'SYNTHETIC · missing in completed wave';
+                return hist.reports[it.dataIndex] ? 'клик → report' : '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+          y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+        }
+      }
+    });
+  }
+  const y = hist.ydb || [];
+  // suite history: raw points; color vs trailing median mavg. synthetic markers win.
+  const yColors = colorsVsMedianMavg(y).map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    return c;
+  });
+  const f = hist.fail_rate || [];
+  const fColors = failColors(f).map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    return c;
+  });
+  // synthetic fail bar: small visible stub
+  const fPlot = f.map((v, i) => {
+    if (markers[i] === 'in_progress' || markers[i] === 'missing') return v == null ? 1 : v;
+    return v;
+  });
+  bar(id + '_ydb', y, 'YdbSumMeans · raw runs', yColors);
+  bar(id + '_fail', fPlot, 'Fail rate % · raw runs', fColors);
+}
+
+function findQuery(item, testName) {
+  if (item.query_map && item.query_map[testName]) return item.query_map[testName];
+  const all = [...(item.queries || []), ...(item.slow_queries || []), ...(item.bad_queries || [])];
+  return all.find(q => q.test === testName) || null;
+}
+
+/** Last non-null point in series (raw daily / run value). */
+function lastPoint(labels, vals) {
+  for (let i = (vals || []).length - 1; i >= 0; i--) {
+    if (vals[i] != null && Number.isFinite(Number(vals[i]))) {
+      return { i, label: labels[i], v: Number(vals[i]) };
+    }
+  }
+  return null;
+}
+function medianOf(nums) {
+  const a = nums.filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+/** Trailing median moving window (default = baseline_runs). Color bar vs that mavg. */
+function colorsVsMedianMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    // window: previous w points (exclude current) — fallback include current if too short
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n > ref * 3) return '#8a1f1a';
+    // chart softener vs alert: red only from +25% (hard floor), not +10%
+    if (n > ref * 1.25) return '#e5534b';
+    if (n > ref * 1.10) return '#d29922';
+    if (n < ref * 0.93) return '#3fb950';
+    return '#5b8def';
+  });
+}
+function failColors(vals) {
+  return (vals || []).map(v => {
+    if (v == null) return '#8c959f';
+    if (v >= 50) return '#8a1f1a';
+    if (v >= 10) return '#e5534b';
+    if (v >= 3) return '#db6d28';
+    if (v > 0) return '#d29922';
+    return '#3fb950';
+  });
+}
+
+function markIndicesForQuery(item, diveId, q, hist) {
+  /** Map full-history indices onto sliced hist via labels. */
+  const labelIndex = new Map((hist.labels || []).map((lab, i) => [String(lab), i]));
+  function mapIdx(fullIdx) {
+    if (fullIdx < 0 || !q.history) return -1;
+    const lab = (q.history.labels || [])[fullIdx];
+    if (lab == null) return -1;
+    const i = labelIndex.get(String(lab));
+    return i == null ? -1 : i;
+  }
+  const data = diveData(item);
+  const runs = data.now_runs || [];
+  const cmpId = getCompareId(item.branch, item.db);
+  const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  // With active compare: now = latest completed (was-side = compare). Focus only when no compare.
+  const focusIdx = cmpId ? (runs.length - 1) : diveFocusRunIndex(item, data);
+  const focusRun = runs[focusIdx] || null;
+  let nowFull = -1;
+  if (focusRun) nowFull = findHistIndexForRun(q.history, focusRun);
+  if (nowFull < 0 && q.history) nowFull = lastCompletedHistIndex(q.history);
+  const cmpFull = wave ? findHistIndexForWave(q.history, wave) : -1;
+  return { now: mapIdx(nowFull), compare: mapIdx(cmpFull) };
+}
+
+function restoreDiveQueryFocus(item, diveId) {
+  if (!item || !diveId) return;
+  const test = diveQueryFocus[suiteKey(item)];
+  if (!test) return;
+  mountQueryHistory(item, diveId, test);
+}
+function mountQueryHistory(item, diveId, testName) {
+  const q = findQuery(item, testName);
+  const box = document.getElementById(diveId + '_qhist');
+  if (!box) return;
+  diveQueryFocus[suiteKey(item)] = testName;
+  destroyCharts(diveId + '_q_');
+  box.closest('.dive')?.querySelectorAll('button.pill[data-qpick]').forEach(b => {
+    b.classList.toggle('active', b.dataset.test === testName);
+  });
+
+  if (!q || !(q.history && q.history.labels && q.history.labels.length)) {
+    box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
+      <div class="q-empty" style="min-height:280px">Нет run history для этого запроса</div></div>`;
+    return;
+  }
+  const hist = sliceHist(q.history);
+  const marks = markIndicesForQuery(item, diveId, q, hist);
+  if (!(hist.labels || []).length) {
+    box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
+      <div class="q-empty" style="min-height:280px">Нет точек в выбранном интервале дат</div></div>`;
+    return;
+  }
+
+  const last = lastPoint(hist.labels, hist.ydb);
+  let prev = null;
+  if (last) {
+    for (let i = last.i - 1; i >= 0; i--) {
+      if (hist.ydb[i] != null) { prev = { label: hist.labels[i], v: Number(hist.ydb[i]) }; break; }
+    }
+  }
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  let mavgRef = null;
+  if (last) {
+    const start = Math.max(0, last.i - win);
+    mavgRef = medianOf((hist.ydb || []).slice(start, last.i));
+  }
+  const vsMavg = (last && mavgRef != null && mavgRef > 0)
+    ? `vs median mavg(${win} runs): ${pct(((last.v - mavgRef) / mavgRef) * 100)} (ref ${fmt(mavgRef)})`
+    : null;
+  const dod = (last && prev && prev.v > 0)
+    ? `Δ run: ${pct(((last.v - prev.v) / prev.v) * 100)}`
+    : null;
+  const lastLbl = last ? String(last.label).replace('T', ' ').replace('Z', '').slice(0, 16) : '';
+  const rawLine = last
+    ? `last <b>${esc(lastLbl)}</b>: <b>${fmt(last.v)}</b>` +
+      (vsMavg ? ` · ${vsMavg}` : '') +
+      (dod ? ` · ${dod}` : '')
+    : 'нет точек';
+  const thrBits = [];
+  if (q.dur_thr_pct != null) thrBits.push(`thr ${pct(q.dur_thr_pct)}`);
+  if (q.dur_noise_pct != null) thrBits.push(`noise ${pct(q.dur_noise_pct)}`);
+  if (q.dur_level) thrBits.push(q.dur_level);
+  const alertLine = (q.ydb_base != null && q.ydb_now != null)
+    ? `alert (last vs median prev7 до now): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}` +
+      (thrBits.length ? ` · ${thrBits.join(' · ')}` : '')
+    : null;
+  // Same numbers as left-list pills under compare (vs prev7 ending at compare wave).
+  let cmpAxisLine = null;
+  let viewKind = q.kind || 'ok';
+  const cmpIdQ = getCompareId(item.branch, item.db);
+  const cmpWaveQ = cmpIdQ ? waveEntry(item.branch, item.db, cmpIdQ) : null;
+  if (cmpWaveQ && q.history) {
+    const fullH = q.history;
+    const nowFull = lastCompletedHistIndex(fullH);
+    const cmpFull = findHistIndexForWave(fullH, cmpWaveQ);
+    if (nowFull >= 0 && cmpFull >= 0 && cmpFull !== nowFull) {
+      const nowM = metricsAtHistIndex(q, nowFull, cmpFull);
+      const prevM = metricsAtHistIndex(q, cmpFull);
+      viewKind = nowM.kind || viewKind;
+      cmpAxisLine =
+        `compare-ось (как в списке слева): ` +
+        `cmp ${querySideLabel(prevM)} (${fmt(prevM.ydb_now)} vs median prev7 до cmp ${fmt(prevM.ydb_base)}) → ` +
+        `now ${querySideLabel(nowM)} (${fmt(nowM.ydb_now)} vs тот же median ${fmt(nowM.ydb_base)})` +
+        ` · % не Δ cmp→now`;
+    }
+  }
+  const nReports = (hist.reports || []).filter(Boolean).length;
+  const histMode = hist.mode || q.history.mode || 'runs';
+
+  const kindCls = viewKind === 'nodata' ? 'nodata'
+    : (viewKind === 'fail' || viewKind === 'both') ? 'fail'
+    : (viewKind === 'slow' ? 'slow' : (viewKind === 'watch' ? 'watch' : 'qok'));
+  const kindLabel = viewKind === 'nodata' ? 'no data'
+    : (viewKind === 'watch' ? 'soft' : (viewKind || 'query'));
+  const errPill = q.error_class
+    ? ` <span class="pill fail" title="mart Color / diff_response">${esc(q.error_class)}</span>`
+    : '';
+  const qTickets = ticketsForQuery(item, testName, q);
+  const qTicketsHtml = qTickets.length
+    ? ` <span style="margin-left:4px">${ticketPillsHtml(qTickets, { compact: true, maxTitle: 40 })}</span>`
+    : '';
+  box.innerHTML = `<div class="qdetail">
+    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span>${errPill}${qTicketsHtml}</div>
+    <div style="margin-bottom:4px">${
+      q.kind === 'nodata'
+        ? 'в последнем suite-run <b>нет данных</b> по этому query (mart placeholder, не fail)'
+        : rawLine
+    }</div>
+    <div class="muted" style="margin-bottom:6px">
+      график = <b>каждый запуск</b> · цвет vs <b>median mavg(prev${win})</b> · клик → report${nReports ? ` (${nReports})` : ''}
+      · <b>тёмная рамка</b> = now · <b>оранжевая</b> = compare
+      ${cmpAxisLine ? `<div class="muted" style="margin-top:4px">${esc(cmpAxisLine)}</div>` : ''}
+      ${alertLine ? `<div class="muted" style="margin-top:2px">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
+    </div>
+    <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7 runs)
+    </label>
+    <div class="q-charts-stack">
+      <div class="chart-box"><canvas id="${diveId}_q_ydb"></canvas></div>
+      <div class="chart-box"><canvas id="${diveId}_q_fail"></canvas></div>
+    </div>
+  </div>`;
+
+  const reports = hist.reports || [];
+  const alertBase = q.ydb_base;
+  let showBase = false;
+  // time scale + parsing:false needs numeric timestamps (ISO strings break the axis → "today")
+  const toXY = (labels, vals) => {
+    const pts = [];
+    for (let i = 0; i < labels.length; i++) {
+      const t = Date.parse(labels[i]);
+      if (!Number.isFinite(t)) continue;
+      const y = vals[i] == null || vals[i] === '' ? null : Number(vals[i]);
+      pts.push({ x: t, y: Number.isFinite(y) ? y : null, i });
+    }
+    return pts;
+  };
+
+  function paint() {
+    destroyCharts(diveId + '_q_');
+    // Keep status fill (red/green/…); selection = bold border only (blue fill looked like "ok").
+    const yColors = colorsVsMedianMavg(hist.ydb, win);
+    const fColors = failColors(hist.fail_rate);
+    const borderColors = (hist.labels || []).map((_, i) => (
+      i === marks.now ? '#1f2328' : (i === marks.compare ? '#9a6700' : 'transparent')
+    ));
+    const borderWidths = (hist.labels || []).map((_, i) => (
+      (i === marks.now || i === marks.compare) ? 3 : 0
+    ));
+    function runChart(cid, vals, label, colors) {
+      const el = document.getElementById(cid);
+      if (!el) return;
+      const useTime = histMode === 'runs' || String(hist.labels[0] || '').includes('T');
+      const xy = useTime ? toXY(hist.labels, vals) : null;
+      const xyColors = useTime ? xy.map(p => colors[p.i] || '#5b8def') : colors;
+      const xyBorder = useTime ? xy.map(p => borderColors[p.i] || 'transparent') : borderColors;
+      const xyBorderW = useTime ? xy.map(p => borderWidths[p.i] || 0) : borderWidths;
+      const xBounds = useTime && xy.length ? {
+        min: Math.min(...xy.map(p => p.x)),
+        max: Math.max(...xy.map(p => p.x)),
+      } : null;
+      charts[cid] = new Chart(el, {
+        type: 'bar',
+        data: useTime ? {
+          datasets: [{
+            data: xy,
+            backgroundColor: xyColors,
+            borderColor: xyBorder,
+            borderWidth: xyBorderW,
+            borderSkipped: false,
+            barPercentage: 0.9,
+            categoryPercentage: 0.9,
+          }]
+        } : {
+          labels: hist.labels,
+          datasets: [{
+            data: vals,
+            backgroundColor: colors,
+            borderColor: borderColors,
+            borderWidth: borderWidths,
+            borderSkipped: false,
+            barPercentage: 0.9,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          parsing: useTime ? false : true,
+          onClick: (_e, els) => {
+            if (!els.length) return;
+            const idx = useTime ? (xy[els[0].index]?.i) : els[0].index;
+            const url = reports[idx];
+            if (url) window.open(url, '_blank', 'noopener');
+          },
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const it = items[0];
+                  if (!it) return '';
+                  if (useTime) {
+                    const src = xy[it.dataIndex];
+                    const lab = src ? hist.labels[src.i] : it.label;
+                    return String(lab).replace('T', ' ').replace('Z', '').slice(0, 19);
+                  }
+                  return String(it.label).replace('T', ' ').replace('Z', '').slice(0, 19);
+                },
+                afterLabel: (it) => {
+                  const bits = [];
+                  const i = useTime ? (xy[it.dataIndex]?.i) : it.dataIndex;
+                  if (i == null) return '';
+                  if (i === marks.now) bits.push('now');
+                  if (i === marks.compare) bits.push('compare');
+                  if (i === marks.compare) bits.push('compare wave');
+                  if (cid.endsWith('_ydb')) {
+                    const cur = vals[i];
+                    const start = Math.max(0, i - win);
+                    const ref = medianOf(vals.slice(start, i));
+                    if (cur != null && ref != null && ref > 0) {
+                      bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
+                    }
+                  }
+                  if (reports[i]) bits.push('клик → report');
+                  return bits.join(' · ');
+                }
+              }
+            }
+          },
+          scales: {
+            x: useTime ? {
+              type: 'time',
+              min: xBounds ? xBounds.min : undefined,
+              max: xBounds ? xBounds.max : undefined,
+              offset: true,
+              time: {
+                tooltipFormat: 'yyyy-MM-dd HH:mm',
+                displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d', minute: 'HH:mm' },
+              },
+              ticks: { maxRotation: 45, font: { size: 9 }, color: '#656d76', autoSkip: true, maxTicksLimit: 10 },
+              grid: { display: false },
+            } : {
+              ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' },
+              grid: { display: false },
+            },
+            y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+          }
+        },
+        plugins: [{
+          id: 'qbase',
+          afterDraw(chart) {
+            const { left, right, top, bottom } = chart.chartArea;
+            const ctx = chart.ctx;
+            const xScale = chart.scales.x;
+            function vline(idx, color, tag) {
+              if (idx < 0 || !xScale) return;
+              let x;
+              if (useTime && xy && xy.length) {
+                const pt = xy.find(p => p.i === idx);
+                if (!pt) return;
+                x = xScale.getPixelForValue(pt.x);
+              } else {
+                x = xScale.getPixelForValue(idx);
+              }
+              if (x < left || x > right) return;
+              ctx.save();
+              ctx.beginPath();
+              ctx.setLineDash([3, 3]);
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.5;
+              ctx.moveTo(x, top);
+              ctx.lineTo(x, bottom);
+              ctx.stroke();
+              ctx.fillStyle = color;
+              ctx.font = '10px sans-serif';
+              ctx.fillText(tag, Math.min(x + 3, right - 36), top + 12);
+              ctx.restore();
+            }
+            vline(marks.now, '#1f2328', 'now');
+            vline(marks.compare, '#9a6700', 'cmp');
+            if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
+            const y = chart.scales.y.getPixelForValue(alertBase);
+            if (y < top || y > bottom) return;
+            ctx.save();
+            ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
+            ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+            ctx.fillStyle = '#0969da'; ctx.font = '10px sans-serif';
+            ctx.fillText('alert baseline', left + 4, Math.max(top + 10, y - 4));
+            ctx.restore();
+          }
+        }]
+      });
+    }
+    runChart(diveId + '_q_ydb', hist.ydb, `${testName} · per-run YdbSumMeans`, yColors);
+    runChart(diveId + '_q_fail', hist.fail_rate, `${testName} · Fail (0/100 per run)`, fColors);
+  }
+
+  const chk = document.getElementById(diveId + '_q_base');
+  if (chk) {
+    chk.addEventListener('change', () => { showBase = chk.checked; paint(); });
+  }
+  paint();
+}
+
+function kindSev(k) {
+  return ({ ok: 0, nodata: 1, watch: 2, slow: 3, fail: 4, both: 5, missing: 4 })[k] || 0;
+}
+function kindLabelShort(k) {
+  if (k === 'nodata') return 'no data';
+  if (k === 'watch') return 'soft';
+  if (k === 'slow') return 'slow';
+  if (k === 'fail') return 'fail';
+  if (k === 'both') return 'fail+slow';
+  if (k === 'missing') return 'missing';
+  return 'ok';
+}
+/** Solid pill class for a single-side kind. */
+function kindSolidPillCls(k) {
+  if (k === 'fail' || k === 'both') return 'fail';
+  if (k === 'slow') return 'slow';
+  if (k === 'watch') return 'watch';
+  if (k === 'nodata' || k === 'missing') return 'nodata';
+  return 'qok';
+}
+/** Tone for compare gradient endpoints (was → now). */
+function kindTone(k) {
+  if (k === 'fail' || k === 'both') return { bg: '#ffebe9', fg: '#cf222e' };
+  if (k === 'slow') return { bg: '#fff1e5', fg: '#bc4c00' };
+  if (k === 'watch') return { bg: '#fff8c5', fg: '#9a6700' };
+  if (k === 'nodata' || k === 'missing') return { bg: '#fbefff', fg: '#8250df' };
+  return { bg: '#dafbe1', fg: '#1a7f37' };
+}
+/** Accent class for the error type that defines the gradient (fail/slow/soft/nodata). */
+function kindAccentCls(k) {
+  if (k === 'fail' || k === 'both') return 'delta-fail';
+  if (k === 'slow') return 'delta-slow';
+  if (k === 'watch') return 'delta-soft';
+  if (k === 'nodata' || k === 'missing') return 'delta-nodata';
+  return '';
+}
+/** Compare query pill paint: gradient was→now by error type (not always fail-pink). */
+function queryComparePillPaint(prevKind, nowKind) {
+  const pk = prevKind || 'ok';
+  const nk = nowKind || 'ok';
+  if (pk === nk) return { cls: kindSolidPillCls(nk), style: '' };
+  const a = kindTone(pk);
+  const b = kindTone(nk);
+  const d = kindSev(nk) - kindSev(pk);
+  const dir = d < 0 ? 'delta-better' : (d > 0 ? 'delta-worse' : 'delta-same');
+  // Accent = non-ok side (prefer the worse kind when both hot).
+  const accentKind = kindSev(nk) >= kindSev(pk) ? nk : pk;
+  const accent = kindAccentCls(accentKind === 'ok' ? (pk === 'ok' ? nk : pk) : accentKind);
+  const cls = [dir, accent].filter(Boolean).join(' ');
+  const style = [
+    `background:linear-gradient(90deg,${a.bg} 0%,${a.bg} 40%,${b.bg} 60%,${b.bg} 100%)`,
+    `color:${b.fg}`,
+    `box-shadow:inset 0 0 0 1px ${b.fg}66`,
+  ].join(';');
+  return { cls, style };
+}
+function metricsAtHistIndex(q, idx, baseEndIdx) {
+  const h = q.history || {};
+  const m = classifyAtIndex(h.ydb, h.fail_rate, idx, h.nodata, h.markers, baseEndIdx);
+  if (h.error_classes && h.error_classes[idx]) m.error_class = h.error_classes[idx];
+  return m;
+}
+function diveData(r) {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  return fin || r;
+}
+function diveFocusRunIndex(item, data) {
+  const runs = data.now_runs || [];
+  if (!runs.length) return -1;
+  // Active heatmap/card compare → now is always latest (was-side = compare).
+  if (getCompareId(item.branch, item.db)) return runs.length - 1;
+  const key = suiteKey(item);
+  if (diveRunFocus[key] != null && diveRunFocus[key] >= 0 && diveRunFocus[key] < runs.length) {
+    return diveRunFocus[key];
+  }
+  return runs.length - 1;
+}
+/** Inbox-row metrics for focused Last-runs card (fallback = server Now).
+ *  Under active compare: same axis as heatmap — classify now vs compare wave baseline
+ *  so card slow/soft/fail match the cell and are findable in inbox. */
+function suiteViewAtFocus(item, diveId) {
+  const data = diveData(item);
+  const runs = data.now_runs || [];
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = runs[focusIdx];
+  if (!focusRun) return null;
+  const hist = data.history || item.history || {};
+  const hi = findHistIndexForRun(hist, focusRun);
+  const R = alertRules();
+  const cmpId = getCompareId(item.branch, item.db);
+  const cmpWave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  const cmpIdx = cmpWave ? findHistIndexForWave(hist, cmpWave) : -1;
+  const cmpIsFocus = !!(cmpWave && focusRun && (
+    (focusRun.ci_version && (cmpWave.id === focusRun.ci_version || cmpWave.ci_version === focusRun.ci_version))
+    || (focusRun.label && cmpWave.label && focusRun.label === cmpWave.label)
+  ));
+  // Heatmap now = last vs compare baseEnd; without compare / when cmp=focus → prev7 at hi.
+  const suiteBaseEnd = (cmpIdx >= 0 && !cmpIsFocus) ? cmpIdx : hi;
+  let m = null;
+  let fail_rate_base = data.fail_rate_base ?? item.fail_rate_base;
+  if (hi >= 0) {
+    m = classifyAtIndex(hist.ydb, hist.fail_rate, hi, hist.nodata, hist.markers, suiteBaseEnd);
+    const frBaseArr = [];
+    const frEnd = suiteBaseEnd >= 0 ? suiteBaseEnd : hi;
+    for (let i = Math.max(0, frEnd - R.baseline); i < frEnd; i++) {
+      if (!histPointUsable(hist.nodata, hist.markers, i)) continue;
+      if (hist.fail_rate && hist.fail_rate[i] != null) frBaseArr.push(Number(hist.fail_rate[i]) / 100);
+    }
+    const fb = avgNums(frBaseArr);
+    if (fb != null) fail_rate_base = fb;
+  }
+  const fails = [];
+  const slows = [];
+  const softs = [];
+  const nodatas = [];
+  for (const q of (data.queries || [])) {
+    if (!q.history) continue;
+    const qi = findHistIndexForRun(q.history, focusRun);
+    if (qi < 0) { nodatas.push({ test: q.test }); continue; }
+    let qBaseEnd = qi;
+    if (cmpWave && !cmpIsFocus) {
+      const qCmp = findHistIndexForWave(q.history, cmpWave);
+      if (qCmp >= 0) qBaseEnd = qCmp;
+    }
+    const qm = metricsAtHistIndex(q, qi, qBaseEnd);
+    if (qm.kind === 'fail' || qm.kind === 'both') {
+      fails.push({ test: q.test, ydb_pct: qm.ydb_pct, error_class: qm.error_class });
+    }
+    if (qm.kind === 'slow' || qm.kind === 'both') {
+      slows.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    }
+    if (qm.kind === 'watch') softs.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress') {
+      nodatas.push({ test: q.test });
+    }
+  }
+  let status = m ? m.status : (item.status || 'ok');
+  let kind = m ? m.kind : 'ok';
+  const frNow = (m && m.fail_rate != null) ? m.fail_rate : (focusRun.fail_rate != null ? Number(focusRun.fail_rate) : null);
+  if (fails.length && slows.length) {
+    kind = 'both';
+    status = (frNow != null && frNow >= R.failBroken) ? 'broken' : 'both';
+  } else if (fails.length) {
+    kind = 'fail';
+    status = (frNow != null && frNow >= R.failBroken) ? 'broken' : 'failing';
+  } else if (slows.length && (status === 'ok' || status === 'nodata' || status === 'failing')) {
+    kind = 'slow'; status = 'regression';
+  } else if (slows.length && status === 'watch') {
+    kind = 'slow'; status = 'regression';
+  } else if (!fails.length && !slows.length && softs.length && (status === 'ok' || status === 'nodata')) {
+    kind = 'watch'; status = 'watch';
+  }
+  let issue = item.issue;
+  if (!['missing', 'stale', 'in_progress'].includes(issue)) {
+    if (kind === 'both') issue = 'both';
+    else if (kind === 'fail') issue = 'failing';
+    else if (kind === 'slow') issue = 'slower';
+    else if (kind === 'watch') issue = 'watch';
+    else if (kind === 'nodata') issue = 'ok';
+    else issue = 'ok';
+  }
+  const civ = focusRun.ci_version
+    || (hi >= 0 && hist.ci_versions ? hist.ci_versions[hi] : null)
+    || item.ci_version;
+  return {
+    status,
+    issue,
+    kind,
+    ydb_pct: m ? m.ydb_pct : (data.ydb_pct ?? item.ydb_pct),
+    ydb_base: m ? m.ydb_base : (data.ydb_base ?? item.ydb_base),
+    ydb_now: m ? m.ydb_now : (data.ydb_now ?? item.ydb_now),
+    fail_rate_now: m ? m.fail_rate : (data.fail_rate_now ?? item.fail_rate_now),
+    fail_rate_base,
+    ci_version: civ,
+    last_ts: focusRun.ts || focusRun.day || item.last_ts,
+    fails,
+    slows,
+    softs,
+    nodatas,
+    focusRun,
+    reasons: [
+      m && m.fail_rate != null
+        ? `fail_rate ${fmtFail(fail_rate_base)}→${fmtFail(m.fail_rate)} (focus ${focusRun.label || ''})`
+        : null,
+      m && m.ydb_pct != null
+        ? `ydb ${fmt(m.ydb_base)}→${fmt(m.ydb_now)} (${pct(m.ydb_pct)})`
+        : null,
+    ].filter(Boolean),
+  };
+}
+/** Side chip for compare pill: "soft +24%" / "fail" / "no data".
+ *  % = this run vs median(prev7) ending at that side's baseline — NOT Δ(cmp→now). */
+function querySideLabel(m) {
+  if (!m) return '—';
+  const kind = kindLabelShort(m.kind || 'ok');
+  if (m.kind === 'nodata' || m.kind === 'missing') return kind;
+  if (m.ydb_pct != null) return `${kind} ${pct(m.ydb_pct)}`;
+  return kind;
+}
+function querySideTitle(m, baseHint) {
+  if (!m) return 'нет точки';
+  const kind = kindLabelShort(m.kind || 'ok');
+  if (m.ydb_now == null) return `${kind} · нет YdbSumMeans`;
+  const base = m.ydb_base != null ? fmt(m.ydb_base) : '—';
+  const pctBit = m.ydb_pct != null ? ` ${pct(m.ydb_pct)}` : '';
+  return `${kind}${pctBit} · ${fmt(m.ydb_now)} vs median(prev7 ${baseHint}): ${base}`;
+}
+/** Issues whose affected lists this query (suite×db×query). Prefer live known_issues. */
+function ticketsForQuery(item, queryName, qObj) {
+  const nq = normQueryNameJS(queryName);
+  if (!nq) return [];
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  if (issues.length) {
+    const data = diveData(item);
+    const focusIdx = diveFocusRunIndex(item, data);
+    const focusRun = (data.now_runs || [])[focusIdx] || null;
+    const cov = classifyFailCoverageJS(issues, {
+      suite: item.suite || '',
+      db: item.db || null,
+      branch: item.branch || null,
+      query: nq,
+      kind: 'olap',
+      as_of: runAsOfJS(focusRun),
+    });
+    if ((cov.tickets || []).length) return cov.tickets;
+  }
+  return (qObj && qObj.tickets) || [];
+}
+function queryTicketRowHtml(item, q, data) {
+  const suite = data || diveData(item);
+  const nq = normQueryNameJS(q.test || q.name);
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const focusIdx = diveFocusRunIndex(item, suite);
+  const focusRun = (suite.now_runs || [])[focusIdx] || null;
+  let tickets = ticketsForQuery(item, q.test || q.name, q);
+  let covStatus = null;
+  if (issues.length && nq) {
+    const cov = classifyFailCoverageJS(issues, {
+      suite: item.suite || '',
+      db: item.db || null,
+      branch: item.branch || null,
+      query: nq,
+      kind: 'olap',
+      as_of: runAsOfJS(focusRun),
+    });
+    covStatus = cov.status;
+    if ((cov.tickets || []).length) tickets = cov.tickets;
+  }
+  const waitPill = dutyDecisionPillHtml(waitNextAppliesToQuery(item, suite, q.test || q.name));
+  const postCloseOnly = !!(tickets.length
+    && covStatus === 'uncovered'
+    && tickets.every(t => t.post_close || String(t.state || '').toLowerCase() === 'closed'));
+  if (!tickets.length && !waitPill) return '';
+  const parts = [];
+  if (tickets.length) {
+    parts.push(ticketPillsHtml(tickets, { compact: true, maxTitle: 28 }));
+  }
+  if (waitPill) parts.push(waitPill);
+  else if (postCloseOnly) {
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('closed issue predates this SHA/run — treat as new issue')}">new issue</span>`
+    );
+  }
+  return `<div class="q-row-tickets">${parts.join(' ')}</div>`;
+}
+function wrapQueryRow(pillHtml, ticketsHtml) {
+  if (!ticketsHtml) return pillHtml;
+  return `<div class="q-row">${pillHtml}${ticketsHtml}</div>`;
+}
+function queryPillHtml(q, diveId, item, data) {
+  const runs = data.now_runs || [];
+  const cmpId = getCompareId(item.branch, item.db);
+  const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  // Dive now = focused Last-runs card; under compare classify vs compare baseline
+  // (same axis as heatmap / inbox card) so slow/soft are findable in pills.
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = runs[focusIdx] || null;
+  const cmpIsFocus = !!(wave && focusRun && (
+    (focusRun.ci_version && (wave.id === focusRun.ci_version || wave.ci_version === focusRun.ci_version))
+    || (focusRun.label && wave.label && focusRun.label === wave.label)
+  ));
+  let nowM = null;
+  if (q.history && focusRun) {
+    const hi = findHistIndexForRun(q.history, focusRun);
+    if (hi >= 0) {
+      let qBaseEnd = hi;
+      if (wave && !cmpIsFocus) {
+        const qCmp = findHistIndexForWave(q.history, wave);
+        if (qCmp >= 0) qBaseEnd = qCmp;
+      }
+      nowM = metricsAtHistIndex(q, hi, qBaseEnd);
+    }
+  }
+  if (!nowM) {
+    nowM = {
+      kind: q.kind || 'ok',
+      ydb_pct: q.ydb_pct,
+      ydb_now: q.ydb_now,
+      error_class: q.error_class,
+    };
+  }
+  let prevM = null;
+  if (wave && q.history) {
+    const pi = findHistIndexForWave(q.history, wave);
+    if (pi >= 0) prevM = metricsAtHistIndex(q, pi);
+    else prevM = { kind: 'nodata', ydb_pct: null };
+  }
+  let cls = kindSolidPillCls(nowM.kind || 'ok');
+  let styleAttr = '';
+  const extras = [];
+  if ((nowM.kind === 'fail' || nowM.kind === 'both') && nowM.error_class) extras.push(nowM.error_class);
+  if (!q.history) extras.push('no hist');
+  const extraHtml = extras.length
+    ? `<span class="q-extra">${esc(extras.join(' · '))}</span>`
+    : '<span class="q-extra"></span>';
+  if (prevM) {
+    const paint = queryComparePillPaint(prevM.kind || 'ok', nowM.kind || 'ok');
+    cls = paint.cls;
+    styleAttr = paint.style ? ` style="${paint.style}"` : '';
+    const was = querySideLabel(prevM);
+    const now = querySideLabel(nowM);
+    const tip = [
+      'стрелка = смена статуса compare → now (не дельта %)',
+      `cmp: ${querySideTitle(prevM, 'до cmp')}`,
+      `now: ${querySideTitle(nowM, wave && !cmpIsFocus ? 'до cmp (compare-ось)' : 'до now')}`,
+      'alert в графике справа = другая ось: last vs median prev7 до now',
+    ].join('\n');
+    const pill = `<button type="button" class="pill q-pill-cmp ${cls}"${styleAttr} data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
+      <span class="q-name">${esc(q.test)}</span>
+      <span class="q-cmp-mid">
+        <span class="q-was">${esc(was)}</span>
+        <span class="q-arrow">→</span>
+        <span class="q-now">${esc(now)}</span>
+      </span>
+      ${extraHtml}
+    </button>`;
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
+  }
+  const nowBit = nowM.kind === 'nodata' ? 'no data'
+    : (nowM.ydb_pct != null ? pct(nowM.ydb_pct)
+      : (nowM.ydb_now != null ? fmt(nowM.ydb_now) : ''));
+  const nowHtml = nowBit
+    ? `<span class="q-cmp-mid"><span class="q-now">${esc(nowBit)}</span></span>`
+    : `<span class="q-cmp-mid"></span>`;
+  const pill = `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">
+    <span class="q-name">${esc(q.test)}</span>
+    ${nowHtml}
+    ${extraHtml}
+  </button>`;
+  return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
+}
+function buildQueryBlockHtml(item, diveId) {
+  const data = diveData(item);
+  const catalog = (data.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
+  const cmpId = getCompareId(item.branch, item.db);
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = (data.now_runs || [])[focusIdx];
+  const focusNote = focusRun
+    ? ` · focus <code>${esc(focusRun.label || focusRun.ci_version || '')}</code>`
+    : '';
+  const cmpNote = cmpId ? ` · compare <code>${esc(cmpId)}</code>` : '';
+  if (catalog.length) {
+    const catalogHtml = catalog.map(q => queryPillHtml(q, diveId, item, data)).join('');
+    const pctNote = cmpId
+      ? `<div class="muted" style="margin-top:4px;font-size:11px;line-height:1.35">
+          <b>%</b> в пилюле = этот run vs <b>median(prev7)</b> до baseline-точки ·
+          при compare у <b>now</b> baseline = prev7 <b>до compare-волны</b> (та же ось, что heatmap) ·
+          стрелка = смена <b>статуса</b>, не Δ% cmp→now ·
+          справа в графике <b>alert</b> = другая ось (last vs prev7 до now)
+        </div>`
+      : `<div class="muted" style="margin-top:4px;font-size:11px">
+          <b>%</b> = last run vs <b>median(prev7)</b> до now
+        </div>`;
+    return `<div>
+        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история${focusNote}${cmpNote} ·
+          issue-пилюля под query = match по <code>affected</code> ·
+          <span class="pill ticket wait-next">wait next</span> = duty ждёт следующую волну ·
+          <span class="pill qok">ok</span>
+          <span class="pill watch">soft</span>
+          <span class="pill slow">hard slow</span>
+          <span class="pill fail">fail</span>
+          <span class="pill delta-better delta-fail">fail→ok</span>
+          <span class="pill delta-better delta-slow">slow→ok</span>
+          <span class="pill delta-better delta-soft">soft→ok</span>
+          <span class="pill delta-better delta-nodata">no data→ok</span>
+          <span class="pill nodata">no data</span>
+        </div>
+        ${pctNote}
+        <div class="qlist">${catalogHtml}</div>
+      </div>`;
+  }
+  const slow = listedSlow(data);
+  const fails = listedFail(data);
+  const qPill = (q, cls) => {
+    const err = (cls === 'fail' || q.kind === 'fail' || q.kind === 'both') && q.error_class
+      ? ` · ${q.error_class}` : '';
+    const pill = `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${
+      cls === 'nodata' ? ' · no data'
+        : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
+    }${err}${q.history ? '' : ' · no hist'}</button>`;
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
+  };
+  return `<div>
+        <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>
+        <div class="qlist">${slow.length ? slow.map(q => qPill(q, 'slow')).join('') : '<span class="muted">нет (или нет daily dump)</span>'}</div>
+      </div>
+      <div>
+        <div class="muted"><b>Failing queries</b> (клик = история)</div>
+        <div class="qlist">${fails.length ? fails.map(q => qPill(q, 'fail')).join('') : '<span class="muted">—</span>'}</div>
+      </div>`;
+}
+
+/** Compact history for duty context (no full query series). */
+function compactHist(hist, maxPts) {
+  if (!hist || !hist.labels) return null;
+  const n = hist.labels.length;
+  const start = Math.max(0, n - (maxPts || 24));
+  const slice = (arr) => (arr || []).slice(start);
+  return {
+    mode: hist.mode || null,
+    labels: slice(hist.labels),
+    fail_rate: slice(hist.fail_rate),
+    ydb: slice(hist.ydb),
+    versions: slice(hist.versions),
+    ci_versions: slice(hist.ci_versions),
+    reports: slice(hist.reports),
+    nodata: slice(hist.nodata),
+  };
+}
+
+function dutyReportMeta(kind) {
+  const ui = DATA.ui || {};
+  let url = null;
+  try { url = (location && location.href) ? location.href.split('#')[0] : null; } catch (_) {}
+  return {
+    kind,
+    url,
+    window: [ui.default_from || null, ui.default_to || null],
+    generated_at: DATA.generated_at || null,
+    source: DATA.source || null,
+  };
+}
+
+function downloadDutyJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function copyDutyJson(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+function flashDutyBtn(btn, okMsg, failMsg, ok) {
+  const wrap = document.getElementById('dutyFab');
+  const toast = wrap && wrap.querySelector('.duty-fab-toast');
+  if (toast) {
+    toast.textContent = ok ? okMsg : failMsg;
+    toast.hidden = false;
+    toast.classList.toggle('fail', !ok);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.hidden = true; }, 1800);
+    return;
+  }
+  const prev = btn.textContent;
+  btn.textContent = ok ? okMsg : failMsg;
+  setTimeout(() => { btn.textContent = prev; }, 1600);
+}
+
+let dutyFabRows = [];
+function syncDutyFab(rows) {
+  if (rows) dutyFabRows = rows;
+  const wrap = document.getElementById('dutyFab');
+  if (!wrap) return;
+  const open = document.querySelector('#inbox tr.row.open');
+  const on = !!open;
+  wrap.classList.toggle('visible', on);
+  wrap.setAttribute('aria-hidden', on ? 'false' : 'true');
+  if (open) wrap.dataset.openId = open.dataset.id || '';
+  else delete wrap.dataset.openId;
+}
+async function dutyFabAction(mode) {
+  const wrap = document.getElementById('dutyFab');
+  const id = wrap && wrap.dataset.openId;
+  if (!id) return;
+  const idx = Number(document.querySelector(`#inbox tr.row[data-id="${id}"]`)?.dataset.idx);
+  const item = dutyFabRows[idx];
+  if (!item) return;
+  const pack = buildDutyContext(item, id);
+  const sel = pack.selection || {};
+  const sha = (sel.focus_run && (sel.focus_run.sha || sel.focus_run.label)) || 'run';
+  const fname = `perf-duty-olap-${dutySafeName(sel.suite)}-${dutySafeName(sha)}.json`;
+  const btn = document.getElementById(mode === 'save' ? 'dutyFabSave' : 'dutyFabCopy');
+  if (mode === 'save') {
+    downloadDutyJson(fname, pack);
+    flashDutyBtn(btn, 'Saved ✓', 'Save failed', true);
+  } else {
+    const ok = await copyDutyJson(pack);
+    flashDutyBtn(btn, ok ? 'Copied ✓' : 'Copy failed', 'Copy failed', ok);
+  }
+}
+
+function dutySafeName(s) {
+  return String(s || 'suite').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+}
+
+/** Pack one Last-runs / wave card for duty context (focus or compare). */
+function packDutyRunSnapshot(item, run) {
+  if (!run) return null;
+  const cov = runCoverageForDisplay(item, run);
+  return {
+    label: run.label || null,
+    ci_version: run.ci_version || null,
+    sha: run.version || null,
+    ts: run.ts || null,
+    day: run.day || null,
+    fail_rate: run.fail_rate != null ? run.fail_rate : null,
+    ydb: run.ydb != null ? run.ydb : null,
+    success: run.success != null ? run.success : null,
+    fail: run.fail != null ? run.fail : null,
+    report: run.report || null,
+    ticket_coverage: cov.ticket_coverage || 'ok',
+    uncovered_queries: cov.uncovered_queries || [],
+    tickets: (cov.tickets || []).map(t => ({
+      number: t.number,
+      title: t.title || null,
+      url: t.url || null,
+      state: t.state || 'open',
+      branch_match: t.branch_match !== false,
+      needs_branch: t.needs_branch || null,
+      queries: t.queries || [],
+    })),
+    duty_decision: packDutyDecision(run.duty_decision),
+  };
+}
+function findNowRunForCompare(runs, wave, cmpId) {
+  if (!runs || !runs.length) return null;
+  const id = (wave && (wave.ci_version || wave.id)) || cmpId;
+  if (id) {
+    for (let i = runs.length - 1; i >= 0; i--) {
+      if (runs[i].ci_version === id) return runs[i];
+    }
+  }
+  if (wave && wave.day) {
+    for (let i = runs.length - 1; i >= 0; i--) {
+      if (String(runs[i].day || '') === String(wave.day)) return runs[i];
+    }
+  }
+  return null;
+}
+/** Fail/slow/soft/nodata query lists at a specific now_run (not necessarily focus). */
+function queryGapsAtRun(item, run) {
+  const fails = [], slows = [], softs = [], nodatas = [];
+  if (!run) return { fails, slows, softs, nodatas };
+  for (const q of (item.queries || [])) {
+    if (!q || !q.test) continue;
+    if (!q.history) {
+      const k = q.kind || 'ok';
+      if (k === 'fail' || k === 'both') fails.push({ test: q.test, error_class: q.error_class || null });
+      if (k === 'slow' || k === 'both') slows.push({ test: q.test, ydb_pct: q.ydb_pct });
+      if (k === 'watch') softs.push({ test: q.test, ydb_pct: q.ydb_pct });
+      if (k === 'nodata' || k === 'missing' || k === 'in_progress') nodatas.push({ test: q.test });
+      continue;
+    }
+    const qi = findHistIndexForRun(q.history, run);
+    if (qi < 0) { nodatas.push({ test: q.test }); continue; }
+    const qm = metricsAtHistIndex(q, qi, qi);
+    if (qm.kind === 'fail' || qm.kind === 'both') {
+      fails.push({ test: q.test, ydb_pct: qm.ydb_pct, error_class: qm.error_class || null });
+    }
+    if (qm.kind === 'slow' || qm.kind === 'both') slows.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'watch') softs.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress') {
+      nodatas.push({ test: q.test });
+    }
+  }
+  return { fails, slows, softs, nodatas };
+}
+function queryTicketMeta(item, testName) {
+  const nq = normQueryNameJS(testName);
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const data = diveData(item);
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = (data.now_runs || [])[focusIdx] || null;
+  const cov = classifyFailCoverageJS(issues, {
+    suite: item.suite, db: item.db, branch: item.branch, query: nq, kind: 'olap',
+    as_of: runAsOfJS(focusRun),
+  });
+  return {
+    ticket_coverage: cov.status,
+    tickets: (cov.tickets || []).slice(0, 3).map(t => ({
+      number: t.number, url: t.url || null, branch_match: t.branch_match !== false,
+      needs_branch: t.needs_branch || null,
+      post_close: !!t.post_close,
+      state: t.state || 'open',
+    })),
+  };
+}
+
+/** Frozen incident pack for duty_agent (schema perf-duty-context/v1).
+ *  Must include nodata/soft counts — duty_agent seeds olap_nodata from these.
+ *  Also packs ticket coverage + compare-wave snapshot when heatmap cmp is active. */
+function buildDutyContext(item, diveId) {
+  const view = suiteViewAtFocus(item, diveId);
+  const data = diveData(item);
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = (data.now_runs || [])[focusIdx] || null;
+  const focusPack = packDutyRunSnapshot(data, focusRun);
+  const sticky = diveQueryFocus[suiteKey(item)] || null;
+  const react = [...document.querySelectorAll('.react-btn[aria-pressed="true"]')]
+    .map(b => b.dataset.react).filter(Boolean);
+  const queries = [];
+  const seenQ = new Set();
+  const pushQ = (q, kind) => {
+    if (!q || !q.test || seenQ.has(q.test)) return;
+    seenQ.add(q.test);
+    const tmeta = queryTicketMeta(item, q.test);
+    const waitDec = waitNextAppliesToQuery(item, data, q.test);
+    queries.push({
+      test: q.test,
+      kind,
+      error_class: q.error_class || null,
+      ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
+      ydb_now: q.ydb_now != null ? q.ydb_now : null,
+      fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+      ticket_coverage: tmeta.ticket_coverage,
+      tickets: tmeta.tickets,
+      wait_next: !!waitDec,
+      duty_decision: packDutyDecision(waitDec),
+    });
+  };
+  const catalog = data.queries || item.queries || [];
+  const query_counts = { fail: 0, slow: 0, soft: 0, nodata: 0, ok: 0, total: 0 };
+  if (view) {
+    query_counts.fail = (view.fails || []).length;
+    query_counts.slow = (view.slows || []).length;
+    query_counts.soft = (view.softs || []).length;
+    query_counts.nodata = (view.nodatas || []).length;
+    query_counts.total = catalog.length || (
+      query_counts.fail + query_counts.slow + query_counts.soft + query_counts.nodata
+    );
+    query_counts.ok = Math.max(
+      0,
+      query_counts.total - query_counts.fail - query_counts.slow - query_counts.soft - query_counts.nodata
+    );
+    (view.fails || []).forEach(q => pushQ(q, 'fail'));
+    (view.slows || []).forEach(q => pushQ(q, 'slow'));
+    (view.softs || []).slice(0, 12).forEach(q => pushQ(q, 'watch'));
+    // All nodata — truncate used to leave suite-wipe tails out of queries[] while
+    // ticket_coverage.uncovered_queries still listed them → agent/validate missed affected.
+    (view.nodatas || []).forEach(q => pushQ(q, 'nodata'));
+  } else {
+    for (const q of catalog) {
+      query_counts.total++;
+      const k = q.kind || 'ok';
+      if (k === 'fail' || k === 'both') query_counts.fail++;
+      if (k === 'slow' || k === 'both') query_counts.slow++;
+      if (k === 'watch') query_counts.soft++;
+      if (k === 'nodata' || k === 'missing' || k === 'in_progress') query_counts.nodata++;
+      if (k === 'ok') query_counts.ok++;
+    }
+    (data.bad_queries || item.bad_queries || []).forEach(q => pushQ(q, 'fail'));
+    (data.slow_queries || item.slow_queries || []).forEach(q => pushQ(q, 'slow'));
+    catalog.filter(q => q.kind === 'watch').slice(0, 12).forEach(q => pushQ(q, 'watch'));
+    catalog.filter(q => q.kind === 'nodata' || q.kind === 'missing')
+      .forEach(q => pushQ(q, 'nodata'));
+  }
+  // Uncovered fail/nodata first — agent should dig these before covered tickets.
+  const covRank = { uncovered: 0, wrong_branch: 1, covered: 2, ok: 3 };
+  queries.sort((a, b) => {
+    const ka = a.kind === 'fail' || a.kind === 'both' || a.kind === 'nodata' ? 0
+      : (a.kind === 'slow' ? 1 : 2);
+    const kb = b.kind === 'fail' || b.kind === 'both' || b.kind === 'nodata' ? 0
+      : (b.kind === 'slow' ? 1 : 2);
+    if (ka !== kb) return ka - kb;
+    return (covRank[a.ticket_coverage] ?? 3) - (covRank[b.ticket_coverage] ?? 3);
+  });
+  let sticky_detail = null;
+  if (sticky) {
+    const q = catalog.find(x => x.test === sticky);
+    if (q) {
+      const tmeta = queryTicketMeta(item, q.test);
+      const waitDec = waitNextAppliesToQuery(item, data, q.test);
+      sticky_detail = {
+        test: q.test,
+        kind: q.kind || null,
+        error_class: q.error_class || null,
+        ydb_now: q.ydb_now != null ? q.ydb_now : null,
+        ydb_base: q.ydb_base != null ? q.ydb_base : null,
+        ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
+        fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+        ticket_coverage: tmeta.ticket_coverage,
+        tickets: tmeta.tickets,
+        wait_next: !!waitDec,
+        duty_decision: packDutyDecision(waitDec),
+        history: compactHist(q.history, 24),
+      };
+    }
+  }
+  const reportUrl = (focusPack && focusPack.report)
+    || data.report || item.report || null;
+  if (focusPack && reportUrl && !focusPack.report) focusPack.report = reportUrl;
+
+  const uncovered = [];
+  const wrongBranch = [];
+  const covered = [];
+  for (const q of queries) {
+    if (q.kind !== 'fail' && q.kind !== 'both' && q.kind !== 'nodata') continue;
+    if (q.ticket_coverage === 'uncovered') uncovered.push(q.test);
+    else if (q.ticket_coverage === 'wrong_branch') wrongBranch.push(q.test);
+    else if (q.ticket_coverage === 'covered') covered.push(q.test);
+  }
+  // Also fold focus-run uncovered names (history gaps not in view samples).
+  for (const n of (focusPack && focusPack.uncovered_queries) || []) {
+    if (!uncovered.includes(n)) uncovered.push(n);
+  }
+  const newIssueCount = Math.max(
+    intOr0(item.new_issue_count) || intOr0(item.new_fail_count),
+    intOr0(data.new_issue_count) || intOr0(data.new_fail_count),
+    uncovered.length
+  );
+
+  const cmpId = getCompareId(item.branch, item.db) || null;
+  const cmpWave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  const cmpRunRaw = cmpId
+    ? findNowRunForCompare(data.now_runs || [], cmpWave, cmpId)
+    : null;
+  const cmpPack = cmpRunRaw ? packDutyRunSnapshot(data, cmpRunRaw) : null;
+  let compareBlock = { wave_id: cmpId, active: !!cmpId };
+  if (cmpId) {
+    const cg = queryGapsAtRun(data, cmpRunRaw);
+    const cmpQc = {
+      fail: cg.fails.length,
+      slow: cg.slows.length,
+      soft: cg.softs.length,
+      nodata: cg.nodatas.length,
+    };
+    const cmpQueries = [];
+    const pushCmp = (q, kind) => {
+      if (!q || !q.test || cmpQueries.some(x => x.test === q.test)) return;
+      const tmeta = queryTicketMeta(item, q.test);
+      cmpQueries.push({
+        test: q.test, kind,
+        error_class: q.error_class || null,
+        ticket_coverage: tmeta.ticket_coverage,
+        tickets: tmeta.tickets,
+      });
+    };
+    cg.fails.forEach(q => pushCmp(q, 'fail'));
+    cg.nodatas.forEach(q => pushCmp(q, 'nodata'));
+    cg.slows.slice(0, 8).forEach(q => pushCmp(q, 'slow'));
+    compareBlock = {
+      wave_id: cmpId,
+      active: true,
+      day: (cmpWave && cmpWave.day) || (cmpPack && cmpPack.day) || null,
+      label: (cmpWave && cmpWave.label) || (cmpPack && cmpPack.label) || null,
+      run: cmpPack,
+      query_counts: cmpQc,
+      queries: cmpQueries.slice(0, 200),
+      note: 'Compare wave selected in heatmap — dig compare.run (Allure/sha/gaps) as well as selection.focus_run (now/latest). Do not stop at last only.',
+    };
+  }
+
+  const known_tickets = (item.tickets || []).map(t => ({
+    number: t.number,
+    title: t.title,
+    url: t.url,
+    fingerprint: t.fingerprint || null,
+    queries: t.queries || [],
+    branch_match: t.branch_match !== false,
+    needs_branch: t.needs_branch || null,
+  }));
+
+  const suiteDecision = packDutyDecision(
+    (focusRun && focusRun.duty_decision) || item.duty_decision || data.duty_decision
+  );
+  const waitNextQueries = queries.filter(q => q.wait_next).map(q => q.test);
+
+  return {
+    schema: 'perf-duty-context/v1',
+    generated_at: new Date().toISOString(),
+    report: dutyReportMeta('olap'),
+    selection: {
+      branch: item.branch || null,
+      db: item.db || null,
+      suite: item.suite || null,
+      family: item.family || null,
+      focus_run: focusPack,
+    },
+    suite_now: {
+      issue: view ? view.issue : item.issue,
+      status: view ? view.status : item.status,
+      fail_rate_now: view ? view.fail_rate_now : (item.fail_rate_now != null ? item.fail_rate_now : item.fail_rate),
+      fail_rate_base: view ? view.fail_rate_base : item.fail_rate_base,
+      ydb_now: view ? view.ydb_now : item.ydb_now,
+      ydb_base: view ? view.ydb_base : item.ydb_base,
+      ydb_pct: view ? view.ydb_pct : item.ydb_pct,
+      n_fail: query_counts.fail,
+      n_slow: query_counts.slow,
+      n_soft: query_counts.soft,
+      n_nodata: query_counts.nodata,
+      n_ok: query_counts.ok,
+      n_queries: query_counts.total,
+      query_counts,
+      reasons: item.reasons || [],
+      ci_version: (view && view.ci_version) || item.ci_version || item.wave || null,
+      last_ts: (view && view.last_ts) || item.last_ts || null,
+      new_issue_count: newIssueCount,
+      ticket_coverage: (focusPack && focusPack.ticket_coverage) || 'ok',
+      duty_decision: suiteDecision,
+      wait_next_queries: waitNextQueries,
+    },
+    // Fail + all nodata first (see push order/sort); soft samples truncated above.
+    // Cap high enough for suite wipe (Clickbench ~43+); do not re-truncate nodata here.
+    queries: queries.slice(0, 200),
+    sticky_query: sticky,
+    sticky_detail,
+    suite_history: compactHist(data.history || item.history, 24),
+    compare: compareBlock,
+    hints: {
+      react,
+      wave_view: waveView(),
+      investigate_uncovered_first: uncovered.length > 0 || react.includes('new'),
+      compare_active: !!cmpId,
+      wait_next_active: !!suiteDecision,
+    },
+    ticket_coverage: {
+      status: (focusPack && focusPack.ticket_coverage) || (
+        uncovered.length ? 'uncovered' : (wrongBranch.length ? 'wrong_branch' : (covered.length ? 'covered' : 'ok'))
+      ),
+      new_issue_count: newIssueCount,
+      uncovered_queries: uncovered,
+      wrong_branch_queries: wrongBranch,
+      covered_queries: covered,
+      wait_next_queries: waitNextQueries,
+      investigate_uncovered_first: uncovered.length > 0 || wrongBranch.length > 0 || react.includes('new'),
+      note: 'Uncovered / wrong_branch = problems without an open issue on this branch label — dig these first. Covered → prefer update_known (expand affected), do not open a duplicate. wait_next = duty already filed wait_next_wave for that query (see analysis_url).',
+    },
+    duty_decision: suiteDecision,
+    known_tickets,
+  };
+}
+function intOr0(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function diveHtml(r, id) {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  const data = fin || r;
+  const waveNote = (r.issue === 'in_progress')
+    ? `<div class="muted" style="margin-bottom:8px">Волна <code>${esc(r.ci_version || r.wave || '')}</code> in progress` +
+      (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '') +
+      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(fin.issue || fin.status || 'ok')})` : ' · finished twin нет') +
+      `</div>`
+    : '';
+  const focusIdx = diveFocusRunIndex(r, data);
+  const cmpId = getCompareId(r.branch, r.db);
+  const cmpWave = cmpId ? waveEntry(r.branch, r.db, cmpId) : null;
+  const runs = (data.now_runs || []).map((run, ri) => {
+    const covRun = runCoverageForDisplay(data, run);
+    const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
+    const isLatest = ri === (data.now_runs || []).length - 1;
+    const active = ri === focusIdx ? ' active' : '';
+    const isCmp = !!(cmpWave && run.ci_version && (
+      run.ci_version === cmpWave.id || run.ci_version === cmpWave.ci_version || run.ci_version === cmpId
+    ) && !isLatest);
+    const cls = isLatest && active ? 'run-card active' : (isCmp ? 'run-card cmp' : `run-card${active}`);
+    const sha = (run.version || run.label || '').toString();
+    const shortLbl = run.label
+      ? String(run.label).replace(/^(\d{4}-\d{2}-\d{2})_([a-f0-9]{7,8}).*$/i, '$1·$2')
+      : sha.slice(0, 10);
+    const tipBits = [
+      run.label || '',
+      run.ci_version || '',
+      isCmp ? 'compare' : (isLatest ? 'now' : ''),
+      covRun.ticket_coverage && covRun.ticket_coverage !== 'ok' ? `tickets:${covRun.ticket_coverage}` : '',
+      (covRun.uncovered_queries || []).length ? `no ticket: ${(covRun.uncovered_queries || []).join(', ')}` : '',
+    ].filter(Boolean);
+    return `<div class="${cls}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc(tipBits.join(' · '))}">
+      <div class="t">${esc(shortLbl)}</div>
+      <div>${fmtFail(run.fail_rate)} · ${fmt(run.ydb)}</div>
+      <div class="muted">${esc(run.ci_version || '—')}${isCmp ? ' · cmp' : (isLatest ? ' · now' : '')}</div>
+      ${runTicketsHtml(covRun)}
+      <div>${link}</div>
+    </div>`;
+  }).join('') || `<div class="muted">${
+    r.issue === 'in_progress' && !fin
+      ? `Волна <code>${esc(r.ci_version || r.wave || '')}</code> ещё едет — данных по suite пока нет` +
+        (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+      : r.issue === 'missing'
+        ? `Нет в завершённой волне <code>${esc(r.ci_version || r.wave || '')}</code>` +
+          (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+        : 'Нет последних прогонов (missing/stale)'
+  }</div>`;
+
+  const reportUrl = (data.now_runs && data.now_runs[focusIdx] && data.now_runs[focusIdx].report)
+    || data.report || r.report;
+  const report = reportUrl
+    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>`
+    : '—';
+  const view = suiteViewAtFocus(r, id);
+  const R = alertRules();
+  const focusLbl = (view && view.focusRun && (view.focusRun.label || view.focusRun.ci_version)) || 'focus';
+  const summaryHtml = view
+    ? `<div style="display:grid;gap:4px;margin-bottom:6px">
+         <div style="font-weight:700">Focus <code>${esc(focusLbl)}</code></div>
+         <div>fail rate: now <b>${fmtFail(view.fail_rate_now)}</b> · base <b>${fmtFail(view.fail_rate_base)}</b> (= avg prev${R.baseline}, не соседняя карточка)
+           · Δ <b class="${(view.fail_rate_now||0) >= 0.1 ? 'bad' : ''}">${
+             (view.fail_rate_now != null && view.fail_rate_base != null)
+               ? `${((view.fail_rate_now - view.fail_rate_base) * 100) > 0 ? '+' : ''}${((view.fail_rate_now - view.fail_rate_base) * 100).toFixed(0)}pp`
+               : '—'
+           }</b></div>
+         <div>ydb: now <b>${fmt(view.ydb_now)}</b> · base <b>${fmt(view.ydb_base)}</b> (= median prev${R.baseline})
+           · Δ <b class="${view.ydb_pct != null && view.ydb_pct > 10 ? 'bad' : ''}">${
+             (view.ydb_now != null && view.ydb_base != null)
+               ? `${(view.ydb_now - view.ydb_base) > 0 ? '+' : ''}${fmt(view.ydb_now - view.ydb_base)} (${pct(view.ydb_pct)})`
+               : '—'
+           }</b></div>
+         <div class="muted" style="font-size:11px">queries now: ${esc(fmtFS(
+           view.fails.length, view.slows.length, (view.softs || []).length, (view.nodatas || []).length,
+           newIssueQueryCount(r)
+         ) || 'ok')} · ${report}</div>
+       </div>`
+    : `<div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>`;
+
+  if (fin) {
+    r.queries = data.queries;
+    r.query_map = data.query_map;
+    r.bad_queries = data.bad_queries;
+    r.slow_queries = data.slow_queries;
+    r.now_runs = data.now_runs;
+    r.history = data.history || r.history;
+  }
+
+  const ticketsHtml = ticketPillsHtml(r.tickets);
+  return `<div class="dive">
+    ${waveNote}
+    ${summaryHtml}
+    ${ticketsHtml ? `<div style="margin:0 0 8px">${ticketsHtml}</div>` : ''}
+    <div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = compare baseline (синхрон с heatmap) · latest = now и сбрасывает compare · % = fail rate${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
+      <div class="runs">${runs}</div>
+    </div>
+    <div class="q-split">
+      <div class="q-split-list" id="${id}_qblock">${buildQueryBlockHtml(r, id)}</div>
+      <div class="q-split-charts" id="${id}_qhist">
+        <div class="q-empty">Выбери query слева — справа YdbSumMeans и Fail rate</div>
+      </div>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button type="button" class="btn" data-hist="${id}">Show suite history</button>
+      <span class="muted" style="font-size:12px">Save / Copy context → красная кнопка справа внизу</span>
+    </div>
+    <div id="${id}_hist"></div>
+  </div>`;
+}
+
+function renderInbox() {
+  destroyCharts();
+  const rows = filteredInboxOrDrill();
+  const root = document.getElementById('inbox');
+  if (!rows.length) {
+    const issue = document.getElementById('fIssue').value;
+    const db = document.getElementById('fDb')?.value || '';
+    const fam = document.getElementById('fFam')?.value || '';
+    const br = selectedBranch();
+    // Heatmap "no data" with zero suites in window = no runs (not "no hot problems").
+    if (db && fam && !suitesInCell(br, db, fam).length) {
+      root.innerHTML = '<div class="empty">no runs</div>';
+      return;
+    }
+    if (issue === 'nodata') {
+      root.innerHTML = '<div class="empty">Нет suite с no-data queries под фильтры.</div>';
+      return;
+    }
+    root.innerHTML = issue === 'ok'
+      ? '<div class="empty">Нет ok-slice под фильтры.</div>'
+      : (db && fam
+        ? '<div class="empty">Нет slice для этого DbAlias × family в выбранном окне.</div>'
+        : '<div class="empty">Нет hot-проблем под фильтры — good. (Issue → ok чтобы смотреть зелёные)</div>');
+    return;
+  }
+  const body = rows.map((r, idx) => {
+    const id = 'dive_' + idx;
+    const view = suiteViewAtFocus(r, id);
+    const metrics = view || ((r.issue === 'in_progress' && r.finished) ? r.finished : r);
+    const status = view ? view.status : r.status;
+    const issue = view ? view.issue : r.issue;
+    const civ = view ? view.ci_version : (r.ci_version || r.wave || '');
+    const lastTs = view ? view.last_ts : r.last_ts;
+    const R = alertRules();
+    const dataRow = diveData(r);
+    const runsRow = dataRow.now_runs || [];
+    const focusRun = (view && view.focusRun) || (runsRow.length ? runsRow[runsRow.length - 1] : null);
+    const cmpId = getCompareId(r.branch, r.db);
+    const cmpWave = cmpId ? waveEntry(r.branch, r.db, cmpId) : null;
+    const cmpIsFocus = !!(cmpWave && focusRun && (
+      (focusRun.ci_version && (cmpWave.id === focusRun.ci_version || cmpWave.ci_version === focusRun.ci_version))
+      || (focusRun.label && cmpWave.label && focusRun.label === cmpWave.label)
+    ));
+    const nowCounts = view
+      ? {
+          fail: view.fails.length,
+          slow: view.slows.length,
+          soft: (view.softs || []).length,
+          nodata: (view.nodatas || []).length,
+          new: newIssueQueryCount(r),
+        }
+      : (() => {
+          const qs = querySplit(metrics);
+          return {
+            fail: qs.fail.size, slow: qs.slow.size, soft: qs.soft.size,
+            nodata: qs.nodata.size, new: newIssueQueryCount(r),
+          };
+        })();
+    // Status "was" only from compare wave (same axis as heatmap). No prev-card fallback —
+    // metrics base is prev7, not the neighbor card.
+    let prevCounts = null;
+    let prevLabel = '';
+    if (cmpWave && !cmpIsFocus) {
+      prevCounts = queryCountsAtWave(dataRow, cmpWave);
+      prevLabel = `compare ${cmpWave.day || cmpWave.id || cmpId}`;
+    }
+    const primary = inboxPrimaryStatus(status, issue, nowCounts, metrics.fail_rate_now);
+    const failBits = view
+      ? view.fails.slice(0, 3)
+      : listedFail(r).slice(0, 3);
+    const slowBits = view
+      ? view.slows.slice(0, 3)
+      : listedSlow(r).slice(0, 3);
+    const softBits = view
+      ? (view.softs || []).slice(0, 3)
+      : [];
+    const noFr = metrics.fail_rate_now == null && (issue === 'missing' || (issue === 'in_progress' && !r.finished));
+    const ydbPct = metrics.ydb_pct;
+    const focusHint = focusRun
+      ? `focus ${focusRun.label || focusRun.ci_version || ''}`
+      : '';
+    const ticketsRow = ticketPillsHtml(r.tickets);
+    return `
+      <tr class="row" data-idx="${idx}" data-id="${id}">
+        <td>${statusCellHtml(primary, nowCounts, prevCounts, prevLabel)}</td>
+        <td><span class="cluster">${esc(r.db)}</span>
+          <div class="muted">${esc(r.branch)}</div></td>
+        <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
+          <div class="muted mono">${esc(civ)}</div>
+          ${ticketsRow ? `<div style="margin-top:3px">${ticketsRow}</div>` : ''}
+          ${(() => {
+            const nd = view ? [] : listedNodata(r);
+            const bits = [];
+            if (failBits.length) bits.push('fail: ' + failBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (slowBits.length) bits.push('slow: ' + slowBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (softBits.length) bits.push('soft: ' + softBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (nd.length) bits.push('no data: ' + nd.length + 'q');
+            if (issue === 'in_progress' && r.finished) {
+              bits.push('finished: ' + (r.finished.issue || r.finished.status || 'ok'));
+            }
+            return bits.length ? `<div class="muted">${esc(bits.join(' · '))}</div>` : '';
+          })()}
+        </td>
+        <td>${noFr ? '<div class="mcell"><div class="big muted">—</div></div>' : metricCellHtml(
+          metrics.fail_rate_base, metrics.fail_rate_now, null, '', `avg prev${R.baseline}`, 'fail'
+        )}</td>
+        <td>${metricCellHtml(
+          metrics.ydb_base, metrics.ydb_now, ydbPct, '', `median prev${R.baseline}`, 'ydb'
+        )}</td>
+        <td class="muted">${esc(lastTs || '—')}
+          ${!view && r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
+          ${focusHint ? `<div class="muted">${esc(focusHint)}</div>` : ''}
+        </td>
+      </tr>
+      <tr class="detail hidden" data-detail="${id}"><td colspan="6">${diveHtml(r, id)}</td></tr>`;
+  }).join('');
+
+  root.innerHTML = `<table class="inbox">
+    <thead><tr>
+      <th>Status</th><th>DbAlias</th><th>Suite</th>
+      <th>Fail rate</th><th>YdbSumMeans</th><th>Wave / last</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="muted" style="margin-top:8px">Показано ${rows.length} · клик = deep dive</div>`;
+
+  root.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.id;
+      const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      // One open dive at a time — FAB targets the visible row.
+      root.querySelectorAll('tr.row.open').forEach(other => {
+        if (other === tr) return;
+        other.classList.remove('open');
+        const od = root.querySelector(`tr.detail[data-detail="${other.dataset.id}"]`);
+        if (od) od.classList.add('hidden');
+        destroyCharts(other.dataset.id + '_');
+      });
+      const open = tr.classList.toggle('open');
+      detail.classList.toggle('hidden', !open);
+      if (!open) destroyCharts(id + '_');
+      else {
+        const idx = Number(tr.dataset.idx);
+        const item = rows[idx];
+        // auto-show history for coverage issues so synthetic point is visible
+        if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
+          mountHistory(item, id);
+        }
+        restoreDiveQueryFocus(item, id);
+      }
+      syncDutyFab(rows);
+    });
+  });
+  syncDutyFab(rows);
+  root.querySelectorAll('button[data-hist]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.hist;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (item) mountHistory(item, id);
+    });
+  });
+  function bindQPicks(scope) {
+    (scope || root).querySelectorAll('button[data-qpick]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.qpick;
+        const test = btn.dataset.test;
+        const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+        const item = rows[idx];
+        if (item && test) mountQueryHistory(item, id, test);
+      });
+    });
+  }
+  bindQPicks(root);
+  root.querySelectorAll('[data-run-card]').forEach(card => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('a')) return;
+      ev.stopPropagation();
+      const id = card.dataset.runCard;
+      const ri = Number(card.dataset.runIdx);
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (!item || !Number.isFinite(ri)) return;
+      const data = diveData(item);
+      const runs = data.now_runs || [];
+      const run = runs[ri];
+      // TPC-C parity: cards ↔ heatmap compare. Now always stays on latest.
+      if (ri === runs.length - 1 || !run) {
+        setCompareId(item.branch, item.db, '');
+        diveRunFocus[suiteKey(item)] = runs.length - 1;
+      } else if (run.ci_version) {
+        setCompareId(item.branch, item.db, run.ci_version);
+        clearDiveFocusForDb(item.branch, item.db);
+      } else {
+        diveRunFocus[suiteKey(item)] = ri;
+      }
+      const openKeys = [...root.querySelectorAll('tr.row.open')].map(tr => {
+        const i = Number(tr.dataset.idx);
+        return rows[i] ? suiteKey(rows[i]) : null;
+      }).filter(Boolean);
+      destroyCharts();
+      renderAll();
+      const curRows = filteredInboxOrDrill();
+      curRows.forEach((r, i) => {
+        if (!openKeys.includes(suiteKey(r))) return;
+        const diveId = 'dive_' + i;
+        const tr = document.querySelector(`#inbox tr.row[data-id="${diveId}"]`);
+        const detail = document.querySelector(`#inbox tr.detail[data-detail="${diveId}"]`);
+        if (tr && detail) {
+          tr.classList.add('open');
+          detail.classList.remove('hidden');
+        }
+        restoreDiveQueryFocus(r, diveId);
+      });
+      syncDutyFab(curRows);
+    });
+  });
+}
+
+function renderAll() {
+  clearLiveViewCache();
+  renderHeader();
+  renderHeatmap();
+  renderInbox();
+}
+
+function setupDateBar() {
+  const fromEl = document.getElementById('winFrom');
+  const toEl = document.getElementById('winTo');
+  fromEl.value = winFrom || UI.default_from || '';
+  toEl.value = winTo || UI.default_to || '';
+  if (UI.default_from) {
+    fromEl.min = UI.default_from;
+    toEl.min = UI.default_from;
+  }
+  if (UI.default_to) {
+    fromEl.max = UI.default_to;
+    toEl.max = UI.default_to;
+  }
+  document.getElementById('winApply').addEventListener('click', () => {
+    let a = fromEl.value || null;
+    let b = toEl.value || null;
+    if (a && b && a > b) { const t = a; a = b; b = t; }
+    winFrom = a;
+    winTo = b;
+    fromEl.value = winFrom || '';
+    toEl.value = winTo || '';
+    destroyCharts();
+    renderAll();
+  });
+  document.getElementById('winReset').addEventListener('click', () => {
+    winFrom = UI.default_from || null;
+    winTo = UI.default_to || null;
+    fromEl.value = winFrom || '';
+    toEl.value = winTo || '';
+    destroyCharts();
+    renderAll();
+  });
+  [fromEl, toEl].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') document.getElementById('winApply').click();
+    });
+  });
+}
+
+function setupFilters() {
+  const ui = DATA.ui || {};
+  const branches = uiBranches();
+  const def = ui.default_branch || 'main';
+  document.getElementById('fBranch').innerHTML =
+    `<option value="">all</option>` +
+    branches.map(b => `<option value="${esc(b)}"${b === def ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  if (branches.includes(def)) document.getElementById('fBranch').value = def;
+
+  const fams = [...new Set((DATA.inbox || []).map(r => r.family).filter(Boolean))].sort();
+  document.getElementById('fFam').innerHTML = '<option value="">all</option>' +
+    fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  refreshDbFilter();
+  setupDateBar();
+  syncReactButtons();
+  syncWaveButtons();
+  document.querySelectorAll('#reactBar .react-btn').forEach(btn => {
+    btn.addEventListener('click', () => setReact(btn.dataset.react));
+  });
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.addEventListener('click', () => setWave(btn.dataset.wave));
+  });
+  ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'fBranch' || id === 'fIssue') refreshDbFilter();
+      renderAll();
+    });
+  });
+}
+
+function refreshDbFilter() {
+  const br = selectedBranch();
+  const keep = document.getElementById('fDb').value;
+  const issue = document.getElementById('fIssue')?.value || '';
+  const pool = inboxPool(issue);
+  const dbs = br
+    ? dbsForBranch(br)
+    : [...new Set(pool.map(r => r.db).filter(Boolean))].sort();
+  document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
+    dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if (dbs.includes(keep)) document.getElementById('fDb').value = keep;
+}
+
+setupFilters();
+document.getElementById('dutyFabSave')?.addEventListener('click', () => dutyFabAction('save'));
+document.getElementById('dutyFabCopy')?.addEventListener('click', () => dutyFabAction('copy'));
+renderAll();
+</script>
+</body>
+</html>

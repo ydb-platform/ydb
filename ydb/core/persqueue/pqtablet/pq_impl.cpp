@@ -224,7 +224,12 @@ public:
         return true;
     }
 
-    const TActorId Sender;
+    void SetSender(const TActorId& sender)
+    {
+        Sender = sender;
+    }
+
+    TActorId Sender;
     const TActorId Tablet;
     const TString TopicName;
     const ui32 Partition;
@@ -2366,10 +2371,12 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
 void TPersQueue::HandleReadRequest(
         const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-        const TActorId& pipeClient, const TActorId&
-) {
+        const TActorId& pipeClient, const TActorId& sender,
+        const NKikimrClient::TPersQueueRequest& request)
+{
     PQ_ENSURE(req.HasCmdRead());
 
+    const TString requestId = request.HasRequestId() ? request.GetRequestId() : "<none>";
     auto cmd = req.GetCmdRead();
     if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2395,35 +2402,43 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.HasPartNo() && cmd.GetPartNo() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid partNo in read request: " << ToString(req).data());
+    } else if (cmd.GetPartNo() != 0 && requestId != TMP_REQUEST_MARKER) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "partial request are not allowed: " << ToString(req).data());
     } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data());
-
     } else if (cmd.GetClientId() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "cannot read with internal clinetId: " << cmd.GetClientId());
+    } else if (IsDirectReadCmd(cmd) && PipesInfo.find(pipeClient).IsEnd()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                   TStringBuilder() << "Read prepare request from unknown(old?) pipe: " << pipeClient.ToString());
+    } else if (IsDirectReadCmd(cmd) && cmd.GetSessionId().empty()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                   TStringBuilder() << "Read prepare request with empty session id");
+    } else if (IsDirectReadCmd(cmd) && PipesInfo.find(pipeClient)->second.SessionId != cmd.GetSessionId()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                   TStringBuilder() << "Read prepare request with unknown(old?) session id " << cmd.GetSessionId());
     } else {
+        if (requestId != TMP_REQUEST_MARKER) {
+            auto pipeIter = PipesInfo.find(pipeClient);
+            TDirectReadKey directKey{};
+            if (!pipeIter.IsEnd()) {
+                directKey.SessionId = pipeIter->second.SessionId;
+                directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
+            }
+            auto it = ResponseProxy.find(responseCookie);
+            PQ_ENSURE(it != ResponseProxy.end());
+            it->second->SetSender(ctx.RegisterWithSameMailbox(CreateReadProxy(
+                sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor)));
+        }
+
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();
         ui32 bytes = Min<ui32>(MAX_BYTES, cmd.HasBytes() ? cmd.GetBytes() : MAX_BYTES);
         auto clientDC = cmd.HasClientDC() ? to_lower(cmd.GetClientDC()) : "unknown";
         clientDC.to_title();
-        if (IsDirectReadCmd(cmd)) {
-            auto pipeIter = PipesInfo.find(pipeClient);
-            if (pipeIter.IsEnd()) {
-                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                           TStringBuilder() << "Read prepare request from unknown(old?) pipe: " << pipeClient.ToString());
-                return;
-            } else if (cmd.GetSessionId().empty()) {
-                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                           TStringBuilder() << "Read prepare request with empty session id");
-                return;
-            } else if (pipeIter->second.SessionId != cmd.GetSessionId()) {
-                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                           TStringBuilder() << "Read prepare request with unknown(old?) session id " << cmd.GetSessionId());
-                return;
-            }
-        }
 
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
@@ -2942,19 +2957,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     auto& req = request.GetPartitionRequest();
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
 
-    if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
-        auto pipeIter = PipesInfo.find(pipeClient);
-        TDirectReadKey directKey{};
-        if (!pipeIter.IsEnd()) {
-            directKey.SessionId = pipeIter->second.SessionId;
-            directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
-        }
-        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
-            ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
-        ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
-    } else {
-        ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
-    }
+    ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
 
     ResponseProxy[responseCookie] = ans;
     Counters->Simple()[COUNTER_PQ_TABLET_INFLIGHT].Set(ResponseProxy.size());
@@ -3045,7 +3048,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdUpdateWriteTimestamp()) {
         HandleUpdateWriteTimestampRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdRead()) {
-        HandleReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
+        HandleReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender, request);
     } else if (req.HasCmdPublishRead()) {
         HandlePublishReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdForgetRead()) {

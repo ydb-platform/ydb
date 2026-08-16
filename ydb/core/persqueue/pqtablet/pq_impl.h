@@ -183,12 +183,16 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     DESCRIBE_HANDLE_WITH_SENDER(HandleCreateSessionRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleDeleteSessionRequest)
-    DESCRIBE_HANDLE_WITH_SENDER(HandleReadRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandlePublishReadRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleForgetReadRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleGetOwnershipRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
+
+    void HandleReadRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                           const TActorId& pipeClient, const TActorId& sender,
+                           const NKikimrClient::TPersQueueRequest& request);
 
     bool ChangingState() const { return !TabletStateRequests.empty(); }
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);

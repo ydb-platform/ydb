@@ -39,37 +39,42 @@ public:
     }
 
     void OnAccessorsFetched(std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>&& accessors) override {
-        TVector<std::pair<ui32, ui32>> disproved;
+        THashSet<TEntryKey> disprovedKeys;
 
         for (const auto& accessor : accessors) {
             if (!accessor) {
                 continue;
             }
+            if (disprovedKeys.size() == Candidates->size()) {
+                break;
+            }
             for (const auto& blobId : accessor->GetBlobIds()) {
-                const TLogoBlobID& lid = blobId.GetLogoBlobId();
+                const TLogoBlobID& logoBlobId = blobId.GetLogoBlobId();
                 // Skip blobs from other tablets (shared/borrowed) — they must not disprove our candidates.
-                if (lid.TabletID() != OurTabletId) {
+                if (logoBlobId.TabletID() != OurTabletId) {
                     continue;
                 }
                 for (const auto& key : *Candidates) {
-                    if (lid.Channel() != key.Channel) {
+                    if (logoBlobId.Channel() != key.Channel || disprovedKeys.contains(key)) {
                         continue;
                     }
-                    const ui32 gen = lid.Generation();
+                    const ui32 gen = logoBlobId.Generation();
                     if (gen < key.FromGeneration) {
                         continue;
                     }
                     const auto it = NextGenMap.find(key);
                     if (it != NextGenMap.end() && gen < it->second) {
-                        disproved.emplace_back(key.Channel, key.FromGeneration);
+                        disprovedKeys.emplace(key);
                     }
                 }
             }
         }
 
-        // Deduplicate disproved (multiple blobs from same entry).
-        std::sort(disproved.begin(), disproved.end());
-        disproved.erase(std::unique(disproved.begin(), disproved.end()), disproved.end());
+        TVector<std::pair<ui32, ui32>> disproved;
+        disproved.reserve(disprovedKeys.size());
+        for (const auto& key : disprovedKeys) {
+            disproved.emplace_back(key.Channel, key.FromGeneration);
+        }
 
         NActors::TActivationContext::AsActorContext().Send(
             TabletActorId, new TEvPrivate::TEvCutHistorySweepBatchDone(std::move(disproved), Exhausted));

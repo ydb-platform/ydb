@@ -128,7 +128,7 @@ public:
         while (!buf.empty()) {
             const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
             if (nodeStateSize == std::numeric_limits<ui64>::max()) {
-                throw yexception() << "Task " << taskId << " has incomplite program state, some of stateful operators still not initialized.";
+                throw yexception() << "Task " << taskId << " has incomplete program state: some stateful operators are still not initialized.";
             }
 
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");

@@ -4961,6 +4961,493 @@ Y_UNIT_TEST(ReadProxyGlueSizeMismatchReturnsError) {
         result->Record.DebugString());
 }
 
+Y_UNIT_TEST(ReadProxyUndeliveredUnblocksClientWaitingOnBatch) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<TString> values = {"value0", "value1", "value2"};
+    CmdWriteKafkaBatch(0, "sourceid_readproxy_undelivered", 1, values, tc, 0);
+
+    TActorId readProxy;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* batch = ev->CastAsLocal<NBatching::TEvProcessBatch>()) {
+            readProxy = batch->Context.ResponseActor;
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, static_cast<ui32>(values.size()), 16_MB, 0, false, {}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return readProxy != TActorId{}; };
+    tc.Runtime->DispatchEvents(options);
+    UNIT_ASSERT_C(readProxy, "ReadProxy never sent TEvProcessBatch");
+
+    tc.Runtime->Send(new IEventHandle(
+        readProxy,
+        tc.Edge,
+        new TEvents::TEvUndelivered(
+            NBatching::TEvProcessBatch::EventType,
+            TEvents::TEvUndelivered::ReasonActorUnknown)),
+        0, true);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::READ_NOT_DONE),
+        result->Record.DebugString());
+}
+
+Y_UNIT_TEST(ReadProxyGlueErrorOnPartFromMiddleOfEmptyResponse) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    bool mutated = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        NKikimrClient::TCmdReadResult kept;
+        for (const auto& res : readResult->GetResult()) {
+            if (res.GetPartNo() > 0) {
+                kept.AddResult()->CopyFrom(res);
+            }
+        }
+        if (kept.ResultSize() > 0) {
+            readResult->MutableResult()->CopyFrom(kept.GetResult());
+            mutated = true;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, 10, 20_MB, 0, false, {}, 0, 0, user};
+    BeginCmdRead(readSettings, tc);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_C(mutated, "observer failed to leave a PartNo>0 result with an empty assembled response");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::READ_NOT_DONE),
+        result->Record.DebugString());
+}
+
+Y_UNIT_TEST(ReadProxyGlueErrorOnNewMessageWhileLastIsIncomplete) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(2_MB, 'b'));
+    data.emplace_back(2, TString(64, 'c'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    bool mutated = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        NKikimrClient::TCmdReadResult kept;
+        bool keptIncomplete = false;
+        bool keptNext = false;
+        for (const auto& res : readResult->GetResult()) {
+            if (!keptIncomplete && res.GetPartNo() == 0 && res.HasTotalParts() && res.GetTotalParts() > 1) {
+                kept.AddResult()->CopyFrom(res);
+                keptIncomplete = true;
+            } else if (keptIncomplete && !keptNext && res.GetPartNo() == 0 &&
+                       res.GetOffset() != kept.GetResult(0).GetOffset())
+            {
+                kept.AddResult()->CopyFrom(res);
+                keptNext = true;
+            }
+        }
+        if (keptIncomplete && keptNext) {
+            readResult->MutableResult()->CopyFrom(kept.GetResult());
+            mutated = true;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, 10, 20_MB, 0, false, {}, 0, 0, user};
+    BeginCmdRead(readSettings, tc);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_C(mutated, "observer failed to pair an incomplete last message with a new PartNo==0");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::READ_NOT_DONE),
+        result->Record.DebugString());
+}
+
+Y_UNIT_TEST(ReadProxyEmptyFollowUpWithOnlyIncompleteTailContinues) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(2_MB, 'b'));
+    data.emplace_back(3, TString(64, 'c'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    constexpr ui32 kFollowUpLoopThreshold = 8;
+    ui32 followUpReads = 0;
+    bool firstReadAnswer = true;
+    bool madeIncompleteTail = false;
+    bool gotClientResponse = false;
+    bool clearNextInternalResponse = false;
+
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* read = ev->CastAsLocal<TEvPQ::TEvRead>()) {
+            if (read->PartNo > 0) {
+                ++followUpReads;
+                clearNextInternalResponse = true;
+            }
+        } else if (auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (!event->Record.HasPartitionResponse() ||
+                !event->Record.GetPartitionResponse().HasCmdReadResult())
+            {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (ev->Recipient == tc.Edge) {
+                gotClientResponse = true;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            if (firstReadAnswer) {
+                firstReadAnswer = false;
+                NKikimrClient::TCmdReadResult kept;
+                for (const auto& res : readResult.GetResult()) {
+                    if (res.GetPartNo() == 0 && res.HasTotalParts() && res.GetTotalParts() > 1) {
+                        kept.AddResult()->CopyFrom(res);
+                        break;
+                    }
+                }
+                readResult.MutableResult()->CopyFrom(kept.GetResult());
+                if (readResult.ResultSize() > 0) {
+                    const auto& last = readResult.GetResult(readResult.ResultSize() - 1);
+                    madeIncompleteTail = last.HasTotalParts() && last.GetPartNo() + 1 < last.GetTotalParts();
+                }
+            } else if (clearNextInternalResponse) {
+                readResult.MutableResult()->Clear();
+                clearNextInternalResponse = false;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, 10, 20_MB, 1, false, {2});
+    readSettings.ReadToBlobEnd = false;
+    readSettings.User = user;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return followUpReads >= kFollowUpLoopThreshold || gotClientResponse;
+    };
+    try {
+        tc.Runtime->DispatchEvents(options);
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+    }
+
+    UNIT_ASSERT_C(madeIncompleteTail,
+        "observer failed to leave only an incomplete multipart message in the first CmdReadResult");
+    UNIT_ASSERT_VALUES_EQUAL_C(followUpReads, 1,
+        "expected a single follow-up read, got " << followUpReads);
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc),
+        "empty follow-up with only an incomplete tail did not continue from the next offset");
+}
+
+Y_UNIT_TEST(ReadProxyFollowUpPartMismatchDropsIncompleteTail) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    constexpr ui32 kFollowUpLoopThreshold = 8;
+    ui32 followUpReads = 0;
+    bool firstReadAnswer = true;
+    bool madeIncompleteTail = false;
+    bool mismatchedFollowUp = false;
+    bool gotClientResponse = false;
+
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* read = ev->CastAsLocal<TEvPQ::TEvRead>()) {
+            if (read->PartNo > 0) {
+                ++followUpReads;
+            }
+        } else if (auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (!event->Record.HasPartitionResponse() ||
+                !event->Record.GetPartitionResponse().HasCmdReadResult())
+            {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (ev->Recipient == tc.Edge) {
+                gotClientResponse = true;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            if (firstReadAnswer) {
+                firstReadAnswer = false;
+                NKikimrClient::TCmdReadResult kept;
+                for (const auto& res : readResult.GetResult()) {
+                    if (res.GetPartNo() > 0) {
+                        continue;
+                    }
+                    kept.AddResult()->CopyFrom(res);
+                }
+                readResult.MutableResult()->CopyFrom(kept.GetResult());
+                if (readResult.ResultSize() > 0) {
+                    const auto& last = readResult.GetResult(readResult.ResultSize() - 1);
+                    madeIncompleteTail = last.HasTotalParts() && last.GetPartNo() + 1 < last.GetTotalParts();
+                }
+            } else if (readResult.ResultSize() > 0 && readResult.GetResult(0).GetPartNo() > 0) {
+                auto* res = readResult.MutableResult(0);
+                res->SetPartNo(res->GetPartNo() + 10);
+                while (readResult.ResultSize() > 1) {
+                    readResult.MutableResult()->RemoveLast();
+                }
+                mismatchedFollowUp = true;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, 10, 20_MB, 1, false, {0});
+    readSettings.ReadToBlobEnd = false;
+    readSettings.User = user;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return followUpReads >= kFollowUpLoopThreshold || gotClientResponse;
+    };
+    try {
+        tc.Runtime->DispatchEvents(options);
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+    }
+
+    UNIT_ASSERT_C(madeIncompleteTail,
+        "observer failed to leave an incomplete last multipart message in the first CmdReadResult");
+    UNIT_ASSERT_C(mismatchedFollowUp, "observer failed to break SeqNo/PartNo of the follow-up part");
+    UNIT_ASSERT_VALUES_EQUAL_C(followUpReads, 1,
+        "expected a single follow-up read, got " << followUpReads);
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc),
+        "follow-up PartNo mismatch did not keep the already assembled complete message");
+}
+
+Y_UNIT_TEST(ReadProxyStopsWhenNewMultipartDoesNotFit) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(64, 'b'));
+    data.emplace_back(3, TString(2_MB, 'c'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    bool mutated = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        NKikimrClient::TCmdReadResult kept;
+        for (const auto& res : readResult->GetResult()) {
+            if (res.GetPartNo() == 0) {
+                kept.AddResult()->CopyFrom(res);
+            }
+        }
+        if (kept.ResultSize() >= 3 &&
+            kept.GetResult(2).HasTotalParts() && kept.GetResult(2).GetTotalParts() > 1)
+        {
+            readResult->MutableResult()->CopyFrom(kept.GetResult());
+            mutated = true;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, 10, 20_MB, 2, false, {0, 1});
+    readSettings.ReadToBlobEnd = false;
+    readSettings.User = user;
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_C(mutated, "observer failed to leave two complete messages and an incomplete multipart tail");
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(0).GetOffset(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(1).GetOffset(), 1u);
+}
+
+Y_UNIT_TEST(ReadProxySkipsObsoleteTimestampOnInitialRead) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+    }
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(64, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    bool mutated = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        if (readResult->ResultSize() >= 2) {
+            readResult->SetReadFromTimestampMs(10'000);
+            for (ui32 i = 0; i < readResult->ResultSize(); ++i) {
+                readResult->MutableResult(i)->SetWriteTimestampMS(i == 0 ? 1 : 20'000);
+            }
+            mutated = true;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, 10, 20_MB, 1, false, {1}, 0, 0, user);
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_C(mutated, "observer failed to mark the first message as older than ReadTimestampMs");
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(0).GetOffset(), 1u);
+}
+
+Y_UNIT_TEST(ReadProxyDirectReadBatchCutStagesData) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    SetEnableTopicMessagesBatching(tc);
+    tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
+            CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
+    );
+
+    const TString user = "user1";
+    const TString sessionId = "session-direct-batch-cut";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{user, true}}, tc);
+
+    const TVector<TString> values = {"value0", "value1", "value2"};
+    CmdWriteKafkaBatch(0, "sourceid_direct_batch_cut", 1, values, tc, 0);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    std::shared_ptr<NKikimrClient::TResponse> staged;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
+            staged = event->Response;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 0, static_cast<ui32>(values.size()), 16_MB, 0, false, {}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.DirectReadId = 1;
+    readSettings.Pipe = pipe;
+    readSettings.CanReadBatches = false;
+    CmdRead(readSettings, tc);
+
+    UNIT_ASSERT_C(staged, "ReadProxy did not stage TEvStageDirectReadData after cutting the kafka batch");
+    UNIT_ASSERT_C(
+        staged->GetPartitionResponse().HasCmdReadResult(),
+        staged->DebugString());
+    const auto& readResult = staged->GetPartitionResponse().GetCmdReadResult();
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), values.size());
+    for (ui32 i = 0; i < values.size(); ++i) {
+        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, 1u + i, values[i]);
+    }
+}
+
 Y_UNIT_TEST(IncompleteProxyResponse) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

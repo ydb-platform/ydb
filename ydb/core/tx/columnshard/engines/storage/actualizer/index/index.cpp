@@ -47,7 +47,6 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(
     , VersionedIndex(versionedIndex)
     , StoragesManager(storagesManager)
 {
-    Y_UNUSED(PathId);
 }
 
 void TGranuleActualizationIndex::Start() {
@@ -92,12 +91,12 @@ ui64 TGranuleActualizationIndex::GetMoveDataPortionsCount() const {
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
     std::vector<TCSMetadataRequest> result;
     if (TieringActualizer) {
-        auto r = TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
-        result.insert(result.end(), std::make_move_iterator(r.begin()), std::make_move_iterator(r.end()));
+        auto requests = TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
+        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
     }
     if (MoveDataActualizer) {
-        auto r = MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer);
-        result.insert(result.end(), std::make_move_iterator(r.begin()), std::make_move_iterator(r.end()));
+        auto requests = MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer);
+        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
     }
     return result;
 }

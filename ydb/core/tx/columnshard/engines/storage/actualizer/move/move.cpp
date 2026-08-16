@@ -35,7 +35,7 @@ public:
     }
 };
 
-}   // namespace
+}   // anonymous namespace
 
 void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
     auto it = PortionAddress.find(portionId);
@@ -140,7 +140,7 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
 }
 
 std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) {
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const {
     if (PendingPortionIds.empty()) {
         return {};
     }

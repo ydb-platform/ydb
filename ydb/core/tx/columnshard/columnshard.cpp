@@ -655,8 +655,7 @@ void TColumnShard::ScheduleExecutorStatistics() {
     }
 }
 
-void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
+void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&) {
     if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetMoveDataEnabled()) {
         TTabletExecutedFlat::Handle(ev);
         return;
@@ -668,8 +667,8 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         // Hive retry or re-assignment: merge groups and update sender.
         MoveDataState.HiveSender = ev->Sender;
         bool newGroupsAdded = false;
-        for (auto g : record.GetGroups()) {
-            newGroupsAdded |= MoveDataState.TargetGroups.emplace(g).second;
+        for (const auto groupId : record.GetGroups()) {
+            newGroupsAdded |= MoveDataState.TargetGroups.emplace(groupId).second;
         }
         LOG_S_INFO("TColumnShard::Handle TEvMoveData: merge resend, newGroups="
                    << newGroupsAdded << " totalGroups=" << MoveDataState.TargetGroups.size() << " at tablet " << TabletID());
@@ -684,8 +683,8 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
 
     MoveDataState.HiveSender = ev->Sender;
     MoveDataState.TargetGroups.clear();
-    for (auto g : record.GetGroups()) {
-        MoveDataState.TargetGroups.emplace(g);
+    for (const auto groupId : record.GetGroups()) {
+        MoveDataState.TargetGroups.emplace(groupId);
     }
     MoveDataState.Active = true;
     MoveDataState.VacuumCompleted = false;

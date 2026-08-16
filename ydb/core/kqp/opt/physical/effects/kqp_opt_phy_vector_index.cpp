@@ -84,6 +84,12 @@ TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription
         }
     }
 
+    YQL_ENSURE(!indexDesc->KeyColumns.empty());
+    const auto& embeddingColumn = indexDesc->KeyColumns.back();
+    if (indexTableColumnSet.insert(embeddingColumn).second) {
+        indexTableColumns.emplace_back(embeddingColumn);
+    }
+
     for (const auto& column : indexDesc->DataColumns) {
         if (indexTableColumnSet.insert(column).second) {
             indexTableColumns.emplace_back(column);

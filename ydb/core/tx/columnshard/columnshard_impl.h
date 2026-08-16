@@ -546,7 +546,12 @@ private:
         // Set to true when the executor calls MoveDataCompleted(); signals that
         // vacuum is done and only the HasBlobsForGroups gate remains.
         bool VacuumCompleted = false;
+        // The completion gate scans the GC queues; cap its cadence instead of
+        // paying the scans on every periodic wakeup tick.
+        TInstant LastGateCheckAt;
     };
+
+    static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);
 
     TMoveDataState MoveDataState;
 

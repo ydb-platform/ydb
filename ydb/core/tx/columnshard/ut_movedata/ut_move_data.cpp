@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -218,6 +219,25 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         UNIT_ASSERT_C(mgrNew.HasBlobsForGroups({ NewGroup }), "BlobsToKeep: blob after reassign must match new group");
         UNIT_ASSERT_C(!mgrNew.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: old group must not match after reassign");
+    }
+
+    // TestMoveDataSharedBlobs: the shared/borrowed registry leg of the operator gate.
+    // Borrowed blobs are foreign-tablet blobs whose group comes from the persisted
+    // DS:<group>:<logoblobid> form (GetDsGroup), not from our channel history.
+    Y_UNIT_TEST(TestMoveDataSharedBlobs) {
+        static constexpr ui64 TabletId = 46;
+        static constexpr ui64 ForeignTabletId = 99;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 NewGroup = 200;
+
+        NOlap::NDataSharing::TStorageSharedBlobsManager shared(NOlap::IStoragesManager::DefaultStorageId, NOlap::TTabletId(TabletId));
+        UNIT_ASSERT(!shared.HasBlobsForGroups({ OldGroup }));
+
+        const auto borrowed = MakeDsBlobId(OldGroup, ForeignTabletId, /*gen=*/1, /*step=*/1, /*channel=*/2);
+        UNIT_ASSERT(shared.UpsertBorrowedBlobOnLoad(borrowed, NOlap::TTabletId(ForeignTabletId)));
+
+        UNIT_ASSERT_C(shared.HasBlobsForGroups({ OldGroup }), "borrowed blob in old group must match via GetDsGroup");
+        UNIT_ASSERT_C(!shared.HasBlobsForGroups({ NewGroup }), "unrelated group must not match");
     }
 
 }   // Y_UNIT_TEST_SUITE

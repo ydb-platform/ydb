@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -399,6 +400,8 @@ protected:
 
     void TestMultiplePQTablets(const TString& consumer1, const TString& consumer2);
     void TestParallelTransactions(const TString& consumer1, const TString& consumer2);
+
+    void AssertTabletIsAlive(ui64 txId = 2);
 
     void StartPQCalcPredicateObserver(size_t& received);
     void WaitForPQCalcPredicate(size_t& received, size_t expected);
@@ -1452,6 +1455,13 @@ NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
     Ctx->Runtime->DispatchEvents(options);
 
     return mock;
+}
+
+void TPQTabletFixture::AssertTabletIsAlive(ui64 txId)
+{
+    SendProposeTransactionRequest({.TxId=txId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TString& consumer2)
@@ -2510,6 +2520,23 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_1, TPQTabletFixture)
                                   });
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(Ignore_Late_Events_For_Unknown_Partition, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const TPartitionId unknownOriginal(999);
+    const TPartitionId unknownSupportive(0, TWriteId(0, 777), 100'000);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvInitComplete(unknownOriginal));
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvInitComplete(unknownSupportive));
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvPartitionCounters(unknownOriginal, TTabletCountersBase()));
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvPartitionCounters(unknownSupportive, TTabletCountersBase()));
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvPartitionLabeledCounters(unknownOriginal, TTabletLabeledCountersBase()));
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvPartitionLabeledCountersDrop(unknownOriginal, "group"));
+
+    AssertTabletIsAlive();
 }
 
 Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)

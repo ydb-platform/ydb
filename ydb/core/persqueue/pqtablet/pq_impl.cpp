@@ -1122,7 +1122,14 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
         {"partition", ev->Get()->Partition});
 
     auto& partitionId = ev->Get()->Partition;
-    auto& partition = GetPartitionInfo(partitionId);
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore TEvPartitionCounters for unknown partition",
+            {"logPrefix", LogPrefix()},
+            {"partition", partitionId});
+        return;
+    }
+    auto& partition = it->second;
 
     auto& counters = ev->Get()->Counters;
     ui64 cpuUsage = counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
@@ -1210,7 +1217,14 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
     if (partitionId.IsSupportivePartition()) {
         return;
     }
-    auto& partition = GetPartitionInfo(partitionId);
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore TEvPartitionLabeledCounters for unknown partition",
+            {"logPrefix", LogPrefix()},
+            {"partition", partitionId});
+        return;
+    }
+    auto& partition = it->second;
     const TString& group = ev->Get()->LabeledCounters.GetGroup();
     partition.LabeledCounters[group] = ev->Get()->LabeledCounters;
     Y_UNUSED(ctx);
@@ -1224,7 +1238,14 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const 
     if (partitionId.IsSupportivePartition()) {
         return;
     }
-    auto& partition = GetPartitionInfo(partitionId);
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore TEvPartitionLabeledCountersDrop for unknown partition",
+            {"logPrefix", LogPrefix()},
+            {"partition", partitionId});
+        return;
+    }
+    auto& partition = it->second;
     const TString& group = ev->Get()->Group;
     auto jt = partition.LabeledCounters.find(group);
     if (jt != partition.LabeledCounters.end())
@@ -1257,7 +1278,14 @@ bool TPersQueue::AllOriginalPartitionsInited() const
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
     const auto& partitionId = ev->Get()->Partition;
-    auto& partition = GetPartitionInfo(partitionId);
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore TEvInitComplete for unknown partition",
+            {"logPrefix", LogPrefix()},
+            {"partition", partitionId});
+        return;
+    }
+    auto& partition = it->second;
     PQ_ENSURE(!partition.InitDone);
     partition.InitDone = true;
 

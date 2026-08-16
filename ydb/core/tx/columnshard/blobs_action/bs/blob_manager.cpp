@@ -19,7 +19,7 @@ namespace {
 // (both regular GC batches and CutHistory hard barriers). BS enforces monotonicity per
 // (tablet, generation) space; using one counter ensures no collisions.
 static TAtomicCounter SharedGCPerGenerationCounter = 1;
-}   // namespace
+}   // anonymous namespace
 
 ui32 TBlobManager::AllocateGCPerGenerationCounter(const ui32 step) {
     return static_cast<ui32>(SharedGCPerGenerationCounter.Add(step));

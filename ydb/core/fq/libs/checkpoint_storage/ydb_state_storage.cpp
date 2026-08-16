@@ -477,8 +477,11 @@ size_t TStateStorage::SerializeState(
 
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
     if (rowLimit && originalSize > rowLimit && Config.GetEnableCompression()) {
-        serializedState = CompressBlob(serializedState);
-        outIsCompressed = true;
+        TString compressed = CompressBlob(serializedState);
+        if (compressed.size() < serializedState.size()) {
+            serializedState = std::move(compressed);
+            outIsCompressed = true;
+        }
     }
 
     size_t remaining = serializedState.size();

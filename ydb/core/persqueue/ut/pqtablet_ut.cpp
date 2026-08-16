@@ -2583,6 +2583,46 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
+Y_UNIT_TEST_F(ProposeTx_Immediate_WriteId_Known_Original, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui32 partitionId = 0;
+    const ui64 txId = 2;
+    const TWriteId writeId(0, 3);
+
+    SyncGetOwnership({.Partition=partitionId,
+                     .WriteId=writeId,
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4},
+                     {.Cookie=4,
+                     .Status=NMsgBusProxy::MSTATUS_OK});
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=partitionId, .Path="/topic", .SupportivePartition=100'000}},
+                                  .WriteId=writeId,
+                                  .Immediate=true});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(ProposeTx_Immediate_WriteId_Unknown_Original, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 2;
+    const TWriteId writeId(0, 3);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=999, .Path="/topic"}},
+                                  .WriteId=writeId,
+                                  .Immediate=true});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+    AssertTabletIsAlive(txId + 1);
+}
+
 Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

@@ -683,6 +683,12 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TFlowControlManagerInitializer: public IKikimrServicesInitializer {
+public:
+    TFlowControlManagerInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
 class TNbsServiceInitializer: public IKikimrServicesInitializer {
 public:

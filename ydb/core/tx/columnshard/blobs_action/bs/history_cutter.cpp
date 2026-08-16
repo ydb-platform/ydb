@@ -10,6 +10,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -389,14 +391,9 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
-        TVector<TEntryKey> kept;
-        kept.reserve(SweepSurvivors.size());
-        for (const auto& key : SweepSurvivors) {
-            if (!disproved.contains(key)) {
-                kept.push_back(key);
-            }
-        }
-        SweepSurvivors = std::move(kept);
+        EraseIf(SweepSurvivors, [&](const TEntryKey& key) {
+            return disproved.contains(key);
+        });
     }
 
     if (!exhausted) {

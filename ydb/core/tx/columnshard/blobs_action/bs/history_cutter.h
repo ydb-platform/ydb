@@ -127,6 +127,9 @@ public:
     }
 
     bool HasPortionSnapshot() const {
+        // True from SetPortionSnapshot until the cursor is fully consumed AND reset:
+        // a non-empty vector covers the not-yet-started case, a positive offset covers
+        // the tail where GetNextBatch already handed out every id.
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 

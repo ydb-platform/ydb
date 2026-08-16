@@ -253,6 +253,9 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     CutState.clear();
     PoisonedChannels.clear();
     PortionKeys.clear();
+    DisprovedAt.clear();
+    LastNominateAt = TInstant::Zero();
+    NextChannelToCheck = 2;
     SweepInFlight = false;
     SweepCandidates.reset();
     SweepSurvivors.clear();

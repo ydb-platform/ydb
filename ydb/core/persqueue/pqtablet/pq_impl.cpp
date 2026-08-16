@@ -6011,7 +6011,12 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
     }
 
     const TWriteId& writeId = *event->WriteId;
-    PQ_ENSURE(TxWrites.contains(writeId))("WriteId", writeId.ToString());
+    if (!TxWrites.contains(writeId)) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Ignore TEvTransactionCompleted for unknown WriteId",
+            {"logPrefix", LogPrefix()},
+            {"writeId", writeId});
+        return;
+    }
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     PQ_ENSURE(writeInfo.Partitions.size() == 1);
 

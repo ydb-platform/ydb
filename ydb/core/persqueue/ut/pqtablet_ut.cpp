@@ -2539,6 +2539,15 @@ Y_UNIT_TEST_F(Ignore_Late_Events_For_Unknown_Partition, TPQTabletFixture)
     AssertTabletIsAlive();
 }
 
+Y_UNIT_TEST_F(Ignore_Late_TransactionCompleted_For_Unknown_WriteId, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvTransactionCompleted(TWriteId(0, 3)));
+
+    AssertTabletIsAlive();
+}
+
 Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

@@ -6171,7 +6171,7 @@ void TPersQueue::Handle(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
     const ui32 partitionId = ev->Get()->GetPartitionId();
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
-        const ui64 cookie = ev->Get()->Record.GetCookie() ? ev->Get()->Record.GetCookie() : ev->Cookie;
+        const ui64 cookie = ev->Get()->Record.HasCookie() ? ev->Get()->Record.GetCookie() : ev->Cookie;
         Send(ev->Sender, new TEvPQ::TEvResetOffsetResponse(
             partitionId,
             Ydb::StatusIds::SCHEME_ERROR,

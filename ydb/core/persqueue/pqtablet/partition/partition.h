@@ -1397,6 +1397,8 @@ private:
         TInstant Timestamp;
         TVector<TKeyRef> CompactionKeys;
         TVector<TKeyRef> FastWriteKeys;
+        // Holds blob-key tokens for the duration of the async KV read so compaction
+        // cannot delete those blobs until HandleResetOffsetBlobResponse completes.
         TBlobKeyTokens BlobKeyTokens;
     };
     std::optional<TResetOffsetBlobRead> ResetOffsetBlobRead;

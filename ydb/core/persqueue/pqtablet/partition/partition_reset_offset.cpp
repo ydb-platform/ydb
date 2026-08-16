@@ -12,6 +12,10 @@ namespace NKikimr::NPQ {
 
 namespace {
 
+// DataKeysBody / HeadKeys are in write order; write timestamps are non-decreasing
+// (same invariant as GetOffsetEstimate). lower_bound finds the first key whose
+// blob-end timestamp is >= timestamp; the previous key is also a candidate because
+// that blob may still contain a matching message.
 void AppendCandidateKeys(const std::deque<TDataKey>& keys, TInstant timestamp, TVector<const TDataKey*>& out) {
     if (keys.empty()) {
         return;
@@ -172,6 +176,9 @@ TMaybe<ui64> TPartition::ResolveResetOffsetFromWrittenAt(
         return Nothing();
     };
 
+    // Compaction zone holds older offsets than fast-write. Scan it first so the
+    // first timestamp match is the earliest qualifying message. Empty compaction
+    // sources fall through to fast-write, including in-memory Head.
     if (auto found = scanRefs(compactionRefs)) {
         return found;
     }
@@ -232,7 +239,7 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
     collect(compactionKeys, compactionRefs);
     collect(fastWriteKeys, fastWriteRefs);
 
-    const ui64 replyCookie = rec.GetCookie() ? rec.GetCookie() : ev->Cookie;
+    const ui64 replyCookie = rec.HasCookie() ? rec.GetCookie() : ev->Cookie;
     const ui32 partitionId = Partition.OriginalPartitionId;
 
     if (blobs.empty()) {
@@ -305,7 +312,7 @@ void TPartition::HandleResetOffsetBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev)
 void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
     const auto& rec = ev->Get()->Record;
     const ui32 partitionId = Partition.OriginalPartitionId;
-    const ui64 replyCookie = rec.GetCookie() ? rec.GetCookie() : ev->Cookie;
+    const ui64 replyCookie = rec.HasCookie() ? rec.GetCookie() : ev->Cookie;
 
     if (rec.GetPosition() == NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED) {
         ReplyResetOffset(ev->Sender, partitionId, Ydb::StatusIds::BAD_REQUEST, "Position is required", replyCookie);

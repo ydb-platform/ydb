@@ -6,6 +6,9 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 namespace {
@@ -60,17 +63,23 @@ private:
             return ReplyWithError(ev->Get()->Status, ev->Get()->Error);
         }
 
+        std::vector<const NPQ::NResetOffset::TPartitionResult*> failedPartitions;
+        for (const auto& partition : ev->Get()->Partitions) {
+            if (partition.Status != Ydb::StatusIds::SUCCESS) {
+                failedPartitions.push_back(&partition);
+            }
+        }
+        std::sort(failedPartitions.begin(), failedPartitions.end(), [](const auto* lhs, const auto* rhs) {
+            return lhs->PartitionId < rhs->PartitionId;
+        });
+
         TStringBuilder failed;
         Ydb::StatusIds::StatusCode errorStatus = Ydb::StatusIds::GENERIC_ERROR;
-        bool first = true;
-        for (const auto& partition : ev->Get()->Partitions) {
-            if (partition.Status == Ydb::StatusIds::SUCCESS) {
-                continue;
-            }
-            if (first) {
+        for (size_t i = 0; i < failedPartitions.size(); ++i) {
+            const auto& partition = *failedPartitions[i];
+            if (i == 0) {
                 failed << "Failed to reset offset for partitions: ";
                 errorStatus = partition.Status;
-                first = false;
             } else {
                 failed << ", ";
             }
@@ -78,9 +87,12 @@ private:
             if (!partition.Error.empty()) {
                 failed << " (" << partition.Error << ")";
             }
+            if (partition.Status == Ydb::StatusIds::OVERLOADED) {
+                errorStatus = Ydb::StatusIds::OVERLOADED;
+            }
         }
 
-        if (!first) {
+        if (!failedPartitions.empty()) {
             return ReplyWithError(errorStatus, failed);
         }
 

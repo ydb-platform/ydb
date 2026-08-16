@@ -3,6 +3,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NResetOffset {
@@ -117,7 +119,7 @@ void TResetOffsetActor::Handle(TEvPQ::TEvResetOffsetResponse::TPtr& ev) {
         return;
     }
 
-    const ui64 cookie = ev->Get()->GetCookie() ? ev->Get()->GetCookie() : ev->Cookie;
+    const ui64 cookie = ev->Get()->Record.HasCookie() ? ev->Get()->GetCookie() : ev->Cookie;
     if (partitionStatus.Cookie != cookie) {
         return;
     }
@@ -172,12 +174,17 @@ void TResetOffsetActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         {"logPrefix", NPQ_LOG_PREFIX});
 
     auto tabletId = ev->Get()->TabletId;
-    // SubscribeCookie of the last TEvForward to this tablet. A delayed
-    // DeliveryProblem from an older pipe must not start another retry.
-    if (ev->Cookie != TabletCookies[tabletId]) {
+    auto cookieIt = TabletCookies.find(tabletId);
+    if (cookieIt == TabletCookies.end()) {
         return;
     }
-    ++TabletCookies[tabletId];
+    // SubscribeCookie of the last TEvForward to this tablet. Pipe cache echoes
+    // that value as TEvDeliveryProblem::Cookie. A delayed DeliveryProblem from
+    // an older pipe must not start another retry.
+    if (ev->Cookie != cookieIt->second) {
+        return;
+    }
+    ++cookieIt->second;
 
     for (auto& [partitionId, partitionStatus] : Partitions) {
         if (partitionStatus.TabletId == tabletId) {
@@ -251,6 +258,7 @@ void TResetOffsetActor::ReplyIfPossible() {
 }
 
 void TResetOffsetActor::SendToTablet(ui64 tabletId, IEventBase* ev, ui64 cookie) {
+    // SubscribeCookie is what TEvPipeCache puts on TEvDeliveryProblem::Cookie.
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, true, TabletCookies[tabletId]);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery, cookie);
 }
@@ -277,6 +285,9 @@ void TResetOffsetActor::ReplyResultAndDie() {
         }
         results.push_back(std::move(result));
     }
+    std::sort(results.begin(), results.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.PartitionId < rhs.PartitionId;
+    });
 
     Send(ParentId, new TEvResetOffsetResult(Ydb::StatusIds::SUCCESS, {}, std::move(results)));
     PassAway();

@@ -12,6 +12,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/history_cutter.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -103,6 +104,7 @@ using ECutState = NOlap::NBlobOperations::NBlobStorage::ECutState;
 class TTestableHistoryCutter: public THistoryCutterWrapper {
 public:
     using THistoryCutterWrapper::GetCutStateForTest;
+    using THistoryCutterWrapper::IsDrained;
     using THistoryCutterWrapper::StartSweepForTest;
     using THistoryCutterWrapper::THistoryCutterWrapper;
 };
@@ -315,6 +317,32 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(cutter.GetCutStateForTest(keyA) == ECutState::None);
         // Survivor keyB failed the final re-check (IsDrained false) → also None, no barrier.
         UNIT_ASSERT(cutter.GetCutStateForTest(keyB) == ECutState::None);
+    }
+
+    // The drain gate must treat our blobs shared out to other tablets as pinning
+    // the entry: while shared they are in no GC queue, but a hard barrier would
+    // collect them under the borrower.
+    Y_UNIT_TEST(SharedBlobsPinDrainGate) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const ui64 TabletId = 888;
+        const ui64 BorrowerTabletId = 999;
+        // History: {fromGen=0, group=100}, {fromGen=5, group=200 (active)}.
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { 0, 100 }, { 5, 200 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, /*gen=*/5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+
+        TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId());
+        const TEntryKey key{ /*channel=*/2, /*fromGeneration=*/0 };
+
+        // Empty queues and empty shared registry: the old entry is drained.
+        UNIT_ASSERT(cutter.IsDrained(key));
+
+        // Share out one of OUR blobs living in the old range (channel 2, gen 1 < 5).
+        const NOlap::TUnifiedBlobId sharedOut(/*dsGroup=*/100, TLogoBlobID(TabletId, /*gen=*/1, /*step=*/1, /*channel=*/2, 100, 1));
+        UNIT_ASSERT(shared->UpsertSharedBlobOnLoad(sharedOut, NOlap::TTabletId(BorrowerTabletId)));
+        UNIT_ASSERT_C(!cutter.IsDrained(key), "shared-out blob in the old range must pin the entry");
     }
 
 }   // TCutHistoryCutterCounters

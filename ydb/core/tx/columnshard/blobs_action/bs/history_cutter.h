@@ -161,9 +161,12 @@ public:
     static bool SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration,
         const std::unordered_set<ui32>& cutFromGenerations = {});
 
+protected:
+    // Also reachable from the unit-test subclass (drain-gate integration tests).
+    bool IsDrained(const TEntryKey& key) const;
+
 private:
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
-    bool IsDrained(const TEntryKey& key) const;
     ui32 GetNextFromGeneration(const TEntryKey& key) const;
 
     // Computes the entry key (channel, fromGen) for a blob id.

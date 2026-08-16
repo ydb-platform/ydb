@@ -238,14 +238,13 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 }
 
-void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
     db.Table<Schema::Imports>().Key(importInfo.Id).Update(
         NIceDb::TUpdate<Schema::Imports::Uid>(importInfo.Uid),
         NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo.Kind)),
         NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized),
         NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),
         NIceDb::TUpdate<Schema::Imports::PeerName>(importInfo.PeerName),
         NIceDb::TUpdate<Schema::Imports::SanitizedToken>(importInfo.SanitizedToken)
     );
@@ -256,12 +255,22 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
         );
     }
 
+    PersistImportItemCount(db, importInfo, importInfo.Items.size());
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         PersistNewImportItem(db, importInfo, itemIdx);
     }
 }
 
-void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx) {
+void TSchemeShard::PersistImportItemCount(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 count) {
+    importInfo.PersistedItemCount = count;
+
+    db.Table<Schema::Imports>().Key(importInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Imports::Items>(count)
+    );
+}
+
+void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
 
@@ -272,9 +281,16 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
         NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath),
         NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
     );
+
+    PersistImportItemCount(db, importInfo, Max(importInfo.PersistedItemCount, itemIdx + 1));
 }
 
-void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
+    for (ui32 itemIdx = importInfo.Items.size(); itemIdx < importInfo.PersistedItemCount; ++itemIdx) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
+    }
+    PersistImportItemCount(db, importInfo, importInfo.Items.size());
+
     // There can be new items, so do at least the same as for creation
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         const auto& item = importInfo.Items.at(itemIdx);
@@ -308,7 +324,9 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
     ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
     Imports.erase(importInfo.Id);
 
-    for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+    Y_ABORT_UNLESS(importInfo.PersistedItemCount == importInfo.Items.size());
+
+    for (ui32 itemIdx : xrange(importInfo.PersistedItemCount)) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
 
@@ -320,8 +338,7 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo.State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo.Issue),
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds())
     );
 }
 

@@ -3205,6 +3205,52 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
+    Y_UNIT_TEST_F(WritingInLocalYdbIndexesTables, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        constexpr char inputTopicName[] = "writingInLocalYdbIndexesTablesInputTopicName";
+        constexpr char pqSourceName[] = "pqSource";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char ydbTable[] = "tableSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                INDEX IdxValue GLOBAL SYNC ON (Value, Key),
+                PRIMARY KEY (Key)
+            );)",
+            "table"_a = ydbTable
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                UPSERT INTO `{ydb_table}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "ydb_table"_a = ydbTable
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, ydbTable, {{"message1", "value1"}});
+    }
+
     Y_UNIT_TEST_F(DropStreamingQueryUnderLoad, TStreamingTestFixture) {
         LogSettings.Freeze = true;
         SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1);

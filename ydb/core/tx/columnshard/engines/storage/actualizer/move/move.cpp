@@ -22,6 +22,16 @@ private:
         if (!locked) {
             return;
         }
+        if (result.GetValue().HasErrors()) {
+            // Affected portions stay in PendingPortionIds and are re-requested on the
+            // next BuildMoveDataMetadataRequests cycle; surface the failure for operators.
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", "move data accessor result with errors " + result.GetValue().GetErrorMessage()});
+        }
+        if (result.GetValue().HasRemovedData()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", TStringBuilder{} << "move data accessor result with removed data, " << result.GetValue().GetRemovedData().size()});
+        }
         for (auto&& [_, accessor] : result.GetValue().GetPortions()) {
             locked->ActualizePortionInfo(*accessor);
         }

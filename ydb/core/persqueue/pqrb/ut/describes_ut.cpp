@@ -2,6 +2,8 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/core/persqueue/events/global.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NKikimr::NPQ {
 using namespace NPersQueue;
 
@@ -32,7 +34,7 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
                 return ev;
             }
             UNIT_ASSERT_VALUES_EQUAL(response.LocationsSize(), partitionsCount);
-            THashSet<ui32> partitionsFound;
+            absl::flat_hash_set<ui32> partitionsFound;
             for (const auto& partitionInResponse : response.GetLocations()) {
                 auto res = partitionsFound.insert(partitionInResponse.GetPartitionId());
                 UNIT_ASSERT(res.second);

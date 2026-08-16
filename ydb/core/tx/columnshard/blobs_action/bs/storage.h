@@ -67,7 +67,7 @@ public:
     }
 
     void InitHistoryCutter(const TActorId& tabletActorId) {
-        Manager->InitHistoryCutter(Manager, tabletActorId);
+        Manager->InitHistoryCutter(Manager, GetSharedBlobs(), tabletActorId);
     }
 };
 

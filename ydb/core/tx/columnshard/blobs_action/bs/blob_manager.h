@@ -23,6 +23,10 @@ class THistoryCutterWrapper;
 
 namespace NKikimr::NOlap {
 
+namespace NDataSharing {
+class TStorageSharedBlobsManager;
+}   // namespace NDataSharing
+
 using NKikimrTxColumnShard::TEvictMetadata;
 
 // A batch of blobs that are written by a single task.
@@ -256,7 +260,8 @@ public:
 
     // Called by TColumnShard after boot to wire up the cutter.
     // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).
-    void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self, const TActorId& tabletActorId);
+    void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId);
 
 private:
     // Forward-declared to avoid circular include; defined in blob_manager.cpp.

@@ -648,14 +648,38 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         const auto& error = result.GetError();
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
-            return PassAway();
+            auto request = Aws::S3::Model::HeadObjectRequest()
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
+            this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+            return this->Become(&TThis::StateCheckUploadedData);
         }
 
         if (CanRetry(error)) {
-            if (error.GetExceptionName() == "FsCompleteMultipartUploadFailed") {
+            if (RequiresNewUpload(error)) {
                 ForceNewUpload = true;
             }
             UploadId.Clear(); // force getting info after restart
+            Retry();
+        } else {
+            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            PassAway();
+        }
+    }
+
+    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (result.IsSuccess()) {
+            return PassAway();
+        }
+
+        const auto& error = result.GetError();
+        if (CanRetry(error)) {
+            UploadId.Clear();
             Retry();
         } else {
             Error = TStringBuilder() << LogPrefix() << " error: " << error;
@@ -702,6 +726,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     bool CanRetry(const Aws::S3::S3Error& error) const {
         return Attempt < Retries && NWrappers::ShouldRetry(error);
+    }
+
+    static bool RequiresNewUpload(const Aws::S3::S3Error& error) {
+        const auto& exceptionName = error.GetExceptionName();
+        return exceptionName == "FsCompleteMultipartUploadFailed"
+            || exceptionName == "InvalidPart"
+            || exceptionName == "InvalidPartOrder";
     }
 
     void Retry() {
@@ -908,6 +939,14 @@ public:
             hFunc(TEvExternalStorage::TEvUploadPartResponse, Handle);
             hFunc(TEvExternalStorage::TEvCompleteMultipartUploadResponse, Handle);
             hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateCheckUploadedData) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
         default:
             return StateBase(ev);
         }

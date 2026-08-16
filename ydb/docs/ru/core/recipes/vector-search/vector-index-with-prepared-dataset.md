@@ -118,12 +118,7 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=768,
-  levels=1,
-  clusters=200,
-  overlap_clusters=3);
+  distance=cosine);
 ```
 
 Данный запрос создаёт индекс типа `vector_kmeans_tree`.

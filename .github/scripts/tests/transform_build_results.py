@@ -4,6 +4,7 @@
 # - adds links to logs in test results
 # - mutes tests
 # - adds user properties from test_dir
+# - merges VERIFY/SANITIZER/TIMEOUT/POSSIBLE_OOM tags into error_type for upload
 
 import argparse
 import json
@@ -15,6 +16,8 @@ import urllib.parse
 import zipfile
 from typing import Set
 from mute.mute_check import YaMuteCheck
+
+from error_type_utils import enrich_error_types_in_results
 
 
 def log_print(*args, **kwargs):
@@ -184,7 +187,7 @@ def mute_test_result(result):
 
 
 def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, log_out_dir, log_truncate_size,
-              test_stuff_out, test_stuff_prefix, test_dir):
+              test_stuff_out, test_stuff_prefix, test_dir, public_dir=None, public_dir_url=None):
     start_time = time.time()
     
     # Load JSON report
@@ -416,6 +419,15 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     rich_time = time.time() - rich_start
     log_print(f"Processed rich-snippet: {rich_time:.2f}s ({rich_count} results)")
 
+    enrich_start = time.time()
+    enrich_error_types_in_results(
+        filtered_results,
+        public_dir=public_dir,
+        public_dir_url=public_dir_url,
+    )
+    enrich_time = time.time() - enrich_start
+    log_print(f"Enriched error_type tags: {enrich_time:.2f}s")
+
     # Replace report results with filtered results only
     report["results"] = filtered_results
 
@@ -486,6 +498,8 @@ def main():
         test_stuff_out,
         test_stuff_prefix,
         args.test_dir,
+        public_dir=args.public_dir,
+        public_dir_url=args.public_dir_url,
     )
 
 

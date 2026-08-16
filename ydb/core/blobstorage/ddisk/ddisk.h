@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "ddisk_config.h"
+#include "ddisk_checksums.h"
 
 #include <ydb/core/base/events.h>
 
@@ -9,9 +10,92 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 
+#include <ydb/library/actors/util/rope.h>
+
+#include <vector>
+
 namespace NKikimr::NDDisk {
 
-    constexpr size_t DataAlignment = 4096;
+    constexpr size_t MinSectorSize = 4096;
+    constexpr size_t DataAlignment = MinSectorSize;
+
+    static_assert(MinSectorSize == IntegrityUnitSize);
+
+    struct TConnectionToken {
+        ui64 Low = 0;
+        ui64 High = 0;
+
+        TConnectionToken() = default;
+
+        TConnectionToken(ui64 low, ui64 high)
+            : Low(low)
+            , High(high)
+        {}
+
+        static TConnectionToken Make(
+                ui32 connectionIndex,
+                ui8 sequenceNo,
+                ui32 tabletIdSuffix,
+                ui16 nodeId,
+                ui16 pdiskId,
+                ui16 vslotId,
+                ui8 random
+        ) {
+            return {
+                connectionIndex | static_cast<ui64>(tabletIdSuffix) << 32,
+                sequenceNo |
+                    static_cast<ui64>(random) << 8 |
+                    static_cast<ui64>(nodeId) << 16 |
+                    static_cast<ui64>(pdiskId) << 32 |
+                    static_cast<ui64>(vslotId) << 48,
+            };
+        }
+
+        explicit TConnectionToken(const NKikimrBlobStorage::NDDisk::TConnectionToken& pb)
+            : Low(pb.GetLow())
+            , High(pb.GetHigh())
+        {}
+
+        [[nodiscard]] ui32 GetConnectionIndex() const {
+            return static_cast<ui32>(Low);
+        }
+
+        [[nodiscard]] ui8 GetSequenceNo() const {
+            return static_cast<ui8>(High);
+        }
+
+        [[nodiscard]] ui32 GetTabletIdSuffix() const {
+            return static_cast<ui32>(Low >> 32);
+        }
+
+        [[nodiscard]] ui16 GetNodeId() const {
+            return static_cast<ui16>(High >> 16);
+        }
+
+        [[nodiscard]] ui16 GetPDiskId() const {
+            return static_cast<ui16>(High >> 32);
+        }
+
+        [[nodiscard]] ui16 GetVSlotId() const {
+            return static_cast<ui16>(High >> 48);
+        }
+
+        [[nodiscard]] ui8 GetRandom() const {
+            return static_cast<ui8>(High >> 8);
+        }
+
+        explicit operator bool() const {
+            return Low || High;
+        }
+
+        bool operator==(const TConnectionToken&) const = default;
+
+        void Serialize(NKikimrBlobStorage::NDDisk::TConnectionToken* pb) const
+        {
+            pb->SetLow(Low);
+            pb->SetHigh(High);
+        }
+    };
 
     struct TEv {
         enum {
@@ -23,10 +107,10 @@ namespace NKikimr::NDDisk {
             EvWriteResult,
             EvRead,
             EvReadResult,
-            EvSyncWithPersistentBuffer,
-            EvSyncWithPersistentBufferResult,
-            EvSyncWithDDisk,
-            EvSyncWithDDiskResult,
+            EvSync,
+            EvSyncResult,
+            EvSyncReserved1,
+            EvSyncReserved2,
             EvWritePersistentBuffer,
             EvWritePersistentBufferResult,
             EvReadPersistentBuffer,
@@ -41,40 +125,182 @@ namespace NKikimr::NDDisk {
             EvReadThenWritePersistentBuffers,
             EvGetPersistentBufferInfo,
             EvPersistentBufferInfo,
+            EvDeleteTabletChunks,
+            EvDeleteTabletChunksResult,
         };
     };
 
     struct TQueryCredentials {
-        ui64 TabletId;
-        ui32 Generation;
+        using TRequestCredentials = NKikimrBlobStorage::NDDisk::TRequestCredentials;
+        using ERequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::ERequestKind;
+
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+        ui32 DirectBlockGroupIndex = 0;
         std::optional<ui64> DDiskInstanceGuid;
-        bool FromPersistentBuffer = false;
+        ui64 DDiskSessionSeqNo = 0;
+        ERequestKind RequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
+        std::optional<TConnectionToken> ConnectionToken;
+        bool ServerContext = false;
 
         TQueryCredentials() = default;
 
-        TQueryCredentials(ui64 tabletId, ui32 generation, std::optional<ui64> ddiskInstanceGuid, bool fromPersistentBuffer = false)
+        TQueryCredentials(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                std::optional<ui64> ddiskInstanceGuid,
+                ERequestKind requestKind,
+                ui32 directBlockGroupIndex)
             : TabletId(tabletId)
             , Generation(generation)
+            , DirectBlockGroupIndex(directBlockGroupIndex)
             , DDiskInstanceGuid(ddiskInstanceGuid)
-            , FromPersistentBuffer(fromPersistentBuffer)
+            , DDiskSessionSeqNo(ddiskSessionSeqNo)
+            , RequestKind(requestKind)
         {}
+
+        // Connection metadata for a DDisk actor. Ordinary requests serialize
+        // only the token returned by TEvConnectResult.
+        static TQueryCredentials ToDDisk(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                std::optional<ui64> ddiskInstanceGuid,
+                ui32 directBlockGroupIndex
+        ) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                ddiskSessionSeqNo,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK,
+                directBlockGroupIndex);
+        }
+
+        // Connection metadata for a PersistentBuffer actor. Ordinary requests
+        // serialize only the token returned by TEvConnectResult.
+        static TQueryCredentials ToPersistentBuffer(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid,
+                ui32 directBlockGroupIndex
+        ) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                0,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_PERSISTENT_BUFFER,
+                directBlockGroupIndex);
+        }
+
+        // Internal DDisk/PersistentBuffer forwarding.
+        // Validation allows the request to bypass sender IC session checks and to pass without a registered
+        // tablet connection on the receiver. DDiskSessionSeqNo is not checked: each DDisk has its own session
+        // sequence number, so a forwarding actor cannot know the right value for every target.
+        static TQueryCredentials ForInternal(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid,
+                ui32 directBlockGroupIndex
+        ) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                0,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_INTERNAL,
+                directBlockGroupIndex);
+        }
+
+        static TQueryCredentials ToDDisk(const TConnectionToken& connectionToken) {
+            TQueryCredentials creds;
+            creds.ConnectionToken.emplace(connectionToken);
+            return creds;
+        }
+
+        static TQueryCredentials ToDDisk(const NKikimrBlobStorage::NDDisk::TConnectionToken& connectionToken) {
+            return ToDDisk(TConnectionToken(connectionToken));
+        }
+
+        static TQueryCredentials ToPersistentBuffer(const TConnectionToken& connectionToken) {
+            return ToDDisk(connectionToken);
+        }
+
+        static TQueryCredentials ToPersistentBuffer(const NKikimrBlobStorage::NDDisk::TConnectionToken& connectionToken) {
+            return ToDDisk(connectionToken);
+        }
+
 
         TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
+            , DirectBlockGroupIndex(pb.GetDirectBlockGroupIndex())
             , DDiskInstanceGuid(pb.HasDDiskInstanceGuid() ? std::make_optional(pb.GetDDiskInstanceGuid()) : std::nullopt)
-            , FromPersistentBuffer(pb.GetFromPersistentBuffer())
+            , DDiskSessionSeqNo(pb.GetDDiskSessionSeqNo())
+            , RequestKind(pb.GetRequestKind())
         {}
+
+        TQueryCredentials(const TRequestCredentials& pb)
+        {
+            if (pb.HasInternal()) {
+                ServerContext = true;
+                const auto& internal = pb.GetInternal();
+                TabletId = internal.GetTabletId();
+                Generation = internal.GetGeneration();
+                DirectBlockGroupIndex = internal.GetDirectBlockGroupIndex();
+                DDiskInstanceGuid = internal.HasDDiskInstanceGuid()
+                    ? std::make_optional(internal.GetDDiskInstanceGuid())
+                    : std::nullopt;
+                DDiskSessionSeqNo = internal.GetDDiskSessionSeqNo();
+                RequestKind = internal.GetRequestKind();
+            } else if (pb.HasConnectionToken()) {
+                ConnectionToken.emplace(pb.GetConnectionToken());
+            }
+        }
+
+        bool IsInternal() const {
+            return RequestKind == NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_INTERNAL;
+        }
+
+        bool HasServerContext() const {
+            return ServerContext;
+        }
+
+        bool RequiresDDiskSessionSeqNoCheck() const {
+            return RequestKind == NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
+        }
 
         void Serialize(NKikimrBlobStorage::NDDisk::TQueryCredentials *pb) const {
             pb->SetTabletId(TabletId);
             pb->SetGeneration(Generation);
+            pb->SetDirectBlockGroupIndex(DirectBlockGroupIndex);
             if (DDiskInstanceGuid) {
                 pb->SetDDiskInstanceGuid(*DDiskInstanceGuid);
             }
-            if (FromPersistentBuffer) {
-                pb->SetFromPersistentBuffer(FromPersistentBuffer);
+            if (DDiskSessionSeqNo) {
+                pb->SetDDiskSessionSeqNo(DDiskSessionSeqNo);
             }
+            if (RequestKind != NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK) {
+                pb->SetRequestKind(RequestKind);
+            }
+        }
+
+        void SerializeForRequest(TRequestCredentials* pb) const
+        {
+            pb->Clear();
+            if (ConnectionToken) {
+                ConnectionToken->Serialize(pb->MutableConnectionToken());
+            } else if (IsInternal()) {
+                Serialize(pb->MutableInternal());
+            }
+        }
+
+        void SerializeResolvedForRequest(TRequestCredentials* pb) const
+        {
+            pb->Clear();
+            Serialize(pb->MutableInternal());
         }
     };
 
@@ -107,6 +333,51 @@ namespace NKikimr::NDDisk {
             os << "{VChunkIndex:" << VChunkIndex << " OffsetInBytes:" << OffsetInBytes << " Size:" << Size << "}";
         }
     };
+
+    struct TChecksumValidationResult {
+        NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+        TString ErrorReason;
+        ui32 ChecksumCount = 0;
+        std::optional<ui32> MismatchedBlockIdx; // set only when Status == CORRUPTED
+    };
+
+    // Validates a sender-supplied per-block payload checksum list against the payload actually received.
+    // For now, checksum validation is opt-in: returns std::nullopt when the sender attached no checksums at all
+    // or when every checksum matches. Otherwise returns the status/reason to send back to the sender:
+    // * INCORRECT_REQUEST if the checksum count does not match the payload size
+    // * CORRUPTED at the first mismatching MinSectorSize block.
+    template<typename TRecord>
+    [[nodiscard]]
+    std::optional<TChecksumValidationResult> ValidatePayloadChecksums(const TRecord& record, const TRope& payload) {
+        const ui32 checksumCount = static_cast<ui32>(record.ChecksumsSize());
+        if (checksumCount == 0) {
+            return std::nullopt;
+        }
+
+        if (static_cast<ui64>(checksumCount) * MinSectorSize != payload.size()) {
+            return TChecksumValidationResult{
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "checksum count " << checksumCount << " does not match payload size "
+                    << payload.size() << " (block size " << MinSectorSize << ")",
+                checksumCount,
+                std::nullopt,
+            };
+        }
+
+        auto it = payload.Begin();
+        for (ui32 i = 0; i < checksumCount; ++i) {
+            if (record.GetChecksums(i) != CalculateBlockChecksum(it, MinSectorSize)) {
+                return TChecksumValidationResult{
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED,
+                    TStringBuilder() << "checksum mismatch at block " << i << " of " << checksumCount,
+                    checksumCount,
+                    i,
+                };
+            }
+            it += MinSectorSize;
+        }
+        return std::nullopt;
+    }
 
     struct TWriteInstruction {
         std::optional<ui32> PayloadId;
@@ -175,7 +446,31 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
-    ui32 MaxBarriersLimit = 64;
+    ui32 MaxBarriersLimit = 128;
+    ui32 MaxPendingEventsQueueSize = 1024;
+    bool EnableFastErases = true;
+    ui32 WritesBatchingPeriodMicroseconds = 40;
+    bool EnableWritesBatching = true;
+    // Minimum number of free sectors to keep reserved so that barrier movement
+    // and fast erases (which write to a new sector before freeing the old one)
+    // always have space available. New plain writes are rejected with OVERFILL
+    // when the free sector count drops below this threshold. Defaults to 256
+    // (= default disk operations max inflight size).
+    ui32 MinFreeSectorsReserve = 256;
+    // Allocate a new chunk proactively when free space drops below this percentage
+    // of the currently owned capacity. 0 disables proactive allocation.
+    ui32 PreallocateFreeSpaceThresholdPercent = 10;
+    // Deallocate a chunk proactively when free space is over this percentage
+    // of the currently owned capacity. 100% disables proactive deallocation.
+    ui32 DeallocateFreeSpaceThresholdPercent = 90;
+    // Deallocate a chunk proactively when it has been freed for this many seconds.
+    ui32 DeallocateThresholdSeconds = 30;
+    // TEvListPersistentBuffer must not observe a partially-applied write/erase for its tablet: the
+    // listing is deferred (queued and retried) while any disk operation is in flight for the
+    // requesting tablet. These parameters bound how long/how often we wait before giving up and
+    // replying with an OVERLOADED error to avoid returning a potentially-stale view.
+    ui32 ListPersistentBufferMaxRetries = 10;
+    ui32 ListPersistentBufferRetryPeriodMilliseconds = 20;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -189,10 +484,8 @@ struct TPersistentBufferFormat {
     struct TEvWriteResult;
     struct TEvRead;
     struct TEvReadResult;
-    struct TEvSyncWithPersistentBuffer;
-    struct TEvSyncWithPersistentBufferResult;
-    struct TEvSyncWithDDisk;
-    struct TEvSyncWithDDiskResult;
+    struct TEvSync;
+    struct TEvSyncResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvWritePersistentBuffers;
@@ -207,6 +500,8 @@ struct TPersistentBufferFormat {
     struct TEvReadThenWritePersistentBuffers;
     struct TEvGetPersistentBufferInfo;
     struct TEvPersistentBufferInfo;
+    struct TEvDeleteTabletChunks;
+    struct TEvDeleteTabletChunksResult;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -223,13 +518,17 @@ struct TPersistentBufferFormat {
 
         TEvConnectResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
-                std::optional<ui64> ddiskInstanceGuid = std::nullopt) {
+                std::optional<ui64> ddiskInstanceGuid = std::nullopt,
+                std::optional<TConnectionToken> connectionToken = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             if (ddiskInstanceGuid) {
                 Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
+            if (connectionToken) {
+                connectionToken->Serialize(Record.MutableConnectionToken());
             }
         }
     };
@@ -256,14 +555,31 @@ struct TPersistentBufferFormat {
         TEvWrite() = default;
 
         TEvWrite(const TQueryCredentials& creds, const TBlockSelector& selector, const TWriteInstruction& instruction) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
+            Record.AddChecksums(checksum);
+            return id;
+        }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+            return id;
+        }
+
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -284,7 +600,7 @@ struct TPersistentBufferFormat {
         TEvRead() = default;
 
         TEvRead(const TQueryCredentials& creds, const TBlockSelector& selector, const TReadInstruction& instruction) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
         }
@@ -313,15 +629,36 @@ struct TPersistentBufferFormat {
 
         TEvWritePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
                 const TWriteInstruction& instruction) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
+
+        static constexpr size_t GetPayloadHeaderSize() {
+            return MinSectorSize;
+        }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
+            Record.AddChecksums(checksum);
+            return id;
+        }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+            return id;
+        }
+
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(WritePersistentBufferResult) {
@@ -351,7 +688,7 @@ struct TPersistentBufferFormat {
         TEvReadThenWritePersistentBuffers(const TQueryCredentials& creds, ui64 lsn, ui32 generation,
                 const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
                 ui32 replyTimeoutMicroseconds) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             Record.SetLsn(lsn);
             Record.SetGeneration(generation);
             Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
@@ -372,7 +709,7 @@ struct TPersistentBufferFormat {
         TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
                 const TWriteInstruction& instruction, const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
                 ui32 replyTimeoutMicroseconds) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
@@ -388,7 +725,7 @@ struct TPersistentBufferFormat {
         TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
                 const TWriteInstruction& instruction, const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
                 ui32 replyTimeoutMicroseconds) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
@@ -399,9 +736,26 @@ struct TPersistentBufferFormat {
             }
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
+            Record.AddChecksums(checksum);
+            return id;
+        }
+
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+            return id;
+        }
+
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {
@@ -411,7 +765,7 @@ struct TPersistentBufferFormat {
 
         TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector,
                 ui64 lsn, ui32 generation, const TReadInstruction& instruction) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             Record.SetGeneration(generation);
@@ -425,7 +779,7 @@ struct TPersistentBufferFormat {
         TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
                 ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 sizeInBytes = 0,
-                TRope data = {}) {
+                TRope data = {}, const std::vector<ui64>& checksums = {}) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
@@ -435,6 +789,12 @@ struct TPersistentBufferFormat {
                 Record.SetOffsetInBytes(offsetInBytes);
                 Record.SetSizeInBytes(sizeInBytes);
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
+                // Opt-in, mirrors TEvWritePersistentBuffer.Checksums: only attached when the persisted
+                // record actually carries sender-supplied payload checksums (see
+                // TPersistentBuffer::TRecord::PayloadChecksums).
+                for (ui64 checksum : checksums) {
+                    Record.AddChecksums(checksum);
+                }
             }
         }
     };
@@ -445,7 +805,7 @@ struct TPersistentBufferFormat {
         TEvErasePersistentBuffer() = default;
 
         TEvErasePersistentBuffer(const TQueryCredentials& creds, ui64 lsn) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             Record.SetLsn(lsn);
         }
     };
@@ -456,11 +816,11 @@ struct TPersistentBufferFormat {
         TEvBatchErasePersistentBuffer() = default;
 
         TEvBatchErasePersistentBuffer(const TQueryCredentials& creds) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
         }
 
         TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
             for (auto& [lsn, generation] : erases) {
                 auto* erase = Record.AddErases();
                 erase->SetLsn(lsn);
@@ -501,6 +861,17 @@ struct TPersistentBufferFormat {
             TInstant LastLsnTimestamp;
             ui32 LsnsCount;
             ui64 Size;
+            ui32 FastErasesCount;
+        };
+
+        struct TOpStats {
+            TString Name;
+            ui64 RequestsInFlight = 0;
+            ui64 Requests = 0; // requests in the measurement window
+            double LatencyP50Ms = 0;
+            double LatencyP99Ms = 0;
+            double LatencyMaxMs = 0;
+            double WindowSeconds = 0; // measurement window for Requests / latencies
         };
 
         TInstant StartedAt;
@@ -513,9 +884,11 @@ struct TPersistentBufferFormat {
         ui64 InMemoryCacheLimit;
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
+        ui64 PerTabletStorageLimit;
         std::vector<TTabletInfo> TabletInfos;
         std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
+        std::vector<TOpStats> OpStats;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
@@ -533,7 +906,7 @@ struct TPersistentBufferFormat {
         TEvListPersistentBuffer() = default;
 
         TEvListPersistentBuffer(const TQueryCredentials& creds) {
-            creds.Serialize(Record.MutableCredentials());
+            creds.SerializeForRequest(Record.MutableCredentials());
         }
     };
 
@@ -549,38 +922,86 @@ struct TPersistentBufferFormat {
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithPersistentBuffer) {
-        using TResult = TEvSyncWithPersistentBufferResult;
+    DECLARE_DDISK_EVENT(Sync) {
+        using TResult = TEvSyncResult;
+        using TDDiskId = std::tuple<ui32, ui32, ui32>;
+        using TSource = NKikimrBlobStorage::NDDisk::TEvSync::TSource;
+        using TSegment = NKikimrBlobStorage::NDDisk::TEvSync::TSegment;
 
-        TEvSyncWithPersistentBuffer() = default;
+        TEvSync() = default;
 
-        TEvSyncWithPersistentBuffer(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
-            creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
+        explicit TEvSync(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
         }
 
-        void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
-            auto *segment = Record.AddSegments();
+        static void SetSource(TSource *source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            auto *m = source->MutableDDiskId();
+            m->SetNodeId(nodeId);
+            m->SetPDiskId(pdiskId);
+            m->SetDDiskSlotId(ddiskSlotId);
+            source->SetDDiskInstanceGuid(ddiskInstanceGuid);
+        }
+
+        TSegment* AddSegmentFromDDisk(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
+                const TBlockSelector& selector) {
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
+            auto *segment = source->AddSegments();
             selector.Serialize(segment->MutableSelector());
-            segment->SetLsn(lsn);
-            segment->SetGeneration(generation);
+            segment->MutableDDiskSegment();
+            return segment;
+        }
+
+        TSegment* AddSegmentFromPB(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
+                const TBlockSelector& selector,
+                ui64 lsn,
+                ui32 generation) {
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
+            auto *segment = source->AddSegments();
+            selector.Serialize(segment->MutableSelector());
+            auto *persistentBufferSegment =
+                segment->MutablePersistentBufferSegment();
+            persistentBufferSegment->SetLsn(lsn);
+            persistentBufferSegment->SetGeneration(generation);
+            return segment;
+        }
+
+    private:
+        static bool IsSameSource(const TSource& source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            if (!source.HasDDiskId() || source.GetDDiskInstanceGuid() != ddiskInstanceGuid) {
+                return false;
+            }
+
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            const auto& sourceDDiskId = source.GetDDiskId();
+            return sourceDDiskId.GetNodeId() == nodeId
+                && sourceDDiskId.GetPDiskId() == pdiskId
+                && sourceDDiskId.GetDDiskSlotId() == ddiskSlotId;
+        }
+
+        TSource* GetOrAddSource(const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            // Coalesce only consecutive same-source segments to preserve request order.
+            if (Record.SourcesSize()) {
+                auto *source = Record.MutableSources(Record.SourcesSize() - 1);
+                if (IsSameSource(*source, ddiskId, ddiskInstanceGuid)) {
+                    return source;
+                }
+            }
+
+            auto *source = Record.AddSources();
+            SetSource(source, ddiskId, ddiskInstanceGuid);
+            return source;
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithPersistentBufferResult) {
-        TEvSyncWithPersistentBufferResult() = default;
+    DECLARE_DDISK_EVENT(SyncResult) {
+        TEvSyncResult() = default;
 
-        TEvSyncWithPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TEvSyncResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {
@@ -597,48 +1018,24 @@ struct TPersistentBufferFormat {
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithDDisk) {
-        using TResult = TEvSyncWithDDiskResult;
+    DECLARE_DDISK_EVENT(DeleteTabletChunks) {
+        using TResult = TEvDeleteTabletChunksResult;
 
-        TEvSyncWithDDisk() = default;
+        TEvDeleteTabletChunks() = default;
 
-        TEvSyncWithDDisk(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
-            creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
-        }
-
-        void AddSegment(const TBlockSelector& selector) {
-            auto *segment = Record.AddSegments();
-            selector.Serialize(segment->MutableSelector());
+        TEvDeleteTabletChunks(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithDDiskResult) {
-        TEvSyncWithDDiskResult() = default;
+    DECLARE_DDISK_EVENT(DeleteTabletChunksResult) {
+        TEvDeleteTabletChunksResult() = default;
 
-        TEvSyncWithDDiskResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TEvDeleteTabletChunksResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
-            }
-        }
-
-        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            auto *result = Record.AddSegmentResults();
-            result->SetStatus(status);
-            if (errorReason) {
-                result->SetErrorReason(errorReason);
             }
         }
     };

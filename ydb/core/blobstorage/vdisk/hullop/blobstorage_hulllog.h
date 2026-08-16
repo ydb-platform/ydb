@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
+#include <ydb/core/base/blobstorage_write_source.h>
 
 namespace NKikimr {
 
@@ -24,7 +25,8 @@ namespace NKikimr {
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
-                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice);
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice,
+                                             TWriteSource writeSource);
 
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
@@ -32,7 +34,8 @@ namespace NKikimr {
                                              const TString &data,
                                              TLsnSeg seg,
                                              void *cookie,
-                                             std::unique_ptr<IEventBase> syncLogMsg);
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             TWriteSource writeSource);
 
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
@@ -40,7 +43,8 @@ namespace NKikimr {
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
-                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice);
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice,
+                                             TWriteSource writeSource);
 
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
@@ -48,7 +52,8 @@ namespace NKikimr {
                                              const TRcBuf &data,
                                              TLsnSeg seg,
                                              void *cookie,
-                                             std::unique_ptr<IEventBase> syncLogMsg);
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             TWriteSource writeSource);
 
 
 } // NKikimr

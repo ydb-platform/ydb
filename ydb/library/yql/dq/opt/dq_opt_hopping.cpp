@@ -31,13 +31,8 @@ TExprNode::TPtr WrapToShuffle(
     const TKeysDescription& keysDescription,
     const TCoAggregate& aggregate,
     const TDqConnection& input,
-    TExprContext& ctx,
-    const TOptimizeTransformerBase::TGetParents& getParents)
+    TExprContext& ctx)
 {
-    if (!IsSingleConsumerConnection(input, *getParents())) {
-        return nullptr;
-    }
-
     auto pos = aggregate.Pos();
 
     TDqStageBase mappedInput = input.Output().Stage();
@@ -79,11 +74,12 @@ TExprNode::TPtr WrapToShuffle(
 TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TExprBase node,
     TExprContext& ctx,
-    const TOptimizeTransformerBase::TGetParents& getParents,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode) {
+    bool defaultWatermarksMode,
+    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy
+) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -149,7 +145,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     } else {
         multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());
     }
-    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize()) {
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize() || defaultLatePolicy) {
         if (hopTraits.Traits.SizeLimit()) {
             multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
         } else {
@@ -167,9 +163,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         } else {
             multiHoppingCoreBuilder.EarlyPolicy<TCoVoid>().Build();
         }
-        if (hopTraits.LatePolicy) {
+        if (const auto latePolicy = hopTraits.LatePolicy.OrElse(defaultLatePolicy)) {
             multiHoppingCoreBuilder.LatePolicy<TCoUint32>()
-                .Literal().Build(ToString((ui32)*hopTraits.LatePolicy))
+                .Literal().Build(ToString((ui32)*latePolicy))
             .Build();
         } else {
             multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
@@ -201,7 +197,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         auto wrappedInput = input.Ptr();
         if (!keysDescription.MemberKeys.empty()) {
             // Shuffle input connection by keys
-            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx, getParents);
+            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx);
             if (!wrappedInput) {
                 return nullptr;
             }
@@ -243,9 +239,14 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode)
-{
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, getParents, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
+    bool defaultWatermarksMode,
+    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy
+) {
+    if (!IsSingleConsumerConnection(input, *getParents())) {
+        return node;
+    }
+
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, defaultLatePolicy);
     if (!result) {
         return result;
     }

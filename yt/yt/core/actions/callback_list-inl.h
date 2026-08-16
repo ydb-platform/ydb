@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "callback_list.h"
 #endif
-#undef CALLBACK_LIST_INL_H_
 
 namespace NYT {
 

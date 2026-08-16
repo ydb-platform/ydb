@@ -98,6 +98,8 @@ def post_install(self):
         upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
+        m.PEERDIR.add("contrib/libs/zstd")
+        m.ADDINCL.add("contrib/libs/zstd/include")
         # fmt: off
         m.RECURSE += [
             os.path.dirname(path)
@@ -113,6 +115,7 @@ grpc = CMakeNinjaNixProject(
     nixattr="grpc",
     license="Apache-2.0",
     keep_paths=[
+        "README_YANDEX.md",
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
     ],
     ignore_targets=[

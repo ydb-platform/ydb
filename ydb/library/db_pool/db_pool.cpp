@@ -1,11 +1,12 @@
 #include "db_pool.h"
 #include "events.h"
-#include "log.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/db_pool/protos/config.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/stream/file.h>
@@ -13,6 +14,8 @@
 
 #include <unordered_map>
 #include <unordered_set>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::DB_POOL
 
 namespace NDbPool {
 
@@ -104,7 +107,9 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         Y_VALIDATE(!RequestInProgress, "Can not handle requests in parallel");
-        LOG_T("TEvDbFunctionRequest, has inflight: " << RequestInProgress);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionRequest, has",
+            {"logPrefix", LogPrefix()},
+            {"inflight", RequestInProgress});
 
         Request = TFunctionRequest{ev->Sender, ev->Cookie, std::move(ev->Get()->Handler)};
         RequestInProgress = true;
@@ -121,7 +126,9 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         Y_VALIDATE(RequestInProgress, "Unexpected worker state");
-        LOG_T("TEvDbFunctionResponse, has inflight: " << RequestInProgress);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse, has",
+            {"logPrefix", LogPrefix()},
+            {"inflight", RequestInProgress});
 
         Counters.RequestsTime->Collect((TInstant::Now() - Request.StartTime).MilliSeconds());
         Counters.GetStatus(ev->Get()->Status)->Inc();
@@ -228,7 +235,10 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         const auto& sender = ev->Sender;
-        LOG_T("TEvDbFunctionRequest from " << sender << ", Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionRequest from Queue",
+            {"logPrefix", LogPrefix()},
+            {"sender", sender},
+            {"size", Requests.size()});
 
         Counters.IncomingRate->Inc();
         Counters.QueueSize->Inc();
@@ -239,11 +249,16 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_T("TEvDbFunctionResponse from " << sender << ", Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse from Queue",
+            {"logPrefix", LogPrefix()},
+            {"sender", sender},
+            {"size", Requests.size()});
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_I("TEvDbFunctionResponse from unknown sender " << sender);
+            YDB_LOG_INFO_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse from unknown sender",
+                {"logPrefix", LogPrefix()},
+                {"sender", sender});
             return;
         }
 
@@ -256,11 +271,17 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", Queue size = " << Requests.size());
+        YDB_LOG_ERROR_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered Queue",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"reason", ev->Get()->Reason},
+            {"size", Requests.size()});
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_I("Undelivered from unknown sender " << sender);
+            YDB_LOG_INFO_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered from unknown sender",
+                {"logPrefix", LogPrefix()},
+                {"sender", sender});
             return;
         }
 
@@ -292,7 +313,9 @@ private:
         Counters.QueuedTime->Collect((TInstant::Now() - request.StartTime).MilliSeconds());
         ReportStats();
 
-        LOG_T("ProcessQueue, Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "ProcessQueue, Queue",
+            {"logPrefix", LogPrefix()},
+            {"size", Requests.size()});
 
         const auto worker = *FreeWorkers.begin();
         FreeWorkers.erase(FreeWorkers.begin());
@@ -374,7 +397,9 @@ public:
 
     void Bootstrap() {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_T("Bootstrap, send request to: " << proxyId);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "Bootstrap, send request",
+            {"logPrefix", LogPrefix()},
+            {"to", proxyId});
         Become(&TDbRequest::StateFunc);
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
@@ -382,14 +407,21 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
-        LOG_T("DbRequest actor response from: " << ev->Sender << ", status: " << status);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "DbRequest actor response",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"status", status});
         Promise.SetValue(status);
         PassAway();
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
+        YDB_LOG_ERROR_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered resend request",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"reason", ev->Get()->Reason},
+            {"to", proxyId});
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 

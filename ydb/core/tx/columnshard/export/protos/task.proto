@@ -4,7 +4,8 @@ import "ydb/core/scheme/protos/type_info.proto";
 package NKikimrColumnShardExportProto;
 
 message TIdentifier {
-    optional uint64 PathId = 1;
+    optional uint64 PathId = 1 [deprecated = true];
+    optional uint64 SchemeShardLocalPathId = 2;
 }
 
 message TExportTask {

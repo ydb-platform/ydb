@@ -33,5 +33,9 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
+  - name: Наблюдаемость
+    include:
+      mode: link
+      path: observability/toc_p.yaml
   - name: Сравнение возможностей SDK
     href: feature-parity.md

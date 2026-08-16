@@ -26,6 +26,13 @@ public:
 protected:
     virtual TString PrintProgress(TDuration elapsed) = 0;
 
+    // Must be called by the most-derived class at the end of its
+    // constructor. Starting the worker thread inside the base constructor
+    // races with the derived class's vtable setup and can invoke the
+    // still-pure-virtual PrintProgress(), triggering __cxa_pure_virtual
+    // and abort().
+    void Start();
+
 private:
     TDuration Stop(bool success = false);
 

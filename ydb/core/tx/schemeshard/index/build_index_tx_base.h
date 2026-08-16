@@ -21,6 +21,8 @@ public:
 private:
     using TChangeStateRec = std::tuple<TIndexBuildId, TIndexBuildInfo::EState>;
     TDeque<TChangeStateRec> StateChanges;
+    using TChangeSetColumnConstraintStateRec = std::tuple<TIndexBuildId, TSetColumnConstraintOperationInfo::EOperationState>;
+    TDeque<TChangeSetColumnConstraintStateRec> SetColumnConstraintStateChanges;
     using TBillingEventSchedule = std::tuple<TIndexBuildId, TDuration>;
     TDeque<TBillingEventSchedule> ToScheduleBilling;
     using TToBill = std::tuple<TIndexBuildId, TInstant, TInstant>;
@@ -38,6 +40,7 @@ protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
     void AllocateTxId(TIndexBuildId buildId);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
+    void ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state);
     void Progress(TIndexBuildId id);
     void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
     void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);

@@ -76,6 +76,7 @@ public:
     void Abort(const TString &errorMessage);
 
     bool IsStarted() const;
+    bool IsAborted() const;
 
     const TExportTask &GetTask() const;
 

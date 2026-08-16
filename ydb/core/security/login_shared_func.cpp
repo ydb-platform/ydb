@@ -46,21 +46,6 @@ NKikimrScheme::TEvLogin CreatePlainLoginRequest(const TString& username, NLoginP
     return record;
 }
 
-NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username, const TString& password,
-    const TString& peerName, const NKikimrProto::TAuthConfig& config)
-{
-    NKikimrScheme::TEvLogin record;
-    record.SetUser(username);
-    record.SetPassword(password);
-
-    if (config.HasLoginTokenExpireTime()) {
-        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
-    }
-
-    record.SetPeerName(peerName);
-    return record;
-}
-
 NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username, const TString& peerName,
     const NKikimrProto::TAuthConfig& config)
 {

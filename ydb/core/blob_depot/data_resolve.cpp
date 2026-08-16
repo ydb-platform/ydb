@@ -3,6 +3,8 @@
 #include "data_uncertain.h"
 #include "schema.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
@@ -112,8 +114,12 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "TTxResolve::Execute", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex));
+            YDB_LOG_DEBUG("TTxResolve::Execute",
+                {"marker", "BDT22"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"itemIndex", ItemIndex});
 
             bool progress = false;
 
@@ -186,9 +192,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, SuccessorTx),
-                (Uncertainties.size, Uncertainties.size()));
+            YDB_LOG_DEBUG("TTxResolve::Complete",
+                {"marker", "BDT30"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"successorTx", SuccessorTx},
+                {"Uncertainties.size", Uncertainties.size()});
 
             Self->Data->CommitTrash(this);
 
@@ -245,8 +255,14 @@ namespace NKikimr::NBlobDepot {
                 item.ClearValueChain();
             } else {
                 if (!item.ValueChainSize()) {
-                    STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
-                        (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+                    YDB_LOG_WARN("Empty ValueChain on Resolve",
+                        {"marker", "BDT48"},
+                        {"id", Self->GetLogId()},
+                        {"key", key},
+                        {"value", value},
+                        {"item", item},
+                        {"sender", Request->Sender},
+                        {"cookie", Request->Cookie});
                 }
                 if (item.GetValueVersion() != value.ValueVersion) {
                     item.SetValueVersion(value.ValueVersion);
@@ -261,8 +277,13 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
-            (Sender, ev->Sender), (Cookie, ev->Cookie), (LastAssimilatedBlobId, LastAssimilatedBlobId));
+        YDB_LOG_DEBUG("TEvResolve",
+            {"marker", "BDT21"},
+            {"id", Self->GetLogId()},
+            {"msg", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"lastAssimilatedBlobId", LastAssimilatedBlobId});
 
         if (Self->Config.GetIsDecommittingGroup() && Self->DecommitState <= EDecommitState::BlobsFinished) {
             Self->RegisterWithSameMailbox(CreateResolveDecommitActor(ev));

@@ -4,6 +4,7 @@
 #include <ydb/library/logger/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/logger/log.h>
@@ -57,6 +58,13 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
     ) const = 0;
 
+    virtual NThreading::TFuture<NYdb::TStatus> CommitOffset(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        ui32 partition,
+        ui64 offset
+    ) const = 0;
+
     virtual ~IPersQueueMirrorReaderFactory() = default;
 
     TDeferredActorLogBackend::TSharedAtomicActorSystemPtr GetSharedActorSystem() const {
@@ -83,10 +91,36 @@ protected:
             case NKikimrPQ::TMirrorPartitionConfig::TCredentials::CREDENTIALS_NOT_SET: {
                 return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
             }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kOauthToken: {
+                return NThreading::MakeFuture(NYdb::CreateOAuthCredentialsProviderFactory(cred.GetOauthToken()));
+            }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kJwtParams: {
+                NYdb::TIamJwtContent params;
+                params.JwtContent = cred.GetJwtParams();
+                return NThreading::MakeFuture(NYdb::CreateIamJwtParamsCredentialsProviderFactory(params));
+            }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kIam: {
+                NYdb::TIamJwtContent params;
+                params.Endpoint = cred.GetIam().GetEndpoint();
+                params.JwtContent = cred.GetIam().GetServiceAccountKey();
+                return NThreading::MakeFuture(NYdb::CreateIamJwtParamsCredentialsProviderFactory(params));
+            }
             default: {
                 ythrow yexception() << "unsupported credentials type " << ui64(cred.GetCredentialsCase());
             }
         }
+    }
+
+    NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 
 public:
@@ -97,15 +131,6 @@ public:
         ui64 maxMemoryUsageBytes,
         TMaybe<TLog> logger = Nothing()
     ) const override {
-        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .CredentialsProviderFactory(credentialsProviderFactory)
-            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
-        if (config.HasDatabase()) {
-            clientSettings.Database(config.GetDatabase());
-        }
-
         NYdb::NTopic::TReadSessionSettings settings = NYdb::NTopic::TReadSessionSettings()
             .ConsumerName(config.GetConsumer())
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
@@ -122,7 +147,7 @@ public:
         topicSettings.AppendPartitionIds({partition});
         settings.AppendTopics(topicSettings);
 
-        NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
         return topicClient.CreateReadSession(settings);
     }
 
@@ -130,16 +155,18 @@ public:
         const NKikimrPQ::TMirrorPartitionConfig& config,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
     ) const override {
-        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .CredentialsProviderFactory(credentialsProviderFactory)
-            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
-        if (config.HasDatabase()) {
-            clientSettings.Database(config.GetDatabase());
-        }
-        NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
         return topicClient.DescribeTopic(config.GetTopic());
+    }
+
+    NThreading::TFuture<NYdb::TStatus> CommitOffset(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        ui32 partition,
+        ui64 offset
+    ) const override {
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
+        return topicClient.CommitOffset(config.GetTopic(), partition, config.GetConsumer(), offset);
     }
 };
 

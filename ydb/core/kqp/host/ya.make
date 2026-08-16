@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/local_indexes/bloom
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/core/tx/long_tx_service/public
     ydb/library/yql/dq/opt
@@ -38,7 +39,7 @@ PEERDIR(
     yql/essentials/providers/result/provider
     yql/essentials/sql
     yql/essentials/sql/v0
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

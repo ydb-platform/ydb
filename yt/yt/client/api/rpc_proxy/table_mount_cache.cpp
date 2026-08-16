@@ -38,8 +38,8 @@ public:
 private:
     TFuture<TTableMountInfoPtr> DoGet(const NYPath::TYPath& path, bool /*isPeriodicUpdate*/) noexcept override
     {
-        YT_LOG_DEBUG("Requesting table mount info (Path: %v)",
-            path);
+        YT_TLOG_DEBUG("Requesting table mount info")
+            .With("Path", path);
 
         TApiServiceProxy proxy(Channel_);
         proxy.SetDefaultTimeout(Timeout_);
@@ -98,37 +98,7 @@ private:
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 
-                tableInfo->Indices.reserve(rsp->indices_size());
-                for (const auto& protoIndexInfo : rsp->indices()) {
-                    auto indexInfo = TIndexInfo{
-                        .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
-                        .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
-                        .Predicate = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, predicate),
-                        .Correspondence = protoIndexInfo.has_index_correspondence()
-                            ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
-                            : ETableToIndexCorrespondence::Unknown,
-                    };
-
-                    if (protoIndexInfo.has_unfolded_columns()) {
-                        indexInfo.UnfoldedColumns = {
-                            .TableColumn = protoIndexInfo.unfolded_columns().table_column(),
-                            .IndexColumn = protoIndexInfo.unfolded_columns().index_column(),
-                        };
-                    } else if (protoIndexInfo.has_unfolded_column()) {
-                        // COMPAT(sabdenovch)
-                        indexInfo.UnfoldedColumns = {
-                            .TableColumn = protoIndexInfo.unfolded_column(),
-                            .IndexColumn = protoIndexInfo.unfolded_column(),
-                        };
-                    }
-
-                    if (protoIndexInfo.has_evaluated_columns_schema()) {
-                        indexInfo.EvaluatedColumnsSchema = New<TTableSchema>(
-                            FromProto<TTableSchema>(protoIndexInfo.evaluated_columns_schema()));
-                    }
-
-                    tableInfo->Indices.push_back(std::move(indexInfo));
-                }
+                FromProto(&tableInfo->Indices, rsp->indices());
 
                 if (tableInfo->IsSorted()) {
                     tableInfo->LowerCapBound = MinKey();
@@ -142,11 +112,11 @@ private:
                     tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 
-                YT_LOG_DEBUG("Table mount info received (Path: %v, TableId: %v, TabletCount: %v, Dynamic: %v)",
-                    path,
-                    tableInfo->TableId,
-                    tableInfo->Tablets.size(),
-                    tableInfo->Dynamic);
+                YT_TLOG_DEBUG("Table mount info received")
+                    .With("Path", path)
+                    .With("TableId", tableInfo->TableId)
+                    .With("TabletCount", tableInfo->Tablets.size())
+                    .With("Dynamic", tableInfo->Dynamic);
 
                 return tableInfo;
             }));

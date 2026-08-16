@@ -319,10 +319,15 @@ TWriteRequest::TResponseFuture TWriteRequest::ReadModifyWrite(
 {
     AllocateRMWBuffer();
 
+    // The read request executor at the partition layer calls Close() on the
+    // request's Sglist when the read completes. The RMW path needs the user's
+    // Sglist to stay open afterwards so we can copy the user's payload into
+    // the RMW buffer in ModifyAndWrite(). Use CreateDepender so that closing
+    // the read's sglist does not propagate back to the user's Sglist.
     auto read = backend.ExecuteReadRequest(
         CallContext,
         BlocksInfo.MakeAligned(),
-        SgList.Create(RMWBufferSgList),
+        SgList.CreateDepender(RMWBufferSgList),
         {});
 
     return read.Apply(
@@ -363,10 +368,12 @@ TWriteRequest::TResponseFuture TWriteRequest::ModifyAndWrite()
             {.Error = CreateErrorAcquireResponse()});
     }
 
+    // The aligned write request will Close() its Sglist after completion. Use
+    // CreateDepender so the user's Sglist is not unilaterally closed by us.
     return backend->ExecuteWriteRequest(
         CallContext,
         BlocksInfo.MakeAligned(),
-        SgList.Create(RMWBufferSgList));
+        SgList.CreateDepender(RMWBufferSgList));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -421,10 +428,14 @@ TZeroRequest::TResponseFuture TZeroRequest::ReadModifyWrite(
     AllocateRMWBuffer();
     SgList.SetSgList(RMWBufferSgList);
 
+    // The partition's read executor calls Close() on the request's Sglist on
+    // completion. We must not let that close TZeroRequest::SgList directly,
+    // because the follow-up write in ModifyAndWrite() reuses the same RMW
+    // buffer via SgList. Pass a depender so the close stays local to the read.
     auto read = backend.ExecuteReadRequest(
         CallContext,
         BlocksInfo.MakeAligned(),
-        SgList,
+        SgList.CreateDepender(),
         {});
 
     return read.Apply(
@@ -459,10 +470,12 @@ TZeroRequest::TResponseFuture TZeroRequest::ModifyAndWrite()
         0,
         BlocksInfo.BufferSize());
 
+    // The aligned write request will Close() its Sglist after completion. Use
+    // a depender so we keep ownership of TZeroRequest::SgList ourselves.
     auto result = backend->ExecuteWriteRequest(
         CallContext,
         BlocksInfo.MakeAligned(),
-        SgList);
+        SgList.CreateDepender());
     return result.Apply(
         [](const TFuture<TWriteBlocksLocalResponse>& future)
         {
@@ -649,10 +662,14 @@ TUnalignedDeviceHandler::ExecuteUnalignedReadRequest(
             {.Error = sgListOrError.GetError()});
     }
 
+    // The partition's read executor calls Close() on the request's Sglist on
+    // completion. The callback below needs the user's Sglist to remain open so
+    // we can copy the unaligned slice of the read buffer back into it. Use
+    // CreateDepender so the close does not propagate to the user's Sglist.
     auto alignedRequest = Backend->ExecuteReadRequest(
         std::move(ctx),
         blocksInfo.MakeAligned(),
-        sgList.Create(sgListOrError.ExtractResult()),
+        sgList.CreateDepender(sgListOrError.ExtractResult()),
         std::move(checkpointId));
 
     return alignedRequest.Apply(

@@ -46,6 +46,8 @@ public:
     i64 GetCapacity() const;
 
     TValuePtr Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValuePtr Find(const THeterogenousKey& key);
 
     bool TryInsert(const TValuePtr& value, TValuePtr* existingValue = nullptr);
     bool TryRemove(const TKey& key);
@@ -61,6 +63,7 @@ protected:
 
     std::atomic<i64> Capacity_;
     std::atomic<double> YoungerSizeFraction_;
+    std::atomic<bool> RejectOversizedItems_;
 
     explicit TSyncSlruCacheBase(
         TSlruCacheConfigPtr config,
@@ -70,6 +73,12 @@ protected:
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
     virtual void OnTotalWeightUpdated(i64 weightDelta);
+
+    //! For testing purposes only.
+    const NProfiling::TCounter& GetRejectedOversizedCounter() const;
+    const NProfiling::TCounter& GetRejectedOversizedWeightCounter() const;
+    const NProfiling::TCounter& GetEvictedCounter() const;
+    const NProfiling::TCounter& GetEvictedWeightCounter() const;
 
 private:
     struct TItem
@@ -105,10 +114,15 @@ private:
     NProfiling::TCounter HitWeightCounter_;
     NProfiling::TCounter MissedWeightCounter_;
     NProfiling::TCounter DroppedWeightCounter_;
+    NProfiling::TCounter RejectedOversizedCounter_;
+    NProfiling::TCounter RejectedOversizedWeightCounter_;
+    NProfiling::TCounter EvictedCounter_;
+    NProfiling::TCounter EvictedWeightCounter_;
     std::atomic<i64> YoungerWeightCounter_ = 0;
     std::atomic<i64> OlderWeightCounter_ = 0;
 
-    TShard* GetShardByKey(const TKey& key) const;
+    template <class THeterogenousKey>
+    TShard* GetShardByKey(const THeterogenousKey& key) const;
 
     bool Touch(TShard* shard, TItem* item);
     void DrainTouchBuffer(TShard* shard);
@@ -156,8 +170,14 @@ public:
     int GetSize() const;
 
     const TValue& Get(const TKey& key);
+    template <class THeterogenousKey>
+    const TValue& Get(const THeterogenousKey& key);
     TValue* Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValue* Find(const THeterogenousKey& key);
     TValue* FindNoTouch(const TKey& key);
+    template <class THeterogenousKey>
+    TValue* FindNoTouch(const THeterogenousKey& key);
     TValue* Insert(const TKey& key, TValue value, i64 weight = 1);
 
     void SetMaxWeight(i64 maxWeight);
@@ -196,7 +216,11 @@ public:
     int GetSize() const;
 
     const TValue& Get(const TKey& key);
+    template <class THeterogenousKey>
+    const TValue& Get(const THeterogenousKey& key);
     TValue* Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValue* Find(const THeterogenousKey& key);
 
     TValue* Insert(const TKey& key, TValue value, i64 weight = 1);
     std::optional<TValue> TryExtract(const TKey& key);

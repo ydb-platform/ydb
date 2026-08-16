@@ -12,11 +12,6 @@ class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::T
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
 
 public:
-    TAlterTopicActor(NGRpcService::TEvAlterTopicRequest* request)
-        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
-    {
-    }
-
     TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
     {
@@ -26,7 +21,7 @@ public:
         Become(&TAlterTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
             .UserToken = GetUserToken()
@@ -34,7 +29,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
@@ -44,7 +39,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

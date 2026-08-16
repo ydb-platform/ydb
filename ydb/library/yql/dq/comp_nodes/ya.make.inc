@@ -2,9 +2,8 @@ INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes/hash_join_utils
-    ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/runtime/streaming
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation
     yql/essentials/minikql/invoke_builtins
@@ -23,6 +22,7 @@ SET(ORIG_SOURCES
     dq_scalar_hash_join.cpp
     dq_hash_join_table.cpp
     dq_join_common.cpp
+    dq_watermark_generator.cpp
     type_utils.cpp
 )
 

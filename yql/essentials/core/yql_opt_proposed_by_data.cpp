@@ -63,7 +63,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
@@ -138,7 +138,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {
@@ -199,7 +199,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
@@ -269,7 +269,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {

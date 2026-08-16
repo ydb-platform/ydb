@@ -7,7 +7,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>

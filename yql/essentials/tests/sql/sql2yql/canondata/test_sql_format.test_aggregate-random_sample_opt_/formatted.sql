@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT
     random_sample(x, 3l)
 FROM

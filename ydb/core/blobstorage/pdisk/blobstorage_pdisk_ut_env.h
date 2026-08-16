@@ -153,6 +153,12 @@ public:
         return Runtime.Get();
     }
 
+    void FormatPDisk(const TIntrusivePtr<TPDiskConfig>& cfg) {
+        DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
+            cfg->EnableFormatAndMetadataEncryption, cfg->FeatureFlags.GetEnablePDiskDataEncryption()
+        );
+    }
+
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg, bool reformat = false) {
         if (PDiskActor) {
             TestResponse<NPDisk::TEvYardControlResult>(
@@ -163,9 +169,7 @@ public:
         }
 
         if (reformat) {
-            DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
-                cfg->EnableFormatAndMetadataEncryption, cfg->FeatureFlags.GetEnablePDiskDataEncryption()
-            );
+            FormatPDisk(cfg);
         }
 
         if (Settings.UsePDiskMock) {

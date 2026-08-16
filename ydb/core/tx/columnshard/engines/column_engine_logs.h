@@ -65,6 +65,8 @@ private:
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
     TVersionedPresetSchemas VersionedSchemas;
 
+    void InitDerivedState();
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
         return SignalCounters.BadPortionsCount;
@@ -155,10 +157,14 @@ public:
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;
     std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    bool UsesPullCompactionScheduling() const noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
         const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept override;
+    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
+        const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
@@ -223,6 +229,10 @@ public:
 
     const THashMap<NColumnShard::TInternalPathId, std::shared_ptr<TGranuleMeta>>& GetTables() const {
         return GranulesStorage->GetTables();
+    }
+
+    const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& GetOptimizerRuntimeSettings() const {
+        return GranulesStorage->GetOptimizerRuntimeSettings();
     }
 
     ui64 GetTabletId() const {

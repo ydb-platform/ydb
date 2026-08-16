@@ -5,6 +5,9 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NKikimr::NPQ::NDescriber {
 
 enum EEv : ui32 {
@@ -18,7 +21,27 @@ enum class EStatus {
     NOT_TOPIC,
     UNAUTHORIZED,
     UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
+    BAD_REQUEST,
     UNKNOWN_ERROR
+};
+
+
+struct TAccessRights {
+    TAccessRights() = default;
+
+    TAccessRights(ui32 access)
+        : Access(access)
+    {
+    }
+
+    TAccessRights(ui32 access, ui32 accessOr)
+        : Access(access)
+        , AccessOr(accessOr)
+    {
+    }
+
+   ui32 Access = NACLib::DescribeSchema;
+   std::optional<ui32> AccessOr;
 };
 
 struct TTopicInfo {
@@ -27,6 +50,7 @@ struct TTopicInfo {
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
     bool CdcStream = false;
+    TString CdcStreamName;
 
     ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
@@ -36,26 +60,26 @@ struct TTopicInfo {
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
 
-    TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
+    TEvDescribeTopicsResponse(absl::flat_hash_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
         : Topics(std::move(topics))
         , UsedSyncVersion(usedSyncVersion)
     {
     }
 
     // The original topic path (from request) -> TopicInfo
-    std::unordered_map<TString, TTopicInfo> Topics;
+    absl::flat_hash_map<TString, TTopicInfo> Topics;
     bool UsedSyncVersion = false;
 };
 
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    NACLib::EAccessRights AccessRights;
+    TAccessRights AccessRights;
     bool ForceSyncVersion = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
                                       const TString& databasePath,
-                                      const std::unordered_set<TString>&& topicPaths,
+                                      absl::flat_hash_set<TString>&& topicPaths,
                                       const TDescribeSettings& settings = {});
 
 Ydb::StatusIds::StatusCode Convert(const EStatus status);

@@ -1,18 +1,19 @@
 import getpass
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence, Optional, Dict
+from typing import Any
 
-from clickhouse_connect import __version__
+from clickhouse_connect._version import version as _version_string
 from clickhouse_connect.driver.exceptions import ProgrammingError
 
 
 def version() -> str:
-    return __version__.version
+    return _version_string
 
 
 def format_error(msg: str) -> str:
-    max_size = _common_settings['max_error_size'].value
+    max_size = _common_settings["max_error_size"].value
     if max_size:
         return msg[:max_size]
     return msg
@@ -23,41 +24,40 @@ class CommonSetting:
     name: str
     options: Sequence[Any]
     default: Any
-    value: Optional[Any] = None
+    value: Any | None = None
 
 
-_common_settings: Dict[str, CommonSetting] = {}
+_common_settings: dict[str, CommonSetting] = {}
 
 
-def build_client_name(client_name: str) -> str:
-    product_name = get_setting('product_name')
-    product_name = product_name.strip() + ' ' if product_name else ''
-    client_name = client_name.strip() + ' ' if client_name else ''
-    py_version = sys.version.split(' ', maxsplit=1)[0]
-    os_user = ''
-    if get_setting('send_os_user'):
+def build_client_name(client_name: str | None) -> str:
+    product_name = get_setting("product_name")
+    product_name = product_name.strip() + " " if product_name else ""
+    client_name = client_name.strip() + " " if client_name else ""
+    py_version = sys.version.split(" ", maxsplit=1)[0]
+    os_user = ""
+    if get_setting("send_os_user"):
         try:
-            os_user = f'; os_user:{getpass.getuser()}'
-        except Exception:  # pylint: disable=broad-except
+            os_user = f"; os_user:{getpass.getuser()}"
+        except Exception:
             pass
-    full_name = (f'{client_name}{product_name}clickhouse-connect/{version()}' +
-            f' (lv:py/{py_version}; mode:sync; os:{sys.platform}{os_user})')
-    return full_name.encode('ascii', 'ignore').decode()
+    full_name = f"{client_name}{product_name}clickhouse-connect/{version()} (lv:py/{py_version}; mode:sync; os:{sys.platform}{os_user})"
+    return full_name.encode("ascii", "ignore").decode()
 
 
 def get_setting(name: str) -> Any:
     setting = _common_settings.get(name)
     if setting is None:
-        raise ProgrammingError(f'Unrecognized common setting {name}')
+        raise ProgrammingError(f"Unrecognized common setting {name}")
     return setting.value if setting.value is not None else setting.default
 
 
 def set_setting(name: str, value: Any) -> None:
     setting = _common_settings.get(name)
     if setting is None:
-        raise ProgrammingError(f'Unrecognized common setting {name}')
+        raise ProgrammingError(f"Unrecognized common setting {name}")
     if setting.options and value not in setting.options:
-        raise ProgrammingError(f'Unrecognized option {value} for setting {name})')
+        raise ProgrammingError(f"Unrecognized option {value} for setting {name})")
     if value == setting.default:
         setting.value = None
     else:
@@ -68,30 +68,25 @@ def _init_common(name: str, options: Sequence[Any], default: Any) -> None:
     _common_settings[name] = CommonSetting(name, options, default)
 
 
-_init_common('autogenerate_session_id', (True, False), True)
-_init_common('autogenerate_query_id', (True, False), True)
-_init_common('dict_parameter_format', ('json', 'map'), 'json')
-_init_common('invalid_setting_action', ('send', 'drop', 'error'), 'error')
-_init_common('max_connection_age', (), 10 * 60)  # Max time in seconds to keep reusing a database TCP connection
-_init_common('product_name', (), '')  # Product name used as part of client identification for ClickHouse query_log
-_init_common('readonly', (0, 1), 0)  # Implied "read_only" ClickHouse settings for versions prior to 19.17
-_init_common('send_os_user', (True, False), True)
+_init_common("autogenerate_session_id", (True, False), True)
+_init_common("autogenerate_query_id", (True, False), True)
+_init_common("dict_parameter_format", ("json", "map"), "json")
+_init_common("invalid_setting_action", ("send", "drop", "error"), "error")
+_init_common("max_connection_age", (), 10 * 60)  # Max time in seconds to keep reusing a database TCP connection
+_init_common("product_name", (), "")  # Product name used as part of client identification for ClickHouse query_log
+_init_common("readonly", (0, 1), 0)  # Implied "read_only" ClickHouse settings for versions prior to 19.17
+_init_common("send_os_user", (True, False), True)
 
 # Include integration tags (library name/version) in the User-Agent, e.g.:
 # pandas/2.2.5; polars/0.20.x; sqlalchemy/2.0.x. These tags are only included
 # when using relevant API methods.
-_init_common('send_integration_tags', (True, False), True)
+_init_common("send_integration_tags", (True, False), True)
 
 # Use the client protocol version  This is needed for DateTime timezone columns but breaks with current version of
 # chproxy
-_init_common('use_protocol_version', (True, False), True)
+_init_common("use_protocol_version", (True, False), True)
 
-_init_common('max_error_size', (), 1024)
+_init_common("max_error_size", (), 1024)
 
 # HTTP raw data buffer for streaming queries.  This should not be reduced below 64KB to ensure compatibility with LZ4 compression
-_init_common('http_buffer_size', (), 10 * 1024 * 1024)
-
-# If True and using pandas 2.x, preserves the datetime64/timedelta64
-# dtype resolution (e.g., 's', 'ms', 'us', 'ns'). If False (or on
-# pandas <2.x), coerces to nanosecond ('ns') resolution for compatibility.
-_init_common('preserve_pandas_datetime_resolution', (True, False), False)
+_init_common("http_buffer_size", (), 10 * 1024 * 1024)

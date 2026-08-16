@@ -24,7 +24,7 @@ def generate_docs(root_dir, session):
     text files documenting each service.
 
     :param root_dir: The directory to write the reference files to. Each
-        service's reference documentation is loacated at
+        service's reference documentation is located at
         root_dir/reference/services/service-name.rst
 
     :param session: The boto3 session
@@ -45,7 +45,7 @@ def generate_docs(root_dir, session):
             service_name, session, services_doc_path
         ).document_service()
         service_doc_path = os.path.join(
-            services_doc_path, service_name + '.rst'
+            services_doc_path, f"{service_name}.rst"
         )
         with open(service_doc_path, 'wb') as f:
             f.write(docs)

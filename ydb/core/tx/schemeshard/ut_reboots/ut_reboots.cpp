@@ -1,6 +1,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
@@ -661,6 +662,105 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                      NLs::ChildrenCount(0) });
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
                                    { NLs::PathNotExist });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyColumnTableWithLocalBloomIndexes, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                    NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableSrc"));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/MyRoot", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/ColumnTableSrc"
+                    DstPath: "/MyRoot/ColumnTableDst"
+                    IsBackup: true
+                }
+            )", {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableDst");
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithMultiColumnStatistics, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "src"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/src"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/src"
+                    DstPath: "/MyRoot/dst"
+                })", {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/dst", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableKeepsMultiColumnStatistics, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "StatsTable"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot",
+                                                                  R"(Name: "StatsTable" Columns { Name: "extra" Type: "Uint64" })"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
             }
         });
     }

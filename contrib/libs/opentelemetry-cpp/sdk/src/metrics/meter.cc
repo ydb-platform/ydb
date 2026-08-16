@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -11,7 +12,6 @@
 
 #include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
-#include "opentelemetry/metrics/async_instruments.h"
 #include "opentelemetry/metrics/noop.h"
 #include "opentelemetry/metrics/sync_instruments.h"
 #include "opentelemetry/nostd/function_ref.h"
@@ -40,7 +40,6 @@
 #include "opentelemetry/version.h"
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-#  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
 #  include "opentelemetry/sdk/metrics/exemplar/reservoir_utils.h"
 #endif
 
@@ -53,33 +52,34 @@ namespace
 
 struct InstrumentationScopeLogStreamable
 {
-  const opentelemetry::sdk::instrumentationscope::InstrumentationScope &scope;
+  std::reference_wrapper<const opentelemetry::sdk::instrumentationscope::InstrumentationScope>
+      scope;
 };
 
 struct InstrumentDescriptorLogStreamable
 {
-  const opentelemetry::sdk::metrics::InstrumentDescriptor &instrument;
+  std::reference_wrapper<const opentelemetry::sdk::metrics::InstrumentDescriptor> instrument;
 };
 
 std::ostream &operator<<(std::ostream &os,
                          const InstrumentationScopeLogStreamable &streamable) noexcept
 {
-  os << "\n  name=\"" << streamable.scope.GetName() << "\"" << "\n  schema_url=\""
-     << streamable.scope.GetSchemaURL() << "\"" << "\n  version=\"" << streamable.scope.GetVersion()
-     << "\"";
+  os << "\n  name=\"" << streamable.scope.get().GetName() << "\"" << "\n  schema_url=\""
+     << streamable.scope.get().GetSchemaURL() << "\"" << "\n  version=\""
+     << streamable.scope.get().GetVersion() << "\"";
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const InstrumentDescriptorLogStreamable &streamable) noexcept
 {
-  os << "\n  name=\"" << streamable.instrument.name_ << "\"" << "\n  description=\""
-     << streamable.instrument.description_ << "\"" << "\n  unit=\"" << streamable.instrument.unit_
-     << "\"" << "\n  kind=\""
+  os << "\n  name=\"" << streamable.instrument.get().name_ << "\"" << "\n  description=\""
+     << streamable.instrument.get().description_ << "\"" << "\n  unit=\""
+     << streamable.instrument.get().unit_ << "\"" << "\n  kind=\""
      << opentelemetry::sdk::metrics::InstrumentDescriptorUtil::GetInstrumentValueTypeString(
-            streamable.instrument.value_type_)
+            streamable.instrument.get().value_type_)
      << opentelemetry::sdk::metrics::InstrumentDescriptorUtil::GetInstrumentTypeString(
-            streamable.instrument.type_)
+            streamable.instrument.get().type_)
      << "\"";
   return os;
 }

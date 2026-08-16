@@ -21,6 +21,21 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
 
+    void TryApplySkipLevelMinBlobSize(const TPortionInfo::TPtr& portion) {
+        ui32 level = portion->GetMeta().GetCompactionLevel();
+        if (level >= Levels.size()) {
+            return;
+        }
+        while (level + 1 < Levels.size()) {
+            const auto skipMin = Levels[level]->GetSkipLevelMinBlobSize();
+            if (!skipMin || portion->GetTotalBlobBytes() < *skipMin) {
+                break;
+            }
+            ++level;
+            portion->MutableMeta().ResetCompactionLevel(level);
+        }
+    }
+
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& info) const override {
         ui32 result = baseLevel;
         for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
@@ -76,6 +91,7 @@ protected:
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
+            TryApplySkipLevelMinBlobSize(i);
             PortionsInfo->AddPortion(i);
             if (i->GetCompactionLevel() >= Levels.size()) {
                 problemPortions.emplace_back(i);

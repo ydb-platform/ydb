@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/lib/value
     yql/essentials/public/udf/service/exception_policy
 )
 
@@ -26,6 +27,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_split_merge.cpp
     ut_find_split_key.cpp
+    ut_table_partitions_format.cpp
 )
 
 END()

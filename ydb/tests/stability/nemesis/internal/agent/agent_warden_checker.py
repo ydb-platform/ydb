@@ -27,6 +27,8 @@ from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+_AGENT_SAFETY_CHECK_TIMEOUT_S = 300.0
+
 
 def _safety_checks_snapshot(
     batches: List[List[WardenCheckResult] | None],
@@ -132,7 +134,33 @@ class AgentWardenChecker:
             batches: List[List[WardenCheckResult] | None] = [None] * n
 
             async def _run_at_index(i: int, run: SafetyWardenRun) -> tuple[int, List[WardenCheckResult]]:
-                batch = await loop.run_in_executor(None, run)
+                try:
+                    batch = await asyncio.wait_for(
+                        loop.run_in_executor(None, run),
+                        timeout=_AGENT_SAFETY_CHECK_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    # The underlying blocking call (grep/SSH/unified_agent select) is
+                    # still running in the executor thread, but we stop waiting for it
+                    # so the slot reaches a terminal state and the report can complete.
+                    logger.error(
+                        "Agent safety slot %d/%d (%s) timed out after %.0fs",
+                        i + 1,
+                        n,
+                        slot_names[i],
+                        _AGENT_SAFETY_CHECK_TIMEOUT_S,
+                    )
+                    batch = [
+                        WardenCheckResult(
+                            name=slot_names[i],
+                            category="safety",
+                            violations=[],
+                            status="error",
+                            error_message=(
+                                f"check timed out after {_AGENT_SAFETY_CHECK_TIMEOUT_S:.0f}s"
+                            ),
+                        )
+                    ]
                 return i, batch
 
             tasks = [_run_at_index(i, r) for i, r in enumerate(runs)]

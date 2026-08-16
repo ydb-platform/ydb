@@ -81,7 +81,8 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
          sender = ev->Sender,
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
-         data](const NThreading::TFuture<TWriteBlocksLocalResponse>& f)
+         data = std::move(data)]   //
+        (const NThreading::TFuture<TWriteBlocksLocalResponse>& f) mutable
         {
             auto response =
                 std::make_unique<TEvService::TEvWriteBlocksResponse>(
@@ -93,6 +94,8 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
                 response.release(),
                 0,
                 cookie));
+
+            data.reset();
         });
 }
 
@@ -126,21 +129,12 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
          request,
-         buffer](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
+         buffer = std::move(buffer)](
+            const NThreading::TFuture<TReadBlocksLocalResponse>& f)
         {
             auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
                 f.GetValue().Error);
-
-            if (auto guard = request->Sglist.Acquire()) {
-                const auto& sglist = guard.Get();
-                for (const auto& data: sglist) {
-                    response->Record.MutableBlocks()->AddBuffers(
-                        data.Data(),
-                        data.Size());
-                }
-            } else {
-                Y_ABORT_UNLESS(false);
-            }
+            response->Record.MutableBlocks()->AddBuffers(std::move(*buffer));
 
             actorSystem->Send(new IEventHandle(
                 sender,

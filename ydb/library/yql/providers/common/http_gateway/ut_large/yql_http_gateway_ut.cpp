@@ -9,7 +9,7 @@
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <yql/essentials/utils/url_builder.h>
 
@@ -102,6 +102,6 @@ Y_UNIT_TEST_SUITE(THttpGateway) {
         future.Wait();
 
         UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(future.ExtractValueSync(), std::nullopt);
+        UNIT_ASSERT(future.ExtractValueSync() == std::nullopt);
     }
 }

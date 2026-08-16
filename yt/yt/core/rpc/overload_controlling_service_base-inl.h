@@ -65,7 +65,7 @@ std::optional<TError> TOverloadControllingServiceBase<TBaseService>::GetThrottle
 
     if (!overloadedTrackers.empty()) {
         return TError(NRpc::EErrorCode::Overloaded, "Instance is overloaded")
-            << TErrorAttribute("overloaded_trackers", overloadedTrackers);
+            .With("overloaded_trackers", overloadedTrackers);
     }
 
     return TBaseService::GetThrottledError(requestHeader);
@@ -75,7 +75,8 @@ template <class TBaseService>
 void TOverloadControllingServiceBase<TBaseService>::HandleRequest(
     std::unique_ptr<NRpc::NProto::TRequestHeader> header,
     TSharedRefArray message,
-    NBus::IBusPtr replyBus)
+    NBus::IBusPtr replyBus,
+    NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer)
 {
     auto congestionState = Controller_->GetCongestionState(
         header->service(),
@@ -86,7 +87,11 @@ void TOverloadControllingServiceBase<TBaseService>::HandleRequest(
         NConcurrency::Yield();
     }
 
-    TBaseService::HandleRequest(std::move(header), std::move(message), std::move(replyBus));
+    TBaseService::HandleRequest(
+        std::move(header),
+        std::move(message),
+        std::move(replyBus),
+        std::move(requestAttachmentsTransfer));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

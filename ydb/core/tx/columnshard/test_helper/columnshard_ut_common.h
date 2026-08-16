@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -44,6 +45,13 @@ public:
 
     static void Setup(TTestActorRuntime& runtime);
 };
+
+// Installs, on every node of the runtime, a stand-in snapshot registry whose OldestCollectionTime tracks
+// the live test clock together with LongTxService margins that reproduce the legacy ~13s cleanup window.
+// Use in test runtimes that exercise TRegistryScanSnapshotGuard-based cleanup but have no LongTxService to
+// keep the registry fresh; otherwise registry freshness collapses to TInstant::Zero() and the cleanup
+// floor never advances (nothing is ever collected).
+void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime);
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
@@ -322,6 +330,7 @@ struct TTestSchema {
 
             // schema
             InitSchema(columns, pk, specials, preset->MutableSchema());
+            preset->MutableSchema()->SetVersion(1);
         }
 
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -362,6 +371,7 @@ struct TTestSchema {
         preset->SetId(1);
         preset->SetName("default");
         InitSchema(columns, pk, specials, preset->MutableSchema());
+        preset->MutableSchema()->SetVersion(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {
@@ -452,12 +462,15 @@ void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
 void ProposeSchemaTxFail(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 [[nodiscard]] TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
+void PlanSchemaTxStepOnly(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
+void WaitSchemaTxCompletion(TTestBasicRuntime& runtime, const TActorId& sender, ui64 txId);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1,
+    const std::optional<TDuration>& timeout = std::nullopt);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
@@ -483,7 +496,17 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep p
     PlanCommit(runtime, sender, planStep, ids);
 }
 
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const NOlap::TSnapshot& snapshot) {
+    PlanCommit(runtime, sender, TPlanStep{ snapshot.GetPlanStep() }, snapshot.GetTxId());
+}
+
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
+
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
+
+void VerifyNoBackupOrRestoreArtifacts(
+    TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);
 
 struct TTestBlobOptions {
     THashSet<TString> NullColumns;
@@ -494,6 +517,8 @@ struct TTestBlobOptions {
 TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem);
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options = {},
     const std::set<std::string>& notNullColumns = {});
+TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(
     std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo, const std::vector<NArrow::NTest::TTestColumn>& columns);
 
@@ -532,7 +557,8 @@ public:
                 using T = typename TWrap::T;
                 using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
 
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
+                YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"t", typeid(T).name()});
 
                 auto& typedBuilder = static_cast<TBuilder&>(*builder);
                 if constexpr (std::is_arithmetic<TData>::value) {

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "model/host_mask.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/error.pb.h>
 

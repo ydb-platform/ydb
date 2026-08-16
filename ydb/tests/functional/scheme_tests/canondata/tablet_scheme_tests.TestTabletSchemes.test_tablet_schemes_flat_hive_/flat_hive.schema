@@ -123,11 +123,6 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 122,
-                "ColumnName": "AllowedDataCenterIds",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 123,
                 "ColumnName": "BalancerPolicy",
                 "ColumnType": "Uint64"
@@ -140,6 +135,16 @@
             {
                 "ColumnId": 124,
                 "ColumnName": "StoppedByTenant",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 125,
+                "ColumnName": "NewAllowedDataCenterIds",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 126,
+                "ColumnName": "IsBackup",
                 "ColumnType": "Bool"
             },
             {
@@ -209,10 +214,11 @@
                     4,
                     121,
                     5,
-                    122,
                     123,
                     7,
                     124,
+                    125,
+                    126,
                     11,
                     13,
                     17,
@@ -606,8 +612,8 @@
                 "ColumnType": "Bool"
             },
             {
-                "ColumnId": 12,
-                "ColumnName": "AllowedDataCenterIds",
+                "ColumnId": 13,
+                "ColumnName": "NewAllowedDataCenterIds",
                 "ColumnType": "String"
             }
         ],
@@ -626,7 +632,7 @@
                     9,
                     10,
                     11,
-                    12
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -945,6 +951,11 @@
                 "ColumnId": 8,
                 "ColumnName": "Stopped",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "ShrinkingStoragePools",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -958,7 +969,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,

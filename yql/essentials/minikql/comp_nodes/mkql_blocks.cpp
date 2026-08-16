@@ -20,8 +20,7 @@
 #include <arrow/array.h>
 #include <arrow/datum.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -49,7 +48,7 @@ public:
             builder->Add(result);
         }
 
-        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
+        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -63,35 +62,35 @@ private:
 };
 
 struct TWideToBlocksState: public TBlockState {
-    size_t Rows_ = 0;
-    bool IsFinished_ = false;
-    size_t BuilderAllocatedSize_ = 0;
-    size_t MaxBuilderAllocatedSize_ = 0;
-    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+    size_t Rows = 0;
+    bool IsFinished = false;
+    size_t BuilderAllocatedSize = 0;
+    size_t MaxBuilderAllocatedSize = 0;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders;
     static const size_t MaxAllocatedFactor_ = 4;
 
     TWideToBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength)
         : TBlockState(memInfo, types.size() + 1U)
-        , Builders_(types.size())
+        , Builders(types.size())
     {
         for (size_t i = 0; i < types.size(); ++i) {
-            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
+            Builders[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize);
         }
-        MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
+        MaxBuilderAllocatedSize = MaxAllocatedFactor_ * BuilderAllocatedSize;
     }
 
     void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
-        Builders_[idx]->Add(value);
+        Builders[idx]->Add(value);
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
-        Rows_ = 0;
-        BuilderAllocatedSize_ = 0;
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows)), validationMode);
+        Rows = 0;
+        BuilderAllocatedSize = 0;
 
-        for (size_t i = 0; i < Builders_.size(); ++i) {
-            if (const auto builder = Builders_[i].get()) {
-                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
+        for (size_t i = 0; i < Builders.size(); ++i) {
+            if (const auto builder = Builders[i].get()) {
+                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished), validationMode);
             }
         }
 
@@ -117,9 +116,10 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)),
-                                                      MaxLength_);
+                                                      MaxLength_,
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -129,23 +129,24 @@ private:
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
-                     const size_t maxLength)
+                     const size_t maxLength, NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , BlockState_(blockState)
             , Stream_(stream)
             , MaxLength_(maxLength)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size() - 1;
 
             if (!blockState.Count) {
-                if (!blockState.IsFinished_) {
+                if (!blockState.IsFinished) {
                     do {
                         switch (Stream_.WideFetch(inputFields, inputWidth)) {
                             case NUdf::EFetchStatus::Ok:
@@ -156,14 +157,14 @@ private:
                             case NUdf::EFetchStatus::Yield:
                                 return NUdf::EFetchStatus::Yield;
                             case NUdf::EFetchStatus::Finish:
-                                blockState.IsFinished_ = true;
+                                blockState.IsFinished = true;
                                 break;
                         }
                         break;
-                    } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
+                    } while (++blockState.Rows < MaxLength_ && blockState.BuilderAllocatedSize <= blockState.MaxBuilderAllocatedSize);
                 }
-                if (blockState.Rows_) {
-                    blockState.MakeBlocks(HolderFactory_);
+                if (blockState.Rows) {
+                    blockState.MakeBlocks(HolderFactory_, ValidationMode_);
                 } else {
                     return NUdf::EFetchStatus::Finish;
                 }
@@ -180,6 +181,7 @@ private:
         NUdf::TUnboxedValue Stream_;
         const size_t MaxLength_;
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -220,8 +222,8 @@ public:
         Rows_++;
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values[BlockLengthIndex_] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values[BlockLengthIndex_] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)), validationMode);
         Rows_ = 0;
         BuilderAllocatedSize_ = 0;
 
@@ -229,7 +231,7 @@ public:
             if (i == BlockLengthIndex_) {
                 continue;
             }
-            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
         }
         FillArrays();
     }
@@ -311,11 +313,12 @@ private:
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
+            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter, NYql::EDatumValidationMode validationMode)
                 : TComputationValue<TIterator>(memInfo)
                 , HolderFactory_(holderFactory)
                 , BlockState_(std::move(blockState))
                 , Iter_(std::move(iter))
+                , ValidationMode_(validationMode)
             {
             }
 
@@ -335,7 +338,7 @@ private:
                     if (blockState.IsEmpty()) {
                         return false;
                     }
-                    blockState.MakeBlocks(HolderFactory_);
+                    blockState.MakeBlocks(HolderFactory_, ValidationMode_);
                 }
 
                 NUdf::TUnboxedValue* items = nullptr;
@@ -351,11 +354,10 @@ private:
 
         private:
             const THolderFactory& HolderFactory_;
-
             const NUdf::TUnboxedValue BlockState_;
             const NUdf::TUnboxedValue Iter_;
-
             NUdf::TUnboxedValue Row_;
+            const NYql::EDatumValidationMode ValidationMode_;
         };
 
         TListToBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
@@ -366,13 +368,14 @@ private:
             , BlockLengthIndex_(blockLengthIndex)
             , List_(std::move(list))
             , MaxLength_(maxLength)
+            , ValidationMode_(ctx.RuntimeSettings.DatumValidation.Get())
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             auto state = CompCtx_.HolderFactory.Create<TState>(CompCtx_, Types_, BlockLengthIndex_, MaxLength_);
-            return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_.HolderFactory, std::move(state), List_.GetListIterator());
+            return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_.HolderFactory, std::move(state), List_.GetListIterator(), ValidationMode_);
         }
 
         bool HasListItems() const final {
@@ -390,6 +393,7 @@ private:
 
         NUdf::TUnboxedValue List_;
         const size_t MaxLength_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -430,7 +434,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -550,45 +554,45 @@ private:
 };
 
 struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
-    size_t Count_ = 0;
-    size_t Index_ = 0;
-    size_t Current_ = 0;
-    NUdf::TUnboxedValue* Pointer_ = nullptr;
-    TUnboxedValueVector Values_;
-    std::vector<std::unique_ptr<IBlockReader>> Readers_;
-    std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
-    const std::vector<arrow::ValueDescr> ValuesDescr_;
+    size_t Count = 0;
+    size_t Index = 0;
+    size_t Current = 0;
+    NUdf::TUnboxedValue* Pointer = nullptr;
+    TUnboxedValueVector Values;
+    std::vector<std::unique_ptr<IBlockReader>> Readers;
+    std::vector<std::unique_ptr<IBlockItemConverter>> Converters;
+    const std::vector<arrow::ValueDescr> ValuesDescr;
 
     TWideFromBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
         : TComputationValue(memInfo)
-        , Values_(types.size() + 1)
-        , ValuesDescr_(ToValueDescr(types))
+        , Values(types.size() + 1)
+        , ValuesDescr(ToValueDescr(types))
     {
-        Pointer_ = Values_.data();
+        Pointer = Values.data();
 
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-        for (size_t i = 0; i < types.size(); ++i) {
-            const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
-            Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
-            Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
+        for (const auto type : types) {
+            const TType* blockItemType = AS_TYPE(TBlockType, type)->GetItemType();
+            Readers.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+            Converters.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
         }
     }
 
     void ClearValues() {
-        Values_.assign(Values_.size(), NUdf::TUnboxedValuePod());
+        Values.assign(Values.size(), NUdf::TUnboxedValuePod());
     }
 
     NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
         TBlockItem item;
-        const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
-        ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
+        const auto& datum = TArrowBlock::From(Values[idx]).GetDatum();
+        ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr[idx], datum.descr());
         if (datum.is_scalar()) {
-            item = Readers_[idx]->GetScalarItem(*datum.scalar());
+            item = Readers[idx]->GetScalarItem(*datum.scalar());
         } else {
             MKQL_ENSURE(datum.is_array(), "Expecting array");
-            item = Readers_[idx]->GetItem(*datum.array(), Current_);
+            item = Readers[idx]->GetItem(*datum.array(), Current);
         }
-        return Converters_[idx]->MakeValue(item, holderFactory);
+        return Converters[idx]->MakeValue(item, holderFactory);
     }
 };
 
@@ -609,7 +613,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)));
     }
 
@@ -628,23 +632,23 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
-            auto* inputFields = blockState.Pointer_;
-            const size_t inputWidth = blockState.Values_.size();
+            auto* inputFields = blockState.Pointer;
+            const size_t inputWidth = blockState.Values.size();
 
-            if (blockState.Index_ == blockState.Count_) {
+            if (blockState.Index == blockState.Count) {
                 do {
                     if (const auto result = Stream_.WideFetch(inputFields, inputWidth); result != NUdf::EFetchStatus::Ok) {
                         return result;
                     }
 
-                    blockState.Index_ = 0;
-                    blockState.Count_ = GetBlockCount(blockState.Values_.back());
-                } while (!blockState.Count_);
+                    blockState.Index = 0;
+                    blockState.Count = GetBlockCount(blockState.Values.back());
+                } while (!blockState.Count);
             }
 
-            blockState.Current_ = blockState.Index_++;
+            blockState.Current = blockState.Index++;
             for (size_t i = 0; i < width; i++) {
                 output[i] = blockState.Get(HolderFactory_, i);
             }
@@ -881,15 +885,15 @@ public:
         return KernelName_;
     }
 
-    const arrow::compute::ScalarKernel& GetArrowKernel() const {
+    const arrow::compute::ScalarKernel& GetArrowKernel() const override {
         return Kernel_;
     }
 
-    const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+    const std::vector<arrow::ValueDescr>& GetArgsDesc() const override {
         return EmptyDesc_;
     }
 
-    const IComputationNode* GetArgument(ui32 index) const {
+    const IComputationNode* GetArgument(ui32 index) const override {
         Y_UNUSED(index);
         ythrow yexception() << "No input arguments";
     }
@@ -917,7 +921,7 @@ public:
         return AsScalar(Arg_->GetValue(ctx).Release(), ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Arg_, ctx, block);
@@ -938,7 +942,7 @@ private:
     }
 
     NUdf::TUnboxedValuePod AsScalar(const NUdf::TUnboxedValuePod value, TComputationContext& ctx) const {
-        return ctx.HolderFactory.CreateArrowBlock(DoAsScalar(value, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(DoAsScalar(value, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     void RegisterDependencies() const final {
@@ -969,7 +973,7 @@ public:
         return Replicate(value, count, ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Value_, ctx, block);
@@ -1000,7 +1004,7 @@ private:
     }
 
     NUdf::TUnboxedValuePod Replicate(const NUdf::TUnboxedValuePod value, const NUdf::TUnboxedValuePod count, TComputationContext& ctx) const {
-        return ctx.HolderFactory.CreateArrowBlock(DoReplicate(value, count, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(DoReplicate(value, count, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     void RegisterDependencies() const final {
@@ -1045,7 +1049,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1176,39 +1180,21 @@ private:
 
 class TBlockExpandChunkedStreamWrapper: public TMutableComputationNode<TBlockExpandChunkedStreamWrapper> {
     using TBaseComputation = TMutableComputationNode<TBlockExpandChunkedStreamWrapper>;
-    class TExpanderState: public TComputationValue<TExpanderState> {
-        using TBase = TComputationValue<TExpanderState>;
+    class TExpanderState: public TBlockStreamValue<TExpanderState> {
+        using TBase = TBlockStreamValue<TExpanderState>;
 
     public:
-        TExpanderState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream, size_t width)
-            : TBase(memInfo)
-            , HolderFactory_(ctx.HolderFactory)
-            , State_(ctx.HolderFactory.Create<TBlockState>(width))
+        TExpanderState(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& stream, size_t width)
+            : TBase(memInfo, holderFactory, width)
             , Stream_(stream)
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
-            auto& s = *static_cast<TBlockState*>(State_.AsBoxed().Get());
-            if (!s.Count) {
-                s.ClearValues();
-                auto result = Stream_.WideFetch(s.Values.data(), width);
-                if (NUdf::EFetchStatus::Ok != result) {
-                    return result;
-                }
-                s.FillArrays();
-            }
-
-            const auto sliceSize = s.Slice();
-            for (size_t i = 0; i < width; ++i) {
-                output[i] = s.Get(sliceSize, HolderFactory_, i);
-            }
-            return NUdf::EFetchStatus::Ok;
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            return Stream_.WideFetch(output, width);
         }
 
     private:
-        const THolderFactory& HolderFactory_;
-        NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
     };
 
@@ -1221,7 +1207,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TExpanderState>(ctx, std::move(Stream_->GetValue(ctx)), Width_);
+        return ctx.HolderFactory.Create<TExpanderState>(ctx.HolderFactory, std::move(Stream_->GetValue(ctx)), Width_);
     }
     void RegisterDependencies() const override {
         DependsOn(Stream_);
@@ -1286,7 +1272,7 @@ IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNode
     MKQL_ENSURE(callable.GetType()->GetReturnType()->IsStream(), "Expected WideStream as an output");
 
     const auto wideComponents = GetWideComponents(inputType);
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
     TVector<TType*> items;
     for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
         items.push_back(AS_TYPE(TBlockType, wideComponents[i]));
@@ -1333,8 +1319,7 @@ IComputationNode* WrapReplicateScalar(TCallable& callable, const TComputationNod
 IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
     if (callable.GetInput(0).GetStaticType()->IsStream()) {
-        const auto streamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
-        const auto wideComponents = GetWideComponents(streamType);
+        const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
         const auto computation = dynamic_cast<IComputationNode*>(LocateNode(ctx.NodeLocator, callable, 0));
 
         MKQL_ENSURE(computation != nullptr, "Expected computation node");
@@ -1349,5 +1334,4 @@ IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputation
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

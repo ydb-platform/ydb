@@ -7,6 +7,7 @@
 #include <ydb/library/actors/http/http.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NMVP::NOIDC {
 
@@ -21,6 +22,98 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
     , Settings(settings)
 {}
 
+TRestoreOidcContextResult THandlerSessionCreate::RestoreOidcContext(const NHttp::TCookies& cookies, const TCheckStateResult& checkStateResult) {
+    TString requestedAddress = checkStateResult.RequestedAddress;
+    if (!cookies.Has(TOpenIdConnectSettings::YDB_OIDC_COOKIE)) {
+        if (requestedAddress.empty()) {
+            return TRestoreOidcContextResult(
+                {.IsSuccess = false,
+                 .IsErrorRetryable = false,
+                 .ErrorMessage = "Restore oidc context failed: requested address is missing in state and auth flow cookie"}
+            );
+        }
+
+        return TRestoreOidcContextResult(
+            {.IsSuccess = false,
+             .IsErrorRetryable = true,
+             .ErrorMessage = "Restore oidc context failed: auth flow cookie is missing"},
+            TContext({.RequestedAddress = requestedAddress})
+        );
+    }
+
+    TStringBuf authFlowCookieValue = cookies.Get(TOpenIdConnectSettings::YDB_OIDC_COOKIE);
+    TString requestedAddressFromCookie;
+    TString signedRequestedAddress;
+    try {
+        signedRequestedAddress = Base64StrictDecode(authFlowCookieValue);
+    } catch (std::exception& e) {
+        BLOG_D("Base64Decode auth flow cookie: " << e.what());
+    }
+
+    TString requestedAddressContext;
+    TString expectedDigest;
+    NJson::TJsonValue jsonValue;
+    NJson::TJsonReaderConfig jsonConfig;
+    if (NJson::ReadJsonTree(signedRequestedAddress, &jsonConfig, &jsonValue)) {
+        const NJson::TJsonValue* jsonRequestedAddressContext = nullptr;
+        if (jsonValue.GetValuePointer("requested_address_context", &jsonRequestedAddressContext) && jsonRequestedAddressContext->IsString()) {
+            try {
+                requestedAddressContext = Base64StrictDecode(jsonRequestedAddressContext->GetString());
+            } catch (std::exception& e) {
+                BLOG_D("Base64Decode requested_address_context from auth flow cookie: " << e.what());
+            }
+        }
+        const NJson::TJsonValue* jsonDigest = nullptr;
+        if (jsonValue.GetValuePointer("digest", &jsonDigest) && jsonDigest->IsString()) {
+            try {
+                expectedDigest = Base64StrictDecode(jsonDigest->GetString());
+            } catch (std::exception& e) {
+                BLOG_D("Base64Decode digest from auth flow cookie: " << e.what());
+            }
+        }
+    }
+
+    if (!requestedAddressContext.empty() &&
+        !expectedDigest.empty() &&
+        expectedDigest == HmacSHA256(Settings.ClientSecret, requestedAddressContext)) {
+        NJson::TJsonValue requestedAddressJsonValue;
+        if (NJson::ReadJsonTree(requestedAddressContext, &jsonConfig, &requestedAddressJsonValue)) {
+            const NJson::TJsonValue* jsonRequestedAddress = nullptr;
+            if (requestedAddressJsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) && jsonRequestedAddress->IsString()) {
+                requestedAddressFromCookie = jsonRequestedAddress->GetString();
+            }
+        }
+    }
+
+    if (requestedAddress.empty()) {
+        requestedAddress = requestedAddressFromCookie;
+    }
+
+    if (requestedAddress.empty()) {
+        return TRestoreOidcContextResult(
+            {.IsSuccess = false,
+             .IsErrorRetryable = false,
+             .ErrorMessage = "Restore oidc context failed: requested address is missing in state and auth flow cookie"}
+        );
+    }
+
+    if (requestedAddressFromCookie.empty()) {
+        return TRestoreOidcContextResult(
+            {.IsSuccess = false,
+             .IsErrorRetryable = true,
+             .ErrorMessage = "Restore oidc context failed: auth flow cookie is invalid"},
+            TContext({.RequestedAddress = requestedAddress})
+        );
+    }
+
+    return TRestoreOidcContextResult(
+        {.IsSuccess = true,
+         .IsErrorRetryable = true,
+         .ErrorMessage = ""},
+        TContext({.RequestedAddress = requestedAddress})
+    );
+}
+
 void THandlerSessionCreate::Bootstrap() {
     BLOG_D("Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
@@ -31,7 +124,7 @@ void THandlerSessionCreate::Bootstrap() {
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, checkStateResult);
     Context = restoreContextResult.Context;
 
     if (checkStateResult.Ok) {

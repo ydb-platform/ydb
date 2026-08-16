@@ -37,6 +37,7 @@ struct TCounter final
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter CancelRequestCount;
     NProfiling::TCounter ErrorRequestCount;
+    NProfiling::TCounter TotalRequestCount;
     NProfiling::TTimeGauge EffectivePenalty;
     NProfiling::TTimeGauge ExternalPenalty;
     NProfiling::TEventTimer RequestDuration;
@@ -57,6 +58,20 @@ struct TLagPenaltyProviderCounters final
 };
 
 DEFINE_REFCOUNTED_TYPE(TLagPenaltyProviderCounters)
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(THedgingExecutorCounters)
+
+// ! Counters for THedgingExecutor.
+struct THedgingExecutorCounters final
+{
+    explicit THedgingExecutorCounters(const NProfiling::TTagSet& tagSet);
+
+    NProfiling::TGauge HedgingRequestRatio;
+};
+
+DEFINE_REFCOUNTED_TYPE(THedgingExecutorCounters)
 
 ////////////////////////////////////////////////////////////////////////////////
 

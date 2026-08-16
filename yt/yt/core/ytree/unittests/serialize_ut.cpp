@@ -112,12 +112,12 @@ void TestDeserialization(const TResult& expected, const TSource& source)
     EXPECT_EQ(expected, ConvertTo<TResult>(node));
 }
 
-TString RemoveSpaces(const TString& str)
+std::string RemoveSpaces(const std::string& str)
 {
-    TString res = str;
+    std::string res = str;
     while (true) {
         size_t pos = res.find(" ");
-        if (pos == TString::npos) {
+        if (pos == std::string::npos) {
             break;
         }
         res.replace(pos, 1, "");
@@ -143,7 +143,7 @@ TEST(TCustomTypeSerializationTest, TInstant)
         TestDeserialization<TInstant, double>(value, 100500.);
         TestDeserialization<TInstant, i64>(value, 100500);
         TestDeserialization<TInstant, ui64>(value, 100500U);
-        TestDeserialization<TInstant, TString>(value, "1970-01-01T00:01:40.500000");
+        TestDeserialization<TInstant, std::string>(value, "1970-01-01T00:01:40.500000");
     }
     {
         TDuration value = TDuration::MilliSeconds(100500);
@@ -151,7 +151,7 @@ TEST(TCustomTypeSerializationTest, TInstant)
         TestDeserialization<TDuration, double>(value, 100500.);
         TestDeserialization<TDuration, i64>(value, 100500);
         TestDeserialization<TDuration, ui64>(value, 100500U);
-        TestDeserialization<TDuration, TString>(value, "100.5s");
+        TestDeserialization<TDuration, std::string>(value, "100.5s");
 
         TestDeserialization<TDuration, double>(TDuration::MicroSeconds(500), 0.5);
     }
@@ -182,7 +182,7 @@ TEST(TCustomTypeSerializationTest, Optional)
     {
         std::optional<int> value;
         auto yson = ConvertToYsonString(value);
-        EXPECT_EQ(TString("#"), yson.ToString());
+        EXPECT_EQ(std::string("#"), yson.ToString());
         EXPECT_EQ(value, ConvertTo<std::optional<int>>(yson));
         TestSerializationDeserialization(value);
     }
@@ -242,7 +242,7 @@ TEST(TSerializationTest, Simple)
     }
 
     {
-        TString value = "abacaba";
+        std::string value = "abacaba";
         TestSerializationDeserialization(value);
     }
 
@@ -252,8 +252,8 @@ TEST(TSerializationTest, Simple)
         value = false;
         TestSerializationDeserialization(value);
 
-        TestDeserialization(true, TString("true"));
-        TestDeserialization(false, TString("false"));
+        TestDeserialization(true, std::string("true"));
+        TestDeserialization(false, std::string("false"));
 
         TestDeserialization(false, i64(0));
         TestDeserialization(true, i64(1));
@@ -277,8 +277,8 @@ TEST(TSerializationTest, Simple)
 TEST(TSerializationTest, PackRefs)
 {
     std::vector<TSharedRef> refs;
-    refs.push_back(TSharedRef::FromString("abc"));
-    refs.push_back(TSharedRef::FromString("12"));
+    refs.push_back(TSharedRef::FromString(std::string("abc")));
+    refs.push_back(TSharedRef::FromString(std::string("12")));
 
     auto packed = PackRefs(refs);
     auto unpacked = UnpackRefs(packed);
@@ -290,111 +290,111 @@ TEST(TSerializationTest, PackRefs)
 
 TEST(TSerializationTest, Map)
 {
-    std::map<TString, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    std::map<std::string, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
 }
 
 TEST(TSerializationTest, CompactMap)
 {
-    TCompactFlatMap<TString, size_t, 4> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    TCompactFlatMap<std::string, size_t, 4> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
     TestSerializationDeserialization(original);
 }
 
 TEST(TSerializationTest, Set)
 {
-    std::set<TString> original{"First", "Second", "Third"};
+    std::set<std::string> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, CompactFlatSet)
 {
-    TCompactFlatSet<TString, 4> original{"First", "Second", "Third"};
+    TCompactFlatSet<std::string, 4> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, CompactSet)
 {
-    TCompactSet<TString, 4> original{"First", "Second", "Third"};
+    TCompactSet<std::string, 4> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, MultiSet)
 {
-    std::multiset<TString> original{"First", "Second", "Third", "Second", "Third", "Third"};
+    std::multiset<std::string> original{"First", "Second", "Third", "Second", "Third", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, MultiMap)
 {
-    std::multimap<TString, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    std::multimap<std::string, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
 }
 
 TEST(TSerializationTest, MultiMapErrorDuplicateKey)
 {
-    std::multimap<TString, size_t> original{{"First", 12U}, {"Second", 7883U}, {"First", 2U}, {"Second", 3U}};
+    std::multimap<std::string, size_t> original{{"First", 12U}, {"Second", 7883U}, {"First", 2U}, {"Second", 3U}};
     auto yson = ConvertToYsonString(original);
     EXPECT_THROW(ConvertTo<std::decay<decltype(original)>::type>(yson), std::exception);
 }
 
 TEST(TSerializationTest, UnorderedMap)
 {
-    std::unordered_map<TString, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    std::unordered_map<std::string, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
 }
 
 TEST(TSerializationTest, UnorderedSet)
 {
-    const std::unordered_set<TString> original{"First", "Second", "Third"};
+    const std::unordered_set<std::string> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, UnorderedMultiSet)
 {
-    const std::unordered_multiset<TString> original{"First", "Second", "Third", "Second", "Third", "Third"};
+    const std::unordered_multiset<std::string> original{"First", "Second", "Third", "Second", "Third", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, UnorderedMultiMap)
 {
-    const std::unordered_multimap<TString, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    const std::unordered_multimap<std::string, size_t> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
 }
 
 TEST(TSerializationTest, UnorderedMultiMapErrorDuplicateKey)
 {
-    const std::unordered_multimap<TString, size_t> original{{"Second", 7883U}, {"Third", 7U}, {"Second", 7U}};
+    const std::unordered_multimap<std::string, size_t> original{{"Second", 7883U}, {"Third", 7U}, {"Second", 7U}};
     auto yson = ConvertToYsonString(original);
     EXPECT_THROW(ConvertTo<std::decay<decltype(original)>::type>(yson), std::exception);
 }
 
 TEST(TSerializationTest, Vector)
 {
-    const std::vector<TString> original{"First", "Second", "Third"};
+    const std::vector<std::string> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, Deque)
 {
-    const std::deque<TString> original{"First", "Second", "Third"};
+    const std::deque<std::string> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, Pair)
 {
-    auto original = std::pair<size_t, TString>(1U, "Second");
+    auto original = std::pair<size_t, std::string>(1U, "Second");
     TestSerializationDeserialization(original);
 }
 
@@ -406,24 +406,24 @@ TEST(TSerializationTest, Atomic)
 
 TEST(TSerializationTest, Array)
 {
-    std::array<TString, 4> original{{"One", "Two", "3", "4"}};
+    std::array<std::string, 4> original{{"One", "Two", "3", "4"}};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, Tuple)
 {
-    auto original = std::tuple<int, TString, size_t>(43, "TString", 343U);
+    auto original = std::tuple<int, std::string, size_t>(43, "std::string", 343U);
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
 TEST(TSerializationTest, VectorOfTuple)
 {
-    std::vector<std::tuple<int, TString, size_t>> original{
-        std::tuple<int, TString, size_t>(43, "First", 343U),
-        std::tuple<int, TString, size_t>(0, "Second", 7U),
-        std::tuple<int, TString, size_t>(2323, "Third", 9U),
+    std::vector<std::tuple<int, std::string, size_t>> original{
+        std::tuple<int, std::string, size_t>(43, "First", 343U),
+        std::tuple<int, std::string, size_t>(0, "Second", 7U),
+        std::tuple<int, std::string, size_t>(2323, "Third", 9U),
     };
 
     TestSerializationDeserialization(original);
@@ -432,7 +432,7 @@ TEST(TSerializationTest, VectorOfTuple)
 
 TEST(TSerializationTest, MapOnArray)
 {
-    std::map<TString, std::array<size_t, 3>> original{
+    std::map<std::string, std::array<size_t, 3>> original{
         {"1", {{2112U, 4343U, 5445U}}},
         {"22", {{54654U, 93U, 5U}}},
         {"333", {{7U, 93U, 9U}}},
@@ -528,6 +528,35 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
     }
 }
 
+using TTestMessageAsString = TProtoSerializedAsString<NProto::TTestMessage>;
+
+TEST(TYTreeSerializationTest, ProtobufAsString)
+{
+    TTestMessageAsString message;
+    message.set_int32_field(1);
+    message.set_string_field("test");
+
+    auto yson = ConvertToYsonString(message);
+    EXPECT_EQ(yson, ConvertToYsonString(message.SerializeAsString()));
+
+    // ConvertTo takes the pull parser for a YSON string, so pass a node to reach the other overload.
+    EXPECT_EQ(ConvertTo<TTestMessageAsString>(ConvertToNode(yson)), message);
+    EXPECT_EQ(PullParserConvert<TTestMessageAsString>(yson), message);
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringMalformed)
+{
+    // Field 2, length-delimited, declares 5 bytes of payload but carries only 2.
+    auto yson = BuildYsonStringFluently().Value(TStringBuf("\x12\x05" "ab"));
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ConvertTo<TTestMessageAsString>(ConvertToNode(yson)),
+        "Error parsing protobuf message from string");
+    EXPECT_THROW_WITH_SUBSTRING(
+        PullParserConvert<TTestMessageAsString>(yson),
+        "Error parsing protobuf message from string");
+}
+
 TEST(TSerializationTest, ProtobufRepeatedField)
 {
     google::protobuf::RepeatedField<i64> original;
@@ -542,13 +571,13 @@ TEST(TSerializationTest, ProtobufRepeatedField)
 
 TEST(TSerializationTest, ProtobufRepeatedPtrField)
 {
-    google::protobuf::RepeatedPtrField<TString> original;
+    google::protobuf::RepeatedPtrField<TProtoStringType> original;
     original.Add("one");
     original.Add("two");
     original.Add("three");
 
     auto node = ConvertToNode(original);
-    auto deserialized = ConvertTo<google::protobuf::RepeatedPtrField<TString>>(node);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedPtrField<TProtoStringType>>(node);
     EXPECT_TRUE(std::ranges::equal(original, deserialized));
 }
 

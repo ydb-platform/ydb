@@ -50,6 +50,7 @@ public:
     struct TClusterInfo {
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ui32 PartitionsCount = 0;
+        std::unordered_map<ui64, TInstant> MaxWriteTime;
     };
     using TDescribeFederatedTopicResult = std::vector<TClusterInfo>;
     using TAsyncDescribeFederatedTopicResult = NThreading::TFuture<IPqGateway::TDescribeFederatedTopicResult>;

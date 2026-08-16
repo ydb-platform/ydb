@@ -368,7 +368,7 @@ namespace NKikimr {
         // force to delete nchunks (if we don't have space for instance)
         ui64 TDiskRecLog::DeleteChunks(ui32 nchunks,
                                        std::shared_ptr<IActorNotify> notifier,
-                                       TVector<ui32> &chunks) {
+                                       TVector<TDeletedChunk> &chunks) {
             auto m = Guard(Lock);
             const ui32 curChunks = ManyIdxChunks.size();
             const ui32 numChunksToDelete = Min(nchunks, curChunks);
@@ -379,7 +379,7 @@ namespace NKikimr {
                 ManyIdxChunks.pop_front();
                 newLogStartLsn = chunkPtr->GetLastLsn() + 1;
                 chunkPtr->SetUpNotifier(notifier);
-                chunks.push_back(chunkPtr->GetChunkIdx());
+                chunks.emplace_back(chunkPtr->GetChunkIdx(), chunkPtr->FreePagePos());
             }
 
             // we return new LogStartLsn

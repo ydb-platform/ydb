@@ -1,13 +1,15 @@
 #include "local_partition_reader.h"
-#include "logging.h"
 
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
 
 using namespace NActors;
 using namespace NKikimr::NReplication::NService;
@@ -28,23 +30,10 @@ class TLocalPartitionReader
 private:
     const TActorId PQTablet;
     const ui32 Partition;
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
     ui64 Offset = 0;
     ui64 SentOffset = 0;
-
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[LocalPartitionReader]"
-                << PQTablet
-                << "[" << Partition << "]"
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
-    }
 
     THolder<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
         THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
@@ -63,21 +52,29 @@ private:
 
     void HandleInit(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("HandleInit TEvWorker::TEvHandshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("[LocalPartitionReader] HandleInit TEvWorker::TEvHandshake",
+            {"worker", Worker});
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_D("HandleInit " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[LocalPartitionReader] HandleInit",
+            {"event", ev->Get()->ToString()});
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
             return;
         }
-        Y_VERIFY_S(record.GetErrorCode() == NPersQueue::NErrorCode::OK, "Unimplemented!");
-        Y_VERIFY_S(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdGetClientOffsetResult(), "Unimplemented!");
+        if (record.GetErrorCode() != NPersQueue::NErrorCode::OK
+                || !record.HasPartitionResponse()
+                || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
+            // Retry via worker
+            YDB_LOG_WARN("[LocalPartitionReader] HandleInit unexpected response",
+                {"leaving", ev->Get()->ToString()});
+            Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        }
         const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();
         SentOffset = Offset;
@@ -103,7 +100,8 @@ private:
     }
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[LocalPartitionReader] Handle",
+            {"event", ev->Get()->ToString()});
 
         Offset = SentOffset;
         // TODO: commit offset to PQ
@@ -121,7 +119,8 @@ private:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[LocalPartitionReader] Handle",
+            {"event", ev->Get()->ToString()});
 
         TString error;
         if (!NPQ::BasicCheck(record, error)) {
@@ -149,7 +148,7 @@ private:
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {
-        LOG_I("Leave");
+        YDB_LOG_INFO("[LocalPartitionReader] Leave");
         Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }
@@ -166,6 +165,11 @@ public:
     {}
 
     STATEFN(StateInit) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"pqTablet", PQTablet},
+            {"partition", Partition},
+            {"selfId", SelfId()});
+
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, HandleInit);
             hFunc(TEvPersQueue::TEvResponse, HandleInit);
@@ -178,6 +182,11 @@ public:
     }
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"pqTablet", PQTablet},
+            {"partition", Partition},
+            {"selfId", SelfId()});
+
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);

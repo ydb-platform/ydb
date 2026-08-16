@@ -4,6 +4,8 @@
 #include "log.h"
 #include "params.h"
 
+#include "topic_pqrb_metrics.h"
+
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -49,7 +51,12 @@ private:
     void AppendEntry(const TDeleteMessageRequest& entry, TDeleteMessageResponse* resp, size_t requestIndexInBatch) {
         try {
             // Validate
-            const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
+            TReceipt receipt;
+            if (!TryDecodeReceiptHandle(entry.GetReceiptHandle(), receipt)) {
+                RLOG_SQS_WARN("Failed to decode receipt handle " << entry.GetReceiptHandle());
+                MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
+                return;
+            }
             RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
 
             if (receipt.GetSource() == TReceipt::Table) {
@@ -215,29 +222,63 @@ private:
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
             }
-            return message.Success ?
-                  TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK
-                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+            switch (message.Status) {
+                case NPQ::NMLP::EOperationResult::Success:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
+                case NPQ::NMLP::EOperationResult::NotFound:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound;
+                case NPQ::NMLP::EOperationResult::NotInFlight:
+                case NPQ::NMLP::EOperationResult::Failed:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+            }
+            Y_UNREACHABLE();
         };
 
+        ui32 deletedCount = 0;
         if (IsBatch_) {
             Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
             for (size_t i = 0, size = messages.size(); i < size; ++i) {
                 const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
                 Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
 
-                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), status(messages[i]));
+                const auto messageStatus = status(messages[i]);
+                if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
+                    ++deletedCount;
+                }
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), messageStatus);
             }
         } else {
             Y_ABORT_UNLESS(RequestsToLeader_ == 1);
             Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
-            ProcessAnswer(Response_.MutableDeleteMessage(), status(messages[0]));
+            const auto messageStatus = status(messages[0]);
+            if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
+                ++deletedCount;
+            }
+            ProcessAnswer(Response_.MutableDeleteMessage(), messageStatus);
         }
+
+        if (QueueCounters_ && deletedCount > 0 && !ShouldReportTopicActionMetricsToPqrb()) {
+            ADD_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second, deletedCount);
+        }
+
+        ReportTopicDeleteMetricsToPqrb(ev->Get()->BalancerTabletId, deletedCount);
+        SetBalancerTabletId(ev->Get()->BalancerTabletId);
 
         --RequestsToLeader_;
         if (RequestsToLeader_ == 0) {
             SendReplyAndDie();
         }
+    }
+
+    void ReportTopicDeleteMetricsToPqrb(ui64 balancerTabletId, ui32 deletedCount) {
+        if (deletedCount == 0) {
+            return;
+        }
+
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        auto* deleteMetrics = IsBatch_ ? metrics.MutableDeleteMessageBatch() : metrics.MutableDeleteMessage();
+        deleteMetrics->SetDeleteMessageCount(deletedCount);
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
 
     const TDeleteMessageRequest& Request() const {

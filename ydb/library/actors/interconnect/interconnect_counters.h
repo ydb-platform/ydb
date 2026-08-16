@@ -24,6 +24,7 @@ public:
     virtual void IncSessionDeaths() = 0;
     virtual void IncHandshakeFails() = 0;
     virtual void SetConnected(ui32 value) = 0;
+    virtual void SetRdmaRetryWatchdogPending(ui32 value) = 0;
     virtual void IncSubscribersCount() = 0;
     virtual void SubSubscribersCount(ui32 value) = 0;
     virtual void AddSubscribersByActivity(ui32 activityIndex, i64 value) = 0;
@@ -39,6 +40,7 @@ public:
     virtual void IncUsefulReadWakeups() = 0;
     virtual void IncSpuriousReadWakeups() = 0;
     virtual void SetPeerInfo(const TString& name, const TString& dataCenterId, const TString& peerLabel) = 0;
+    virtual void SetPeerScopeId(const TScopeId& peerScopeId) = 0;
     virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0;
     virtual void IncInputChannelsIncomingEvents(ui16 channel) = 0;
     virtual void IncScopeErrors() = 0;
@@ -46,6 +48,7 @@ public:
     virtual void AddTotalBytesRead(ui64 value) = 0;
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;
     virtual void UpdateIcQueueTimeHistogram(ui64 value) = 0;
+    virtual void UpdateNumEventsInQueueHistogram(ui64 value) = 0;
     virtual void UpdateRdmaReadTimeHistogram(ui64 value) = 0;
     virtual void UpdateOutputChannelTraffic(ui16 channel, ui64 value) = 0;
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;

@@ -1,3 +1,12 @@
+/*
+ * roaring64.h
+ *
+ * This file declares the 64-bit Roaring bitmap API. A roaring64 bitmap stores
+ * sets of 64-bit unsigned integers by partitioning the value space by high
+ * bits and using Roaring containers for the lower bits inside each partition.
+ * This keeps the structure compact while preserving fast membership tests,
+ * insertions, iteration, and set operations over large sparse integer sets.
+ */
 #ifndef ROARING64_H
 #define ROARING64_H
 
@@ -16,8 +25,14 @@ namespace roaring {
 namespace api {
 #endif
 
+/** An opaque 64-bit Roaring bitmap. Create one with `roaring64_bitmap_create()`
+ * and release it with `roaring64_bitmap_free()`. */
 typedef struct roaring64_bitmap_s roaring64_bitmap_t;
+/** Internal leaf type, exposed only for use inside `roaring64_bulk_context_t`.
+ * Callers should treat it as opaque. */
 typedef uint64_t roaring64_leaf_t;
+/** An opaque iterator over a 64-bit bitmap. See `roaring64_iterator_create()`.
+ */
 typedef struct roaring64_iterator_s roaring64_iterator_t;
 
 /**
@@ -241,6 +256,12 @@ bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t val);
  */
 bool roaring64_bitmap_contains_range(const roaring64_bitmap_t *r, uint64_t min,
                                      uint64_t max);
+
+/**
+ * Returns true if all values in the range [min, max] are present.
+ */
+bool roaring64_bitmap_contains_range_closed(const roaring64_bitmap_t *r,
+                                            uint64_t min, uint64_t max);
 
 /**
  * Check if an item is present using context from a previous insert or search
@@ -574,10 +595,6 @@ size_t roaring64_bitmap_portable_size_in_bytes(const roaring64_bitmap_t *r);
  * This is meant to be compatible with other languages:
  * https://github.com/RoaringBitmap/RoaringFormatSpec#extension-for-64-bit-implementations
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
- *
  * When serializing data to a file, we recommend that you also use
  * checksums so that, at deserialization, you can be confident
  * that you are recovering the correct data.
@@ -622,10 +639,6 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
  * We also recommend that you use checksums to check that serialized data
  * corresponds to the serialized bitmap. The CRoaring library does not provide
  * checksumming.
- *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
  */
 roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(const char *buf,
                                                                size_t maxbytes);
@@ -654,7 +667,8 @@ size_t roaring64_bitmap_frozen_size_in_bytes(const roaring64_bitmap_t *r);
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
+ * compatible with little-endian systems. This is not a bug, it is by design,
+ * since the format imitates C memory layout of roaring64_bitmap_t.
  */
 size_t roaring64_bitmap_frozen_serialize(const roaring64_bitmap_t *r,
                                          char *buf);
@@ -672,7 +686,8 @@ size_t roaring64_bitmap_frozen_serialize(const roaring64_bitmap_t *r,
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
+ * compatible with little-endian systems. This is not a bug, it is by design,
+ * since the format imitates C memory layout of roaring64_bitmap_t.
  */
 roaring64_bitmap_t *roaring64_bitmap_frozen_view(const char *buf,
                                                  size_t maxbytes);
@@ -803,6 +818,75 @@ bool roaring64_iterator_move_equalorlarger(roaring64_iterator_t *it,
  */
 uint64_t roaring64_iterator_read(roaring64_iterator_t *it, uint64_t *buf,
                                  uint64_t count);
+
+/**
+ * Reads previous ${count} values from iterator into user-supplied ${buf}.
+ * Returns the number of read elements.
+ * This number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * Values are written in descending order: buf[0] is the highest (current)
+ * value, buf[ret-1] is the lowest value read.
+ *
+ * This function satisfies semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first value is copied from the current iterator value
+ *  - after function returns, iterator is positioned at the previous element
+ */
+uint64_t roaring64_iterator_read_backward(roaring64_iterator_t *it,
+                                          uint64_t *buf, uint64_t count);
+
+typedef struct roaring64_range_closed_s {
+    uint64_t min;
+    uint64_t max;
+} roaring64_range_closed_t;
+
+/**
+ * Reads next ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * This function can be used together with other iterator functions.
+ *  - first range will start with the current iterator value
+ *  - after the function returns, the iterator is positioned at the next element
+ *    after the end of the last returned range, or has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring64_iterator_read_ranges(roaring64_iterator_t *it,
+                                      roaring64_range_closed_t *buf,
+                                      size_t count);
+
+/**
+ * Reads previous ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * Ranges are returned in reverse order, e.g. the first range returned is the
+ * highest range (ending at the current value).
+ *
+ * This function can be used together with other iterator functions.
+ *  - first range will end with the current iterator value
+ *  - after the function returns, the iterator is positioned at the element
+ *    before the beginning of the last returned range, or has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring64_iterator_read_prev_ranges(roaring64_iterator_t *it,
+                                           roaring64_range_closed_t *buf,
+                                           size_t count);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -28,7 +28,7 @@ class Process(object):
         self._event = threading.Event()
         self._result = None
         thread = threading.Thread(target=self._run)
-        thread.setDaemon(True)
+        thread.daemon = True
         thread.start()
 
     def _run(self):

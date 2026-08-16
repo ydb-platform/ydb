@@ -214,6 +214,8 @@ public:
 
     void SendPlan();
 
+    TString Rollback(ui64 shardId);
+
 public:
     TTestActorRuntime& Runtime;
     NKikimrDataEvents::ELockMode LockMode;

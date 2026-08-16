@@ -34,7 +34,7 @@ public:
     }
 
     std::string GetClientIdentity() const override {
-        return "BEARER_CRED_PROV_FACTORY" + ToString((ui64)this);
+        return "BEARER_CRED_PROV_FACTORY\t" + Delegatee->GetClientIdentity();
     }
 
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {

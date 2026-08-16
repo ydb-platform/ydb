@@ -72,8 +72,9 @@ private:
 public:
     TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
     bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
-    void AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
+    bool AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
+    bool AbortWaitingPortion(const ui64 portionId, const TString& error);
     void Abort(const TString& error);
 
     ~TFiltersStore();

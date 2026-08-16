@@ -148,6 +148,7 @@ public:
 class TPreparedQueryHolder {
 private:
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
+    YDB_ACCESSOR(bool, UseKqpTasksGraphV2, false);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     TVector<TString> QueryTables;

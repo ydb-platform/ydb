@@ -127,8 +127,8 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
          *    distinct TEvSyncLogFreeChunk events for the same chunkIdx.
          */
         TEnvironmentSetup env{{
-            .NodeCount = 1,
-            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
             .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
                 config.MaxLogoBlobDataSize = 8_KB;
                 config.MinHugeBlobInBytes = 4_KB;

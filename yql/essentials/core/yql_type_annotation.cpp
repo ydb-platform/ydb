@@ -56,7 +56,7 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
     DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
-    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, std::move(layersIntegrations));
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, layersIntegrations);
     return true;
 }
 
@@ -546,13 +546,13 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (sExpr) {
-        astRes = ParseAst(query, nullptr, fullName);
+        astRes = ParseAst(query, /*externalPool=*/nullptr, fullName);
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = SqlFlags_;
+        ParseTranslationSettings(SqlFlags_, settings);
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix_;
@@ -702,7 +702,7 @@ TString TModuleResolver::SubstParameters(const TString& str) {
         return str;
     }
 
-    return ::NYql::SubstParameters(str, Parameters_, nullptr);
+    return ::NYql::SubstParameters(str, Parameters_, /*usedNames=*/nullptr);
 }
 
 } // namespace NYql

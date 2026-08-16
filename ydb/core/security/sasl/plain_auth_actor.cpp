@@ -68,13 +68,8 @@ public:
 
 private:
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const override final {
-        if (ChosenAuthHashType == EHashType::Unknown) { // for backward compatibility
-            return NKikimr::CreatePlainLoginRequestOldFormat(TString(AuthcId), TString(Passwd), TString(PeerName),
-                AppData()->AuthConfig);
-        } else {
-            return NKikimr::CreatePlainLoginRequest(TString(AuthcId), ChosenAuthHashType, TString(ComputedHash),
-                TString(PeerName), AppData()->AuthConfig);
-        }
+        return NKikimr::CreatePlainLoginRequest(TString(AuthcId), ChosenAuthHashType, TString(ComputedHash),
+            TString(PeerName), AppData()->AuthConfig);
     }
 
     virtual void ProceedWithAuthentication(const TActorContext &ctx,
@@ -93,19 +88,8 @@ private:
         }
 
         const auto& userHashInitParams = itUser->second;
-
-        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
-        // after migration it has to become an error
-        if (userHashInitParams.empty()) {
-            std::string error = "SchemeShard works on old version";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
-        } else {
-            if (!ComputeHash(ctx, userHashInitParams)) {
-                return;
-            }
+        if (!ComputeHash(ctx, userHashInitParams)) {
+            return;
         }
 
         SendLoginRequest();
@@ -238,7 +222,7 @@ private:
             LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
                 ActorName << "# " << ctx.SelfID.ToString() <<
                 ", " << "Authentication failed: " <<
-                "'" << AuthcId << "' has no hashes";
+                "'" << AuthcId << "' has no allowed hashes";
             );
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             CleanupAndDie(ctx);

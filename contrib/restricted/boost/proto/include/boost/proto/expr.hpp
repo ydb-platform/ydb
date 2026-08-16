@@ -132,7 +132,7 @@ namespace boost { namespace proto
         // actually defined:
         #include <boost/proto/detail/basic_expr.hpp>
 
-        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__)
+        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10
             #pragma GCC diagnostic push
             // The warning cannot be fixed for aggregates
             // Sadly, GCC currently emits the warning at the use location:
@@ -144,7 +144,7 @@ namespace boost { namespace proto
         // actually defined:
         #include <boost/proto/detail/expr.hpp>
 
-        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__)
+        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10
             #pragma GCC diagnostic pop
         #endif
     }

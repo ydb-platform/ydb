@@ -1,8 +1,9 @@
-#include "global.h"
+#include "long_tx_write_flow_control.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -12,7 +13,6 @@
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/library/signals/object_counter.h>
-#include <ydb/services/ext_index/common/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
@@ -29,7 +29,7 @@ ui64 GetMemoryInFlightLimit() {
 
     if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
         uint64_t oldValue = 0;
-        const uint64_t newValue = NKqp::TStagePredictor::GetUsableThreads() * 10_MB;
+        const uint64_t newValue = NKqp::TStagePredictor::GetPossibleMaxLimitThreads() * 10_MB;
         DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
@@ -59,13 +59,16 @@ public:
         const TString& token,
         const TLongTxId& longTxId,
         const TString& dedupId,
-        TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TDuration writeTimeout = TDuration::Seconds(20))
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
-        , UserCtx(userCtx) {
+        , UserCtx(userCtx)
+        , WriteTimeout(writeTimeout)
+        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>())  {
         if (token) {
             UserToken.emplace(token);
         }
@@ -73,6 +76,7 @@ public:
 
     virtual ~TLongTxWriteBase() {
         AFL_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
+        Counters->OnMemoryInflight(MemoryInFlight.Val(), GetMemoryInFlightLimit());
     }
 
 protected:
@@ -81,6 +85,10 @@ protected:
         if (resp.ErrorCount > 0) {
             // TODO: map to a correct error
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
+        }
+
+        if (WriteTimeout == TDuration::Zero()) {
+            return ReplyError(Ydb::StatusIds::TIMEOUT, "operation timeout exhausted before shard writes started");
         }
 
         auto& entry = resp.ResultSet[0];
@@ -99,15 +107,10 @@ protected:
         AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
+
+        Counters->OnMemoryInflight(sizeInFlight, GetMemoryInFlightLimit());
         if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
-        }
-        if (NCSIndex::TServiceOperator::IsEnabled()) {
-            TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), DatabaseName, Path,
-                                                                       std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
-        } else {
-            IndexReady = true;
         }
 
         auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
@@ -123,19 +126,19 @@ protected:
 
         const auto& splittedData = shardsSplitter->GetSplitData();
         const auto& shardsInRequest = splittedData.GetShardRequestsCount();
-        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId);
+        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, Counters);
 
-        InternalController->GetCounters()->OnSplitByShards(shardsInRequest);
+        Counters->OnSplitByShards(shardsInRequest);
         ui32 sumBytes = 0;
         ui32 rowsCount = 0;
         ui32 writeIdx = 0;
         for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
             for (auto&& shardInfo : infos) {
-                InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
+                Counters->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
                 this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId,
-                    shardInfo, ActorSpan, InternalController, ++writeIdx, TDuration::Seconds(20), UserCtx));
+                    shardInfo, ActorSpan, InternalController, ++writeIdx, WriteTimeout, UserCtx));
             }
         }
         pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());
@@ -152,7 +155,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NEvWrite::TWritersController::TEvPrivate::TEvShardsWriteResult, Handle);
             hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
-            hFunc(NCSIndex::TEvAddDataResult, Handle);
         }
     }
 
@@ -160,11 +162,7 @@ private:
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "ShardsWriteResult");
         const auto* msg = ev->Get();
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
-            if (IndexReady) {
-                ReplySuccess();
-            } else {
-                ColumnShardReady = true;
-            }
+            ReplySuccess();
         } else {
             Y_ABORT_UNLESS(msg->Status != Ydb::StatusIds::SUCCESS);
             for (auto& issue : msg->Issues) {
@@ -186,26 +184,7 @@ private:
             }
             return ReplyError(msg->Record.GetStatus());
         }
-        if (IndexReady) {
-            ReplySuccess();
-        } else {
-            ColumnShardReady = true;
-        }
-    }
-
-    void Handle(NCSIndex::TEvAddDataResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->GetErrorMessage()) {
-            NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "NCSIndex::TEvAddDataResult");
-            RaiseIssue(NYql::TIssue(msg->GetErrorMessage()));
-            return ReplyError(Ydb::StatusIds::GENERIC_ERROR, msg->GetErrorMessage());
-        } else {
-            if (ColumnShardReady) {
-                ReplySuccess();
-            } else {
-                IndexReady = true;
-            }
-        }
+        ReplySuccess();
     }
 
 protected:
@@ -225,9 +204,11 @@ private:
     std::optional<NACLib::TUserToken> UserToken;
     NWilson::TProfileSpan ActorSpan;
     NEvWrite::TWritersController::TPtr InternalController;
-    bool ColumnShardReady = false;
-    bool IndexReady = false;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    // Per-shard write budget. Post-admit callers pass what remains of the client timeout so wait
+    // time is not refunded as a fresh 20s; the legacy BulkUpsert path keeps the historical 20s cap.
+    TDuration WriteTimeout;
+    std::shared_ptr<NEvWrite::TCSUploadCounters> Counters;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -260,8 +241,9 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx)
-        : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx)
+        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TDuration writeTimeout = TDuration::Seconds(20))
+        : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx, writeTimeout)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
@@ -305,12 +287,30 @@ private:
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
-TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
+void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues,
-    TIntrusivePtr<NACLib::TUserContext> userCtx) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userCtx));
+    std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl,
+    TInstant deadline, TDuration operationTimeout) {
+
+    if (!forceNoFlowControl && NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::IsEnabled()) {
+        StartLongTxWriteFlowControlled(ctx,
+            NColumnShard::NFlowControl::TLongTxWrite(replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult),
+                std::move(batch), std::move(issues), std::move(userCtx), deadline, operationTimeout));
+    } else {
+        // Honour the caller's remaining budget (post-admit path passes what is left after wait).
+        // Cap at the historical 20s shard default so a full BulkUpsert timeout does not silently
+        // stretch each shard write from 20s to minutes. Also clamp by the absolute deadline so a
+        // caller that passed the original timeout (not pre-subtracted) cannot run past it.
+        TDuration writeTimeout = Min(TDuration::Seconds(20), operationTimeout);
+        if (deadline != TInstant::Max()) {
+            const TInstant now = NActors::TActivationContext::Now();
+            writeTimeout = deadline > now ? Min(writeTimeout, deadline - now) : TDuration::Zero();
+        }
+        ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(
+            replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues),
+            std::move(userCtx), writeTimeout));
+    }
 }
 
 //

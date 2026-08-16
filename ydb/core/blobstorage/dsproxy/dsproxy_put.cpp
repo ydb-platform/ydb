@@ -8,10 +8,13 @@
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -244,7 +247,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         ++StatusResultMsgsReceived;
 
         auto& record = ev->Get()->Record;
-        const ui32 orderNumber = ev->Cookie;
+        const ui64 cookie = ev->Cookie;
+        Y_ABORT_UNLESS(cookie < IncarnationRecords.size(),
+            "unexpected TEvVStatusResult cookie# %" PRIu64 " IncarnationRecords.size# %zu",
+            cookie, IncarnationRecords.size());
+        const ui32 orderNumber = static_cast<ui32>(cookie);
         auto& incarnationRecord = IncarnationRecords[orderNumber];
         Y_ABORT_UNLESS(incarnationRecord.IncarnationGuid);
         Y_ABORT_UNLESS(incarnationRecord.ExpirationTimestamp != TMonotonic::Max());
@@ -254,7 +261,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (record.HasIncarnationGuid()) {
             HandleIncarnation(issue, orderNumber, record.GetIncarnationGuid());
         } else if (record.GetStatus() != NKikimrProto::OK) { // we can't obtain status from the vdisk; assume it has not been written
-            Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
             IncarnationRecords[orderNumber] = {};
             PutImpl.InvalidatePartStates(orderNumber);
             ++*Mon->NodeMon->IncarnationChanges;
@@ -281,7 +287,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const size_t blobIdx = PutImpl.GetBlobIdx(blobId);
 
@@ -297,7 +303,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (record.HasIncarnationGuid()) {
             // TODO: correct timestamp
-            HandleIncarnation(TActivationContext::Monotonic(), Info->GetOrderNumber(shortId), record.GetIncarnationGuid());
+            HandleIncarnation(TActivationContext::Monotonic(), vdisk, record.GetIncarnationGuid());
         }
 
         LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVPut, blobId.BlobSize(), blobId.TabletID(),
@@ -347,7 +353,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
         if (TimeStatsEnabled && record.GetMsgQoS().HasExecTimeStats()) {
@@ -467,23 +473,31 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (RestartCounter, RestartCounter),
-                    (History, PutImpl.PrintHistory()));
+        if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
+            if (PopAllowToken(HandleClass)) {
+                YDB_LOG_WARN("Long TEvPut request detected",
+                    {"marker", "BPP71"},
+                    {"longRequestThreshold", LongRequestThreshold},
+                    {"groupId", Info->GroupID},
+                    {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                    {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                    {"restartCounter", RestartCounter},
+                    {"history", PutImpl.PrintHistory()});
+            }
+            if (ResponsesSent == PutImpl.Blobs.size() && EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
+            }
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
-            STLOG(PutImpl.ResultPriority,
-                    BS_PROXY_PUT, BPP72, "Query history",
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (History, PutImpl.PrintHistory()));
+            YDB_LOG_COMP(PutImpl.ResultPriority, BS_PROXY_PUT, "Query history",
+                {"marker", "BPP72"},
+                {"groupId", Info->GroupID},
+                {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"history", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
@@ -570,6 +584,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     .Deadline = item.Deadline,
                     .HandleClass = HandleClass,
                     .Tactic = Tactic,
+                    .WriteSource = item.WriteSource,
+                    .DataKind = item.DataKind,
                     .IssueKeepFlag = item.IssueKeepFlag,
                     .IgnoreBlock = item.IgnoreBlock,
                     .AlreadyEncrypted = item.AlreadyEncrypted,
@@ -600,7 +616,8 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
                 params.EnableRequestMod3x3ForMinLatency, params.Common.Source,
-                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams)
+                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams,
+                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , HandleClass(params.Common.Event->HandleClass)
         , ReportedBytes(0)
@@ -631,7 +648,8 @@ public:
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Events, Mon, params.HandleClass, params.Tactic,
-                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams)
+                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams,
+                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(params.HandleClass)
@@ -733,7 +751,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(nodeId != SelfId().NodeId());
 
             bool isConnected = false;
-            vdisk->Queues.ForEachQueue([&](auto& queue) { isConnected |= queue.IsConnected; });
+            vdisk->Queues.ForEachQueue([&](auto& queue) {
+                isConnected |= queue.IsConnected.load(std::memory_order_acquire);
+            });
             if (isConnected) {
                 options.push_back(nodeId);
             }

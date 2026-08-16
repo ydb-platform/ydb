@@ -39,6 +39,7 @@ private:
     STFUNC(StateBroken);
 
     void Handle(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleDeferredDestinationUpsertRequest(NPQ::TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr& ev, const TActorContext& ctx);
     void HandleOnBroken(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
@@ -52,12 +53,15 @@ private:
                     const TActorContext& ctx);
 
     TPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,
+                                         const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
                                          const TActorContext& ctx);
     bool TryDeleteOldestWriter(const TActorContext& ctx);
     void RegisterPartitionWriter(const TString& sessionId, const TString& txId,
+                                 const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
                                  const TActorContext& ctx);
     void RegisterDefaultPartitionWriter(const TActorContext& ctx);
     TActorId CreatePartitionWriter(const TString& sessionId, const TString& txId,
+                                   const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
                                    const TActorContext& ctx);
 
     template <class TEvent>

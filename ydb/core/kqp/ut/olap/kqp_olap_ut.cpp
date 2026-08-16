@@ -252,13 +252,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             {
                 const auto result = client.ExecuteQuery(
-                    "ALTER TABLE `/Root/olapTable` ALTER FAMILY default SET compression 'LZ4';",
-                    NYdb::NQuery::TTxControl::NoTx()
-                ).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
-            {
-                const auto result = client.ExecuteQuery(
                     "ALTER TABLE `/Root/olapTable` set TTL Interval('P1D') on timestamp;",
                     NYdb::NQuery::TTxControl::NoTx()
                 ).ExtractValueSync();
@@ -1609,6 +1602,111 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_Regexp) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                    (1, "foobar", "foobar"),
+                    (2, "baz", "baz"),
+                    (3, "fooqux", "fooqux"),
+                    (4, NULL, NULL)
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str REGEXP '.*foo.*'",
+            "str REGEXP 'foo.ar'",
+            "str REGEXP 'nomatch'",
+            "u_str REGEXP '.*foo.*'",
+            "u_str REGEXP 'foo.ar'",
+            "u_str REGEXP 'nomatch'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        // Pragma ON: REGEXP must be pushed down (KqpOlapFilter present in AST) and produce correct results.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+            Cerr << "QUERY " << i << Endl << query << Endl;
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
+                TStringBuilder() << "REGEXP not pushed down. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Pragma OFF (default): REGEXP must NOT be pushed down, but results must still be correct.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") == std::string::npos,
+                TStringBuilder() << "REGEXP unexpectedly pushed down with pragma off. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Invalid regex must be ignored (no error), preserving current Re2 semantics, even when pushed down.
+        {
+            const auto query = R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE str REGEXP '(' ORDER BY id;
+            )";
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[]");
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1820,7 +1918,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("BlocksAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
+            UNIT_ASSERT_C(ast.find("BlockAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
 
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1879,6 +1977,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
                 d Utf8,
+                e Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1925,6 +2024,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     `/Root/t1` as t1
                 WHERE
                     t1.d is not distinct from "some_str";
+            )",
+            R"(
+                SELECT
+                    d, b, e
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.e in ["some_str_0", "some_str_1", "some_str_2"] and t1.d is not distinct from "some_str";
             )",
         };
 
@@ -3820,7 +3927,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
         {
-            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)").GetValueSync();
+            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -4100,7 +4207,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -5189,5 +5296,303 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(TruncateColumnTableFails) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/TestColumnTable` (
+                    Key Uint32 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/TestColumnTable` (Key, Value) VALUES
+                    (1, "one"),
+                    (2, "two"),
+                    (3, "three");
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                TRUNCATE TABLE `/Root/TestColumnTable`;
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
+                "Unexpected error message: " << result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTable) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float NOT NULL,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN c DROP NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/table_name` (a, b, c) VALUES (1u, Timestamp('1970-01-01T00:00:00.000002Z'), NULL);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT a, c FROM `/Root/table_name`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTableViaAlterTableOp) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float NOT NULL,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("c");
+            column->SetNotNull(false);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "AlterTable DROP NOT NULL via ESchemeOpAlterTable");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/table_name` (a, b, c) VALUES (1u, Timestamp('1970-01-01T00:00:00.000002Z'), NULL);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT a, c FROM `/Root/table_name`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTableRejectsPkAndSetNotNull) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("a");
+            column->SetNotNull(false);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status, NMsgBusProxy::MSTATUS_OK,
+                "DROP NOT NULL on primary key column must fail");
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("c");
+            column->SetNotNull(true);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status, NMsgBusProxy::MSTATUS_OK,
+                "SET NOT NULL on column table must fail");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN a DROP NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN c SET NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(MovingTableStoreTablesNotSupported) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLESTORE `/Root/TableStore` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/TableStore/InStoreTable` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                PARTITION BY HASH(timestamp)
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/StandaloneTable` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                PARTITION BY HASH(timestamp)
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        // Case 1: Move in-store table within the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TableStore/InStoreTable` RENAME TO `/Root/TableStore/InStoreTable_renamed`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables inside a TABLESTORE should fail");
+        }
+
+        // Case 2: Move in-store table out of the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TableStore/InStoreTable` RENAME TO `/Root/InStoreTable_moved`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables from a TABLESTORE should fail");
+        }
+
+        // Case 3: Move standalone table into the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/StandaloneTable` RENAME TO `/Root/TableStore/MovedTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables into a TABLESTORE should fail");
+        }
+
+        // Verify the in-store table is still accessible (all moves were rejected)
+        {
+            auto it = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/TableStore/InStoreTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        // Verify the standalone table is still accessible (move was rejected)
+        {
+            auto it = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/StandaloneTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
 }
 }

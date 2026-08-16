@@ -192,6 +192,11 @@ struct TBackup {
     }
 
     static bool NeedToBill(const TPathId& pathId, TOperationContext& context) {
+        if (context.SS->ColumnTables.contains(pathId)) {
+            auto table = context.SS->ColumnTables.at(pathId);
+            return table->BackupSettings.GetNeedToBill();
+        }
+
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
         return table->BackupSettings.GetNeedToBill();

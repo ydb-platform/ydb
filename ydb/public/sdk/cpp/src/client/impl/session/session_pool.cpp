@@ -41,10 +41,16 @@ TDuration RandomizeThreshold(TDuration duration) {
     return TDuration::FromValue(value);
 }
 
+namespace {
+
+static const std::string ServerHintsKey{NYdb::YDB_SERVER_HINTS};
+
+} // namespace
+
 bool IsSessionCloseRequested(const TStatus& status) {
     const auto& meta = status.GetResponseMetadata();
-    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS);
-    for(auto it = hints.first; it != hints.second; ++it) {
+    auto hints = meta.equal_range(ServerHintsKey);
+    for (auto it = hints.first; it != hints.second; ++it) {
         if (it->second == NYdb::YDB_SESSION_CLOSE) {
             return true;
         }

@@ -60,7 +60,7 @@ public:
 class Request : public opentelemetry::ext::http::client::Request
 {
 public:
-  Request() : method_(opentelemetry::ext::http::client::Method::Get), uri_("/") {}
+  Request() : uri_("/") {}
 
   void SetMethod(opentelemetry::ext::http::client::Method method) noexcept override
   {
@@ -113,7 +113,7 @@ public:
   }
 
 public:
-  opentelemetry::ext::http::client::Method method_;
+  opentelemetry::ext::http::client::Method method_{opentelemetry::ext::http::client::Method::Get};
   opentelemetry::ext::http::client::HttpSslOptions ssl_options_;
   opentelemetry::ext::http::client::Body body_;
   opentelemetry::ext::http::client::Headers headers_;

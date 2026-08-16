@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/params

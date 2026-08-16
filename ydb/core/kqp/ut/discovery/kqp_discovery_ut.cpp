@@ -1,6 +1,7 @@
 #include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

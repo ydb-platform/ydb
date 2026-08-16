@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/string.h>
@@ -25,7 +26,7 @@ namespace NYT::NYTree {
 template <class T>
 struct TAssociativeContainerKeyHelper
 {
-    static TString Serialize(const T& value)
+    static std::string Serialize(const T& value)
     {
         return ToString(value);
     }
@@ -40,7 +41,7 @@ template <class T>
     requires(TEnumTraits<T>::IsEnum)
 struct TAssociativeContainerKeyHelper<T>
 {
-    static TString Serialize(const T& value)
+    static std::string Serialize(const T& value)
     {
         return FormatEnum(value);
     }
@@ -54,7 +55,7 @@ struct TAssociativeContainerKeyHelper<T>
 template <>
 struct TAssociativeContainerKeyHelper<TGuid>
 {
-    static TString Serialize(TGuid value)
+    static std::string Serialize(TGuid value)
     {
         return ToString(value);
     }
@@ -70,7 +71,7 @@ struct TAssociativeContainerKeyHelper<TStrongTypedef<T, TTag, Options>>
 {
     using TValue = TStrongTypedef<T, TTag, Options>;
 
-    static TString Serialize(const TValue& value)
+    static std::string Serialize(const TValue& value)
     {
         return TAssociativeContainerKeyHelper<T>::Serialize(value.Underlying());
     }
@@ -517,7 +518,7 @@ void Serialize(
     const T& message,
     NYson::IYsonConsumer* consumer)
 {
-    consumer->OnStringScalar(message.SerializeAsStringOrThrow());
+    consumer->OnStringScalar(SerializeProtoToString(message));
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>
@@ -560,7 +561,7 @@ void Deserialize(T& value, INodePtr node)
             case ENodeType::List:
                 value = T();
                 for (const auto& item : node->AsList()->GetChildren()) {
-                    value |= ParseEnum<T>(item->GetValue<TString>());
+                    value |= ParseEnum<T>(item->GetValue<std::string>());
                 }
                 break;
             case ENodeType::String:
@@ -573,7 +574,7 @@ void Deserialize(T& value, INodePtr node)
     } else {
         switch (node->GetType()) {
             case ENodeType::String: {
-                value = ParseEnum<T>(node->GetValue<TString>());
+                value = ParseEnum<T>(node->GetValue<std::string>());
                 break;
             }
             case ENodeType::Int64: {
@@ -744,9 +745,12 @@ void Deserialize(
     T& message,
     const INodePtr& node)
 {
-    TString string;
+    std::string string;
     Deserialize(string, node);
-    message.ParseFromStringOrThrow(string);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            .With("protobuf_type", message.GetTypeName());
+    }
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

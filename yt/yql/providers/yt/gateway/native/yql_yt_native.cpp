@@ -202,6 +202,7 @@ inline TType OptionFromNode(const NYT::TNode& value) {
 }
 
 void PopulatePathStatResult(IYtGateway::TPathStatResult& out, int index, NYT::TTableColumnarStatistics& extendedStat) {
+    out.DataSize[index] += extendedStat.LegacyChunksDataWeight;
     for (const auto& entry : extendedStat.ColumnDataWeight) {
         out.DataSize[index] += entry.second;
     }
@@ -724,6 +725,8 @@ public:
                 future = DoCopy(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtMerge>()) {
                 future = DoMerge(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtPersist>()) {
+                future = DoPersist(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtMap>()) {
                 future = DoMap(op.Cast(), execCtx, ctx);
             } else if (auto op = opBase.Maybe<TYtReduce>()) {
@@ -1919,6 +1922,7 @@ private:
         }
 
         if (ensureParentsTmp) {
+            execCtx->PrepareSecureTmpFolder();
             CreateParents(ensureParentsTmp, entry->CacheTx);
         }
         if (ensureParents) {
@@ -2416,7 +2420,7 @@ private:
             NYT::MergeNodes(yqlAttrs, dstAttrs);
         }
         NYT::TNode& rowSpecNode = yqlAttrs[YqlRowSpecAttribute];
-        const auto nativeYtTypeCompatibility = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *execCtx->Options_.Config());
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
         rowSpec->FillAttrNode(rowSpecNode, rowSpecCompactForm);
 
@@ -2889,6 +2893,12 @@ private:
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
         }
+        auto hasRowLevelSecurity = [](const TVector<NYT::TNode>& attributes, size_t idx) {
+            const NYT::TNode& attrs = attributes[idx];
+            return attrs.AsMap().contains("has_row_level_ace") && NYT::GetBool(attrs["has_row_level_ace"]);
+        };
+
+        TVector<ui8> fullReadPermissionFlags(tables.size(), 0);
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes;
@@ -2899,26 +2909,41 @@ private:
                     .AddAttribute(TString{YqlRowSpecAttribute})
                 );
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    try {
-                        NYT::TNode attrs = f.GetValue();
-                        if (GetTypeFromAttributes(attrs, false) == "link") {
-                            // override some attributes by the link ones
-                            if (attrs.HasKey(QB2Premapper)) {
-                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                if (!omitInaccessibleRows && hasRowLevelSecurity(attributes, idx.first)) {
+                    batchRes.push_back(batchGet->CheckPermission(entry->EffectiveUser, NYT::EPermission::FullRead, idx.second)
+                        .Apply([idx, &fullReadPermissionFlags](const TFuture<NYT::TCheckPermissionResponse>& f) {
+                            fullReadPermissionFlags[idx.first] = f.GetValue().Action == NYT::ESecurityAction::Allow ? 1 : 0;
+                        }));
+                }
+
+                auto tablePath = tables[idx.first].Table();
+                batchRes.push_back(batchGet->Get(tablePath + "&/@", getOpts).Apply(
+                    [idx, tablePath, &attributes] (const TFuture<NYT::TNode>& f) {
+                        try {
+                            NYT::TNode attrs = f.GetValue();
+                            if (GetTypeFromAttributes(attrs, false) == "link") {
+                                // override some attributes by the link ones
+                                if (attrs.HasKey(QB2Premapper)) {
+                                    attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                                }
+                                if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                    attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                                }
                             }
-                            if (attrs.HasKey(YqlRowSpecAttribute)) {
-                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                        } catch (const TErrorResponse& e) {
+                            if (e.IsAccessDenied()) {
+                                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_ACCESS_DENIED)
+                                    << "Access denied while fetching additional attributes for symbolic link " << tablePath << ".\n"
+                                    << "Make sure read access to the parent directory is granted; full error: " << e.GetError().GetYsonText();
                             }
+                            // Yt returns NoSuchTransaction as inner issue for ResolveError
+                            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                                throw;
+                            }
+                            // Just ignore. Original table path may be deleted at this time
                         }
-                    } catch (const TErrorResponse& e) {
-                        // Yt returns NoSuchTransaction as inner issue for ResolveError
-                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
-                            throw;
-                        }
-                        // Just ignore. Original table path may be deleted at this time
                     }
-                }));
+                ));
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
@@ -2967,7 +2992,7 @@ private:
                 }
 
                 bool isDynamic = attrs.AsMap().contains("dynamic") && NYT::GetBool(attrs["dynamic"]);
-                bool hasRLS = attrs.AsMap().contains("has_row_level_ace") && NYT::GetBool(attrs["has_row_level_ace"]);
+                bool hasRLS = hasRowLevelSecurity(attributes, idx.first);
                 auto rowCount = attrs[isDynamic || hasRLS ? "chunk_row_count" : "row_count"].AsInt64();
                 statInfo->RecordsCount = rowCount;
                 statInfo->DataSize = GetDataWeight(attrs).GetOrElse(0);
@@ -2979,7 +3004,7 @@ private:
                 if (statInfo->IsEmpty()) {
                     YQL_CLOG(INFO, ProviderYt) << "Empty table : " << tables[idx.first].Table() << ", modify time: " << strModifyTime << ", revision: " << statInfo->Revision;
                 }
-                if (metaInfo->HasRLS && !omitInaccessibleRows) {
+                if (metaInfo->HasRLS && !fullReadPermissionFlags[idx.first] && !omitInaccessibleRows) {
                     YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
                         << "Table " << tables[idx.first].Table() << " on cluster " << tables[idx.first].Cluster()
                         << " has row level security. Please enable pragma yt.OmitInaccessibleRows.";
@@ -3207,9 +3232,10 @@ private:
         const TMaybe<NYql::TColumnOrder>& columns = Nothing())
     {
         const auto sequenceItemType = GetSequenceItemType(node.Pos(), node.GetTypeAnn(), false, ctx);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
 
         auto rowSpecInfo = MakeIntrusive<TYqlRowSpecInfo>();
-        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config()));
+        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), nativeYtTypeCompatibility);
         if (columns) {
             rowSpecInfo->SetColumnOrder(columns);
         }
@@ -3217,7 +3243,7 @@ private:
         NYT::TNode tableSpec = NYT::TNode::CreateMap();
         rowSpecInfo->FillCodecNode(tableSpec[YqlRowSpecAttribute]);
 
-        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY)).ToNode());
+        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], nativeYtTypeCompatibility).ToNode());
         auto resultRowSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(tableSpec));
         return {resultYTType, resultRowSpec};
     }
@@ -3673,14 +3699,17 @@ private:
 
         return execCtx->Session_->Async([execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             auto entry = execCtx->GetEntry();
             execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtCopy
             TOutputInfo& out = execCtx->OutTables_.front();
 
             entry->DeleteAtFinalize(out.Path);
 
+            execCtx->PrepareSecureTmpFolder();
             entry->CreateDefaultTmpFolder();
             CreateParents({out.Path}, entry->CacheTx);
+            execCtx->SetNodeExecProgress("Running");
             entry->Tx->Copy(execCtx->InputTables_.front().Name, out.Path, TCopyOptions().Force(true));
 
         });
@@ -3734,9 +3763,10 @@ private:
         }
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
+        bool checkOutputStats = CanReplaceParentOutputHash(merge.Ref());
 
-        return execCtx->Session_->Async([forceTransform, combineChunks, limit, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
+        return execCtx->Session_->Async([forceTransform, combineChunks, limit, checkOutputStats, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, checkOutputStats, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
@@ -3787,10 +3817,82 @@ private:
 
                 CheckSpecForSecrets(spec, execCtx);
 
-                return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
+                auto opFuture = execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
                 });
+
+                if (!checkOutputStats) {
+                    return opFuture;
+                }
+
+                // Ensure YtMerge with ReplaceParentCache won't change it's input.
+                return opFuture.Apply([entry, execCtx, outYPath = outYPaths.front()](const TFuture<void>& f) {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                    f.GetValue();
+                    YQL_ENSURE(execCtx->InputTables_.size() == 1);
+                    const auto inputRowCount = entry->Tx->Get(execCtx->InputTables_.front().Path.Path_ + "/@row_count").AsInt64();
+                    const auto outputRowCount = entry->Tx->Get(outYPath.Path_ + "/@row_count").AsInt64();
+                    YQL_ENSURE(inputRowCount == outputRowCount, "YtMerge with ReplaceParentCache produced row_count mismatch: " << "input=" << inputRowCount << " output=" << outputRowCount);
+                    const auto inputDataWeight = entry->Tx->Get(execCtx->InputTables_.front().Path.Path_ + "/@data_weight").AsInt64();
+                    const auto outputDataWeight = entry->Tx->Get(outYPath.Path_ + "/@data_weight").AsInt64();
+                    YQL_ENSURE(inputDataWeight == outputDataWeight, "YtMerge with ReplaceParentCache produced data_weight mismatch: " << "input=" << inputDataWeight << " output=" << outputDataWeight);
+                });
             });
+        });
+    }
+
+    TFuture<void> DoPersist(TYtPersist /*persist*/, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        YQL_ENSURE(execCtx->InputTables_.size() == 1);
+        YQL_ENSURE(execCtx->InputTables_.front().Temp);
+        YQL_ENSURE(execCtx->OutTables_.size() == 1);
+
+        return execCtx->Session_->Async([execCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
+            auto entry = execCtx->GetEntry();
+            execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtPersist
+            TOutputInfo& out = execCtx->OutTables_.front();
+
+            const bool remote = entry->Cluster != execCtx->InputTables_.front().Cluster;
+
+            if (remote) {
+                TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, true);
+
+                TMergeOperationSpec mergeOpSpec;
+                for (const auto& table: execCtx->InputTables_) {
+                    YQL_ENSURE(table.Strict);
+                    mergeOpSpec.AddInput(table.Path);
+                }
+
+                if (execCtx->OutTables_.front().SortedBy.Parts_.empty()) {
+                    mergeOpSpec.Mode(EMergeMode::MM_ORDERED);
+                } else {
+                    mergeOpSpec.Mode(EMergeMode::MM_SORTED);
+                    mergeOpSpec.MergeBy(execCtx->OutTables_.front().SortedBy);
+                }
+
+                mergeOpSpec.Output(outYPaths.front());
+                mergeOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(mergeOpSpec, execCtx);
+
+                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
+                FillSpec(spec, *execCtx, entry, 0., Nothing(), {});
+
+                CheckSpecForSecrets(spec, execCtx);
+
+                return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)]() {
+                    return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
+                });
+            } else {
+                entry->DeleteAtFinalize(out.Path);
+                entry->CreateDefaultTmpFolder();
+                CreateParents({out.Path}, entry->CacheTx);
+
+                execCtx->SetNodeExecProgress("Running");
+                entry->Tx->Copy(execCtx->InputTables_.front().Name, out.Path, TCopyOptions().Force(true));
+
+                return MakeFuture();
+            }
         });
     }
 
@@ -3822,6 +3924,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -3995,6 +4098,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4187,6 +4291,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4440,6 +4545,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4564,8 +4670,7 @@ private:
         auto reduceBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::ReduceBy);
         auto sortBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::SortBy);
 
-        const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
         const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
@@ -4577,12 +4682,10 @@ private:
         TString mapInputType;
         size_t mapDirectOutputs = 0;
         if (!mapReduce.Mapper().Maybe<TCoVoid>()) {
-            auto createRowSpec = [](const TTypeAnnotationNode* itemType, bool useNativeTypes, ui64 nativeTypeCompat) -> NYT::TNode {
+            auto createRowSpec = [](const TTypeAnnotationNode* itemType, ui64 nativeYtTypeCompatibility) -> NYT::TNode {
                 auto spec = NYT::TNode::CreateMap();
                 spec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
-                spec[RowSpecAttrNativeYtTypeFlags] = useNativeTypes
-                    ? (GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeTypeCompat)
-                    : 0ul;
+                spec[RowSpecAttrNativeYtTypeFlags] = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeYtTypeCompatibility;
                 return spec;
             };
 
@@ -4601,7 +4704,7 @@ private:
                     intermediateStreams = NYT::TNode::CreateList();
                     bool front = true;
                     for (auto itemType: items) {
-                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, nativeYtTypeCompatibility), nativeYtTypeCompatibility);
                         if (front) {
                             ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
                             front = false;
@@ -4614,7 +4717,7 @@ private:
             } else {
                 if (useIntermediateStreams) {
                     intermediateStreams = NYT::TNode::CreateList();
-                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, nativeYtTypeCompatibility), nativeYtTypeCompatibility);
                     ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
                     intermediateStreams.Add(
                         NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
@@ -4623,9 +4726,9 @@ private:
             }
 
             intermediateMeta = NYT::TNode::CreateMap();
-            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat);
-            if (useNativeTypes && !useIntermediateStreams) {
-                intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
+            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, nativeYtTypeCompatibility);
+            if (nativeYtTypeCompatibility && !useIntermediateStreams) {
+                intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeYtTypeCompatibility).ToNode();
             }
             if (NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::KeySwitch)) {
                 intermediateMeta[YqlSysColumnPrefix].Add("keyswitch");
@@ -4639,14 +4742,14 @@ private:
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
-        } else if (useNativeTypes && !useIntermediateStreams) {
+        } else if (nativeYtTypeCompatibility && !useIntermediateStreams) {
             YQL_ENSURE(mapReduce.Input().Size() == 1);
             const TTypeAnnotationNode* itemType = GetSequenceItemType(mapReduce.Input().Item(0), false);
             if (auto flags = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>())) {
                 auto rowSpec = NYT::TNode::CreateMap();
                 rowSpec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
-                rowSpec[RowSpecAttrNativeYtTypeFlags] = (flags & nativeTypeCompat);
-                intermediateSchema = RowSpecToYTSchema(rowSpec, nativeTypeCompat).ToNode();
+                rowSpec[RowSpecAttrNativeYtTypeFlags] = (flags & nativeYtTypeCompatibility);
+                intermediateSchema = RowSpecToYTSchema(rowSpec, nativeYtTypeCompatibility).ToNode();
             }
         }
         TString reduceLambda;
@@ -4784,6 +4887,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4799,7 +4903,7 @@ private:
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
             bool hasLayerPaths = false;
-            if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
+            if constexpr (::NYql::NPrivate::THasLayersPaths<TRunOptions>::value) {
                 hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
                 localRun &= execCtx->Options_.LayersPaths().empty();
             }
@@ -5123,15 +5227,14 @@ private:
                     TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
                     if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
                         res.DataSize[i] += *cachedStat;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: false)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
                         PopulatePathStatResult(res, i, *cachedExtendedStat);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (onlyCached) {
                         YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " is missing in cache - sync path stat failed (extended: " << extended << ")";
                         return res;
-                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR != tmpOptimizeFor && !extended) {
-
+                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR != tmpOptimizeFor) {
                         // Use entire table size for lookup tables (YQL-7257)
                         if (attrs.IsUndefined()) {
                             attrs = tx->Get(ytPath.Path_ + "/@", NYT::TGetOptions().AttributeFilter(
@@ -5142,8 +5245,9 @@ private:
                         }
                         auto size = CalcDataSize(ytPath, attrs);
                         res.DataSize[i] += size;
-                        entry->UpdateColumnarStat(ytPath, size);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (uncompressed_data_size for lookup, extended: false)";
+                        entry->UpdateColumnarStat(ytPath, size, extended);
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i]
+                            << " (uncompressed_data_size for lookup / missing columns in schema, extended: " << extended << ")";
                     } else {
                         ytPaths.push_back(ytPath);
                         pathMap.push_back(i);
@@ -5188,10 +5292,10 @@ private:
                     TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
                     if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
                         res.DataSize[i] += *cachedStat;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: false)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
                         PopulatePathStatResult(res, i, *cachedExtendedStat);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (onlyCached) {
                         YQL_CLOG(INFO, ProviderYt)
                             << "Stat for " << DebugPath(req.Path())
@@ -5205,8 +5309,8 @@ private:
                                 NYT::TGetOptions().AttributeFilter(attributeFilter));
                         }
 
-                        if (cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()
-                            && !extended && attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan") {
+                        const bool isScan = attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan";
+                        if (isScan && cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()) {
                             auto schema_id = attrs["schema_id"].AsString();
 
                             with_lock (entry->Lock_) {
@@ -5223,19 +5327,18 @@ private:
                             }
                         }
 
-                        if (extended ||
-                            (attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan" &&
-                            AllPathColumnsAreInSchema(req.Path(), attrs)))
+                        if (isScan && AllPathColumnsAreInSchema(req.Path(), attrs))
                         {
                             pathMap.push_back(i);
                             ytPaths.push_back(ytPath);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << ") add for request with path " << ytPath.Path_ << " (extended: " << extended << ")";
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << ") add for request (extended: " << extended << ")";
                         } else {
                             // Use entire table size for lookup tables (YQL-7257)
                             auto size = CalcDataSize(ytPath, attrs);
                             res.DataSize[i] += size;
-                            entry->UpdateColumnarStat(ytPath, size);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (uncompressed_data_size for lookup)";
+                            entry->UpdateColumnarStat(ytPath, size, extended);
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): "
+                                << res.DataSize[i] << " (uncompressed_data_size for lookup / missing columns in schema, extended: " << extended << ")";
                         }
                     }
                 }
@@ -5508,7 +5611,7 @@ private:
         auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         bool hasLayerPaths = false;
-        if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
+        if constexpr (::NYql::NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
             hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
             localRun &= execCtx->Options_.LayersPaths().empty();
         }
@@ -5630,6 +5733,7 @@ private:
         return future
             .Apply([execCtx, entry, mapOpSpec = std::move(mapOpSpec), job, tmpTable, lambda, extraUsage, tmpFiles] (const TFuture<bool>& f) {
                 if (f.GetValue()) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -5970,6 +6074,8 @@ private:
             return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtCopy>()) {
             return TOperationProgress::EOpBlockStatus::None;
+        } else if (op.Maybe<TYtPersist>()) {
+            return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtMerge>()) {
             return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtTouch>()) {
@@ -6193,6 +6299,61 @@ private:
                 return MakeFuture(ResultFromCurrentException<TDownloadTableResult>());
             }
         });
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            const auto cluster = options.Cluster();
+            const auto files = options.Files();
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
+            auto dstPath = NYql::TransformPath(tmpFolder, "tmp/", true, session->UserName_);
+
+            auto ytServer = Clusters_->TryGetServer(cluster);
+            YQL_ENSURE(ytServer);
+            auto execCtx = MakeExecCtx(std::move(options), session, options.Cluster(), nullptr, nullptr);
+            auto entry = execCtx->GetOrCreateEntry();
+
+            return session->Async([entry, cluster, dstPath, files, logCtx]() {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    TUploadFilesToCacheResult res;
+                    auto client = entry->Client;
+                    for (auto file : files) {
+                        TString remotePath = NYT::AddPathPrefix(TFsPath(dstPath) / file.Md5, NYT::TConfig::Get()->Prefix);
+                        CreateParents({remotePath}, client);
+                        if (!client->Exists(remotePath)) {
+                            YQL_CLOG(INFO, ProviderYt) << "Start uploading " << file.Path << " to " << remotePath;
+                            auto uploadTx = client->StartTransaction({});
+                            try {
+                                auto out = uploadTx->CreateFileWriter(NYT::TRichYPath(remotePath), NYT::TFileWriterOptions().CreateTransaction(false));
+                                TIFStream in(file.Path);
+                                TransferData(&in, out.Get());
+                                out->Finish();
+                                uploadTx->Commit();
+                                YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << file.Path << " to " << remotePath;
+                            } catch (...) {
+                                uploadTx->Abort();
+                                throw;
+                            }
+                        }
+
+                        file.RemotePath = remotePath;
+                        res.Files.push_back(std::move(file));
+                    }
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TUploadFilesToCacheResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TUploadFilesToCacheResult>());
+        }
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

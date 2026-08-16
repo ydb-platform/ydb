@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <library/cpp/yt/misc/strong_typedef.h>
 
 namespace NYT::NYson {
@@ -41,8 +43,8 @@ public:
     bool IsEmpty();
 
 private:
-    TString ValueString_;
-    TStringOutput Output_;
+    std::string ValueString_;
+    TStdStringOutput Output_;
     const std::unique_ptr<NYson::IFlushableYsonConsumer> Writer_;
 };
 

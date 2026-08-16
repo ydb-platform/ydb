@@ -21,6 +21,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/providers/common/mkql
     ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/s3/expr_nodes
 )
 

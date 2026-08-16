@@ -8,9 +8,12 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
+#include <atomic>
 #include <random>
 
 namespace NYdbWorkload {
+
+    class TFulltextQualityEvaluator;
 
     class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {
     public:
@@ -27,10 +30,14 @@ namespace NYdbWorkload {
     private:
         TQueryInfoList Select();
         TQueryInfoList Upsert();
-        void LoadQueries();
+        void LoadQueries(const TString& queryTable);
+        void LoadUpsertQueries();
 
         TVector<TString> Queries;
-        size_t CurrentIndex = 0;
+        std::atomic<size_t> CurrentIndex = 0;
+
+        TVector<TString> UpsertData;
+        std::atomic<size_t> UpsertCurrentIndex = 0;
 
         TMaybe<TMarkovModelEvaluator> Evaluator;
     };

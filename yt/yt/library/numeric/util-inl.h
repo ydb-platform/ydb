@@ -9,15 +9,13 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTo, class TFrom>
-TTo BitCast(const TFrom &src) noexcept
+constexpr TTo BitCast(const TFrom &src) noexcept
 {
     static_assert(sizeof(TTo) == sizeof(TFrom));
     static_assert(std::is_trivially_copyable_v<TFrom>);
     static_assert(std::is_trivial_v<TTo>);
 
-    TTo dst;
-    std::memcpy(&dst, &src, sizeof(TTo));
-    return dst;
+    return __builtin_bit_cast(TTo, src);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

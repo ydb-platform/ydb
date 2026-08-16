@@ -210,8 +210,18 @@ void THttpHeader::AddOperationId(const TOperationId& operationId, bool overwrite
 
 TMutationId THttpHeader::AddMutationId()
 {
-    TMutationId guid = NDetail::GenerateMutationId();
+    TGUID guid;
+
+    // Some users use `fork()' with yt wrapper
+    // (actually they use python + multiprocessing)
+    // and CreateGuid is not resistant to `fork()', so spice it a little bit.
+    //
+    // Check IGNIETFERRO-610
+    CreateGuid(&guid);
+    guid.dw[2] = GetPID() ^ MicroSeconds();
+
     AddParameter("mutation_id", GetGuidAsString(guid), true);
+
     return guid;
 }
 

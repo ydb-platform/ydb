@@ -10,7 +10,7 @@
  extern "C" {
 --- a/crypto/rename.h	(index)
 +++ b/crypto/rename.h	(working tree)
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,70 @@
 +#pragma once
 +
 +#ifdef BORINGSSL_PREFIX
@@ -62,6 +62,7 @@
 +#define ngtcp2_crypto_delete_crypto_aead_ctx_cb NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_delete_crypto_aead_ctx_cb)
 +#define ngtcp2_crypto_delete_crypto_cipher_ctx_cb NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_delete_crypto_cipher_ctx_cb)
 +#define ngtcp2_crypto_get_path_challenge_data_cb NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_get_path_challenge_data_cb)
++#define ngtcp2_crypto_get_path_challenge_data2_cb NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_get_path_challenge_data2_cb)
 +#define ngtcp2_crypto_version_negotiation_cb NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_version_negotiation_cb)
 +
 +#define ngtcp2_crypto_aead_aes_128_gcm NGTCP2_WITH_PREFIX(BORINGSSL_PREFIX, ngtcp2_crypto_aead_aes_128_gcm)

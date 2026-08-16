@@ -62,7 +62,7 @@ public:
         , FileStorage_(fileStorage)
         , OperationOptions_(operationOptions)
         , FullCapture_(fullCapture)
-        , TablesData_(tablesData)
+        , TablesData_(QContext_.CanRead() ? tablesData : TYtTablesData::TPtr{})
         , Types_(types)
     {}
 
@@ -1109,6 +1109,7 @@ private:
                     replaces[node.Get()] = ctx.ChangeChild(*node, NNodes::TYtTable::idx_Name, ctx.NewAtom(node->Pos(), *dumpPath, TNodeFlags::Default));
 
                     // Add fake table data to allow YT type annotation
+                    YQL_ENSURE(TablesData_);
                     for (auto epoch : {tableInfo->Epoch, tableInfo->CommitEpoch}) {
                         auto& origTableData = TablesData_->GetTable(tableInfo->Cluster, tableInfo->Name, epoch);
                         TablesData_->GetOrAddTable(tableInfo->Cluster, *dumpPath, epoch) = origTableData;
@@ -1222,6 +1223,10 @@ private:
 
     NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override {
         return Inner_->DownloadTable(std::move(options));
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        return Inner_->UploadFilesToCache(std::move(options));
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

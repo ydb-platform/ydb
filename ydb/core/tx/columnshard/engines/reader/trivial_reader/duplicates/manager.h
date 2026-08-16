@@ -4,6 +4,7 @@
 #include "common.h"
 #include "events.h"
 #include "filters.h"
+#include "hang_tracker.h"
 #include "private_events.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -41,6 +42,38 @@ private:
     TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
 
+    static constexpr ui32 MaxInflightExecutors = 1;
+    ui32 InflightExecutors = 0;
+
+    static constexpr ui32 MaxInflightFilterRequests = 3;
+    ui32 InflightFilterRequests = 0;
+    std::deque<TEvRequestFilter::TPtr> PendingFilterRequests;
+
+    void TryStartPendingFilterRequest();
+    void HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev);
+    void OnFilterRequestCompleted();
+
+    struct TPendingExecutor {
+        std::shared_ptr<TBuildFilterTaskExecutor> Executor;
+        TBuildFilterContext Context;
+
+        TPendingExecutor(std::shared_ptr<TBuildFilterTaskExecutor>&& executor, TBuildFilterContext&& context)
+            : Executor(std::move(executor))
+            , Context(std::move(context))
+        {
+        }
+    };
+
+    std::deque<TPendingExecutor> PendingExecutors;
+
+    void TryStartPendingExecutor();
+
+    THangTracker HangTracker;
+
+    void OnProgress();
+    bool HasInflightFetchOrMerge() const;
+    void HandleWakeup();
+
 private:
     static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);
@@ -54,6 +87,7 @@ private:
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvBordersConstructionResult, Handle);
             hFunc(TEvMergeBordersResult, Handle);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -68,7 +102,8 @@ private:
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const;
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);
+    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions,
+        const TDuration inflightTimeout = THangTracker::DefaultTimeout);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

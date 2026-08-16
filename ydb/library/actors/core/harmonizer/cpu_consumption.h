@@ -12,6 +12,7 @@ struct TCpuConsumptionInfo {
     float Cpu;
     float LastSecondElapsed;
     float LastSecondCpu;
+    float NeedyWindowCpu;
 
     void Clear();
 }; // struct TCpuConsumptionInfo

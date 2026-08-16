@@ -85,14 +85,32 @@ private:
         TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
     };
 
+    struct TMultiColumnStatDesc {
+        TString Name;
+        std::vector<TString> ColumnNames;
+        std::vector<ui32> ColumnIds;
+        std::vector<EStatType> Types;
+    };
+
     TString TableName;
     bool IsColumnTable = false;
     TVector<TColumnDesc> Columns;
+    TVector<TMultiColumnStatDesc> MultiColumnStatDescs;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ui64 HiveId = 0;
 
+    ui32 ScansCompletedTotal = 0;
+
+    void SendProgressEvent(ui32 shardsTotal, ui32 shardsDone);
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+
+    bool ResolvingDatabase = false;
+    THashMap<ui32, TSysTables::TTableColumnInfo> NavigateColumns;
+    TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> NavigateMultiColumnStatistics;
+    void HandleNavigateResult();
+    void HandleResolveDatabase(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
 
     // StateLocateTablets
 
@@ -136,6 +154,7 @@ private:
         // One of the following
         TSimpleColumnStatisticEval::TPtr SimpleStatEval;
         IStage2ColumnStatisticEval::TPtr Stage2StatEval;
+        IMultiColumnStatisticEval::TPtr MultiStatEval;
     };
 
     std::queue<TColumnStatEvalTask> PendingTasks;

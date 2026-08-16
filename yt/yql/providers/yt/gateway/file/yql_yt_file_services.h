@@ -22,9 +22,10 @@ public:
     ~TYtFileServices();
 
     static TPtr Make(const NKikimr::NMiniKQL::IFunctionRegistry* registry, const THashMap<TString, TString>& mapping = {},
-        TFileStoragePtr fileStorage = {}, const TString& tmpDir = {}, bool keepTempTables = false, const THashMap<TString, TString>& dirMapping = {})
+        TFileStoragePtr fileStorage = {}, const TString& tmpDir = {}, bool keepTempTables = false, const THashMap<TString, TString>& dirMapping = {},
+        bool writeOutputRowCount = false)
     {
-        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping);
+        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping, writeOutputRowCount);
     }
 
     const NKikimr::NMiniKQL::IFunctionRegistry* GetFunctionRegistry() const {
@@ -41,6 +42,10 @@ public:
 
     bool GetKeepTempTables() const {
         return KeepTempTables_;
+    }
+
+    bool GetWriteOutputRowCount() const {
+        return WriteOutputRowCount_;
     }
 
     TString GetTmpTablePath(TStringBuf table);
@@ -63,7 +68,8 @@ private:
         TFileStoragePtr fileStorage,
         const TString& tmpDir,
         bool keepTempTables,
-        const THashMap<TString, TString>& dirMapping
+        const THashMap<TString, TString>& dirMapping,
+        bool writeOutputRowCount
     );
 
     TFileStoragePtr FileStorage_;
@@ -72,6 +78,7 @@ private:
     THashMap<TString, TString> TablesDirMapping_; // [cluster] -> [dir path]
     TString TmpDir_;
     bool KeepTempTables_;
+    bool WriteOutputRowCount_;
 
     std::unordered_multimap<TString, TString> Contents_; // path -> pickled content
     THashMap<std::pair<TString, ui32>, TString> Snapshots_;

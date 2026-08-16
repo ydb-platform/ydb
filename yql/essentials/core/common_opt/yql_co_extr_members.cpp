@@ -92,7 +92,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr
     }
     innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
 
-    const auto inputType = GetSequenceItemType(filterInput, false);
+    const auto inputType = GetSequenceItemType(filterInput, /*allowMultiIO=*/false);
     YQL_ENSURE(inputType);
     const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
     YQL_ENSURE(inputWidth >= innerExtracted.size());
@@ -835,8 +835,8 @@ TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, chain1Map.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -881,8 +881,8 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, condense1.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -919,5 +919,29 @@ TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, cons
     });
     return ctx.ChangeChild(*node, TCoMapBase::idx_Lambda, ctx.DeepCopyLambda(node->Tail(), std::move(body)));
 }
+
+TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoTableSource tableSource(node);
+    YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+    return Build<TCoTableSource>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(tableSource.Input())
+            .Members(members)
+        .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoWithWorld withWorld(node);
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over WithWorld" << logSuffix;
+    return Build<TCoWithWorld>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(withWorld.Input())
+            .Members(members)
+        .Build()
+        .World(withWorld.World())
+        .Done().Ptr();
+}
+
 
 } // NYql

@@ -56,6 +56,25 @@ Y_UNIT_TEST(TruncateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Materialize) {
+    TCases cases{
+        {"use plato;materialize Input into $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n"},
+
+        {"materialize plato.Input into $result on plato;",
+         "MATERIALIZE plato.Input INTO $result ON plato;\n"},
+
+        {"use plato;materialize Input into $result;select * from $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n\nSELECT\n\t*\nFROM\n\t$result\n;\n"},
+
+        {"materialize (select * from plato.Input) into $result on plato;",
+         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) INTO $result ON plato;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},
@@ -186,12 +205,24 @@ Y_UNIT_TEST(SecretOperations) {
         {// create with more than one setting
          "use plato; create secret `secret-name` with (value=\"secret_value\",inherit_permissions=fALSe);\n",
          "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value', inherit_permissions = FALSE);\n"},
+        {// create if not exists
+         "use plato; create secret if not exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE SECRET IF NOT EXISTS `secret-name` WITH (value = 'secret_value');\n"},
+        {// create or replace
+         "use plato; create or replace secret `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE OR REPLACE SECRET `secret-name` WITH (value = 'secret_value');\n"},
         {// alter
          "use plato; alter secret `secret-name` with (value=\"secret_value\");\n",
          "USE plato;\n\nALTER SECRET `secret-name` WITH (value = 'secret_value');\n"},
+        {// alter if exists
+         "use plato; alter secret if exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nALTER SECRET IF EXISTS `secret-name` WITH (value = 'secret_value');\n"},
         {// drop
          "use plato; drop secret `secret-name`;\n",
          "USE plato;\n\nDROP SECRET `secret-name`;\n"},
+        {// drop if exists
+         "use plato; drop secret if exists `secret-name`;\n",
+         "USE plato;\n\nDROP SECRET IF EXISTS `secret-name`;\n"},
     };
 
     TSetup setup;
@@ -201,6 +232,24 @@ Y_UNIT_TEST(SecretOperations) {
 Y_UNIT_TEST(ShowCreateView) {
     TCases cases = {
         {"use plato;show create view user;", "USE plato;\n\nSHOW CREATE VIEW user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ShowCreateExternalDataSource) {
+    TCases cases = {
+        {"use plato;show create external data source source;", "USE plato;\n\nSHOW CREATE EXTERNAL DATA SOURCE source;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ShowCreateExternalTable) {
+    TCases cases = {
+        {"use plato;show create external table mytable;", "USE plato;\n\nSHOW CREATE EXTERNAL TABLE mytable;\n"},
     };
 
     TSetup setup;
@@ -371,6 +420,10 @@ Y_UNIT_TEST(CreateTable) {
          "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
         {"create table user(changefeed user with (user='foo',user='bar'))",
          "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
+        {"create table user(statistics user on (user) with (count_min_sketch))",
+         "CREATE TABLE user (\n\tSTATISTICS user ON (user) WITH (count_min_sketch)\n);\n"},
+        {"create table user(statistics user on (user,user) with (count_min_sketch,histogram))",
+         "CREATE TABLE user (\n\tSTATISTICS user ON (user, user) WITH (count_min_sketch, histogram)\n);\n"},
         {"create table user(user) AS SELECT 1", "CREATE TABLE user (\n\tuser\n)\nAS\nSELECT\n\t1\n;\n"},
         {"create table user(user) AS VALUES (1), (2)", "CREATE TABLE user (\n\tuser\n)\nAS\nVALUES\n\t(1),\n\t(2)\n;\n"},
         {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
@@ -400,6 +453,20 @@ Y_UNIT_TEST(CreateTable) {
         {"create  table\tuser(key int32, val String encoding(off))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (off)\n);\n"},
         {"create  table\tuser(key int32, val String encoding())", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING ()\n);\n"},
         {"create table user(key int32, val String encoding(dict(max_size=100)))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (dict (max_size = 100))\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1) stored)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1) virtual)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) VIRTUAL\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1)\n);\n"},
+        {"create table user(key int32, val int64 as (key+1) stored)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 as (key+1))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 AS (key + 1)\n);\n"},
+        {"create table user(key int32, val int64 GeNeRaTeD AlWaYs As (key+1) StOrEd)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 (not null, generated always as (key+1) stored))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 (NOT NULL, GENERATED ALWAYS AS (key + 1) STORED)\n);\n"},
     };
 
     TSetup setup;
@@ -529,6 +596,28 @@ Y_UNIT_TEST(TypeSelection) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(NullAsType) {
+    TCases cases = {
+        {"select cast(x as null)",
+         "SELECT\n\tCAST(x AS null)\n;\n"},
+        {"select cast(x as NULL)",
+         "SELECT\n\tCAST(x AS NULL)\n;\n"},
+        {"select cast(x as null?)",
+         "SELECT\n\tCAST(x AS null?)\n;\n"},
+        {"select list<null>",
+         "SELECT\n\tlist<null>\n;\n"},
+        {"select Optional<NULL>",
+         "SELECT\n\tOptional<NULL>\n;\n"},
+        {"select NULL",
+         "SELECT\n\tNULL\n;\n"},
+        {"select null",
+         "SELECT\n\tNULL\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(AlterTable) {
     TCases cases = {
         {"alter table user add user int32",
@@ -573,6 +662,12 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tADD INDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = 'bar')\n;\n"},
         {"alter table user drop index user",
          "ALTER TABLE user\n\tDROP INDEX user\n;\n"},
+        {"alter table user add statistics user on (user) with (count_min_sketch)",
+         "ALTER TABLE user\n\tADD STATISTICS user ON (user) WITH (count_min_sketch)\n;\n"},
+        {"alter table user add statistics s on (a,b) with (count_min_sketch), drop statistics t",
+         "ALTER TABLE user\n\tADD STATISTICS s ON (a, b) WITH (count_min_sketch),\n\tDROP STATISTICS t\n;\n"},
+        {"alter table user drop statistics user",
+         "ALTER TABLE user\n\tDROP STATISTICS user\n;\n"},
         {"alter table user rename to user",
          "ALTER TABLE user\n\tRENAME TO user\n;\n"},
         {"alter table user add changefeed user with (user = 'foo')",
@@ -631,6 +726,18 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING ()\n;\n"},
         {"alter table t alter column c set encoding(dict(max_size=100))",
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (dict (max_size = 100))\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1) stored",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1) STORED\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1) virtual",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1) VIRTUAL\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1)",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1)\n;\n"},
+        {"alter table user add column val int64 as (key+1) stored",
+         "ALTER TABLE user\n\tADD COLUMN val int64 AS (key + 1) STORED\n;\n"},
+        {"alter table user add val int64 GeNeRaTeD AlWaYs As (key+1) StOrEd",
+         "ALTER TABLE user\n\tADD val int64 GENERATED ALWAYS AS (key + 1) STORED\n;\n"},
+        {"alter table user add column val int64 (not null, generated always as (key+1) stored)",
+         "ALTER TABLE user\n\tADD COLUMN val int64 (NOT NULL, GENERATED ALWAYS AS (key + 1) STORED)\n;\n"},
     };
 
     TSetup setup;
@@ -955,6 +1062,36 @@ Y_UNIT_TEST(Reduce) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Combine) {
+    TCases cases = {
+        {"combine leftInput with rightInput "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\nWITH rightInput\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key with rightInput presort key "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey\nWITH rightInput\n\tPRESORT\n\t\tkey\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key,subkey with rightInput presort key,subkey "
+         "on leftInput.key=rightInput.key AND leftInput.subkey=rightInput.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tleftInput.key == rightInput.key AND leftInput.subkey == rightInput.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+        {"combine leftInput as L presort key,subkey with rightInput as R presort key,subkey "
+         "on L.key=R.key AND L.subkey=R.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput AS L\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput AS R\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tL.key == R.key AND L.subkey == R.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Select) {
     TCases cases = {
         {"select 1",
@@ -1209,6 +1346,44 @@ Y_UNIT_TEST(TableHints) {
          "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
         {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
          "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
+        {R"sql($input=select * from plato.T; select * from $input with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            $input = (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            );
+
+            SELECT
+                *
+            FROM
+                $input WITH WATERMARK = ts - Interval('PT1S')
+            ;
+
+        )sql")},
+        {R"sql(select * from (select * from plato.T) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
+        {R"sql(select * from (values(1)) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                VALUES
+                    (1)
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
     };
 
     TSetup setup;
@@ -2340,6 +2515,153 @@ Y_UNIT_TEST(PgSyntax) {
                     plato.x
                 WHERE
                     convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(WithCTE) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x AS (
+                    SELECT
+                        1
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x (a) AS (VALUES (1)) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a) AS (
+                    VALUES
+                        (1)
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1), y AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    x AS (
+                        SELECT
+                            1
+                    ),
+                    y AS (
+                        SELECT
+                            1
+                    )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a, b) AS (
+                    SELECT
+                        1
+                ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH RECURSIVE x(a, b) AS (SELECT 1), y(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    RECURSIVE x (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                    y (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x = (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = (
+                    WITH x AS (
+                        SELECT
+                            1
+                    )
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                SELECT (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    (
+                        WITH x AS (
+                            SELECT
+                                1
+                        )
+                        SELECT
+                            1
+                    )
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (SELECT 1 AS b)
+                SELECT * FROM a;
+            )sql"),
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (
+                    SELECT
+                        1 AS b
+                )
+                SELECT
+                    *
+                FROM
+                    a
+                ;
+
             )sql"),
         },
     };

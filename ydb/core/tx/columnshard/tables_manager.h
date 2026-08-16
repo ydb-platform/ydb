@@ -99,6 +99,7 @@ class TTableInfo {
     struct TPathInfo {
         std::optional<NOlap::TSnapshot> DropVersion;
         std::optional<NOlap::TSnapshot> CopyVersion;
+        std::optional<TString> LastCompletedBackupTransaction;
         bool IsReadOnly = false;
     };
 
@@ -188,24 +189,45 @@ public:
         return it->second.IsReadOnly;
     }
 
+    std::optional<NOlap::TSnapshot> GetCopyVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        if (it == SchemeShardLocalPathIds.end()) {
+            return std::nullopt;
+        }
+        if (it->second.DropVersion) {
+            return std::nullopt;
+        }
+        return it->second.CopyVersion;
+    }
+
     void SetCopyVersion(const TSchemeShardLocalPathId& schemeShardLocalPathId, const NOlap::TSnapshot& version) {
-        auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        auto& pathInfo = it->second;
+        auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
         AFL_VERIFY(!pathInfo.CopyVersion)("exists", pathInfo.CopyVersion->DebugString())("version", version.DebugString());
         pathInfo.CopyVersion = version;
     }
 
     void SetReadOnly(const TSchemeShardLocalPathId& schemeShardLocalPathId, const bool isReadOnly) {
-        auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        auto& pathInfo = it->second;
+        auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
         AFL_VERIFY(!pathInfo.IsReadOnly)("exists", pathInfo.IsReadOnly)("version", isReadOnly);
         pathInfo.IsReadOnly = isReadOnly;
     }
 
+    void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId& schemeShardLocalPathId, TString serializedBackupTx) {
+        auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        it->second.LastCompletedBackupTransaction = std::move(serializedBackupTx);
+    }
+
     void AddVersion(const NOlap::TSnapshot& snapshot) {
         Versions.insert(snapshot);
+    }
+
+    void CollectReadOnlyTablesSnapshots(TSet<NOlap::TSnapshot>& target) const {
+        for (const auto& [_, pathInfo] : SchemeShardLocalPathIds) {
+            if (pathInfo.CopyVersion && !pathInfo.DropVersion) {
+                target.insert(*pathInfo.CopyVersion);
+            }
+        }
     }
 
     void RenameTableSchemeShardLocalPathId(
@@ -216,9 +238,12 @@ public:
         if (!pathInfo.IsReadOnly) {   // v0 can't be read-only. backward compatibility
             Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
         }
-        Schema::RenameTableSchemeShardLocalPathIdV1(
-            db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly);
-        AFL_VERIFY(SchemeShardLocalPathIds.insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly}}).second);
+        Schema::RenameTableSchemeShardLocalPathIdV1(db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion,
+            pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly);
+        AFL_VERIFY(SchemeShardLocalPathIds
+                       .insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion,
+                                              pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly}})
+                       .second);
         SchemeShardLocalPathIds.erase(oldPathId);
     }
 
@@ -226,8 +251,18 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId, const NOlap::TSnapshot& copyVersion) {
         auto it = SchemeShardLocalPathIds.find(srcSchemeShardLocalPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        Schema::CopySchemeShardLocalPathIdV1(db, InternalPathId, dstSchemeShardLocalPathId, it->second.DropVersion, copyVersion, true);
-        AFL_VERIFY(SchemeShardLocalPathIds.insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, true}}).second);
+        const auto dstIt = SchemeShardLocalPathIds.find(dstSchemeShardLocalPathId);
+        if (dstIt == SchemeShardLocalPathIds.end()) {
+            Schema::CopySchemeShardLocalPathIdV1(
+                db, InternalPathId, dstSchemeShardLocalPathId, it->second.DropVersion, copyVersion, std::nullopt, true);
+            AFL_VERIFY(SchemeShardLocalPathIds
+                           .insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, std::nullopt, true}})
+                           .second);
+            return;
+        }
+        AFL_VERIFY(dstIt->second.CopyVersion == copyVersion)("expected", copyVersion.DebugString())(
+            "actual", dstIt->second.CopyVersion->DebugString());
+        AFL_VERIFY(dstIt->second.IsReadOnly);
     }
 
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
@@ -238,7 +273,7 @@ public:
         if (!minReadSnapshot) {
             return true;
         }
-        return *dropVersion < *minReadSnapshot;
+        return *dropVersion <= *minReadSnapshot;
     }
 
     TTableInfo(const std::set<TUnifiedPathId>& unifiedPathIds) {
@@ -283,6 +318,10 @@ public:
         if (rowset.template HaveValue<Schema::TableInfoV1::CopyStep>() && rowset.template HaveValue<Schema::TableInfoV1::CopyTxId>()) {
             result.SetCopyVersion(schemeShardLocalPathId, NOlap::TSnapshot(rowset.template GetValue<Schema::TableInfoV1::CopyStep>(),
                                                               rowset.template GetValue<Schema::TableInfoV1::CopyTxId>()));
+        }
+        if (rowset.template HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()) {
+            result.SchemeShardLocalPathIds[schemeShardLocalPathId].LastCompletedBackupTransaction =
+                rowset.template GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>();
         }
         if (rowset.template HaveValue<Schema::TableInfoV1::IsReadOnly>()) {
             result.SetReadOnly(schemeShardLocalPathId, rowset.template GetValue<Schema::TableInfoV1::IsReadOnly>());
@@ -342,6 +381,7 @@ private:
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
+    TSet<NOlap::TSnapshot> ReadOnlyTablesSnapshots;
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -354,6 +394,9 @@ private:
     std::optional<TUnifiedPathId> TabletPathId;
     TInternalPathId MaxInternalPathId;
 
+    void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
+    void RebuildReadOnlyTablesSnapshots();
+
     friend class TTxInit;
 
 public:   //IPathIdTranslator
@@ -361,16 +404,20 @@ public:   //IPathIdTranslator
         const TInternalPathId internalPathId) const override;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const override;
+    virtual std::optional<NOlap::TSnapshot> GetCopyVersionOptional(
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
+    virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
-        const TString& tablePath, const TSchemeShardLocalPathId externalPathId);
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
-        const TString& tablePath, const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
+        const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
 
     class TSchemaAddress {
     private:
@@ -475,6 +522,18 @@ public:
         return SchemaPresetsIds;
     }
 
+    // Tables belonging to a column store carry a non-standalone schema preset (id != 0), whereas
+    // standalone column tables use an inline schema (their only preset, if any, is the id-0
+    // placeholder registered on load). So a non-zero preset id means this tablet backs a column store.
+    bool IsStoreTablet() const {
+        for (const ui32 presetId : SchemaPresetsIds) {
+            if (presetId != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
@@ -484,8 +543,12 @@ public:
         NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
 
     void CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId);
+    void CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
+        const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
     void CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
+
+    NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 
     void AddTableInfo(const NKikimr::NColumnShard::TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo);
 
@@ -549,6 +612,14 @@ public:
     bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info);
 
     const TTableInfo& GetTable(const TInternalPathId pathId, const bool withDeleted = false) const;
+
+    void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId schemeShardLocalPathId, TString serializedBackupTx) {
+        const auto internalPathId = ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
+        auto* table = Tables.FindPtr(internalPathId);
+        AFL_VERIFY(table);
+        table->SetLastCompletedBackupTransaction(schemeShardLocalPathId, std::move(serializedBackupTx));
+    }
+
     ui64 GetMemoryUsage() const;
     TInternalPathId GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(

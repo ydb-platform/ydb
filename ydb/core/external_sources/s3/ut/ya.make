@@ -64,6 +64,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/library/actors/core
+    ydb/library/aws_init
 )
 
 DEPENDS(

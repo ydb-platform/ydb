@@ -5,7 +5,7 @@
 
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -1092,12 +1092,12 @@ public:
     }
 
     TCompactHashBase(TCompactHashBase&& other)
-        : Size_(std::move(other.Size_))
-        , UniqSize_(std::move(other.UniqSize_))
-        , MaxLoadFactor_(std::move(other.MaxLoadFactor_))
+        : Size_(other.Size_)
+        , UniqSize_(other.UniqSize_)
+        , MaxLoadFactor_(other.MaxLoadFactor_)
         , Buckets_(std::move(other.Buckets_))
-        , BucketsCount_(std::move(other.BucketsCount_))
-        , BucketsMemory_(std::move(other.BucketsMemory_))
+        , BucketsCount_(other.BucketsCount_)
+        , BucketsMemory_(other.BucketsMemory_)
         , ListPool_(std::move(other.ListPool_))
         , KeyExtractor_(std::move(other.KeyExtractor_))
         , KeyHash_(std::move(other.KeyHash_))

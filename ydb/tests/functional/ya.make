@@ -21,7 +21,6 @@ RECURSE(
     minidumps
     mvp
     nbs
-    postgresql
     query_cache
     rename
     restarts
@@ -36,12 +35,14 @@ RECURSE(
     serverless
     split_merge
     sqs
+    sqs_topic
     statistics
     suite_tests
     tpc
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

@@ -78,7 +78,7 @@ std::string BuildServiceAddress(TStringBuf hostName, int port)
 void ParseServiceAddress(TStringBuf address, TStringBuf* hostName, int* port)
 {
     auto colonIndex = address.find_last_of(':');
-    if (colonIndex == TString::npos) {
+    if (colonIndex == std::string::npos) {
         THROW_ERROR_EXCEPTION("Service address %Qv is malformed, <host>:<port> format is expected",
             address);
     }
@@ -143,7 +143,7 @@ TNetworkAddress::TNetworkAddress(const TNetworkAddress& other, int port)
             break;
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", Storage_.ss_family);
+                .With("family", Storage_.ss_family);
     }
 }
 
@@ -162,7 +162,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in*>(&Storage_);
             if (size > sizeof(sockaddr_in)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin_addr, addr, size);
             Length_ = sizeof(sockaddr_in);
@@ -172,7 +172,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in6*>(&Storage_);
             if (size > sizeof(sockaddr_in6)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET6 address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin6_addr, addr, size);
             Length_ = sizeof(sockaddr_in6);
@@ -180,7 +180,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
         }
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", family);
+                .With("family", family);
     }
 }
 
@@ -270,14 +270,14 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
     std::optional<int> port;
 
     auto closingBracketIndex = address.find(']');
-    if (closingBracketIndex != TString::npos) {
+    if (closingBracketIndex != std::string::npos) {
         if (address.empty() || address[0] != '[') {
             return TError("Address %Qv is malformed, expected [<addr>]:<port> or [<addr>] format",
                 address);
         }
 
         auto colonIndex = address.find(':', closingBracketIndex + 1);
-        if (colonIndex != TString::npos) {
+        if (colonIndex != std::string::npos) {
             try {
                 port = FromString<int>(address.substr(colonIndex + 1));
             } catch (const std::exception) {
@@ -288,9 +288,9 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
 
         ipAddress = address.substr(1, closingBracketIndex - 1);
     } else {
-        if (address.find('.') != TString::npos) {
+        if (address.find('.') != std::string::npos) {
             auto colonIndex = address.find(':');
-            if (colonIndex != TString::npos) {
+            if (colonIndex != std::string::npos) {
                 try {
                     port = FromString<int>(address.substr(colonIndex + 1));
                     ipAddress = address.substr(0, colonIndex);
@@ -356,8 +356,8 @@ TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const std::string
     sockaddr_un sockAddr = {};
     if (socketPath.size() > sizeof(sockAddr.sun_path)) {
         THROW_ERROR_EXCEPTION("Unix domain socket path is too long")
-            << TErrorAttribute("socket_path", socketPath)
-            << TErrorAttribute("max_socket_path_length", sizeof(sockAddr.sun_path));
+            .With("socket_path", socketPath)
+            .With("max_socket_path_length", sizeof(sockAddr.sun_path));
     }
 
     sockAddr.sun_family = AF_UNIX;
@@ -382,16 +382,16 @@ TNetworkAddress TNetworkAddress::Parse(TStringBuf address)
     return TryParse(address).ValueOrThrow();
 }
 
-void ToProto(TString* protoAddress, const TNetworkAddress& address)
+void ToProto(TProtobufString* protoAddress, const TNetworkAddress& address)
 {
-    *protoAddress = TString(reinterpret_cast<const char*>(&address.Storage_), address.Length_);
+    *protoAddress = TProtobufString(reinterpret_cast<const char*>(&address.Storage_), address.Length_);
 }
 
-void FromProto(TNetworkAddress* address, const TString& protoAddress)
+void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress)
 {
     if (protoAddress.size() > sizeof(address->Storage_)) {
         THROW_ERROR_EXCEPTION("Network address size is too big")
-            << TErrorAttribute("size", protoAddress.size());
+            .With("size", protoAddress.size());
     }
     address->Storage_ = {};
     memcpy(&address->Storage_, protoAddress.data(), protoAddress.size());
@@ -423,7 +423,7 @@ std::string ToString(const TNetworkAddress& address, const TNetworkAddressFormat
                 auto quoted = Format("%Qv", addressRef);
                 return Format("unix://[%v]", quoted.substr(1, quoted.size() - 2));
             } else {
-                auto addressRef = TString(typedAddr->sun_path, address.GetLength() - sizeof(sa_family_t));
+                auto addressRef = std::string(typedAddr->sun_path, address.GetLength() - sizeof(sa_family_t));
                 return Format("unix://%v", NFS::GetRealPath(addressRef));
             }
         }
@@ -996,15 +996,20 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
+    TFuture<TNetworkAddress> Resolve(TStringBuf hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
             return MakeFuture(result);
         }
 
-        // Run async resolution.
-        return Get(hostName);
+        // Fast path: probe the cache without materializing a std::string key.
+        if (auto address = Find(hostName)) {
+            return MakeFuture(*address);
+        }
+
+        // Slow path: materialize the key and run async resolution.
+        return Get(std::string(hostName));
     }
 
     IDnsResolverPtr GetDnsResolver()
@@ -1026,9 +1031,9 @@ public:
 
         UpdateLocalHostName(config);
 
-        YT_LOG_INFO("Localhost name determined via system call (LocalHostName: %v, ResolveHostNameIntoFqdn: %v)",
-            GetLocalHostName(),
-            config->ResolveHostNameIntoFqdn);
+        YT_TLOG_INFO("Localhost name determined via system call")
+            .With("LocalHostName", GetLocalHostName())
+            .With("ResolveHostNameIntoFqdn", config->ResolveHostNameIntoFqdn);
     }
 
     bool IsLocalAddress(const TNetworkAddress& address)
@@ -1044,7 +1049,7 @@ public:
     void PurgeCache()
     {
         Clear();
-        YT_LOG_INFO("Address cache purged");
+        YT_TLOG_INFO("Address cache purged");
     }
 
     void Configure(TAddressResolverConfigPtr config)
@@ -1056,8 +1061,8 @@ public:
 
         if (config->LocalHostNameOverride) {
             SetLocalHostName(*config->LocalHostNameOverride);
-            YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
-                config->LocalHostNameOverride);
+            YT_TLOG_INFO("Localhost name configured via config override")
+                .With("LocalHostName", config->LocalHostNameOverride);
         }
 
         UpdateLoopbackAddress(config);
@@ -1124,7 +1129,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address)
 {
     return Impl_->Resolve(address);
 }
@@ -1217,7 +1222,7 @@ TIP6Address TMtnAddress::ToIP6Address() const
 ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
@@ -1234,17 +1239,17 @@ ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 void TMtnAddress::SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value)
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
 
     auto bytesInRange = rightIndex - leftIndex;
     if (value >= (1ull << (8 * bytesInRange))) {
-        THROW_ERROR_EXCEPTION("Value is too large to be set in [leftIndex; rightIndex) interval (LeftIndex: %v, RightIndex: %v, Value %v)",
+        THROW_ERROR_EXCEPTION("Value %v is too large to be set in interval [%v, %v)",
+            value,
             leftIndex,
-            rightIndex,
-            value);
+            rightIndex);
     }
 
     auto* addressBytes = Address_.GetRawBytes();
@@ -1289,7 +1294,7 @@ std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {
     if (auto rawResult = InferYPClusterFromHostNameRaw(hostName)) {
-        return TString{*rawResult};
+        return std::string{*rawResult};
     }
     return {};
 }
@@ -1311,7 +1316,7 @@ std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl)
 std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
 {
     if (auto rawResult = InferYTClusterFromClusterUrlRaw(clusterUrl)) {
-        return TString{*rawResult};
+        return std::string{*rawResult};
     }
     return {};
 }

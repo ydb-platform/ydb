@@ -2,24 +2,20 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <yql/essentials/utils/sort.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
 Y_UNIT_TEST_LLVM(TestMakeHeap) {
-    const std::array<float, 10U> xxx = {{0.f, 13.f, -3.14f, 1212.f, -7898.8f, 21E4f, HUGE_VALF, -HUGE_VALF, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{0.F, 13.F, -3.14F, 1212.F, -7898.8F, 21E4F, HUGE_VALF, -HUGE_VALF, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](float f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<float>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>(xxx.begin(), xxx.end()));
 
     const auto pgmReturn = pb.MakeHeap(list,
                                        [&](TRuntimeNode l, TRuntimeNode r) {
@@ -45,11 +41,7 @@ Y_UNIT_TEST_LLVM(TestPopHeap) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](double f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>(xxx.begin(), xxx.end()));
 
     const auto comparer = [&](TRuntimeNode l, TRuntimeNode r) {
         return pb.AggrGreater(pb.Abs(l), pb.Abs(r));
@@ -73,16 +65,12 @@ Y_UNIT_TEST_LLVM(TestPopHeap) {
 }
 
 Y_UNIT_TEST_LLVM(TestSortHeap) {
-    const std::array<float, 10U> xxx = {{9E9f, -HUGE_VALF, 0.003f, 137.4f, -3.1415f, 1212.f, -7898.8f, 21E4f, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{9E9F, -HUGE_VALF, 0.003F, 137.4F, -3.1415F, 1212.F, -7898.8F, 21E4F, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](float f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<float>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>(xxx.begin(), xxx.end()));
 
     const auto pgmReturn = pb.SortHeap(
         pb.MakeHeap(list,
@@ -108,16 +96,12 @@ Y_UNIT_TEST_LLVM(TestSortHeap) {
 }
 
 Y_UNIT_TEST_LLVM(TestStableSort) {
-    const std::array<double, 10U> xxx = {{9E9f, -HUGE_VALF, 0.003f, HUGE_VALF, +3.1415f, -0.003f, -7898.8f, -3.1415f, 3673.f, 0.003f}};
+    const std::array<double, 10U> xxx = {{9E9F, -HUGE_VALF, 0.003F, HUGE_VALF, +3.1415F, -0.003F, -7898.8F, -3.1415F, 3673.F, 0.003F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](double f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>(xxx.begin(), xxx.end()));
 
     const auto pgmReturn = pb.StableSort(list,
                                          [&](TRuntimeNode l, TRuntimeNode r) {
@@ -138,17 +122,13 @@ Y_UNIT_TEST_LLVM(TestStableSort) {
 }
 
 Y_UNIT_TEST_LLVM(TestNthElement) {
-    const std::array<float, 10U> xxx = {{0.f, 13.f, -3.14f, 1212.f, -7898.8f, 21E4f, HUGE_VALF, -HUGE_VALF, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{0.F, 13.F, -3.14F, 1212.F, -7898.8F, 21E4F, HUGE_VALF, -HUGE_VALF, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](float f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<float>::Id);
-    const auto list = pb.NewList(type, data);
-    const auto n = pb.NewDataLiteral<ui64>(4U);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>(xxx.begin(), xxx.end()));
+    const auto n = NTest::ConvertValueToLiteralNode(pb, ui64(4U));
 
     const auto pgmReturn = pb.NthElement(list, n,
                                          [&](TRuntimeNode l, TRuntimeNode r) {
@@ -174,12 +154,8 @@ Y_UNIT_TEST_LLVM(TestPartialSort) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](double f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pb.NewList(type, data);
-    const auto n = pb.NewDataLiteral<ui64>(6U);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>(xxx.begin(), xxx.end()));
+    const auto n = NTest::ConvertValueToLiteralNode(pb, ui64(6U));
 
     const auto pgmReturn = pb.PartialSort(list, n,
                                           [&](TRuntimeNode l, TRuntimeNode r) {
@@ -205,17 +181,14 @@ Y_UNIT_TEST_LLVM(TestTopN) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](double f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto type = NTest::ConvertToMinikqlType<double>(pb);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>(xxx.begin(), xxx.end()));
 
     const auto comparator = [&](TRuntimeNode l, TRuntimeNode r) { return pb.AggrGreater(pb.Abs(l), pb.Abs(r)); };
 
     const auto n = 5ULL;
 
-    const auto limit = pb.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pb, ui64(n));
     const auto last = pb.Decrement(limit);
 
     const auto pgmReturn = pb.Take(pb.NthElement(pb.Fold(list, pb.NewEmptyList(type),
@@ -225,7 +198,7 @@ Y_UNIT_TEST_LLVM(TestTopN) {
                                                              return pb.If(pb.AggrLess(size, limit),
                                                                           pb.If(pb.AggrLess(size, last),
                                                                                 pb.Append(state, item), pb.MakeHeap(pb.Append(state, item), comparator)),
-                                                                          pb.If(comparator(item, pb.Unwrap(pb.ToOptional(state), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0)),
+                                                                          pb.If(comparator(item, pb.Unwrap(pb.ToOptional(state), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0)),
                                                                                 pb.PushHeap(pb.Append(pb.Take(pb.PopHeap(state, comparator), pb.Decrement(size)), item), comparator),
                                                                                 state));
                                                          }), last, comparator), limit);
@@ -241,7 +214,8 @@ Y_UNIT_TEST_LLVM(TestTopN) {
     NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
     const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
-    double min = result.GetElement(0).template Get<double>(), max = min;
+    double min = result.GetElement(0).template Get<double>();
+    double max = min;
     for (auto i = 1U; i < n; ++i) {
         const auto v = result.GetElement(i).template Get<double>();
         min = std::min(min, v, comp);
@@ -258,18 +232,15 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(), [&pb](double f) { return pb.NewDataLiteral(f); });
-
-    const auto type = pb.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pb.NewList(type, data);
+    const auto type = NTest::ConvertToMinikqlType<double>(pb);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>(xxx.begin(), xxx.end()));
 
     const auto comparator = [&](TRuntimeNode l, TRuntimeNode r) { return pb.AggrLess(pb.Abs(l), pb.Abs(r)); };
 
     const auto n = 5ULL;
 
-    const auto limit = pb.NewDataLiteral<ui64>(n);
-    const auto reserve = pb.ShiftLeft(limit, pb.NewDataLiteral<ui8>(1U));
+    const auto limit = NTest::ConvertValueToLiteralNode(pb, ui64(n));
+    const auto reserve = pb.ShiftLeft(limit, NTest::ConvertValueToLiteralNode(pb, ui8(1U)));
     const auto last = pb.Decrement(limit);
 
     const auto pgmReturn = pb.Take(pb.NthElement(pb.Fold(list, pb.NewEmptyList(type),
@@ -279,10 +250,10 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
                                                              return pb.If(pb.AggrLess(size, limit),
                                                                           pb.If(pb.AggrLess(size, last),
                                                                                 pb.Append(state, item), pb.MakeHeap(pb.Append(state, item), comparator)),
-                                                                          pb.If(comparator(item, pb.Unwrap(pb.ToOptional(state), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0)),
+                                                                          pb.If(comparator(item, pb.Unwrap(pb.ToOptional(state), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0)),
                                                                                 pb.If(pb.AggrLess(size, reserve),
                                                                                       pb.Append(state, item),
-                                                                                      pb.Take(pb.NthElement(pb.Prepend(item, pb.Skip(state, pb.NewDataLiteral<ui64>(1U))), last, comparator), limit)),
+                                                                                      pb.Take(pb.NthElement(pb.Prepend(item, pb.Skip(state, NTest::ConvertValueToLiteralNode(pb, ui64(1U)))), last, comparator), limit)),
                                                                                 state));
                                                          }), last, comparator), limit);
 
@@ -297,7 +268,8 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
     NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
     const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
-    double min = result.GetElement(0).template Get<double>(), max = min;
+    double min = result.GetElement(0).template Get<double>();
+    double max = min;
     for (auto i = 1U; i < n; ++i) {
         const auto v = result.GetElement(i).template Get<double>();
         min = std::min(min, v, comp);
@@ -308,5 +280,4 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
     UNIT_ASSERT_VALUES_EQUAL(*mm.second, max);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLHeapTest)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

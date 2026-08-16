@@ -1,6 +1,7 @@
 RECURSE(
     async_io
     cm_client
+    comp_nodes
     common
     expr_nodes
     gateway

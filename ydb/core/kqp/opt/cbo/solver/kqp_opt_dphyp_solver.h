@@ -749,11 +749,20 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
     }
 
     if (shuffleLeftSide || shuffleRightSide) { // we don't have rules to put shuffles into not grace join yet.
+        auto joinAlgo = EJoinAlgoType::GraceJoin;
         auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
+        if (this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::ReverseBlockJoin, edge.JoinKind)) {
+            auto revStats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::ReverseBlockJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
+            if (revStats.Cost < stats.Cost) {
+                stats = revStats;
+                joinAlgo = EJoinAlgoType::ReverseBlockJoin;
+            }
+        }
+
         if (!edge.IsCommutative) {
             return TBestJoin {
                 .Stats = std::move(stats),
-                .Algo = EJoinAlgoType::GraceJoin,
+                .Algo = joinAlgo,
                 .IsReversed = false
             };
         }
@@ -1122,7 +1131,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
             // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
             // bool sameHashFuncArgCount = (lhsHashFuncArgCnt == rhsHashFuncArgCnt);
             if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
-                if (leftNode->Stats.Nrows < rightNode->Stats.Nrows) {
+                if (leftNode->Stats.ByteSize < rightNode->Stats.ByteSize) {
                     lhsShuffled = false;
                 } else {
                     rhsShuffled = false;

@@ -212,6 +212,13 @@ bool IsGlobalCellId(TCellId cellId);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
+bool operator<(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
+
+void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Relies on first 32 bits of object id ("entropy") to be pseudo-random,
 //! cf. MakeRegularId.
 struct TObjectIdEntropyHash

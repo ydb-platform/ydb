@@ -289,6 +289,9 @@ public:
     /// Issue report target
     TString IssueReportTarget;
 
+    /// Remove unsupported pragmas. Temporal flag. Should be removed after COFE-1080 implementation
+    bool RemoveUnsupportedPragmas;
+
 public:
     TProgramFactoryOptions();
 
@@ -417,6 +420,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetIssueReportTarget(const TString& reportTarget);
+
+    /**
+     * Set RemoveUnsupportedPragmas flag.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetRemoveUnsupportedPragmas(bool removeUnsupportedPragmas);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

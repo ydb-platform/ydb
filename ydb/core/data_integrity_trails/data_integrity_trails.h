@@ -33,6 +33,9 @@ inline void LogTxSettings(const TransactionSettings& txSettings, TStringStream& 
         case TransactionSettings::kReadCommittedReadWrite:
             LogKeyValue("TxMode", "ReadCommittedReadWrite", ss);
             break;
+        case TransactionSettings::kStrictSerializableReadWrite:
+            LogKeyValue("TxMode", "StrictSerializableReadWrite", ss);
+            break;
         case TransactionSettings::TX_MODE_NOT_SET:
             LogKeyValue("TxMode", "Undefined", ss);
             break;

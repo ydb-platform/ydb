@@ -1,6 +1,5 @@
 #include "message.h"
-#include "private.h"
-#include "service.h"
+
 #include "channel.h"
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
@@ -237,6 +236,7 @@ void ToProto(
     NProto::TStreamingParameters* protoParameters,
     const TStreamingParameters& parameters)
 {
+    protoParameters->Clear();
     protoParameters->set_window_size(parameters.WindowSize);
     if (parameters.ReadTimeout) {
         protoParameters->set_read_timeout(ToProto(*parameters.ReadTimeout));
@@ -250,6 +250,7 @@ void FromProto(
     TStreamingParameters* parameters,
     const NProto::TStreamingParameters& protoParameters)
 {
+    *parameters = {};
     if (protoParameters.has_window_size()) {
         parameters->WindowSize = protoParameters.window_size();
     }
@@ -259,6 +260,20 @@ void FromProto(
     if (protoParameters.has_write_timeout()) {
         parameters->WriteTimeout = FromProto<TDuration>(protoParameters.write_timeout());
     }
+}
+
+void ToProto(
+    NProto::TDirectPlacementTransferParameters* protoParameters,
+    const TDirectPlacementTransferParameters& parameters)
+{
+    protoParameters->set_enabled(parameters.Enabled);
+}
+
+void FromProto(
+    TDirectPlacementTransferParameters* parameters,
+    const NProto::TDirectPlacementTransferParameters& protoParameters)
+{
+    parameters->Enabled = protoParameters.enabled();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

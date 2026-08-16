@@ -43,6 +43,11 @@ public:
     bool IsOutOfBandProhibited();
 
     void Reset();
+
+private:
+    //! Deadline of the most recently scheduled invocation; used by
+    //! EPeriodicExecutorDelayMode::FromPreviousStart to measure the next delay start-to-start.
+    TInstant LastDeadline_;
 };
 
 } // namespace NDetail

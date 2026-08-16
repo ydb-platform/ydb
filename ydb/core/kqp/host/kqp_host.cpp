@@ -5,42 +5,44 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
-#include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -1408,10 +1410,8 @@ private:
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
                 .SetFromConfig(SessionCtx->Config());
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
@@ -1525,7 +1525,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
 
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
@@ -1656,6 +1655,7 @@ private:
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
+        SessionCtx->Query().IsolateEffects = settings.UsePessimisticLocks;
         if (settings.RuntimeParameterSizeLimitSatisfied) {
             SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }
@@ -1681,8 +1681,8 @@ private:
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
-                .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config())
+                .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
                 .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
@@ -1709,7 +1709,6 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
@@ -1812,7 +1811,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1842,7 +1840,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1921,8 +1918,12 @@ private:
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
             configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
-        } else if (queryType != EKikimrQueryType::Script) {
-            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+        } else {
+            if (queryType != EKikimrQueryType::Script) {
+                configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+            }
+
+            configuration.ChangeDefaultPragmaValue(configuration.UseRuntimeListing, true);
         }
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
@@ -1931,9 +1932,10 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Gateway = FederatedQuerySetup->HttpGateway;
-        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        state->GatewayRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
+        state->EnableS3ConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
 
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
@@ -2031,8 +2033,15 @@ private:
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
-        state->AllowTransparentSystemColumns = false;
+        state->AddTransparentPrefixToTransparentSystemColumns = false;
+        state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
+        state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
+        state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
+        state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2047,6 +2056,7 @@ private:
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
             }
+            state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
@@ -2092,6 +2102,7 @@ private:
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
         TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
+        TypesCtx->OptimizerFlags.insert("rewriteswitchoverextractmembers");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
@@ -2335,7 +2346,7 @@ private:
     bool UsePessimisticLocks = false;
 };
 
-} // namespace
+} // anonymous namespace
 
 Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
     switch (statsMode) {
@@ -2361,5 +2372,4 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
                                    keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

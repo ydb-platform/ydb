@@ -4,7 +4,8 @@ from attr import Factory
 
 TEST_GROUP_PATTERN = "{prefix}-container.json"
 TEST_CASE_PATTERN = "{prefix}-result.json"
-ATTACHMENT_PATTERN = '{prefix}-attachment.{ext}'
+ATTACHMENT_PATTERN = "{prefix}-attachment.{ext}"
+GLOBALS_PATTERN = "{prefix}-globals.json"
 INDENT = 4
 
 
@@ -54,7 +55,7 @@ class TestResult(ExecutableItem):
 
 @attrs
 class TestStepResult(ExecutableItem):
-    id = attrib(default=None)  # noqa: A003
+    id = attrib(default=None)
 
 
 @attrs
@@ -83,7 +84,7 @@ class Label:
 
 @attrs
 class Link:
-    type = attrib(default=None)  # noqa: A003
+    type = attrib(default=None)
     url = attrib(default=None)
     name = attrib(default=None)
 
@@ -100,12 +101,30 @@ class StatusDetails:
 class Attachment:
     name = attrib(default=None)
     source = attrib(default=None)
-    type = attrib(default=None)  # noqa: A003
+    type = attrib(default=None)
+
+
+@attrs
+class GlobalAttachment(Attachment):
+    timestamp = attrib(default=None)
+
+
+@attrs
+class GlobalError(StatusDetails):
+    timestamp = attrib(default=None)
+
+
+@attrs
+class Globals:
+    file_pattern = GLOBALS_PATTERN
+
+    attachments = attrib(default=Factory(list))
+    errors = attrib(default=Factory(list))
 
 
 class Status:
-    FAILED = 'failed'
-    BROKEN = 'broken'
-    PASSED = 'passed'
-    SKIPPED = 'skipped'
-    UNKNOWN = 'unknown'
+    FAILED = "failed"
+    BROKEN = "broken"
+    PASSED = "passed"
+    SKIPPED = "skipped"
+    UNKNOWN = "unknown"

@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -20,36 +19,36 @@ public:
     public:
         TState(TMemoryUsageInfo* memInfo, ui64 limit)
             : TBase(memInfo)
-            , Limit(limit)
+            , Limit_(limit)
         {
         }
 
         NUdf::TUnboxedValuePod Pull(TComputationContext& ctx) {
-            if (Accumulator.empty()) {
+            if (Accumulator_.empty()) {
                 return ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator.size(), items);
-            std::move(Accumulator.begin(), Accumulator.end(), items);
-            Accumulator.clear();
+            const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator_.size(), items);
+            std::move(Accumulator_.begin(), Accumulator_.end(), items);
+            Accumulator_.clear();
             return list;
         }
 
         bool Put(NUdf::TUnboxedValuePod value) {
-            Accumulator.emplace_back(std::move(value));
-            return Limit != 0 && Limit <= Accumulator.size();
+            Accumulator_.emplace_back(std::move(value));
+            return Limit_ != 0 && Limit_ <= Accumulator_.size();
         }
 
     private:
-        const ui64 Limit;
-        TUnboxedValueDeque Accumulator;
+        const ui64 Limit_;
+        TUnboxedValueDeque Accumulator_;
     };
 
     TSqueezeToListWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationNode* limit)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , Flow(flow)
-        , Limit(limit)
+        , Flow_(flow)
+        , Limit_(limit)
     {
     }
 
@@ -57,11 +56,11 @@ public:
         if (state.IsFinish()) {
             return state;
         } else if (state.IsInvalid()) {
-            MakeState(ctx, Limit->GetValue(ctx).GetOrDefault(std::numeric_limits<ui64>::max()), state);
+            MakeState(ctx, Limit_->GetValue(ctx).GetOrDefault(std::numeric_limits<ui64>::max()), state);
         }
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
-            if (auto item = Flow->GetValue(ctx); item.IsYield()) {
+            if (auto item = Flow_->GetValue(ctx); item.IsYield()) {
                 return item.Release();
             } else if (item.IsFinish() || statePtr->Put(item.Release())) {
                 const auto list = statePtr->Pull(ctx);
@@ -76,10 +75,7 @@ public:
     class TLLVMFieldsStructureForState: public TLLVMFieldsStructure<TComputationValue<TState>> {
     private:
         using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-        llvm::PointerType* StructPtrType;
-
-    protected:
-        using TBase::Context;
+        llvm::PointerType* StructPtrType_;
 
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
@@ -87,14 +83,14 @@ public:
             return result;
         }
 
-        TLLVMFieldsStructureForState(llvm::LLVMContext& context)
+        explicit TLLVMFieldsStructureForState(llvm::LLVMContext& context)
             : TBase(context)
-            , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+            , StructPtrType_(PointerType::getUnqual(StructType::get(context)))
         {
         }
     };
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -110,7 +106,7 @@ public:
         BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
-        const auto value = GetNodeValue(Limit, ctx, block);
+        const auto value = GetNodeValue(Limit_, ctx, block);
         const auto limit = SelectInst::Create(IsExists(value, block, context), GetterFor<ui64>(value, context, block), ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<ui64>::max()), "limit", block);
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -137,7 +133,7 @@ public:
 
         block = more;
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(GetYield(context), block);
 
         const auto choise = SwitchInst::Create(item, plus, 2U, block);
@@ -169,13 +165,13 @@ private:
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            this->DependsOn(flow, Limit);
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            this->DependsOn(flow, Limit_);
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationNode* const Limit;
+    IComputationNode* const Flow_;
+    IComputationNode* const Limit_;
 };
 
 } // namespace
@@ -187,5 +183,4 @@ IComputationNode* WrapSqueezeToList(TCallable& callable, const TComputationNodeF
     return new TSqueezeToListWrapper(ctx.Mutables, flow, limit);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

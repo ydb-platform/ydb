@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(200)
 
 REQUIREMENTS(ram:32 cpu:4)
 
@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
     ydb/core/wrappers/ut_helpers
+    ydb/library/aws_init
     yql/essentials/public/udf/service/exception_policy
 )
 

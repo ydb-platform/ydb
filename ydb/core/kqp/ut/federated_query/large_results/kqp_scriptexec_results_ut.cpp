@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::NOT_FOUND, status.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "No such execution");
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Script execution operation not found");
         }
 
         WaitRemoveScriptResults(db, resOp.Metadata().ExecutionId);

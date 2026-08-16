@@ -1,23 +1,24 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/issue/yql_issue.h>
-
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/services/metadata/optimization/abstract.h>
-
 namespace NYql {
+
 namespace {
 
 using namespace NKikimr;
 using namespace NNodes;
-
-namespace {
 
 bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     THashSet<TStringBuf> columnNames;
@@ -43,8 +44,6 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
 
     return hasIntersection;
 }
-
-} // namespace
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {
 public:
@@ -543,8 +542,7 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
-class TKikimrDataSink : public TDataProviderBase
-{
+class TKikimrDataSink : public TDataProviderBase {
 public:
     TKikimrDataSink(
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
@@ -563,6 +561,8 @@ public:
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
+        , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
+        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -601,6 +601,11 @@ public:
         return *TypeAnnotationTransformer;
     }
 
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer;
+    }
+
     IGraphTransformer& GetCallableExecutionTransformer() override {
         return *CallableExecutionTransformer;
     }
@@ -633,6 +638,12 @@ public:
 
         if (KikimrDataSinkFunctions().contains(node.Content())) {
             return true;
+        }
+
+        if (const auto* extendedTypeAnn = SessionCtx->GetInternalTypeAnnTransformer()) {
+            if (extendedTypeAnn->CanParse(node) || DqTypeAnnTransformer->CanParse(node)) {
+                return true;
+            }
         }
 
         return false;
@@ -1356,6 +1367,7 @@ public:
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
+                        .Statistics(settings.Statistics.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
@@ -1843,32 +1855,42 @@ public:
                     return nullptr; // Error has been already reported in parsing
                 }
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
-                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .ReplaceIfExists(mode == "create_or_replace" ? trueAtom : falseAtom)
+                        .ExistingOk(mode == "create_if_not_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "alter") {
+                } else if (mode == "alter" || mode == "alter_if_exists") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .MissingOk(mode == "alter_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiDropSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
+                        .MissingOk(mode == "drop_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
                 } else {
@@ -1909,9 +1931,11 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
+    const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
@@ -2018,7 +2042,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
 
     YQL_ENSURE(mode);
     auto modeStr = mode.Cast().Value();
-    if (modeStr == "create" || modeStr == "alter") {
+    if (modeStr == "create" || modeStr == "create_if_not_exists" || modeStr == "create_or_replace" || modeStr == "alter" || modeStr == "alter_if_exists") {
         if (!value && !valueParamName) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                 "Secret value is required: provide a literal or a single string parameter"));

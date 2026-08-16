@@ -37,10 +37,6 @@ public:
 
 private:
   static ryml::Callbacks MakeCallbacks();
-  [[noreturn]] static void OnError(const char *msg,
-                                   size_t msg_len,
-                                   ryml::Location location,
-                                   void *user_data);
 
   ryml::ParserOptions opts_;
   ryml::Parser::handler_type event_handler_;

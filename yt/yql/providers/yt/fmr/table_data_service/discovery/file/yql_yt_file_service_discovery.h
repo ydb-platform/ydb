@@ -8,6 +8,6 @@ struct TFileTableDataServiceDiscoverySettings {
     TString Path;
 };
 
-ITableDataServiceDiscovery::TPtr MakeFileTableDataServiceDiscovery(const TFileTableDataServiceDiscoverySettings& settings);
+ITableDataServiceDiscovery::TPtr MakeFileTableDataServiceDiscovery(TFileTableDataServiceDiscoverySettings settings);
 
 } // namespace NYql::NFmr

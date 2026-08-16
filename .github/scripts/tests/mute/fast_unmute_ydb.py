@@ -122,6 +122,31 @@ def fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type):
     return result
 
 
+def fetch_fast_unmute_active_rows(ydb_wrapper, table_path, branch, build_type):
+    br = _escape(branch)
+    bt = _escape(build_type)
+    query = f"""
+    SELECT full_name, github_issue_number, requested_at
+    FROM `{table_path}`
+    WHERE branch = '{br}'
+        AND build_type = '{bt}'
+    """
+    return ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_active_fetch')
+
+
+def fetch_grace_full_names(ydb_wrapper, table_path, branch, build_type):
+    br = _escape(branch)
+    bt = _escape(build_type)
+    query = f"""
+    SELECT full_name
+    FROM `{table_path}`
+    WHERE branch = '{br}'
+        AND build_type = '{bt}'
+    """
+    rows = ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_grace_fetch_names')
+    return {row['full_name'] for row in rows if row.get('full_name')}
+
+
 def create_fast_unmute_grace_table(ydb_wrapper, table_path):
     create_sql = f"""
     CREATE TABLE IF NOT EXISTS `{table_path}` (

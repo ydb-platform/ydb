@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from inspect import Parameter, Signature, signature
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 
 from ..traitlets import HasTraits, Undefined
 
@@ -16,7 +16,7 @@ def _get_default(value: Any) -> Any:
 T = TypeVar("T", bound=HasTraits)
 
 
-def signature_has_traits(cls: Type[T]) -> Type[T]:
+def signature_has_traits(cls: type[T]) -> type[T]:
     """Return a decorated class with a constructor signature that contain Trait names as kwargs."""
     traits = [
         (name, _get_default(value.default_value))

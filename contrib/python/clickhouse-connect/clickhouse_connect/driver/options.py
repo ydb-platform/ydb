@@ -1,14 +1,19 @@
-import warnings
-
 from clickhouse_connect.driver.exceptions import NotSupportedError
 
 # Attributes resolved lazily by __getattr__ / _resolve_* functions:
-#   np, pd, arrow, pl, pd_time_test, pd_extended_dtypes, PANDAS_VERSION, IS_PANDAS_2
+#   np, pd, arrow, pl, pd_time_test
 
-# pylint: disable=import-outside-toplevel
 
-_PANDAS_ATTRS = frozenset({"pd", "pd_time_test", "pd_extended_dtypes", "PANDAS_VERSION", "IS_PANDAS_2"})
+_PANDAS_ATTRS = frozenset({"pd", "pd_time_test"})
 _ALL_LAZY = frozenset({"np", "arrow", "pl"}) | _PANDAS_ATTRS
+
+
+def _pd_time_test(arr_or_dtype):
+    """Check whether a Series or dtype is datetime64 or timedelta64."""
+    kind = getattr(arr_or_dtype, "kind", None)
+    if kind is None:
+        kind = getattr(getattr(arr_or_dtype, "dtype", None), "kind", None)
+    return kind in ("M", "m")
 
 
 def _resolve_numpy():
@@ -28,41 +33,15 @@ def _resolve_pandas():
     try:
         import pandas
 
-        globals()["pd"] = pandas
         version = tuple(map(int, pandas.__version__.split(".")[:2]))
-        globals()["PANDAS_VERSION"] = version
-        is_v2 = version >= (2, 0)
-        globals()["IS_PANDAS_2"] = is_v2
-        globals()["pd_extended_dtypes"] = not pandas.__version__.startswith("0")
-        if not is_v2:
-            warnings.warn(
-                "clickhouse-connect support for pandas 1.x is deprecated and will be removed in v1.0.0. "
-                "Please upgrade to pandas 2.x or later.",
-                DeprecationWarning,
-                stacklevel=2,
+        if version < (2, 0):
+            raise NotSupportedError(
+                f"clickhouse-connect requires pandas 2.0 or later, found {pandas.__version__}. Please upgrade: pip install --upgrade pandas"
             )
-        try:
-            from pandas.core.dtypes.common import (
-                is_datetime64_dtype,
-                is_timedelta64_dtype,
-            )
-
-            def combined_test(arr_or_dtype):
-                return is_datetime64_dtype(arr_or_dtype) or is_timedelta64_dtype(arr_or_dtype)
-
-            globals()["pd_time_test"] = combined_test
-        except ImportError:
-            try:
-                from pandas.core.dtypes.common import is_datetime_or_timedelta_dtype
-
-                globals()["pd_time_test"] = is_datetime_or_timedelta_dtype
-            except ImportError as ex:
-                raise NotSupportedError("pandas version does not contain expected test for temporal types") from ex
+        globals()["pd"] = pandas
+        globals()["pd_time_test"] = _pd_time_test
     except ImportError:
         globals()["pd"] = None
-        globals()["PANDAS_VERSION"] = None
-        globals()["IS_PANDAS_2"] = None
-        globals()["pd_extended_dtypes"] = False
         globals()["pd_time_test"] = None
 
 
@@ -106,7 +85,6 @@ def __dir__():
     return list(globals().keys()) + list(_ALL_LAZY - globals().keys())
 
 
-# pylint: disable=redefined-outer-name
 def check_numpy():
     _resolve_numpy()
     np = globals()["np"]

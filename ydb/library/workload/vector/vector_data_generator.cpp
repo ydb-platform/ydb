@@ -450,10 +450,14 @@ int TWorkloadVectorDataInitializerBase::PostImport() {
     ddlQuery << "WITH (\n";
     ddlQuery << "    " << VectorParams.GetDistanceDDL() << ",\n";
     ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
-    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
-    ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";
-    ddlQuery << "    clusters=" << VectorParams.KmeansTreeClusters << "\n";
-    ddlQuery << ");";
+    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension;
+    if (VectorParams.KmeansTreeLevels) {
+        ddlQuery << ",\n    levels=" << VectorParams.KmeansTreeLevels;
+    }
+    if (VectorParams.KmeansTreeClusters) {
+        ddlQuery << ",\n    clusters=" << VectorParams.KmeansTreeClusters;
+    }
+    ddlQuery << "\n);";
 
     Cout << "Building vector index ..." << Endl;
     auto result = VectorParams.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {

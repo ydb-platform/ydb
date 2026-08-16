@@ -122,7 +122,7 @@ bool TKeysDescription::NeedPickle() const {
 TExprNode::TPtr TKeysDescription::GetKeySelector(TExprContext& ctx, TPositionHandle pos, const TStructExprType* rowType) {
     auto builder = Build<TCoAtomList>(ctx, pos);
     for (auto key : GetKeysList(ctx, pos)) {
-        builder.Add(std::move(key));
+        builder.Add(key);
     }
     return BuildKeySelector(pos, *rowType, builder.Build().Value().Ptr(), ctx);
 }

@@ -11,7 +11,6 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -126,6 +125,18 @@ TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExpr
         }
     }
     return extraUsage;
+}
+
+void TExecContextBase::ReportFullCaptureCacheHit() const {
+    if (!Session_->FullCapture_ || !UserFiles_) {
+        return;
+    }
+    const auto& files = UserFiles_->GetFiles();
+    if (AnyOf(files, [](const auto& p) { return p.second.IsUdf; })) {
+        Session_->FullCapture_->ReportError(
+            yexception() << "query cache hit for operation with attached UDFs"
+        );
+    }
 }
 
 void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const {

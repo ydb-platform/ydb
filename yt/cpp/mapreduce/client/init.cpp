@@ -189,7 +189,7 @@ void CommonInitialize(TGuard<TMutex>& g)
 
             auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
             for (const auto& rule : coreLoggingConfig->Rules) {
-                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+                rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
             }
 
             if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
@@ -205,7 +205,7 @@ void CommonInitialize(TGuard<TMutex>& g)
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
         for (const auto& rule : coreLoggingConfig->Rules) {
-            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
         }
 
         if (auto structuredLogPath = TConfig::Get()->StructuredLog) {

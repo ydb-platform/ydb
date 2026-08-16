@@ -1,5 +1,7 @@
 #include "fls.h"
 
+#include <yt/yt/core/misc/mpsc_stack.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
@@ -51,14 +53,17 @@ public:
     TFls* Allocate()
     {
         auto* fls = new TFls();
-        Pool_.push_back(fls);
+        Pool_.Enqueue(fls);
         return fls;
     }
 
 private:
-    std::vector<TFls*> Pool_;
+    TMpscStack<TFls*> Pool_;
 
-#ifdef __clang__
+    // Best-effort process-wide cleanup for global FLS pool.
+    // See https://st.yandex-team.ru/DEVTOOLSSUPPORT-85470 on why we explicitly
+    // exclude Windows platform.
+#if defined(__clang__) && !defined(_win_)
     __attribute__((destructor(101))) static void Cleanup()
     {
         Get()->DoCleanup();
@@ -66,13 +71,9 @@ private:
 
     void DoCleanup()
     {
-        while (!Pool_.empty()) {
-            auto* fls = Pool_.back();
-            delete fls;
-            Pool_.pop_back();
-        }
-        // Ensure vector's memory is released.
-        Pool_ = {};
+        Pool_.DequeueAll(
+            /*reverse*/ false,
+            [] (auto* fls) { delete fls; });
     }
 #endif
 };

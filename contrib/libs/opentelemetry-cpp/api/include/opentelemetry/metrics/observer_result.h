@@ -25,7 +25,12 @@ class ObserverResultT
 {
 
 public:
-  virtual ~ObserverResultT() = default;
+  ObserverResultT()                                       = default;
+  ObserverResultT(const ObserverResultT &)                = default;
+  ObserverResultT(ObserverResultT &&) noexcept            = default;
+  ObserverResultT &operator=(const ObserverResultT &)     = default;
+  ObserverResultT &operator=(ObserverResultT &&) noexcept = default;
+  virtual ~ObserverResultT()                              = default;
 
   virtual void Observe(T value) noexcept = 0;
 

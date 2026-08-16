@@ -144,7 +144,7 @@ void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopi
         .Strategy = std::make_unique<TAlterTopicSetPartitionWriteSpeedInMessagesStrategy>(TString{TEST_TOPIC}, writeSpeedInMessagesPerSecond),
     }));
     runtime.EnableScheduleForActor(aid);
-    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvAlterTopicResponse>(parent, TDuration::Seconds(120));
+    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvSchemaResponse>(parent, TDuration::Seconds(120));
     UNIT_ASSERT(reply);
     const auto& alter = *reply->Get();
     UNIT_ASSERT_C(alter.Status == Ydb::StatusIds::SUCCESS,
@@ -301,6 +301,9 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }
+    if (settings.WithoutConsumer) {
+        readSettings.WithoutConsumer();
+    }
 
     struct MsgWrapper : public IMessage {
 
@@ -419,6 +422,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId + 1);
     }
+    UNIT_ASSERT_VALUES_EQUAL_C(settings.WithoutConsumer, false, "Reading WithoutConsumer is not supported in PQv1");
 
     struct MsgWrapper : public IMessage {
 

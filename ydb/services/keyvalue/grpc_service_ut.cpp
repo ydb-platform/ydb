@@ -942,8 +942,6 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
             getStatusRequest.set_path(tablePath);
             getStatusRequest.add_storage_channel(0);
-            getStatusRequest.add_storage_channel(1);
-            getStatusRequest.add_storage_channel(2);
             GetStorageChannelStatus<StubVersion>(getStatusRequest, stub);
 
             Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
@@ -951,8 +949,6 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest2;
             getStatusRequest2.set_path(tablePath);
             getStatusRequest2.add_storage_channel(0);
-            getStatusRequest2.add_storage_channel(1);
-            getStatusRequest2.add_storage_channel(2);
             GetStorageChannelStatus<StubVersion>(getStatusRequest2, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
@@ -1050,11 +1046,9 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             getStatusRequest.set_path(tablePath);
             getStatusRequest.set_partition_id(0);
             getStatusRequest.add_storage_channel(1);
-            getStatusRequest.add_storage_channel(2);
-            getStatusRequest.add_storage_channel(3);
 
             Ydb::KeyValue::GetStorageChannelStatusResult getStatusResult = GetStorageChannelStatus<StubVersion>(getStatusRequest, stub);
-            UNIT_ASSERT_VALUES_EQUAL(getStatusResult.storage_channel_info_size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(getStatusResult.storage_channel_info_size(), 1);
         });
     }
 

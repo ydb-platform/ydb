@@ -1,19 +1,22 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "kqp_schedulable_read.h"
-#include "log.h"
+#include <ydb/library/actors/core/log.h>
 #include "tree/dynamic.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
@@ -26,11 +29,11 @@ constexpr double Epsilon = 1e-8;
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const NScheduler::TOptions& options) : Options(options) {}
+    explicit TComputeSchedulerService(const TDuration& updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
 
     void Bootstrap() {
-        auto counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &NActors::TActivationContext::AsActorContext());
-        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(counters, Options.DelayParams);
+        Scheduler = AppData()->KqpComputeScheduler;
+        Y_ENSURE(Scheduler);
 
         Send(
             NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -38,17 +41,16 @@ public:
             NActors::IEventHandle::FlagTrackDelivery
         );
 
-        Enabled = AppData()->FeatureFlags.GetEnableResourcePoolsScheduler();
-        if (Enabled) {
-            LOG_I("Enabled on start");
+        if (Scheduler->IsEnabled()) {
+            YDB_LOG_INFO("Enabled on start");
         } else {
-            LOG_I("Disabled on start");
+            YDB_LOG_INFO("Disabled on start");
         }
 
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
 
         Become(&TComputeSchedulerService::State);
-        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
     STATEFN(State) {
@@ -59,32 +61,31 @@ public:
             hFunc(TEvAddDatabase, Handle);
             hFunc(TEvRemoveDatabase, Handle);
             hFunc(TEvAddPool, Handle);
-            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
+            hFunc(NWorkloadManager::TEvUpdatePoolInfo, Handle);
             hFunc(TEvRemovePool, Handle);
             hFunc(TEvAddQuery, Handle);
             hFunc(TEvRemoveQuery, Handle);
 
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
-            hFunc(TEvGetReadFactory, Handle);
-
             default:
-                LOG_E("Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG_ERROR("Unexpected",
+                    {"event", ev->GetTypeRewrite()});
         }
     }
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed to config changes");
+        YDB_LOG_DEBUG("Subscribed to config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
-        Enabled = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler();
-        if (Enabled) {
-            LOG_I("Become enabled");
+        Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
+        if (Scheduler->IsEnabled()) {
+            YDB_LOG_INFO("Become enabled");
         } else {
-            LOG_I("Become disabled");
+            YDB_LOG_INFO("Become disabled");
         }
 
         auto responseEvent = std::make_unique<NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -97,7 +98,9 @@ public:
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->DatabaseId, attrs);
 
-        LOG_D("Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
+        YDB_LOG_DEBUG("Add",
+            {"database", ev->Get()->DatabaseId},
+            {"attrs", attrs});
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -124,12 +127,15 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        LOG_D("Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+        YDB_LOG_DEBUG("Add",
+            {"pool", databaseId},
+            {"poolId", poolId},
+            {"attrs", attrs});
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
-            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+            Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             if (resourceWeight > Epsilon) {
                 UpdatePoolsGuarantee();
             }
@@ -140,7 +146,7 @@ public:
         Y_ABORT("Unsupported yet");
     }
 
-    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
         auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
@@ -170,12 +176,15 @@ public:
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
-            LOG_D("Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+            YDB_LOG_DEBUG("Update",
+                {"pool", databaseId},
+                {"poolId", poolId},
+                {"attrs", attrs});
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
                 poolIt->second.IsFirstRemoval = true;
-                Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+                Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             } else {
                 // The second removal - the pool was really removed.
                 PoolSubscribtions.erase(poolIt);
@@ -183,7 +192,9 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
-            LOG_E("Trying to remove unknown pool: " << databaseId << "/" << poolId);
+            YDB_LOG_ERROR("Trying to remove unknown",
+                {"pool", databaseId},
+                {"poolId", poolId});
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -197,10 +208,13 @@ public:
         };
 
         auto response = MakeHolder<TEvQueryResponse>();
-        if (Enabled) {
+        if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
-            LOG_D("Add query: " << databaseId << "/" << poolId << ", TxId: " << queryId);
+            YDB_LOG_DEBUG("Add",
+                {"query", databaseId},
+                {"poolId", poolId},
+                {"txId", queryId});
         }
         Send(ev->Sender, response.Release(), 0, queryId);
     }
@@ -208,21 +222,17 @@ public:
     void Handle(TEvRemoveQuery::TPtr& ev) {
         const auto& queryId = ev->Get()->QueryId;
         if (!Scheduler->RemoveQuery(queryId)) {
-            LOG_E("Trying to remove unknown query: " << queryId);
+            YDB_LOG_ERROR("Trying to remove unknown",
+                {"query", queryId});
         } else {
-            LOG_D("Remove query: TxId: " << queryId);
+            YDB_LOG_DEBUG("Remove query",
+                {"txId", queryId});
         }
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
-        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
-    }
-
-    void Handle(TEvGetReadFactory::TPtr& ev) {
-        auto response = MakeHolder<TEvReadFactoryResponse>();
-        response->Factory = std::make_unique<TSchedulableReadFactory>(Scheduler);
-        Send(ev->Sender, response.Release(), 0, 0);
+        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
 private:
@@ -248,9 +258,8 @@ private:
     }
 
 private:
-    bool Enabled = true;
     TComputeSchedulerPtr Scheduler;
-    const NScheduler::TOptions Options;
+    const TDuration UpdateFairSharePeriod;
 
     struct TPoolParams {
         bool IsFirstRemoval = false;
@@ -266,10 +275,11 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
-    : Root(std::make_shared<TRoot>(counters))
-    , DelayParams(delayParams)
-    , FairShareMode(fairShareMode)
+TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options)
+    : Enabled(options.Enabled)
+    , Root(std::make_shared<TRoot>(counters))
+    , DelayParams(options.DelayParams)
+    , FairShareMode(options.FairShareMode)
     , KqpCounters(counters)
 {
     auto group = counters->GetKqpCounters();
@@ -350,6 +360,10 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
 }
 
 NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
+    if (!IsEnabled()) {
+        return {};
+    }
+
     TReadGuard lock(Mutex);
 
     auto databaseAndPoolId = std::make_pair(databaseId, poolId);
@@ -396,13 +410,29 @@ void TComputeScheduler::UpdateFairShare() {
 
 } // namespace NScheduler
 
-IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options) {
-    Y_ENSURE(options.UpdateFairSharePeriod > TDuration::Zero());
+NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TDynamicCounterPtr& counters, const NKikimrConfig::TAppConfig& appConfig) {
+    const auto& schedulerSettings = appConfig.GetTableServiceConfig().GetComputeSchedulerSettings();
+
+    auto options = TOptions{
+        .Enabled = appConfig.GetFeatureFlags().GetEnableResourcePoolsScheduler(),
+        .DelayParams = TDelayParams{
+            .MaxDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskDelayUs()),
+            .MinDelay = TDuration::MicroSeconds(schedulerSettings.GetMinTaskDelayUs()),
+            .AttemptBonus = TDuration::MicroSeconds(schedulerSettings.GetAttemptTaskBonusUs()),
+            .MaxRandomDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskRandomDelayUs()),
+        }
+    };
+
     Y_ENSURE(options.DelayParams.MaxDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MinDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.AttemptBonus > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MaxRandomDelay > TDuration::Zero());
-    return new TComputeSchedulerService(options);
+    return std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
+}
+
+IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod) {
+    Y_ENSURE(updateFairSharePeriod > TDuration::Zero());
+    return new TComputeSchedulerService(updateFairSharePeriod);
 }
 
 } // namespace NKikimr::NKqp

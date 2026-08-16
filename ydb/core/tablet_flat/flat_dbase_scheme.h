@@ -95,6 +95,7 @@ public:
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
+        ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
 
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
@@ -235,9 +236,9 @@ public:
     TAlter& Merge(const TSchemeChanges &delta);
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
-    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { });
+    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
     TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
-            const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { });
+            const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
@@ -260,6 +261,7 @@ public:
     TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
     TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();

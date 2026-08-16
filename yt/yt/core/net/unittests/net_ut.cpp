@@ -65,11 +65,11 @@ TEST_F(TNetTest, TransferFourBytes)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    WaitUntilSet(a->Write(TSharedRef::FromString("ping")));
+    WaitUntilSet(a->Write(TSharedRef::FromString(std::string("ping"))));
 
     auto buffer = TSharedMutableRef::Allocate(10);
     ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ping"));
 }
 
 TEST_F(TNetTest, TransferFourBytesUsingWriteV)
@@ -78,31 +78,31 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
     WaitForFast(a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
-        TSharedRef::FromString("p"),
-        TSharedRef::FromString("i"),
-        TSharedRef::FromString("n"),
-        TSharedRef::FromString("g")
+        TSharedRef::FromString(std::string("p")),
+        TSharedRef::FromString(std::string("i")),
+        TSharedRef::FromString(std::string("n")),
+        TSharedRef::FromString(std::string("g"))
     }, TSharedRefArray::TMoveParts{}))).ThrowOnError();
 
     auto buffer = TSharedMutableRef::Allocate(10);
     ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ping"));
 }
 
 TEST_F(TNetTest, BigTransfer)
 {
-// Select-based poller implementation is much slower there.
+// Select-based poller re-arms on every partial IO, so each chunk costs a full poller cycle.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
     auto sender = BIND([=] {
-        auto buffer = TSharedRef::FromString(TString(K, 'f'));
+        auto buffer = TSharedRef::FromString(std::string(K, 'f'));
         for (int i = 0; i < N; ++i) {
             WaitFor(a->Write(buffer)).ThrowOnError();
         }
@@ -132,11 +132,11 @@ TEST_F(TNetTest, BigTransfer)
 
 TEST_F(TNetTest, BidirectionalTransfer)
 {
-// Select-based poller implementation is much slower there.
+// See the note in BigTransfer.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;
@@ -144,7 +144,7 @@ TEST_F(TNetTest, BidirectionalTransfer)
 
     auto startSender = [&] (IConnectionPtr conn) {
         return BIND([=] {
-            auto buffer = TSharedRef::FromString(TString(K, 'f'));
+            auto buffer = TSharedRef::FromString(std::string(K, 'f'));
             for (int i = 0; i < N; ++i) {
                 WaitFor(conn->Write(buffer)).ThrowOnError();
             }
@@ -191,7 +191,7 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    auto data = TSharedRef::FromString(TString(16 * 1024, 'f'));
+    auto data = TSharedRef::FromString(std::string(16 * 1024, 'f'));
     bool gracefulConnectionClose = GetParam();
     // If server closes the connection without reading the entire request,
     // it causes an error 'Connection reset by peer' on client's side right after reading response.
@@ -202,7 +202,7 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     WaitForFast(a->Close()).ThrowOnError();
 
     {
-        auto data = TSharedRef::FromString(TString(16 * 1024, 'a'));
+        auto data = TSharedRef::FromString(std::string(16 * 1024, 'a'));
         #ifndef _win_
             EXPECT_THROW(WaitForFast(b->Write(data)).ThrowOnError(), TErrorException);
         #endif
@@ -212,7 +212,7 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     auto read = WaitForFast(b->Read(buffer)).ValueOrThrow();
 
     EXPECT_EQ(data.size(), read);
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ffff"));
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ffff"));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -231,7 +231,7 @@ TEST_F(TNetTest, StressConcurrentClose)
 
         auto runSender = [&] (IConnectionPtr conn) {
             return BIND([=] {
-                auto buffer = TSharedRef::FromString(TString(16 * 1024, 'f'));
+                auto buffer = TSharedRef::FromString(std::string(16 * 1024, 'f'));
                 while (true) {
                     WaitFor(conn->Write(buffer)).ThrowOnError();
                 }

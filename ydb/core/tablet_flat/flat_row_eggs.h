@@ -92,13 +92,15 @@ namespace NTable {
     struct TSkipToCommittedResult {
         TRowVersion RowVersion = TRowVersion::Min();
         ui64 RowTxId = 0;
+        ERowOp RowOp = ERowOp::Absent;
         bool Valid = false;
 
         TSkipToCommittedResult() = default;
 
-        TSkipToCommittedResult(const TRowVersion& rowVersion, ui64 rowTxId = 0)
+        TSkipToCommittedResult(const TRowVersion& rowVersion, ui64 rowTxId, ERowOp rowOp)
             : RowVersion(rowVersion)
             , RowTxId(rowTxId)
+            , RowOp(rowOp)
             , Valid(true)
         {}
 
@@ -111,6 +113,7 @@ namespace NTable {
         EReady Ready;
         TRowVersion RowVersion = TRowVersion::Min();
         ui64 RowTxId = 0;
+        ERowOp RowOp = ERowOp::Absent;
         ELockMode LockMode = ELockMode::None;
         ui64 LockTxId = 0;
 
@@ -122,12 +125,7 @@ namespace NTable {
             : Ready(result ? EReady::Data : EReady::Gone)
             , RowVersion(result.RowVersion)
             , RowTxId(result.RowTxId)
-        { }
-
-        explicit TSelectRowVersionResult(const TRowVersion& rowVersion, ui64 rowTxId = 0)
-            : Ready(EReady::Data)
-            , RowVersion(rowVersion)
-            , RowTxId(rowTxId)
+            , RowOp(result.RowOp)
         { }
 
         explicit operator bool() const {

@@ -20,8 +20,6 @@ struct TFmrJobFactorySettings {
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
 };
 
-TFmrJobFactorySettings GetDefaultJobFactorySettings(const TMaybe<NYT::TNode>& fmrOperationSpec = Nothing());
-
 IFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings);
 
 } // namespace NYql::NFmr

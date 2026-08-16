@@ -121,7 +121,9 @@ public:
             }
         }
 
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullCount << " chunks found");
+        YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TGranulesNormalizer"},
+            {"message", TStringBuilder() << fullCount << " chunks found"});
         return changes;
     }
 };

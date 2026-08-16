@@ -367,7 +367,7 @@ public:
         const TYPath& path,
         const TUnlockOptions& options) override;
 
-    void Commit() override;
+    void Commit(const TCommitTransactionOptions& options = {}) override;
 
     void Abort() override;
 
@@ -465,6 +465,9 @@ public:
     void AlterTableReplica(
         const TReplicaId& replicaId,
         const TAlterTableReplicaOptions& alterTableReplicaOptions) override;
+
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) override;
 
     ui64 GenerateTimestamp() override;
 

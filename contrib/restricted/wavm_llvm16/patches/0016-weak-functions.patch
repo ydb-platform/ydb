@@ -1,0 +1,287 @@
+diff --git a/contrib/restricted/wavm_llvm16/Include/WAVM/LLVMJIT/LLVMJIT.h b/contrib/restricted/wavm_llvm16/Include/WAVM/LLVMJIT/LLVMJIT.h
+--- a/contrib/restricted/wavm_llvm16/Include/WAVM/LLVMJIT/LLVMJIT.h
++++ b/contrib/restricted/wavm_llvm16/Include/WAVM/LLVMJIT/LLVMJIT.h
+@@ -125,6 +125,7 @@ namespace WAVM { namespace LLVMJIT {
+ 		InstanceBinding instance,
+ 		Uptr tableReferenceBias,
+ 		const std::vector<Runtime::FunctionMutableData*>& functionDefMutableDatas,
++		const std::unordered_map<Uptr, Uptr>& importIndexToSelfDefinedFunctionIndex,
+ 		std::string&& debugName);
+ 
+ 	struct InstructionSource
+diff --git a/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h b/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
+--- a/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
++++ b/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
+@@ -43,6 +43,8 @@ namespace WAVM { namespace Runtime {
+ 		context,
+ 		compartment,
+ 		foreign,
++
++		dynamicLinkingWeakFunctionImport,
+ 	};
+ 	static_assert(Uptr(IR::ExternKind::function) == Uptr(ObjectKind::function),
+ 				  "IR::ExternKind::function != ObjectKind::function");
+@@ -160,6 +162,19 @@ namespace WAVM { namespace Runtime {
+ 		const ObjectKind kind;
+ 	};
+ 
++	struct WeakFunction
++		: public Object
++	{
++		const std::string name;
++		const Uptr index; // The index in the array with such layout: [imports][functions].
++
++		WeakFunction(std::string name, Uptr index)
++			: Object(ObjectKind::dynamicLinkingWeakFunctionImport)
++			, name(std::move(name))
++			, index(index)
++		{ }
++	};
++
+ 	typedef Runtime::ContextRuntimeData* (*InvokeThunkPointer)(const Runtime::Function*,
+ 															   Runtime::ContextRuntimeData*,
+ 															   const IR::UntaggedValue* arguments,
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMJITPrivate.h b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMJITPrivate.h
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMJITPrivate.h
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMJITPrivate.h
+@@ -394,9 +394,11 @@ namespace WAVM { namespace LLVMJIT {
+ #endif
+ 
+ 		Module(const std::vector<U8>& inObjectBytes,
+-			   const HashMap<std::string, Uptr>& importedSymbolMap,
++			   HashMap<std::string, Uptr>* importedSymbolMap,
+ 			   bool shouldLogMetrics,
+-			   std::string&& inDebugName);
++			   std::string&& inDebugName,
++			   const std::unordered_map<std::string, std::string>& weakFunctionsToPatch = {});
++
+ 		~Module();
+ 
+ 	private:
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
+@@ -323,9 +323,10 @@ private:
+ };
+ 
+ Module::Module(const std::vector<U8>& objectBytes,
+-			   const HashMap<std::string, Uptr>& importedSymbolMap,
++			   HashMap<std::string, Uptr>* importedSymbolMap,
+ 			   bool shouldLogMetrics,
+-			   std::string&& inDebugName)
++			   std::string&& inDebugName,
++			   const std::unordered_map<std::string, std::string>& weakFunctionsToPatch)
+ : debugName(std::move(inDebugName))
+ , memoryManager(new ModuleMemoryManager())
+ , globalModuleState(GlobalModuleState::get())
+@@ -403,7 +404,7 @@ Module::Module(const std::vector<U8>& objectBytes,
+ 			}
+ 		}
+ 	};
+-	SymbolResolver symbolResolver(importedSymbolMap);
++	SymbolResolver symbolResolver(*importedSymbolMap);
+ 	llvm::RuntimeDyld loader(*memoryManager, symbolResolver);
+ 	// Process all sections on non-Windows platforms. On Windows, this triggers errors due to
+ 	// unimplemented relocation types in the debug sections.
+@@ -467,6 +468,12 @@ Module::Module(const std::vector<U8>& objectBytes,
+ 
+ 	// Use the LLVM object loader to load the object.
+ 	std::unique_ptr<llvm::RuntimeDyld::LoadedObjectInfo> loadedObject = loader.loadObject(*object);
++	auto symbolTable = loader.getSymbolTable();
++	for (auto& [function, import] : weakFunctionsToPatch) {
++		WAVM_ASSERT(symbolTable.contains(function));
++		WAVM_ASSERT(importedSymbolMap->contains(import));
++		(*importedSymbolMap)[import] = symbolTable[function].getAddress();
++	}
+ 	loader.finalizeWithMemoryManagerLocking();
+ 	if(loader.hasError())
+ 	{ Errors::fatalf("RuntimeDyld failed: %s", loader.getErrorString().data()); }
+@@ -661,6 +668,7 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ 	InstanceBinding instance,
+ 	Uptr tableReferenceBias,
+ 	const std::vector<Runtime::FunctionMutableData*>& functionDefMutableDatas,
++	const std::unordered_map<Uptr, Uptr>& importIndexToSelfDefinedFunctionIndex,
+ 	std::string&& debugName)
+ {
+ 	// Bind undefined symbols in the compiled object to values.
+@@ -684,8 +692,10 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ 	// Bind imported function symbols.
+ 	for(Uptr importIndex = 0; importIndex < functionImports.size(); ++importIndex)
+ 	{
+-		importedSymbolMap.addOrFail(getExternalName("functionImport", importIndex),
+-									reinterpret_cast<Uptr>(functionImports[importIndex].code));
++		if (!importIndexToSelfDefinedFunctionIndex.contains(importIndex)) {
++			importedSymbolMap.addOrFail(getExternalName("functionImport", importIndex),
++										reinterpret_cast<Uptr>(functionImports[importIndex].code));
++		}
+ 	}
+ 
+ 	// Bind the table symbols. The compiled module uses the symbol's value as an offset into
+@@ -736,6 +746,15 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ 									exceptionTypes[exceptionTypeIndex].id + 1);
+ 	}
+ 
++	std::unordered_map<Uptr, Uptr> selfDefinedFunctionIndexToimportIndex;
++	for (auto [importIndex, selfDefinedFunctionIndex] : importIndexToSelfDefinedFunctionIndex) {
++		selfDefinedFunctionIndexToimportIndex[selfDefinedFunctionIndex] = importIndex;
++	}
++
++	WAVM_ASSERT(selfDefinedFunctionIndexToimportIndex.size() == importIndexToSelfDefinedFunctionIndex.size());
++
++	std::unordered_map<std::string, std::string> weakFunctionsToPatch;
++
+ 	// Allocate FunctionMutableData objects for each function def, and bind them to the symbols
+ 	// imported by the compiled module.
+ 	for(Uptr functionDefIndex = 0; functionDefIndex < functionDefMutableDatas.size();
+@@ -745,8 +764,19 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ 			= functionDefMutableDatas[functionDefIndex];
+ 		importedSymbolMap.addOrFail(getExternalName("functionDefMutableDatas", functionDefIndex),
+ 									reinterpret_cast<Uptr>(functionMutableData));
++
++		Uptr indexWithFunctionOffsets = functionDefIndex + functionImports.size();
++		auto it = selfDefinedFunctionIndexToimportIndex.find(indexWithFunctionOffsets);
++		if (it != selfDefinedFunctionIndexToimportIndex.end()) {
++			Uptr importIndex = it->second;
++			WAVM_ASSERT(!weakFunctionsToPatch.contains(getExternalName("functionDef", functionDefIndex)));
++			weakFunctionsToPatch[getExternalName("functionDef", functionDefIndex)] = getExternalName("functionImport", importIndex);
++			importedSymbolMap.addOrFail(getExternalName("functionImport", importIndex), 0ul);
++		}
+ 	}
+ 
++	WAVM_ASSERT(weakFunctionsToPatch.size() == importIndexToSelfDefinedFunctionIndex.size());
++
+ 	// Bind the instance symbol to point to the Instance.
+ 	WAVM_ASSERT(instance.id != UINTPTR_MAX);
+ 	importedSymbolMap.addOrFail("biasedInstanceId", instance.id + 1);
+@@ -780,7 +810,7 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ #endif
+ 
+ 	// Load the module.
+-	return std::make_shared<Module>(objectFileBytes, importedSymbolMap, true, std::move(debugName));
++	return std::make_shared<Module>(objectFileBytes, &importedSymbolMap, true, std::move(debugName), weakFunctionsToPatch);
+ }
+ 
+ bool LLVMJIT::getInstructionSourceByAddress(Uptr address, InstructionSource& outSource)
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/Thunk.cpp b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/Thunk.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/Thunk.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/Thunk.cpp
+@@ -170,8 +170,9 @@ InvokeThunkPointer LLVMJIT::getInvokeThunk(FunctionType functionType)
+ 		= compileLLVMModule(llvmContext, std::move(llvmModule), false, targetMachine.get());
+ 
+ 	// Load the object code.
++	auto importedSymbolMap = HashMap<std::string, Uptr>();
+ 	auto jitModule
+-		= new LLVMJIT::Module(objectBytes, {}, false, std::string(functionMutableData->debugName));
++		= new LLVMJIT::Module(objectBytes, &importedSymbolMap, false, std::string(functionMutableData->debugName));
+ 	invokeThunkCache.modules.push_back(std::unique_ptr<LLVMJIT::Module>(jitModule));
+ 
+ 	invokeThunkFunction = jitModule->nameToFunctionMap[mangleSymbol("thunk")];
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
+@@ -78,6 +78,7 @@ Instance* Runtime::instantiateModule(Compartment* compartment,
+ 	// Check the types of the Instance's imports, and build per-kind import arrays.
+ 	std::vector<FunctionImportBinding> functionImports;
++	std::unordered_map<Uptr, Uptr> importIndexToSelfDefinedFunctionIndex;
+ 	std::vector<Table*> tableImports;
+ 	std::vector<Memory*> memoryImports;
+ 	std::vector<Global*> globalImports;
+ 	std::vector<ExceptionType*> exceptionTypeImports;
+@@ -88,18 +89,23 @@ Instance* Runtime::instantiateModule(Compartment* compartment,
+ 		Object* importObject = imports[importIndex];
+ 
+ 		WAVM_ERROR_UNLESS(importObject);
+-		WAVM_ERROR_UNLESS(isInCompartment(importObject, compartment));
+-		WAVM_ERROR_UNLESS(importObject->kind == ObjectKind(kindIndex.kind));
++		WAVM_ERROR_UNLESS((importObject->kind == ObjectKind::dynamicLinkingWeakFunctionImport) || (isInCompartment(importObject, compartment) && importObject->kind == ObjectKind(kindIndex.kind)));
+ 
+ 		switch(kindIndex.kind)
+ 		{
+ 		case ExternKind::function: {
+-			Function* function = asFunction(importObject);
+-			const auto& importType
+-				= module->ir.types[module->ir.functions.getType(kindIndex.index).index];
+-			WAVM_ERROR_UNLESS(function->encodedType == importType);
+-			WAVM_ERROR_UNLESS(importType.callingConvention() == CallingConvention::wasm);
+-			functionImports.push_back({function});
++			if (importObject->kind == ObjectKind::dynamicLinkingWeakFunctionImport) {
++				auto* weakFunction = static_cast<WeakFunction*>(importObject);
++				importIndexToSelfDefinedFunctionIndex[functionImports.size()] = weakFunction->index;
++				functionImports.push_back({static_cast<Function*>(nullptr)});
++			} else {
++				Function* function = asFunction(importObject);
++				const auto& importType
++					= module->ir.types[module->ir.functions.getType(kindIndex.index).index];
++				WAVM_ERROR_UNLESS(function->encodedType == importType);
++				WAVM_ERROR_UNLESS(importType.callingConvention() == CallingConvention::wasm);
++				functionImports.push_back({function});
++			}
+ 			break;
+ 		}
+ 		case ExternKind::table: {
+@@ -138,6 +144,7 @@ Instance* Runtime::instantiateModule(Compartment* compartment,
+ 	return instantiateModuleInternal(compartment,
+ 									 module,
+ 									 std::move(functionImports),
++									 std::move(importIndexToSelfDefinedFunctionIndex),
+ 									 std::move(tableImports),
+ 									 std::move(memoryImports),
+ 									 std::move(globalImports),
+@@ -149,6 +156,7 @@ Instance* Runtime::instantiateModule(Compartment* compartment,
+ Instance* Runtime::instantiateModuleInternal(Compartment* compartment,
+ 											 ModuleConstRefParam module,
+ 											 std::vector<FunctionImportBinding>&& functionImports,
++											 std::unordered_map<Uptr, Uptr>&& importIndexToSelfDefinedFunctionIndex,
+ 											 std::vector<Table*>&& tables,
+ 											 std::vector<Memory*>&& memories,
+ 											 std::vector<Global*>&& globals,
+@@ -327,6 +335,7 @@ Instance* Runtime::instantiateModuleInternal(Compartment* compartment,
+ 							  {id},
+ 							  reinterpret_cast<Uptr>(getOutOfBoundsElement()),
+ 							  functionDefMutableDatas,
++							  importIndexToSelfDefinedFunctionIndex,
+ 							  std::string(moduleDebugName));
+ 
+ 	// LLVMJIT::loadModule filled in the functionDefMutableDatas' function pointers with the
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp
+@@ -232,6 +232,7 @@ Instance* Intrinsics::instantiateModule(
+ 												   {},
+ 												   {},
+ 												   {},
++												   {},
+ 												   std::move(debugName));
+ 
+ 	Timing::logTimer("Instantiated intrinsic module", timer);
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Linker.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Linker.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Linker.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Linker.cpp
+@@ -5,6 +5,7 @@
+ #include "WAVM/Inline/Assert.h"
+ #include "WAVM/Logging/Logging.h"
+ #include "WAVM/Runtime/Runtime.h"
++#include "WAVM/RuntimeABI/RuntimeABI.h"
+ 
+ using namespace WAVM;
+ using namespace WAVM::IR;
+@@ -158,7 +158,7 @@ static void linkImport(const IR::Module& module,
+ 	{
+ 		// Sanity check that the resolver returned an object of the right type.
+ 		WAVM_ASSERT(importValue);
+-		WAVM_ASSERT(isA(importValue, resolvedType));
++		WAVM_ASSERT(importValue->kind == ObjectKind::dynamicLinkingWeakFunctionImport || isA(importValue, resolvedType));
+ 		linkResult.resolvedImports.push_back(importValue);
+ 	}
+ 	else
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h b/contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h
+@@ -401,6 +401,7 @@ namespace WAVM { namespace Runtime {
+ 	Instance* instantiateModuleInternal(Compartment* compartment,
+ 										ModuleConstRefParam module,
+ 										std::vector<FunctionImportBinding>&& functionImports,
++										std::unordered_map<Uptr, Uptr>&& importIndexToSelfDefinedFunctionIndex,
+ 										std::vector<Table*>&& tableImports,
+ 										std::vector<Memory*>&& memoryImports,
+ 										std::vector<Global*>&& globalImports,

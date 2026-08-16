@@ -189,6 +189,7 @@ private:
                         .NumSlots = pdisk.GetNumActiveSlots(),
                         .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                         .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
+                        .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
                         .Groups = {},
                         .SpaceAvailable = 0,
                         .Operational = true,
@@ -222,15 +223,18 @@ private:
                             if (pdisk.HasEnforcedDynamicSlotSize()) {
                                 pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                             }
+                            if (pdisk.HasSlotSizeInUnits()) {
+                                pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
+                            }
                             vm.SetAllocatedSize(0);
-                            disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
+                            disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount(), pdisk.GetExpectedSlotSize()});
                         }
                     }
                 }
             }
 
             NKikimrSysView::TGroupInfo groupInfo;
-            CalculateGroupUsageStats(&groupInfo, disks, erasureType);
+            CalculateGroupUsageStats(&groupInfo, disks, erasureType, 1u);
             groupSizes.push_back(groupInfo.GetAvailableSize());
 
             group.clear();

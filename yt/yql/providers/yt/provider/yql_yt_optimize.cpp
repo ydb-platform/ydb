@@ -42,14 +42,16 @@ TMaybeNode<TYtSection> MaterializeSectionIfRequired(TExprBase world, TYtSection 
     const bool hasLimit = NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip);
     bool needMaterialize = hasLimit && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample);
     bool hasDynamic = false;
+    bool hasRLS = false;
     if (!needMaterialize) {
         bool hasRanges = false;
         for (TYtPath path: section.Paths()) {
             TYtPathInfo pathInfo(path);
             hasDynamic = hasDynamic || (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic);
+            hasRLS = hasRLS || (pathInfo.Table->Meta && pathInfo.Table->Meta->HasRLS);
             hasRanges = hasRanges || pathInfo.Ranges;
         }
-        needMaterialize = hasRanges || (hasLimit && hasDynamic);
+        needMaterialize = hasRanges || (hasLimit && (hasDynamic || hasRLS));
     }
 
     if (needMaterialize) {
@@ -324,7 +326,7 @@ TMaybeNode<TYtSection> UpdateSectionWithFilters(TYtSection section, const TVecto
         .Done();
 }
 
-} //namespace
+} // namespace
 
 TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection section, TYtDSink dataSink, TYqlRowSpecInfo::TPtr outRowSpec, bool keepSortness, bool allowWorldDeps, bool allowMaterialize,
     TSyncMap& syncList, const TYtState::TPtr& state, TExprContext& ctx)
@@ -826,9 +828,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
             continue;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
-            continue;
-        }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
             continue;
         }
 

@@ -1,10 +1,13 @@
 #include "kqp_opt_phy_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/actors/core/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 #include <unordered_set>
@@ -201,7 +204,7 @@ TExprBase BuildAvgResultProcessing(const std::vector<TAggInfo>& aggInfos, const 
         .Done();
 }
 
-} // anonymous namespace end
+} // anonymous namespace
 
 template <class TReadClass>
 TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool& applied) {

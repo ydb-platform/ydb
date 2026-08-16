@@ -12,20 +12,11 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/library/actors/core/log.h>
+
 
 namespace NKikimr::NPQ::NPartitionChooser {
-
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
-#endif
-
-
-#define LOG_PREFIX "TTableHelper "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-
 
 class TTableHelper {
 public:
@@ -59,9 +50,12 @@ public:
         UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
         UpdateAccessTimeQuery = GetUpdateAccessTimeQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
 
-        DEBUG("SelectQuery: " << SelectQuery);
-        DEBUG("UpdateQuery: " << UpdateQuery);
-        DEBUG("UpdateAccessTimeQuery: " << UpdateAccessTimeQuery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"selectQuery", SelectQuery});
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateQuery", UpdateQuery});
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateAccessTimeQuery", UpdateAccessTimeQuery});
 
         return true;
     }
@@ -102,7 +96,7 @@ public:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ENSURE(!KqpSessionId.empty());
+        AFL_ENSURE(!KqpSessionId.empty());
 
         return true;
     }
@@ -171,7 +165,7 @@ public:
 
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
-        Y_ENSURE(!TxId.empty());
+        AFL_ENSURE(!TxId.empty());
 
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();
@@ -188,7 +182,7 @@ public:
         }
 
         if (CreateTime == 0) {
-            CreateTime = TInstant::Now().MilliSeconds();
+            CreateTime = TAppData::TimeProvider->Now().MilliSeconds();
         }
 
         return true;
@@ -237,7 +231,7 @@ public:
                 .Uint64(CreateTime)
                 .Build()
             .AddParam("$AccessTime")
-                .Uint64(TInstant::Now().MilliSeconds())
+                .Uint64(TAppData::TimeProvider->Now().MilliSeconds())
                 .Build()
             .AddParam("$SeqNo")
                 .Uint64(seqNo.value_or(0))
@@ -275,9 +269,5 @@ private:
 };
 
 #undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

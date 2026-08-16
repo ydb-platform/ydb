@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 
 struct TMsgPqCodes {
@@ -41,17 +42,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     using namespace NKikimr::NPQ;
     using namespace NKikimr::NPQ::NSchema;
-
-    TYdbPqCodes FillProposeRequestImpl(
-        const TString& name,
-        const Ydb::Topic::CreateTopicRequest& request,
-        NKikimrSchemeOp::TModifyScheme& modifyScheme,
-        TAppData* appData,
-        TString& error,
-        const TString& path,
-        const TString& database = TString(),
-        const TString& localDc = TString()
-    );
 
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& pqConfig);
 
@@ -123,6 +113,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest",
+                {"database", Database},
+                {"path", GetTopicPath()},
+                {"showPrivate", showPrivate});
+
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
@@ -184,8 +179,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
                 AddIssue(
                     FillIssue(
-                        TStringBuilder() << "path '" << path << "' does not exist or you " <<
-                        "do not have access rights",
+                        TStringBuilder() << "path '" << path <<
+                        "' does not exist or you do not have access rights",
                         Ydb::PersQueue::ErrorCode::ACCESS_DENIED
                     )
                 );
@@ -252,7 +247,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                ALOG_WARN(NKikimrServices::PERSQUEUE, "unhandled eventType=" << ev->GetTypeRewrite() << " event=" << ev->GetTypeName());
+                YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unhandled",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
                 AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
             }
         }
@@ -309,9 +306,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool OnUnhandledException(const std::exception& exc) override {
             auto ctx = *NActors::TlsActivationContext;
-            LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE,
-                TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-                    << TBackTrace::FromCurrentException().PrintToString());
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Unhandled exception",
+                {"typeName", TypeName(exc)},
+                {"exception", exc.what()},
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
 
@@ -370,7 +368,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    AFL_ENSURE(response.ListNodeEntry)
+                        ("path", GetTopicPath())("database", TActorBase::Database);
+                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
+                        ("path", GetTopicPath())("database", TActorBase::Database)
+                        ("children", response.ListNodeEntry->Children.size());
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {

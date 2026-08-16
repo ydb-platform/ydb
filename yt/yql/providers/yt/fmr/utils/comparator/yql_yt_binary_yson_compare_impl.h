@@ -6,6 +6,7 @@
 #include <library/cpp/yson/zigzag.h>
 
 #include <util/generic/yexception.h>
+#include <util/generic/utility.h>
 #include <util/string/cast.h>
 
 
@@ -65,12 +66,16 @@ Y_FORCE_INLINE TStringBuf SliceRange(TStringBuf blob, const TColumnOffsetRange& 
     return TStringBuf(blob.data() + r.StartOffset, r.EndOffset - r.StartOffset);
 }
 
+// Compares two markup rows column by column. numColumns limits the comparison to the first N key
+// columns (a prefix); the default compares all key columns. Both rows must be markups of a key that
+// starts with those columns (their offset ranges and sort orders share the same leading prefix).
 int CompareKeyRowsAcrossYsonBlocks(
     TStringBuf lhsBlob,
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlob,
     const TRowIndexMarkup& rhsRow,
-    const std::vector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders,
+    ui64 numColumns = Max<ui64>()
 );
 
 } // namespace NYql::NFmr

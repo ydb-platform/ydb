@@ -277,21 +277,21 @@ void Lz4Decompress(TSource* source, TBlob* sink)
         [] (const char* input, size_t inputSize, char* output, size_t outputSize) {
             if (inputSize > Max<int>()) {
                 THROW_ERROR_EXCEPTION("LZ4 decompression failed: input size is too big")
-                    << TErrorAttribute("size", inputSize);
+                    .With("size", inputSize);
             }
             if (outputSize > Max<int>()) {
                 THROW_ERROR_EXCEPTION("LZ4 decompression failed: output size is too big")
-                    << TErrorAttribute("size", outputSize);
+                    .With("size", outputSize);
             }
             int rv = LZ4_decompress_safe(input, output, inputSize, static_cast<int>(outputSize));
             if (rv < 0) {
                 THROW_ERROR_EXCEPTION("LZ4 decompression failed: LZ4_decompress_safe returned an error")
-                    << TErrorAttribute("error", rv);
+                    .With("error", rv);
             }
             if (rv != static_cast<int>(outputSize)) {
                 THROW_ERROR_EXCEPTION("LZ4 decompression failed: output size mismatch")
-                    << TErrorAttribute("expected_size", inputSize)
-                    << TErrorAttribute("actual_size", rv);
+                    .With("expected_size", inputSize)
+                    .With("actual_size", rv);
             }
         });
 }

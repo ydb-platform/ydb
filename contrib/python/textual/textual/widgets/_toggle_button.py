@@ -60,6 +60,35 @@ class ToggleButton(Static, can_focus=True):
         background: $surface;
         text-wrap: nowrap;
         text-overflow: ellipsis;
+        pointer: pointer;
+
+        &:ansi {
+            background: ansi_default;
+            & > .toggle--button {
+                background: $ansi-background;
+                color: $ansi-foreground;
+                text-style: dim;
+            }
+            &.-on > .toggle--button {
+                color: $accent;
+                background: $ansi-background;
+                text-style: bold not dim;
+            }
+        }
+        
+        &.-textual-compact {
+            border: none !important;
+            padding: 0;
+            &:focus {
+                border: tall $border;
+                background-tint: $foreground 5%;
+                & > .toggle--label {
+                    color: $block-cursor-foreground;
+                    background: $block-cursor-background;
+                    text-style: $block-cursor-text-style;
+                }
+            }
+        }
 
         & > .toggle--button {
             color: $panel-darken-2;
@@ -71,13 +100,14 @@ class ToggleButton(Static, can_focus=True):
             background: $panel;
         }
 
-        &:focus {
-            border: tall $border;
-            background-tint: $foreground 5%;
-            & > .toggle--label {
+        &:focus {       
+            border: tall $border;            
+            background-tint: $foreground 5%;     
+     
+            & > .toggle--label {                         
                 color: $block-cursor-foreground;
-                background: $block-cursor-background;
-                text-style: $block-cursor-text-style;
+                background: $block-cursor-background;       
+                text-style: $block-cursor-text-style;                
             }
         }
         &:blur:hover {
@@ -100,6 +130,9 @@ class ToggleButton(Static, can_focus=True):
     value: reactive[bool] = reactive(False, init=False)
     """The value of the button. `True` for on, `False` for off."""
 
+    compact: reactive[bool] = reactive(False, toggle_class="-textual-compact")
+    """Enable compact display?"""
+
     def __init__(
         self,
         label: ContentText = "",
@@ -111,6 +144,7 @@ class ToggleButton(Static, can_focus=True):
         classes: str | None = None,
         disabled: bool = False,
         tooltip: RenderableType | None = None,
+        compact: bool = False,
     ) -> None:
         """Initialise the toggle.
 
@@ -123,6 +157,7 @@ class ToggleButton(Static, can_focus=True):
             classes: The CSS classes of the toggle.
             disabled: Whether the button is disabled or not.
             tooltip: RenderableType | None = None,
+            compact: Show a compact button.
         """
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self._button_first = button_first
@@ -132,6 +167,7 @@ class ToggleButton(Static, can_focus=True):
         self._label = self._make_label(label)
         if tooltip is not None:
             self.tooltip = tooltip
+        self.compact = compact
 
     def _make_label(self, label: ContentText) -> Content:
         """Make label content.
@@ -142,7 +178,7 @@ class ToggleButton(Static, can_focus=True):
         Returns:
             A `Content` rendering of the label for use in the button.
         """
-        label = Content.from_text(label).first_line
+        label = Content.from_text(label).first_line.rstrip()
         return label
 
     @property
@@ -184,19 +220,18 @@ class ToggleButton(Static, can_focus=True):
         """
         button = self._button
         label_style = self.get_visual_style("toggle--label")
-        label = self._label.stylize_before(label_style)
-        spacer = " " if label else ""
+        label = self._label.pad(1, 1).stylize_before(label_style)
 
         if self._button_first:
-            content = Content.assemble(button, spacer, label)
+            content = Content.assemble(button, label)
         else:
-            content = Content.assemble(label, spacer, button)
+            content = Content.assemble(label, button)
         return content
 
     def get_content_width(self, container: Size, viewport: Size) -> int:
         return (
             self._button.get_optimal_width(self.styles, 0)
-            + (1 if self._label else 0)
+            + (2 if self._label else 0)
             + self._label.get_optimal_width(self.styles, 0)
         )
 

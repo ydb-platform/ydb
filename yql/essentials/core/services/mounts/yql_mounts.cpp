@@ -2,11 +2,11 @@
 
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>
@@ -22,7 +22,7 @@ void AddLibraryFromResource(TUserDataTable& userDataTable, const TString& resour
     auto& block = userDataTable[TUserDataKey::File(resourceName)];
     block.Data = NResource::Find(resourceName);
     block.Type = EUserDataType::RAW_INLINE_DATA;
-    block.Usage.Set(EUserDataBlockUsage::Library, true);
+    block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true);
 }
 
 TUserDataKey CreateKey(const NUserData::TUserData& item) {
@@ -68,13 +68,13 @@ void AddUserDataToTable(
 
     switch (item.Type) {
         case EType::LIBRARY:
-            block.Usage.Set(EUserDataBlockUsage::Library, true);
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true);
             break;
         case EType::FILE:
-            block.Usage.Set(EUserDataBlockUsage::Content, true);
+            block.Usage.Set(EUserDataBlockUsage::Content, /*val=*/true);
             break;
         case EType::UDF:
-            block.Usage.Set(EUserDataBlockUsage::Udf, true);
+            block.Usage.Set(EUserDataBlockUsage::Udf, /*val=*/true);
             break;
         default:
             ythrow yexception() << "Unknown type for user data \"" << item.Name << "\": " << item.Type;
@@ -119,7 +119,7 @@ TUserDataTable GetYqlModuleResolverImpl(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     THolder<TExprContext> ownedCtx,
     TModuleResolver::TModuleChecker moduleChecker)
@@ -130,12 +130,25 @@ TUserDataTable GetYqlModuleResolverImpl(
     TUserDataTable mounts;
     LoadYqlDefaultMounts(mounts);
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+    };
+
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
@@ -160,7 +173,7 @@ TUserDataTable GetYqlModuleResolver(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     TModuleResolver::TModuleChecker moduleChecker) {
     return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr, moduleChecker);
@@ -180,6 +193,6 @@ bool GetYqlDefaultModuleResolverWithContext(
     const THashMap<TString, TString>& clusterMapping,
     bool optimizeLibraries,
     TModuleResolver::TModuleChecker moduleChecker) {
-    return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
+    return !GetYqlModuleResolverImpl(/*rawCtx=*/nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
 }
 } // namespace NYql

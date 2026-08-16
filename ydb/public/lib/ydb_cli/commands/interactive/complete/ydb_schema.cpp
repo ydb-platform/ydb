@@ -4,7 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
+#include <yql/essentials/sql/v1/ide/completion/name/object/simple/schema.h>
 
 namespace NYdb::NConsoleClient {
 

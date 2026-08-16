@@ -1,5 +1,7 @@
 #include "tenant_slot_broker_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -98,8 +100,8 @@ public:
     {
         auto &rec = Event->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAlterTenant "
-                    << rec.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Execute",
+            {"record", rec.ShortDebugString()});
 
         THashMap<TSlotDescription, ui64> newSlots;
         for (auto &slot : rec.GetRequiredSlots()) {
@@ -119,8 +121,8 @@ public:
         if (it == Self->Tenants.end()) {
             // Don't create tenant with no slots.
             if (!newSlots.empty()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                            "Create new tenant " << name);
+                YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant: create new tenant",
+                    {"tenantName", name});
 
                 tenant = Self->AddTenant(name);
 
@@ -133,8 +135,8 @@ public:
             }
 
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Alter existing tenant " << name);
+            YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant: alter existing tenant",
+                {"tenantName", name});
 
             tenant = it->second;
             Self->RemoveUnhappyTenant(tenant);
@@ -216,8 +218,8 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         auto &name = Event->Get()->Record.GetTenantName();
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAlterTenant "
-                    << name << " complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Complete",
+            {"tenantName", name});
 
         ctx.Send(Event->Sender, TenantState.Release());
 

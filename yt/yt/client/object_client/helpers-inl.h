@@ -6,7 +6,26 @@
 
 #include <util/random/random.h>
 
+#include <cstring>
+
 namespace NYT::NObjectClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_FORCE_INLINE bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+{
+    return ::memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) == 0;
+}
+
+Y_FORCE_INLINE bool operator<(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+{
+    return ::memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) < 0;
+}
+
+inline void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v:%v", id.ObjectId, id.TransactionId);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,7 +68,7 @@ inline NHydra::TVersion VersionFromId(TObjectId id)
 inline NTransactionClient::TTimestamp TimestampFromId(TObjectId id)
 {
     YT_ASSERT(IsSequoiaId(id));
-    return CounterFromId(id) & ~SequoiaCounterMask;
+    return NTransactionClient::TTimestamp(CounterFromId(id) & ~SequoiaCounterMask);
 }
 
 inline EObjectType SchemaTypeFromType(EObjectType type)
@@ -123,11 +142,11 @@ inline TObjectId MakeSequoiaId(
     NTransactionClient::TTimestamp timestamp,
     ui32 entropy)
 {
-    YT_ASSERT(!(timestamp & SequoiaCounterMask));
+    YT_ASSERT(!(timestamp.Underlying() & SequoiaCounterMask));
     return MakeId(
         type,
         cellTag,
-        timestamp | SequoiaCounterMask,
+        timestamp.Underlying() | SequoiaCounterMask,
         entropy);
 }
 

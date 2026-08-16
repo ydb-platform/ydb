@@ -240,7 +240,7 @@ Y_UNIT_TEST(TestUdf) {
         auto blockOptStringType = ctx.template MakeType<TBlockExprType>(
             ctx.template MakeType<TOptionalExprType>(
                 ctx.template MakeType<TDataExprType>(EDataSlot::String)));
-        return b.Udf("Url.GetHost", false, {blockOptStringType}, blockOptStringType);
+        return b.Udf("Url.GetHost", /*isPolymorphic=*/false, {blockOptStringType}, blockOptStringType);
     });
 }
 
@@ -255,7 +255,7 @@ Y_UNIT_TEST(TestUdfLangVer) {
         auto blockOptStringType = ctx.template MakeType<TBlockExprType>(
             ctx.template MakeType<TOptionalExprType>(
                 ctx.template MakeType<TDataExprType>(EDataSlot::String)));
-        return b.Udf("String.AsciiContainsIgnoreCase", false, {blockOptStringType, blockStringType}, blockBoolType);
+        return b.Udf("String.AsciiContainsIgnoreCase", /*isPolymorphic=*/false, {blockOptStringType, blockStringType}, blockBoolType);
     }, MakeLangVersion(2025, 2));
 }
 

@@ -45,7 +45,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
     No config returned.
     ```
 
-    If a file is found, you should use it and skip the next step of this instruction.
+    If a file is found, you should use it and skip the next step of this instruction. Before proceeding, make sure that the file contains the settings that were stored in the static configuration file on storage nodes in configuration V1.
 
 2. If there is no dynamic configuration file in the cluster, run the dynamic configuration file generation command [ydb admin cluster config generate](../../../reference/ydb-cli/commands/configuration/cluster/generate.md). The file will be generated based on the static configuration file located on the cluster nodes.
 
@@ -53,7 +53,20 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config generate > config.yaml
     ```
 
-3. Add the following field to the `config.yaml` file obtained in step 1 or 2:
+3. Check that the `config.yaml` file obtained in step 1 or 2 contains the storage node settings from the current static configuration V1. If the file was obtained from an existing dynamic configuration, these settings may be missing because in V1 dynamic configuration might not contain storage node parameters.
+
+    The goal of this step is to get a single combined configuration file that contains both parameters from the dynamic configuration and settings from the static configuration.
+
+    Move all sections and parameters that describe storage nodes, disks, State Storage, static group, and channel profiles from the static configuration file to the `config` section of the `config.yaml` file. In particular, check for the following sections and parameters if they are set in the static configuration V1:
+
+    - `hosts`;
+    - `host_configs`;
+    - `domains_config`;
+    - `blob_storage_config`;
+    - `channel_profile_config`;
+    - other related storage configuration parameters, such as `static_erasure`.
+
+4. Add the following field to the checked and updated `config.yaml` file:
 
     ```yaml
     feature_flags:
@@ -67,9 +80,9 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% endcut %}
 
-4. Place the `config.yaml` file on all cluster nodes, replacing the previous configuration file with it.
+5. Place the `config.yaml` file on all cluster nodes, replacing the previous configuration file with it.
 
-5. Create a directory for the {{ ydb-short-name }} node to work with configuration on each node. If running multiple cluster nodes on one host, create separate directories for each node. Initialize the directory by running the [ydb admin node config init](../../../reference/ydb-cli/commands/configuration/node/init.md) command on each node. In the `--from-config` parameter, specify the path to the `config.yaml` file placed on the nodes earlier.
+6. Create a directory for the {{ ydb-short-name }} node to work with configuration on each node. If running multiple cluster nodes on one host, create separate directories for each node. Initialize the directory by running the [ydb admin node config init](../../../reference/ydb-cli/commands/configuration/node/init.md) command on each node. In the `--from-config` parameter, specify the path to the `config.yaml` file placed on the nodes earlier.
 
     ```bash
     sudo mkdir -p /opt/ydb/config-dir
@@ -83,7 +96,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% endcut %}
 
-6. Restart all cluster nodes using the [rolling-restart](../../../maintenance/manual/node_restarting.md) procedure, adding the `ydbd --config-dir` option when starting the node with the path to the directory specified, and removing the `ydbd --yaml-config` option.
+7. Restart all cluster nodes using the [rolling-restart](../../../maintenance/manual/node_restarting.md) procedure, adding the `ydbd --config-dir` option when starting the node with the path to the directory specified, and removing the `ydbd --yaml-config` option.
 
     {% list tabs group=manual-systemd %}
 
@@ -111,10 +124,10 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% endlist %}
 
-7. Load the previously obtained configuration file `config.yaml` into the system using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
+8. Load the previously obtained configuration file `config.yaml` into the system using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     The command will request confirmation to perform the operation `This command may damage your cluster, do you want to continue? [y/N]`, in response to this request you need to agree and enter `y`.
@@ -125,7 +138,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% endcut %}
 
-8. Get the current cluster configuration using [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
+9. Get the current cluster configuration using [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
@@ -133,7 +146,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     The `config.yaml` file should match the configuration files distributed across the cluster nodes, except for the `metadata.version` field, which should be one unit higher compared to the version on the cluster nodes.
 
-9. Add the following block to `config.yaml` in the `config` section:
+10. Add the following block to `config.yaml` in the `config` section:
 
     ```yaml
     self_management_config:
@@ -146,22 +159,22 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% endcut %}
 
-10. Load the updated configuration file into the cluster using [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+11. Load the updated configuration file into the cluster using [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
-11. Restart all [storage nodes](../../../concepts/glossary.md#storage-node) of the cluster using the [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) procedure.
+12. Restart all [storage nodes](../../../concepts/glossary.md#storage-node) of the cluster using the [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) procedure.
 
-12. If there is a `config.domains_config.security_config` section in the `config.yaml` file, move it one level up — to the `config` section.
+13. If there is a `config.domains_config.security_config` section in the `config.yaml` file, move it one level up — to the `config` section.
 
-13. Remove the `config.blob_storage_config` and `config.domains_config` sections from the `config.yaml` file.
+14. Remove the `config.blob_storage_config` and `config.domains_config` sections from the `config.yaml` file.
 
-14. Load the updated configuration file into the cluster:
+15. Load the updated configuration file into the cluster:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     {% cut "More details" %}

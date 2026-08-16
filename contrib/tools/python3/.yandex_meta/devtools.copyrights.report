@@ -294,7 +294,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Modules/selectmodule.c [1731:1732]
+        Modules/selectmodule.c [1732:1733]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4c4db466ec49df90501b3efa15b48115
 BELONGS ya.make
@@ -404,7 +404,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Modules/binascii.c [633:634]
+        Modules/binascii.c [641:642]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6df801c8be98b70cf1e1bd99eee48534
 BELONGS Lib/ya.make

@@ -10,6 +10,10 @@ namespace NKikimr::NColumnShard {
 class TSplitterCounters;
 }
 
+namespace NKikimr::NArrow::NAccessor {
+struct IAdditionalAccessorData;
+}
+
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
@@ -43,9 +47,13 @@ protected:
         AFL_VERIFY(false)("problem", "implemented only in index chunks");
     }
 
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
-        TString&& /*data*/, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const ui32 /*rawBytes*/,
+        const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& /*additionalData*/, const TSimpleColumnInfo& /*columnInfo*/) const {
         AFL_VERIFY(false);
+        return nullptr;
+    }
+
+    virtual std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> DoGetAdditionalAccessorData() const {
         return nullptr;
     }
 
@@ -108,8 +116,9 @@ public:
         ChunkIdx = value;
     }
 
-    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const {
-        return DoCopyWithAnotherBlob(std::move(data), rawBytes, columnInfo);
+    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const ui32 rawBytes,
+        const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& additionalData, const TSimpleColumnInfo& columnInfo) const {
+        return DoCopyWithAnotherBlob(std::move(data), rawBytes, additionalData, columnInfo);
     }
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
@@ -143,6 +152,10 @@ public:
 
     void AddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const {
         return DoAddInplaceIntoPortion(portionInfo);
+    }
+
+    std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> GetAdditionalAccessorDataOptional() const {
+        return DoGetAdditionalAccessorData();
     }
 };
 

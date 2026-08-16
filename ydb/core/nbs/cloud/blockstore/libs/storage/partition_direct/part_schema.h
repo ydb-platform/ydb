@@ -12,13 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TPartitionSchema: public NKikimr::NIceDb::Schema
 {
-    enum EChannels
-    {
-        SystemChannel,
-        LogChannel,
-        IndexChannel,
-    };
-
     struct TabletInfo: public TTableSchema<1>
     {
         struct Id: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
@@ -44,17 +37,42 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 TDirectBlockGroupsConnections;
         };
 
+        // Set while an AddHost is in flight, cleared once it finishes (or is
+        // abandoned). Replayed on restart to recover a half-committed add.
+        struct AddHostInProgress
+            : public Column<5, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
-            DirectBlockGroupsConnections>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
+            DirectBlockGroupsConnections,
+            AddHostInProgress>;
     };
 
-    using TTables = SchemaTables<TabletInfo>;
+    // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks
+    // whose layout was explicitly updated have a row here.
+    struct VChunkConfigs: public TTableSchema<2>
+    {
+        struct VChunkIndex: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Config: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type = ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
+        };
+
+        using TKey = TableKey<VChunkIndex>;
+        using TColumns = TableColumns<VChunkIndex, Config>;
+    };
+
+    using TTables = SchemaTables<TabletInfo, VChunkConfigs>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

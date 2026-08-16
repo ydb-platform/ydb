@@ -76,6 +76,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StatsGroup, NumActiveSlots, false);
     COUNTER_INIT(StatsGroup, ExpectedSlotCount, false);
     COUNTER_INIT(StatsGroup, SlotSizeInUnits, false);
+    COUNTER_INIT(StatsGroup, SlotSizeBytes, false);
 
     COUNTER_INIT(StatsGroup, EmulatedWriteErrors, true);
     COUNTER_INIT(StatsGroup, EmulatedReadErrors, true);
@@ -129,6 +130,9 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceActualCostNs, true);
     COUNTER_INIT(DeviceGroup, DeviceOverestimationRatio, false);
     COUNTER_INIT(DeviceGroup, DeviceNonperformanceMs, false);
+    COUNTER_INIT(DeviceGroup, DeviceOverestimationRatioMerged, false);
+    COUNTER_INIT(DeviceGroup, DeviceNonperformanceMsMerged, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOverestimationDroppedSamples, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceInterruptedSystemCalls, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceSubmitThreadBusyTimeNs, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);
@@ -155,6 +159,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     TRACKER_INIT_IF_EXTENDED(UpdateDurationTracker.UpdateCycleTime, updateCycle, Time in millisec);
 
+    HISTOGRAM_INIT(DeviceWritesSizes, deviceWritesSizes);
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);
@@ -271,6 +276,14 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteLog, WriteLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
+
+    LogWriteOpCounters.resize(WriteSourceCount());
+    ChunkWriteOpCounters.resize(WriteSourceCount());
+    ForEachWriteSourceInfo([&](const TWriteSourceInfo& info) {
+        Y_ABORT_UNLESS(info.Ordinal < LogWriteOpCounters.size());
+        LogWriteOpCounters[info.Ordinal].Setup("Log", PDiskGroup, TString(info.Name), visibilityForExtended);
+        ChunkWriteOpCounters[info.Ordinal].Setup("Chunk", PDiskGroup, TString(info.Name), visibilityForExtended);
+    });
 
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
     COUNTER_INIT(PDiskGroup, SubmitThreadCPU, true);
@@ -472,6 +485,18 @@ void TPDiskMon::UpdateStats() {
 
     *FreeSpacePerMile = freePerMile;
     *UsedSpacePerMile = usedPerMile;
+}
+
+void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t ordinal = WriteSourceOrdinal(source);
+    Y_ABORT_UNLESS(ordinal < LogWriteOpCounters.size());
+    LogWriteOpCounters[ordinal].CountRequest(size);
+}
+
+void TPDiskMon::CountChunkWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t ordinal = WriteSourceOrdinal(source);
+    Y_ABORT_UNLESS(ordinal < ChunkWriteOpCounters.size());
+    ChunkWriteOpCounters[ordinal].CountRequest(size);
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {

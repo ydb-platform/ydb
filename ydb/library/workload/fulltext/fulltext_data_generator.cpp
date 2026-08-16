@@ -195,6 +195,10 @@ namespace NYdbWorkload {
 
     TFulltextFilesDataInitializer::TFulltextFilesDataInitializer(const TFulltextWorkloadParams& params)
         : TFulltextDataInitializerBase("files", "Import fulltext data from files and build fulltext index", params)
+        , DocumentsTable(params.TableName)
+        , QueryTableName(params.QueriesTable)
+        , QueryRelevanceTableName(params.RelevancesTable)
+        , UpsertQueryTableName(params.UpsertQueriesTableName)
     {}
 
     void TFulltextFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
@@ -202,7 +206,7 @@ namespace NYdbWorkload {
 
         TStringBuilder inputDescription;
         inputDescription
-            << "File or directory with the dataset to import. Only two columns are imported: "
+            << "File or directory with the documents dataset to import. Only two columns are imported: "
             << colors.BoldColor() << "id" << colors.OldColor() << " and "
             << colors.BoldColor() << "text" << colors.OldColor() << ". "
             << "If a directory is set, all supported files inside will be used."
@@ -210,21 +214,74 @@ namespace NYdbWorkload {
 
         opts.AddLongOption('i', "input", inputDescription)
             .RequiredArgument("PATH")
-            .Required()
+            .DefaultValue(DataFiles)
             .StoreResult(&DataFiles);
+
+        opts.AddLongOption("relevance-file", "File with query relevance judgments (query_id, document_id, relevance). Optional.")
+            .RequiredArgument("PATH")
+            .DefaultValue(RelevanceFile)
+            .StoreResult(&RelevanceFile);
+
+        opts.AddLongOption("query-file", "File with queries (id, query). Optional.")
+            .RequiredArgument("PATH")
+            .DefaultValue(QueryFile)
+            .StoreResult(&QueryFile);
+
+        opts.AddLongOption("upsert-query-file", "File with upsert queries (id, text). Optional.")
+            .RequiredArgument("PATH")
+            .DefaultValue(UpsertQueryFile)
+            .StoreResult(&UpsertQueryFile);
+
+        opts.AddLongOption("documents-table", "Target table name for documents")
+            .DefaultValue(DocumentsTable)
+            .StoreResult(&DocumentsTable);
+
+        opts.AddLongOption("query-table", "Target table name for queries")
+            .DefaultValue(QueryTableName)
+            .StoreResult(&QueryTableName);
+
+        opts.AddLongOption("query-relevance-table", "Target table name for query relevances")
+            .DefaultValue(QueryRelevanceTableName)
+            .StoreResult(&QueryRelevanceTableName);
+
+        opts.AddLongOption("upsert-query-table", "Target table name for upsert queries")
+            .DefaultValue(UpsertQueryTableName)
+            .StoreResult(&UpsertQueryTableName);
     }
 
     TBulkDataGeneratorList TFulltextFilesDataInitializer::DoGetBulkInitialData() {
+        TBulkDataGeneratorList result;
+
         const ui64 lineCount = CountDirLines(DataFiles);
-        return {
-            std::make_shared<TDataGenerator>(
-                *this,
-                FulltextParams.TableName,
-                lineCount,
-                FulltextParams.TableName,
-                DataFiles,
-                TVector<TString>(),
-                TDataGenerator::EPortionSizeUnit::Line)};
+        result.push_back(std::make_shared<TDataGenerator>(
+            *this,
+            DocumentsTable,
+            lineCount,
+            DocumentsTable,
+            DataFiles,
+            TVector<TString>(),
+            TDataGenerator::EPortionSizeUnit::Line));
+
+        auto maybeAddFile = [&](const TString& filePath, const TString& tableName) {
+            const TFsPath path(filePath);
+            if (path.Exists()) {
+                const ui64 lines = CountDirLines(filePath);
+                result.push_back(std::make_shared<TDataGenerator>(
+                    *this,
+                    tableName,
+                    lines,
+                    tableName,
+                    filePath,
+                    TVector<TString>(),
+                    TDataGenerator::EPortionSizeUnit::Line));
+            }
+        };
+
+        maybeAddFile(QueryFile, QueryTableName);
+        maybeAddFile(RelevanceFile, QueryRelevanceTableName);
+        maybeAddFile(UpsertQueryFile, UpsertQueryTableName);
+
+        return result;
     }
 
     TFulltextGeneratorDataInitializer::TFulltextGeneratorDataInitializer(const TFulltextWorkloadParams& params)

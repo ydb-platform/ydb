@@ -22,4 +22,15 @@ bool TSettings::IsEnabledFunction(const TString& functionName) const {
     return EnabledFunctions.contains(functionName);
 }
 
+void TSettings::EnableMember(const TString& memberName) {
+    EnabledMembers.insert(memberName);
+}
+
+bool TSettings::IsMemberEnabled(const TString& memberName) const {
+    if (EnabledMembers.empty()) {
+        return true;
+    }
+    return EnabledMembers.contains(memberName);
+}
+
 } // namespace NYql::NPushdown

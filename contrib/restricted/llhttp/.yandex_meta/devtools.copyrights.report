@@ -29,6 +29,17 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL d2bd5737af31598d7d123056668c240d
+BELONGS ya.make
+    License text:
+        Copyright © 2018 Fedor Indutny
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL f19b62c5b53efa12ad57acfe01015d6c
 BELONGS ya.make
     License text:
@@ -38,6 +49,5 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [3:3]
         LICENSE-MIT [3:3]
-        README.md [476:476]
+        README.md [486:486]

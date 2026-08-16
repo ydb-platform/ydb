@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
 
+#include <util/datetime/base.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -21,7 +23,8 @@ struct TGrpcEndpointDescription : public TThrRefBase {
 };
 
 IActor* CreateGrpcEndpointPublishActor(TGrpcEndpointDescription *description);
-IActor* CreateGrpcPublisherServiceActor(TVector<TIntrusivePtr<TGrpcEndpointDescription>>&& endpoints);
+IActor* CreateGrpcPublisherServiceActor(TVector<TIntrusivePtr<TGrpcEndpointDescription>>&& endpoints,
+                                        TDuration warmupTimeout = TDuration::Zero());
 
 inline TActorId CreateGrpcPublisherServiceActorId() {
     const auto actorId = TActorId(0, "GrpcPublishS");

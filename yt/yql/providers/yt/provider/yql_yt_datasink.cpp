@@ -256,6 +256,17 @@ public:
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        if (auto leftMaterialize = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoLeft>(ctx, node->Pos())
+                .Input(ctx.RenameNode(leftMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+        if (auto rightMaterialize = TMaybeNode<TCoRight>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoRight>(ctx, node->Pos())
+                .Input(ctx.RenameNode(rightMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+
         YQL_ENSURE(TMaybeNode<TYtWrite>(node).DataSink());
         std::optional<EYtWriteMode> mode;
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {
@@ -310,13 +321,15 @@ public:
             children.resize(6U);
 
             const auto settings = node->Child(4U);
+            TExprNode::TPtr queryText;
+            TExprNode::TPtr queryAst;
             if (const auto features = NYql::GetSetting(*settings, EYtSettingType::Features)) {
                 for (auto i = 0U; i < features->Tail().ChildrenSize(); ++i) {
                     if (const auto feature = features->Tail().Child(i); feature->IsList()) {
                         if (feature->Head().IsAtom({"query_text", "__query_text"}))
-                            children[3U] = feature->TailPtr();
+                            queryText = feature->TailPtr();
                         else if (feature->Head().IsAtom({"query_ast", "__query_ast"}))
-                            children[4U] = feature->TailPtr();
+                            queryAst = feature->TailPtr();
                         else {
                             ctx.AddError(TIssue(ctx.GetPosition(feature->Pos()), "Unexpected feature."));
                             return {};
@@ -325,10 +338,13 @@ public:
                 }
             }
 
-            if (!(children[3U] && children[4U])) {
+            if (!queryText || !queryAst) {
                 ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()),  "The view does not contain a query."));
                 return {};
             }
+
+            children[3U] = std::move(queryText);
+            children[4U] = std::move(queryAst);
 
             children.back() = NYql::RemoveSetting(*settings, EYtSettingType::Features, ctx);
             return ctx.NewCallable(node->Pos(), TYtCreateView::CallableName(), std::move(children));

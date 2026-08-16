@@ -9,7 +9,6 @@ namespace NKikimr::NHttpProxy {
     struct THttpProxyConfig {
         NKikimrConfig::TServerlessProxyConfig Config;
         std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
-        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         bool UseSDK{false};
     };
 

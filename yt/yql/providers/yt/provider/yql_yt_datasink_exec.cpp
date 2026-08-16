@@ -119,6 +119,7 @@ public:
         AddHandler({TYtDqProcessWrite::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleYtDqProcessWrite));
         AddHandler({TYtTryFirst::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleTryFirst));
+        AddHandler({TYtPersist::CallableName()}, RequireAllOf({TYtPersist::idx_World, TYtPersist::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>));
     }
 
     void Rewind() override {
@@ -668,7 +669,7 @@ private:
     TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
-        Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
+        YQL_ENSURE(section.Size() == 1, "YtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
 
         if (AssignRuntimeCluster(op, output, ctx)) {
@@ -718,7 +719,7 @@ private:
         }
         else {
             // Fourth iteration: everything is done, return ok status.
-            Y_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
+            YQL_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
             return SyncOk();
         }
     }

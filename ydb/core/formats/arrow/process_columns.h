@@ -2,16 +2,14 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator_simple.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 #include <functional>
 
 namespace NKikimr::NArrow {
-
-class TSchemaSubset;
-class TSchemaLite;
-class TSchemaLiteView;
 
 class TOrderedColumnIndexesImpl {
 private:

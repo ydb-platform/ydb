@@ -22,8 +22,7 @@ namespace metrics
 class MetricReader
 {
 public:
-  MetricReader();
-
+  MetricReader()                                = default;
   MetricReader(const MetricReader &)            = delete;
   MetricReader(MetricReader &&)                 = delete;
   MetricReader &operator=(const MetricReader &) = delete;
@@ -72,7 +71,7 @@ private:
 
 protected:
 private:
-  MetricProducer *metric_producer_;
+  MetricProducer *metric_producer_{nullptr};
   std::atomic<bool> shutdown_{false};
 };
 }  // namespace metrics

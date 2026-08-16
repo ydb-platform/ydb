@@ -1,6 +1,9 @@
 #pragma once
 
 #include "uring_operation.h"
+#include "device_io_sample.h"
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/string.h>
 #include <util/system/fhandle.h>
@@ -9,6 +12,7 @@
 
 #include <atomic>
 #include <expected>
+#include <functional>
 #include <memory>
 
 struct io_uring;
@@ -71,18 +75,44 @@ struct TUringRouterConfig {
     TString ToString() const;
 };
 
+struct TUringCounters {
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadBusyTimeNs;
+};
+
 // TUringRouter is NOT thread-safe.  All public methods (Register*, Start,
 // Read, Write, Flush, Stop, SubmitItemsLeft, etc.) must be called from a
 // single thread (e.g. the DDisk actor). The only internal concurrency is the
 // dedicated TCompletionPoller thread that consumes the CQ ring and invokes
 // OnComplete callbacks.
+//
+// Optional device I/O sample sink: if set (via SetSampleSink, before Start()),
+// the completion poller thread invokes it once per successfully completed
+// Read/Write CQE with a raw TDeviceIoSample (submit/complete cycles, offset,
+// size, direction). Used to feed a device-overestimation aggregator that
+// merges samples across multiple sources sharing the same physical device.
+// The sink is invoked from the completion poller thread and must be cheap
+// and thread-safe on its own (e.g. push into a lock-protected buffer).
+using TDeviceIoSampleSink = std::function<void(const TDeviceIoSample&)>;
+
 class TUringRouter {
 public:
-    TUringRouter(FHANDLE fd, NActors::TActorSystem* actorSystem, TUringRouterConfig config = {});
+    TUringRouter(
+        FHANDLE fd,
+        NActors::TActorSystem* actorSystem,
+        TUringRouterConfig config = {},
+        TUringCounters* counters = nullptr);
+
     ~TUringRouter();
 
     const TUringRouterConfig& GetConfig() const {
         return Config;
+    }
+
+    // Must be called before Start(). Not thread-safe with itself or with
+    // completion-poller activity.
+    void SetSampleSink(TDeviceIoSampleSink sink) {
+        SampleSink = std::move(sink);
     }
 
     // --- Setup (call before Start) ---
@@ -108,7 +138,11 @@ public:
 
     // --- Submission (call from a single thread, e.g., DDisk actor) ---
 
-    // Submit a read operation. op->Iov and op->DiskOffset must be initialized.
+    // Submit a vectored read (Read) or write (Write) operation.
+    // op->Iov and op->DiskOffset must be initialized before calling:
+    //   single buffer:      PrepareIov(buf, size, offset)
+    //   scatter-gather:     PrepareScatterGather(count, offset) + AddIov() × count
+    // op->OperationType must also be set via SetOperationType().
     // op must remain alive until op->OnComplete is called.
     // Returns true if SQE was written to the ring, false if SQ is full.
     bool Read(TUringOperationBase* op);
@@ -152,6 +186,8 @@ private:
     FHANDLE Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
+    TUringCounters* Counters;
+    TDeviceIoSampleSink SampleSink;
 
     std::unique_ptr<struct io_uring> Ring;
 

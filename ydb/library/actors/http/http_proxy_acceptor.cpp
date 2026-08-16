@@ -3,7 +3,33 @@
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
+
+TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, TIpPort port) {
+    try {
+        TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor(THttpConfig::SocketType::GuessAddressFamily(address));
+        // for unit tests :(
+        SetSockOpt(socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
+#ifdef SO_REUSEPORT
+        SetSockOpt(socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
+#endif
+        THttpConfig::SocketAddressType bindAddress(socket->Socket.MakeAddress(address, port));
+        int err = socket->Socket.Bind(bindAddress.get());
+        if (err != 0) {
+            return nullptr;
+        }
+        err = socket->Socket.Listen(THttpConfig::LISTEN_QUEUE);
+        if (err != 0) {
+            return nullptr;
+        }
+        SetNonBlock(socket->Socket);
+        return socket;
+    } catch (...) {
+        return nullptr;
+    }
+}
 
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {
 public:
@@ -47,13 +73,11 @@ protected:
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
-        Socket = new TSocketDescriptor(SocketType::GuessAddressFamily(address));
-        // for unit tests :(
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
-#ifdef SO_REUSEPORT
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
-#endif
-        SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
+        if (event->Get()->PreboundSocket) {
+            Socket = event->Get()->PreboundSocket;
+        } else if (!Socket) {
+            Socket = TryBindListeningSocket(address, port);
+        }
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
@@ -64,48 +88,46 @@ protected:
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
         int err = 0;
+        if (!Socket) {
+            err = -1;
+            YDB_LOG_WARN("Failed to bind",
+                {"address", address},
+                {"port", port});
+        }
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
-                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem, event->Get()->CaFile);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(
+                    event->Get()->SslCertificatePem,
+                    event->Get()->CaFile,
+                    event->Get()->ClientCertificateRequired);
             } else {
-                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile, event->Get()->CaFile);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(
+                    event->Get()->CertificateFile,
+                    event->Get()->PrivateKeyFile,
+                    event->Get()->CaFile,
+                    event->Get()->ClientCertificateRequired);
             }
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;
-                ALOG_WARN(HttpLog, "Failed to construct server security context");
+                YDB_LOG_WARN("Failed to construct server security context");
             }
             // Enable ALPN for HTTP/2 negotiation on secure endpoints
             if (Endpoint->SecureContext && Endpoint->AllowHttp2) {
                 TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
             }
         }
-        if (err == 0) {
-            err = Socket->Socket.Bind(bindAddress.get());
-            if (err != 0) {
-                ALOG_WARN(
-                    HttpLog,
-                    "Failed to bind " << bindAddress->ToString()
-                    << ", code: " << err);
-            }
-        }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
-            err = Socket->Socket.Listen(LISTEN_QUEUE);
-            if (err == 0) {
-                ALOG_INFO(HttpLog, "Listening on " << schema << bindAddress->ToString());
-                SetNonBlock(Socket->Socket);
-                Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
-                TBase::Become(&TAcceptorActor::StateListening);
-                Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
-                return;
-            } else {
-                ALOG_WARN(
-                    HttpLog,
-                    "Failed to listen on " << schema << bindAddress->ToString()
-                    << ", code: " << err);
-            }
+            SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
+            YDB_LOG_INFO("Listening",
+                {"schema", schema},
+                {"bindAddress", bindAddress->ToString()});
+            Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
+            TBase::Become(&TAcceptorActor::StateListening);
+            Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
+            return;
         }
-        ALOG_WARN(HttpLog, "Failed to init - retrying...");
+        YDB_LOG_WARN("Failed to init - retrying...");
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 
@@ -136,9 +158,10 @@ protected:
                         continue; // we can try it again
                     }
                 } else {
-                    ALOG_WARN(HttpLog,
-                        "Accept failed on " << (Endpoint ? Endpoint->WorkerName : TString(""))
-                        << ": errno=" << acceptErrno << " (" << LastSystemErrorText(acceptErrno) << ")");
+                    YDB_LOG_WARN("Accept failed",
+                        {"workerName", (Endpoint ? Endpoint->WorkerName : TString(""))},
+                        {"errno", acceptErrno},
+                        {"error", LastSystemErrorText(acceptErrno)});
                     if (PollerToken) {
                         PollerToken->Request(true, false);
                     }

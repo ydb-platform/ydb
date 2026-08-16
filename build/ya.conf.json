@@ -68,22 +68,6 @@
                 }
             }
         },
-        "clang-format": {
-            "executable": {
-                "clang-format": [
-                    "clang-format"
-                ]
-            },
-            "formula": "build/platform/clang/clang-format/clang-format18.json"
-        },
-        "clang-format-16": {
-            "executable": {
-                "clang-format": [
-                    "clang-format"
-                ]
-            },
-            "formula": "build/platform/clang/clang-format/clang-format16.json"
-        },
         "clang-format-18": {
             "executable": {
                 "clang-format": [
@@ -267,7 +251,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.25.json"
+            "formula": "build/external_resources/go_tools/go1.26.json"
         },
         "jdk17": {
             "executable": {
@@ -571,50 +555,7 @@
             ],
             "tools": {
                 "clang-format": {
-                    "bottle": "clang-format",
-                    "executable": "clang-format"
-                }
-            }
-        },
-        "clang-format-16": {
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "x86_64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                }
-            ],
-            "tools": {
-                "clang-format-16": {
-                    "bottle": "clang-format-16",
+                    "bottle": "clang-format-18",
                     "executable": "clang-format"
                 }
             }
@@ -1097,6 +1038,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1154,6 +1105,27 @@
                 {
                     "default": false,
                     "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
                     },
@@ -1170,6 +1142,16 @@
                     },
                     "target": {
                         "arch": "power9le",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
                         "os": "LINUX"
                     }
                 },
@@ -1243,6 +1225,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -1837,6 +1830,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1894,6 +1897,27 @@
                 {
                     "default": true,
                     "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
                     },
@@ -1910,6 +1934,16 @@
                     },
                     "target": {
                         "arch": "power9le",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
                         "os": "LINUX"
                     }
                 },
@@ -1983,6 +2017,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -2390,7 +2435,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.25.0"
+                "version": "1.26.0"
             },
             "platforms": [
                 {
@@ -2845,9 +2890,6 @@
         },
         "clang-format": {
             "description": "Run Clang-Format source code formatter"
-        },
-        "clang-format-16": {
-            "description": "Run Clang-Format source code formatter (16 version)"
         },
         "clang-format-18": {
             "description": "Run Clang-Format source code formatter (18 version)"

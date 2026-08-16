@@ -43,7 +43,7 @@ namespace NKikimr {
                 std::shared_ptr<TRopeArena> arena)
             : HullCtx(s.HullCtx)
             , TimeProvider(tp)
-            , CompThreshold(s.CompThreshold)
+            , CompThreshold(Max<ui64>(HullCtx->ChunkSize, s.CompThreshold))
             , Cur(new TFreshSegment(HullCtx, s.CompThreshold, tp->Now(), arena))
             , UseDreg(s.FreshUseDreg)
             , Arena(std::move(arena))
@@ -57,6 +57,8 @@ namespace NKikimr {
 
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
+        ui64 GetFreeInPlaceSizeApproximation() const;
+
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
         void CompactionFinished();
@@ -119,6 +121,19 @@ namespace NKikimr {
             const bool compactCurBySize = Cur && Cur->NeedsCompactionBySize() && (!UseDreg || Dreg);
             return compactDregByYard || compactCurByYard || compactCurBySize;
         }
+    }
+
+    template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetFreeInPlaceSizeApproximation() const {
+        auto threshold = CompThreshold / 32 * 40;
+        if (UseDreg && !Dreg) {
+            return threshold;
+        }
+        if (Cur) {
+            auto size = Cur->InPlaceSizeApproximation();
+            return size >= threshold ? 0 : threshold - size;
+        }
+        return threshold;
     }
 
     template <class TKey, class TMemRec>

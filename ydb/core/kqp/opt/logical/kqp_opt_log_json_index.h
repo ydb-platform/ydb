@@ -1,7 +1,12 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+
+#include <util/generic/hash.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#include <expected>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -10,6 +15,7 @@ struct TJsonIndexSettings {
     NYql::TKqpReadTableFullTextIndexSettings Settings;
 };
 
-std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const NYql::NNodes::TExprBase& body, const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
+std::expected<TJsonIndexSettings, NYql::TIssue> CollectJsonIndexPredicate(const NYql::NNodes::TExprBase& body,
+    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const THashSet<TString>& jsonIndexedColumns);
 
-} // namespace NKikimr::NKqp::NOpt
+}   // namespace NKikimr::NKqp::NOpt

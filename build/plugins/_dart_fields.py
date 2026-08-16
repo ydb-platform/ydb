@@ -88,6 +88,15 @@ def get_values_list(unit, key):
     return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
+def get_escaped_values_list(unit, key):
+    """Like get_values_list, but respects backslash-escaped spaces when splitting."""
+    raw = (unit.get_subst(key) or '').strip()
+    if not raw:
+        return []
+    res = [r.strip() for r in shlex.split(raw)]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
+
+
 def _get_test_tags(unit, spec_args=None):
     if spec_args is None:
         spec_args = {}
@@ -681,7 +690,9 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('DEFAULT_CONFIGS')[0]
+        if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
+            return
+        default_configs_path = default_configs_path[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -714,7 +725,17 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = (
+        'adfox',
+        'ads',
+        'alice/agents/booking',
+        'bigrt',
+        'grut',
+        'quality/user_sessions',
+        'yabs',
+        'maps',
+        'yt',
+    )
     # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
@@ -855,6 +876,22 @@ class Requirements:
     @classmethod
     def from_unit(cls, unit, flat_args, spec_args):
         requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+        return serialize_list(requirements)
+
+    @classmethod
+    def from_unit_with_cpu(cls, unit, flat_args, spec_args):
+        requirements = get_values_list(unit, "TEST_REQUIREMENTS_VALUE")
+
+        defaults = {
+            "cpu": "cpu:4",
+            "ram": "ram:16",
+            "ram_disk": "ram_disk:4",
+        }
+
+        for prefix, value in defaults.items():
+            if not any(r and r.startswith(f"{prefix}:") for r in requirements):
+                requirements.append(value)
+
         return serialize_list(requirements)
 
     @classmethod
@@ -1210,6 +1247,14 @@ class TsCheckType:
         return spec_args.get("TS_CHECK_TYPE", None)
 
 
+class TsCheckHasCoverage:
+    KEY = 'TS-CHECK-HAS-COVERAGE'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 
@@ -1317,7 +1362,7 @@ class TestFiles:
 
     @classmethod
     def ts_check_srcs(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_GLOB_FILES")
+        test_files = get_escaped_values_list(unit, "_TS_GLOB_FILES")
         rel_to = "TS_TEST_FOR_PATH" if unit.get("TS_TEST_FOR") else "MODDIR"
         test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
         value = serialize_list(test_files)
@@ -1516,6 +1561,23 @@ class TestRecipes:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return prepare_recipes(unit.get_subst("TEST_RECIPES_VALUE"))
+
+
+class TestPersistentRecipes:
+    KEY = 'TEST-PERSISTENT-RECIPES'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        data = unit.get_subst("TEST_PERSISTENT_RECIPES_VALUE")
+        if not data or not data.strip():
+            return None
+        # Replace delimiter token with newline — same pattern as USE_RECIPE/format_recipes.
+        # Each USE_PERSISTENT_RECIPE call becomes one line; paths within a call are
+        # space-separated on that line.
+        formatted = data.replace('"USE_PERSISTENT_RECIPE_DELIM"', "\n")
+        if not formatted.strip():
+            return None
+        return base64.b64encode(formatted.encode('utf-8'))
 
 
 class TestRunnerBin:

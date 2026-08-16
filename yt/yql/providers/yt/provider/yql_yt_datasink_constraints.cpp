@@ -45,7 +45,8 @@ public:
         AddHandler({TYtStatOut::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtDqProcessWrite ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDqProcessWrite));
         AddHandler({TYtTryFirst ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTryFirst));
-        AddHandler({TYtMaterialize ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
+        AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
+        AddHandler({TYtPersist::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandlePersist));
         AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
     }
 private:
@@ -454,7 +455,27 @@ private:
     }
 
     TStatus HandleMaterialize(TExprBase input, TExprContext&) {
-        input.Ptr()->CopyConstraints(*input.Ref().Child(TYtMaterialize::idx_Input));
+        auto materialize = input.Cast<TYtMaterialize>();
+        const bool skipSort = NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::Unordered);
+        for (auto c: materialize.Input().Ref().GetAllConstraints()) {
+            if (!skipSort || c->GetName() != TSortedConstraintNode::Name()) {
+                input.Ptr()->AddConstraint(c);
+            }
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus HandlePersist(TExprBase input, TExprContext&) {
+        auto persist = input.Cast<TYtPersist>();
+        const bool skipSort = NYql::HasSetting(persist.Settings().Ref(), EYtSettingType::Unordered);
+        for (auto c: persist.Output().Item(0).Ref().GetAllConstraints()) {
+            if (!skipSort || c->GetName() != TSortedConstraintNode::Name()) {
+                input.Ptr()->AddConstraint(c);
+            }
+        }
+        if (auto empty = persist.Input().Item(0).Ref().GetConstraint<TEmptyConstraintNode>()) {
+            input.Ptr()->AddConstraint(empty);
+        }
         return TStatus::Ok;
     }
 

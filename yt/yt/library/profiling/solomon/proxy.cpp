@@ -28,19 +28,19 @@ constinit const auto Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TString ShardIndexParameterName("shard_index");
-static const TString ShardCountParameterName("shard_count");
-static const TString ComponentParameterName("component");
-static const TString InstanceParameterName("instance");
+static const std::string ShardIndexParameterName("shard_index");
+static const std::string ShardCountParameterName("shard_count");
+static const std::string ComponentParameterName("component");
+static const std::string InstanceParameterName("instance");
 
-static const TString InstanceLabelParameterNamePrefix("instance_");
+static const std::string InstanceLabelParameterNamePrefix("instance_");
 
-static const std::vector<TString> ForwardParameterWhitelist = {
+static const std::vector<std::string> ForwardParameterWhitelist = {
     "period",
     "now",
 };
 
-static const std::vector<TString> ForwardHeaderWhitelist = {
+static const std::vector<std::string> ForwardHeaderWhitelist = {
     "X-Solomon-GridSec",
     "X-Solomon-ClusterId",
 };
@@ -53,23 +53,23 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ParseIntegerParameter(const TCgiParameters& parameters, const TString& parameterName, int defaultValue)
+int ParseIntegerParameter(const TCgiParameters& parameters, const std::string& parameterName, int defaultValue)
 {
     int value = defaultValue;
 
     if (auto it = parameters.Find(parameterName); it != parameters.end()) {
         if (!TryFromString<int>(it->second, value)) {
             THROW_ERROR_EXCEPTION("Invalid value of %Qv parameter", parameterName)
-                << TErrorAttribute("value", it->second);
+                .With("value", it->second);
         }
     }
 
     return value;
 }
 
-std::optional<TString> TrimPrefix(const TString& name, const TString& prefix)
+std::optional<std::string> TrimPrefix(const std::string& name, const std::string& prefix)
 {
-    if (name.StartsWith(prefix)) {
+    if (name.starts_with(prefix)) {
         return name.substr(prefix.size());
     }
 
@@ -107,7 +107,7 @@ void TSolomonProxy::UnregisterEndpointProvider(const IEndpointProviderPtr& endpo
     EraseOrCrash(ComponentNameToEndpointProvider_, endpointProvider->GetComponentName());
 }
 
-void TSolomonProxy::Register(const TString& prefix, const IServerPtr& server)
+void TSolomonProxy::Register(const std::string& prefix, const IServerPtr& server)
 {
     server->AddHandler(prefix + "/sensors", BIND(&TSolomonProxy::HandleSensors, MakeStrong(this)));
     // TODO(achulkov2): Expose available tags/targets?
@@ -226,7 +226,7 @@ std::vector<IEndpointProvider::TEndpoint> TSolomonProxy::FilterInstances(
     return filteredEndpoints;
 }
 
-std::vector<TString> TSolomonProxy::CollectEndpoints(const TCgiParameters& parameters, int shardIndex, int shardCount) const
+std::vector<std::string> TSolomonProxy::CollectEndpoints(const TCgiParameters& parameters, int shardIndex, int shardCount) const
 {
     auto componentMatcher = GetComponentMatcher(parameters);
     auto instanceFilter = GetInstanceFilter(parameters);
@@ -242,7 +242,7 @@ std::vector<TString> TSolomonProxy::CollectEndpoints(const TCgiParameters& param
     int skippedByInternalFilter = 0;
     int skippedByUserFilter = 0;
 
-    std::vector<TString> allEndpoints;
+    std::vector<std::string> allEndpoints;
 
     for (const auto& [componentName, endpointProvider] : ComponentNameToEndpointProvider_) {
         YT_VERIFY(componentName == endpointProvider->GetComponentName());
@@ -341,7 +341,7 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
     // TODO(achulkov2): Ideally, we would want some sort of memory accounting here.
     if (std::ssize(filteredEndpoints) > Config_->MaxEndpointsPerRequest) {
         THROW_ERROR_EXCEPTION("Cannot pull sensors from %v endpoints at once, please retry the request with a larger shard count", filteredEndpoints.size())
-            << TErrorAttribute("max_endpoints_per_request", Config_->MaxEndpointsPerRequest);
+            .With("max_endpoints_per_request", Config_->MaxEndpointsPerRequest);
     }
 
     std::vector<TFuture<IResponsePtr>> asyncPullResponses;
@@ -384,8 +384,8 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
             YT_LOG_DEBUG("Sensor pull failed (StatusCode: %v, Response: %v)", pullResponse->GetStatusCode(), body);
             pullErrors.push_back(
                 TError("Sensor pull failed with status code %v", pullResponse->GetStatusCode())
-                    << TErrorAttribute("response_body", ToString(body))
-                    << TErrorAttribute("status_code", pullResponse->GetStatusCode()));
+                    .With("response_body", ToString(body))
+                    .With("status_code", pullResponse->GetStatusCode()));
             continue;
         }
 
@@ -406,9 +406,9 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
             pullErrors.resize(PullErrorSampleSize);
         }
         THROW_ERROR_EXCEPTION("Could not pull sensors from any endpoint")
-            << TErrorAttribute("sampled_error_count", pullErrors.size())
-            << TErrorAttribute("total_error_count", totalErrorCount)
-            << pullErrors;
+            .With("sampled_error_count", pullErrors.size())
+            .With("total_error_count", totalErrorCount)
+            .With(pullErrors);
     }
 
     // TODO(achulkov2): Maybe offload this to a separate thread pool like it is done in the exporter.

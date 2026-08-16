@@ -30,6 +30,10 @@
 #include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/threading/count_down_latch.h>
 
 #include <util/system/compiler.h>
@@ -49,7 +53,7 @@ using ::testing::ContainsRegex;
 
 constexpr auto SleepQuantum = TDuration::MilliSeconds(100);
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -151,14 +155,14 @@ TEST_W(TSchedulerTest, SwitchToInvoker1)
 {
     auto invoker = Queue1->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker->GetThreadId();
 
     EXPECT_NE(id0, id1);
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
     }
 }
 
@@ -167,7 +171,7 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
     auto invoker1 = Queue1->GetInvoker();
     auto invoker2 = Queue2->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker1->GetThreadId();
     auto id2 = invoker2->GetThreadId();
 
@@ -177,10 +181,10 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker1);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
 
         SwitchTo(invoker2);
-        EXPECT_EQ(GetCurrentThreadId(), id2);
+        EXPECT_EQ(GetSystemThreadId(), id2);
     }
 }
 
@@ -258,6 +262,83 @@ TEST_W(TSchedulerTest, WaitForCancelableInvoker2)
         })
         .AsyncVia(invoker)
         .Run()).ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsWaitingFiber)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto asyncResult = BIND([=] {
+            started.Set();
+            WaitFor(future)
+                .ThrowOnError();
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+
+    constexpr auto CancelationCode = TErrorCode(42);
+    context->Cancel(TError(CancelationCode, "Canceled by context"));
+
+    auto result = WaitFor(asyncResult);
+    EXPECT_FALSE(result.IsOK());
+    EXPECT_EQ(CancelationCode, result.GetCode());
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsSubsequentWaits)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto firstPromise = NewPromise<void>();
+    auto secondPromise = NewPromise<void>();
+
+    // Once the context cancels the fiber, every subsequent wait -- even on a
+    // future that is never resolved (secondPromise) -- must be canceled at once,
+    // because the whole fiber is canceled, not just the single await. Otherwise
+    // the second WaitFor would hang.
+    auto asyncResult = BIND([=] {
+            started.Set();
+            EXPECT_THROW(WaitFor(firstPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+            EXPECT_THROW(WaitFor(secondPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+    context->Cancel(TError("Canceled by context"));
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, CurrentCancelableContextFollowsFiberAcrossSwitchTo)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+    auto otherInvoker = Queue2->GetInvoker();
+
+    WaitFor(BIND([=] {
+            // Running under the cancelable invoker: the context is current.
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+
+            // Switching to an unrelated invoker must not rebind the current
+            // cancelable context -- it is fiber-local, not invoker-bound.
+            SwitchTo(otherInvoker);
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+        })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
 }
 
 TEST_W(TSchedulerTest, TerminatedCaught)
@@ -523,6 +604,26 @@ TEST_F(TSchedulerTest, PropagateFiberCancelationToFuture)
     EXPECT_TRUE(p1.IsCanceled());
 }
 
+TEST_F(TSchedulerTest, PropagateFiberCancelationToFutureWithDeadline)
+{
+    auto p1 = NewPromise<void>();
+    auto f1 = p1.ToFuture();
+
+    auto a = BIND([=] () mutable {
+        WaitUntilSet(f1, TWaitOptions{}.WithTimeout(TDuration::Seconds(100)));
+    });
+
+    auto f2 = a.AsyncVia(Queue1->GetInvoker()).Run();
+
+    Sleep(SleepQuantum);
+
+    f2.Cancel(TError("Error"));
+
+    Sleep(SleepQuantum);
+
+    EXPECT_TRUE(p1.IsCanceled());
+}
+
 TEST_F(TSchedulerTest, FiberUnwindOrder)
 {
     auto p1 = NewPromise<void>();
@@ -562,6 +663,173 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
     EXPECT_TRUE(WaitForFast(f1).IsOK());
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetBlockThreadValue)
+{
+    // Already-set future.
+    auto fSet = MakeFuture(42);
+    WaitUntilSet(fSet.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_EQ(42, fSet.GetOrCrash().ValueOrThrow());
+
+    // Blocks the thread until the future is set from another thread.
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    ASSERT_TRUE(f.IsSet());
+    EXPECT_EQ(7, f.GetOrCrash().ValueOrThrow());
+
+    // Error propagation path: the error is returned, not thrown.
+    auto fErr = MakeFuture<int>(TError("simulated error"));
+    WaitUntilSet(fErr.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_FALSE(fErr.GetOrCrash().IsOK());
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetBlockThreadInFiber)
+{
+    // BlockThread inside a fiber blocks the whole thread instead of yielding.
+    auto id0 = GetSystemThreadId();
+
+    auto p = NewPromise<void>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_TRUE(f.IsSet());
+    EXPECT_EQ(GetSystemThreadId(), id0);
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetSuspendFiberValue)
+{
+    // Already-set future.
+    auto fSet = MakeFuture(42);
+    WaitUntilSet(fSet.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_EQ(42, fSet.GetOrCrash().ValueOrThrow());
+
+    // Yields the fiber until the future is set from another thread.
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    ASSERT_TRUE(f.IsSet());
+    EXPECT_EQ(7, f.GetOrCrash().ValueOrThrow());
+
+    // Error propagation path: the error is returned, not thrown.
+    auto fErr = MakeFuture<int>(TError("simulated error"));
+    WaitUntilSet(fErr.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_FALSE(fErr.GetOrCrash().IsOK());
+}
+
+TEST_F(TSchedulerTest, WaitOptionsWithTimeout)
+{
+    auto timeout = TDuration::Seconds(5);
+
+    auto before = GetInstant();
+    auto options = TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(timeout);
+    auto after = GetInstant();
+
+    // Deadline must be |timeout| past a |GetInstant()| taken during the call.
+    ASSERT_TRUE(options.Deadline.has_value());
+    EXPECT_GE(*options.Deadline, before + timeout);
+    EXPECT_LE(*options.Deadline, after + timeout);
+
+    // The other fields pass through untouched.
+    EXPECT_EQ(EWaitForStrategy::BlockThread, options.Strategy);
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetAlwaysYieldFiber)
+{
+    auto invoker = Queue1->GetInvoker();
+    auto id0 = GetSystemThreadId();
+    auto id1 = invoker->GetThreadId();
+    EXPECT_NE(id0, id1);
+
+    auto p = NewPromise<void>();
+    p.Set();
+    auto future = p.ToFuture();
+
+    // AlwaysYieldFiber = false: an already-set future returns without rescheduling.
+    WaitUntilSet(future, TWaitOptions{.ResumingInvoker = invoker, .AlwaysYieldFiber = false});
+    EXPECT_EQ(GetSystemThreadId(), id0);
+
+    // AlwaysYieldFiber = true (default): the fiber is rescheduled onto |invoker| even though set.
+    WaitUntilSet(future, TWaitOptions{.ResumingInvoker = invoker});
+    EXPECT_EQ(GetSystemThreadId(), id1);
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetSuspendFiberOffFiber)
+{
+    // Off a fiber, SuspendFiber degenerates to a blocking wait.
+    auto future = TDelayedExecutor::MakeDelayed(SleepQuantum);
+    WaitUntilSet(future, TWaitOptions{.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_TRUE(future.IsSet());
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetBlockThread)
+{
+    // Already-set future.
+    auto pSet = NewPromise<void>();
+    pSet.Set();
+    auto fSet = pSet.ToFuture();
+    WaitUntilSet(fSet, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(SleepQuantum));
+    EXPECT_TRUE(fSet.IsSet());
+
+    // Times out while the future stays unset (and leaves it untouched).
+    auto p = NewPromise<void>();
+    auto f = p.ToFuture();
+    WaitUntilSet(f, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(SleepQuantum));
+    EXPECT_FALSE(f.IsSet());
+
+    // Wakes once the future is set from another thread before the deadline.
+    auto p2 = NewPromise<void>();
+    auto f2 = p2.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p2.Set();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+    WaitUntilSet(f2, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(TDuration::Seconds(10)));
+    EXPECT_TRUE(f2.IsSet());
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetSuspendFiber)
+{
+    // Already-set future.
+    auto pSet = NewPromise<int>();
+    pSet.Set(1);
+    auto fSet = pSet.ToFuture();
+    WaitUntilSet(fSet.AsVoid(), TWaitOptions{}.WithTimeout(SleepQuantum));
+    EXPECT_TRUE(fSet.IsSet());
+
+    // Times out while the future stays unset (and leaves it untouched).
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    WaitUntilSet(f.AsVoid(), TWaitOptions{}.WithTimeout(SleepQuantum));
+    EXPECT_FALSE(f.TryGet());
+    EXPECT_FALSE(f.IsSet());
+
+    // Reports the value once the future is set before the deadline.
+    auto p2 = NewPromise<int>();
+    auto f2 = p2.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p2.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+    WaitUntilSet(f2.AsVoid(), TWaitOptions{}.WithTimeout(TDuration::Seconds(10)));
+    auto value = f2.TryGet();
+    ASSERT_TRUE(value.has_value());
+    EXPECT_EQ(7, value->ValueOrThrow());
 }
 
 TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)

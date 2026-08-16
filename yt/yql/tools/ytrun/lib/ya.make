@@ -9,6 +9,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/fmr_tool_lib
     yt/yql/providers/yt/fmr/file/metadata/impl
     yt/yql/providers/yt/fmr/file/upload/impl
+    yt/yql/providers/yt/fmr/table_data_service/discovery/file
     yt/yql/providers/yt/gateway/native
     yt/yql/providers/yt/gateway/fmr
     yt/yql/providers/yt/lib/config_clusters

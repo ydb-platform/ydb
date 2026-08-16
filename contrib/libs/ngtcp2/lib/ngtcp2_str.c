@@ -25,8 +25,10 @@
 #include "ngtcp2_str.h"
 
 #include <string.h>
+#include <assert.h>
 
 #include "ngtcp2_macro.h"
+#include "ngtcp2_unreachable.h"
 
 void *ngtcp2_cpymem(void *dest, const void *src, size_t n) {
   memcpy(dest, src, n);
@@ -38,6 +40,22 @@ uint8_t *ngtcp2_setmem(uint8_t *dest, uint8_t b, size_t n) {
   return dest + n;
 }
 
+void ngtcp2_secure_clear(void *data, size_t len) {
+#ifdef WIN32
+  SecureZeroMemory(data, len);
+#elif defined(HAVE_EXPLICIT_BZERO)
+  explicit_bzero(data, len);
+#elif defined(HAVE_MEMSET_S)
+  memset_s(data, len, 0, len);
+#else  /* !defined(WIN32) && !defined(HAVE_EXPLICIT_BZERO) &&                  \
+          !defined(HAVE_MEMSET_S) */
+  static void *(*volatile memset_ptr)(void *, int, size_t) = memset;
+
+  memset_ptr(data, 0, len);
+#endif /* !defined(WIN32) && !defined(HAVE_EXPLICIT_BZERO) &&                  \
+          !defined(HAVE_MEMSET_S) */
+}
+
 const void *ngtcp2_get_bytes(void *dest, const void *src, size_t n) {
   memcpy(dest, src, n);
   return (uint8_t *)src + n;
@@ -47,56 +65,100 @@ const void *ngtcp2_get_bytes(void *dest, const void *src, size_t n) {
 
 uint8_t *ngtcp2_encode_hex(uint8_t *dest, const uint8_t *data, size_t len) {
   size_t i;
-  uint8_t *p = dest;
 
   for (i = 0; i < len; ++i) {
-    *p++ = (uint8_t)LOWER_XDIGITS[data[i] >> 4];
-    *p++ = (uint8_t)LOWER_XDIGITS[data[i] & 0xf];
+    *dest++ = (uint8_t)LOWER_XDIGITS[data[i] >> 4];
+    *dest++ = (uint8_t)LOWER_XDIGITS[data[i] & 0xFU];
   }
-
-  return p;
-}
-
-char *ngtcp2_encode_hex_cstr(char *dest, const uint8_t *data, size_t len) {
-  uint8_t *p = ngtcp2_encode_hex((uint8_t *)dest, data, len);
-
-  *p = '\0';
 
   return dest;
 }
 
-char *ngtcp2_encode_printable_ascii_cstr(char *dest, const uint8_t *data,
-                                         size_t len) {
+size_t ngtcp2_encode_uint_hexlen(uint64_t n) {
   size_t i;
-  char *p = dest;
+  uint8_t d;
+
+  if (n == 0) {
+    return 1;
+  }
+
+  for (i = 0; i < sizeof(n); ++i) {
+    d = (uint8_t)(n >> (sizeof(n) - 1 - i) * 8);
+    if (!d) {
+      continue;
+    }
+
+    if (d >> 4) {
+      return (sizeof(n) - i) * 2;
+    }
+
+    return (sizeof(n) - i) * 2 - 1;
+  }
+
+  ngtcp2_unreachable();
+}
+
+uint8_t *ngtcp2_encode_uint_hex(uint8_t *dest, uint64_t n) {
+  size_t i;
+  uint8_t d;
+
+  if (n == 0) {
+    *dest++ = '0';
+
+    return dest;
+  }
+
+  for (i = 0; i < sizeof(n); ++i) {
+    d = (uint8_t)(n >> (sizeof(n) - 1 - i) * 8);
+    if (d) {
+      if (d >> 4) {
+        *dest++ = (uint8_t)LOWER_XDIGITS[d >> 4];
+      }
+
+      *dest++ = (uint8_t)LOWER_XDIGITS[d & 0xFU];
+      ++i;
+
+      break;
+    }
+  }
+
+  for (; i < sizeof(n); ++i) {
+    d = (uint8_t)(n >> (sizeof(n) - 1 - i) * 8);
+
+    *dest++ = (uint8_t)LOWER_XDIGITS[d >> 4];
+    *dest++ = (uint8_t)LOWER_XDIGITS[d & 0xFU];
+  }
+
+  return dest;
+}
+
+uint8_t *ngtcp2_encode_printable_ascii(uint8_t *dest, const uint8_t *data,
+                                       size_t len) {
+  size_t i;
   uint8_t c;
 
   for (i = 0; i < len; ++i) {
     c = data[i];
-    if (0x20 <= c && c <= 0x7e) {
-      *p++ = (char)c;
+    if (0x20 <= c && c <= 0x7E) {
+      *dest++ = c;
     } else {
-      *p++ = '.';
+      *dest++ = '.';
     }
   }
-
-  *p = '\0';
 
   return dest;
 }
 
-char *ngtcp2_encode_ipv4_cstr(char *dest, const uint8_t *addr) {
+uint8_t *ngtcp2_encode_ipv4(uint8_t *dest, const ngtcp2_in_addr *addr) {
   size_t i;
-  char *p = dest;
+  const uint8_t *in = (const uint8_t *)addr;
 
-  p = (char *)ngtcp2_encode_uint((uint8_t *)p, addr[0]);
+  dest = ngtcp2_encode_uint(dest, in[0]);
 
   for (i = 1; i < 4; ++i) {
-    *p++ = '.';
-    p = (char *)ngtcp2_encode_uint((uint8_t *)p, addr[i]);
+    *dest++ = '.';
+    dest = ngtcp2_encode_uint(dest, in[i]);
   }
-
-  *p = '\0';
 
   return dest;
 }
@@ -106,9 +168,9 @@ char *ngtcp2_encode_ipv4_cstr(char *dest, const uint8_t *addr) {
  * length |len| to |dest| in hex string.  Any leading zeros are
  * suppressed.  It returns |dest| plus the number of bytes written.
  */
-static char *write_hex_zsup(char *dest, const uint8_t *data, size_t len) {
+static uint8_t *write_hex_zsup(uint8_t *dest, const uint8_t *data, size_t len) {
   size_t i;
-  char *p = dest;
+  uint8_t *p = dest;
   uint8_t d;
 
   for (i = 0; i < len; ++i) {
@@ -117,10 +179,10 @@ static char *write_hex_zsup(char *dest, const uint8_t *data, size_t len) {
       break;
     }
 
-    d &= 0xf;
+    d &= 0xFU;
 
     if (d) {
-      *p++ = LOWER_XDIGITS[d];
+      *p++ = (uint8_t)LOWER_XDIGITS[d];
       ++i;
       break;
     }
@@ -133,23 +195,23 @@ static char *write_hex_zsup(char *dest, const uint8_t *data, size_t len) {
 
   for (; i < len; ++i) {
     d = data[i];
-    *p++ = LOWER_XDIGITS[d >> 4];
-    *p++ = LOWER_XDIGITS[d & 0xf];
+    *p++ = (uint8_t)LOWER_XDIGITS[d >> 4];
+    *p++ = (uint8_t)LOWER_XDIGITS[d & 0xFU];
   }
 
   return p;
 }
 
-char *ngtcp2_encode_ipv6_cstr(char *dest, const uint8_t *addr) {
+uint8_t *ngtcp2_encode_ipv6(uint8_t *dest, const ngtcp2_in6_addr *addr) {
   uint16_t blks[8];
   size_t i;
   size_t zlen, zoff;
   size_t max_zlen = 0, max_zoff = 8;
-  char *p = dest;
+  const uint8_t *in = (const uint8_t *)addr;
 
   for (i = 0; i < 16; i += sizeof(uint16_t)) {
     /* Copy in network byte order. */
-    memcpy(&blks[i / sizeof(uint16_t)], addr + i, sizeof(uint16_t));
+    memcpy(&blks[i / sizeof(uint16_t)], in + i, sizeof(uint16_t));
   }
 
   for (i = 0; i < 8;) {
@@ -176,28 +238,28 @@ char *ngtcp2_encode_ipv6_cstr(char *dest, const uint8_t *addr) {
   }
 
   if (max_zoff != 0) {
-    p = write_hex_zsup(p, (const uint8_t *)blks, sizeof(uint16_t));
+    dest = write_hex_zsup(dest, (const uint8_t *)blks, sizeof(uint16_t));
 
     for (i = 1; i < max_zoff; ++i) {
-      *p++ = ':';
-      p = write_hex_zsup(p, (const uint8_t *)(blks + i), sizeof(uint16_t));
+      *dest++ = ':';
+      dest =
+        write_hex_zsup(dest, (const uint8_t *)(blks + i), sizeof(uint16_t));
     }
   }
 
   if (max_zoff != 8) {
-    *p++ = ':';
+    *dest++ = ':';
 
     if (max_zoff + max_zlen == 8) {
-      *p++ = ':';
+      *dest++ = ':';
     } else {
       for (i = max_zoff + max_zlen; i < 8; ++i) {
-        *p++ = ':';
-        p = write_hex_zsup(p, (const uint8_t *)(blks + i), sizeof(uint16_t));
+        *dest++ = ':';
+        dest =
+          write_hex_zsup(dest, (const uint8_t *)(blks + i), sizeof(uint16_t));
       }
     }
   }
-
-  *p = '\0';
 
   return dest;
 }
@@ -236,7 +298,7 @@ static int countl_zero(uint64_t x) {
   };
   int n = 0;
 
-  if (x >= 1ull << 32) {
+  if (x >= 1ULL << 32) {
     x >>= 32;
     n += 32;
   }
@@ -264,25 +326,25 @@ static int countl_zero(uint64_t x) {
  */
 static size_t count_digit(uint64_t x) {
   static const uint64_t count_digit_tbl[] = {
-    9ull,
-    99ull,
-    999ull,
-    9999ull,
-    99999ull,
-    999999ull,
-    9999999ull,
-    99999999ull,
-    999999999ull,
-    9999999999ull,
-    99999999999ull,
-    999999999999ull,
-    9999999999999ull,
-    99999999999999ull,
-    999999999999999ull,
-    9999999999999999ull,
-    99999999999999999ull,
-    999999999999999999ull,
-    9999999999999999999ull,
+    9ULL,
+    99ULL,
+    999ULL,
+    9999ULL,
+    99999ULL,
+    999999ULL,
+    9999999ULL,
+    99999999ULL,
+    999999999ULL,
+    9999999999ULL,
+    99999999999ULL,
+    999999999999ULL,
+    9999999999999ULL,
+    99999999999999ULL,
+    999999999999999ULL,
+    9999999999999999ULL,
+    99999999999999999ULL,
+    999999999999999999ULL,
+    9999999999999999999ULL,
   };
   size_t y = (size_t)(19 * (63 - countl_zero(x | 1)) >> 6);
 
@@ -290,6 +352,8 @@ static size_t count_digit(uint64_t x) {
 
   return y + 1;
 }
+
+size_t ngtcp2_encode_uintlen(uint64_t n) { return count_digit(n); }
 
 uint8_t *ngtcp2_encode_uint(uint8_t *dest, uint64_t n) {
   static const uint8_t uint_digits[] =

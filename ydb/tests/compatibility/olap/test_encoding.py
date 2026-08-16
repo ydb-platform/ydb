@@ -19,7 +19,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 640
 
         yield from self.setup_cluster(
-            extra_feature_flags={"enable_cs_dictionary_encoding": True},
+            extra_feature_flags=["enable_cs_dictionary_encoding"],
             column_shard_config={
                 "disabled_on_scheme_shard": False,
                 "alter_object_enabled": True,
@@ -50,12 +50,13 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
             values.append(f'(Timestamp("{ts_str}"), "{resource_id}", "{uid}")')
 
         query = f"""
-            INSERT INTO `{self.table_name}` (timestamp, resource_id, uid)
+            UPSERT INTO `{self.table_name}` (timestamp, resource_id, uid)
             VALUES {",".join(values)};
             """
 
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+            session_pool.execute_with_retries(query, retry_settings=retry_settings)
 
     def _get_queries(self):
         queries = []
@@ -110,9 +111,10 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
         return queries
 
     def _do_queries(self, queries):
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query_type, query in queries:
-                result_sets = session_pool.execute_with_retries(query)
+                result_sets = session_pool.execute_with_retries(query, retry_settings=retry_settings)
                 if query_type == self.QueryType.SELECT_CNT:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
                     for row in result_sets[0].rows:
@@ -121,8 +123,8 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
 
     def skip_if_unsupported(self):
-        if min(self.versions) < (26, 3):
-            pytest.skip("Only available since stable-26-3")
+        if min(self.versions) < (26, 2):
+            pytest.skip("Only available since stable-26-2")
 
     def test_encoding(self):
         self.skip_if_unsupported()

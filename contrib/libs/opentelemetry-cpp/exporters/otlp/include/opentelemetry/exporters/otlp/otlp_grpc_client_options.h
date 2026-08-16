@@ -13,7 +13,8 @@
 namespace grpc
 {
 class ChannelCredentials;
-}
+class ChannelArguments;
+}  // namespace grpc
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace exporter
@@ -42,7 +43,6 @@ struct OtlpGrpcClientOptions
   /** CA CERT, as a string. */
   std::string ssl_credentials_cacert_as_string;
 
-#ifdef ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
   /** CLIENT KEY, path to a file. */
   std::string ssl_client_key_path;
 
@@ -54,7 +54,6 @@ struct OtlpGrpcClientOptions
 
   /** CLIENT CERT, as a string. */
   std::string ssl_client_cert_string;
-#endif
 
 #ifdef ENABLE_OTLP_GRPC_CREDENTIAL_PREVIEW
   /** Use custom ChannelCredentials, instead of the SSL options above. */
@@ -92,6 +91,13 @@ struct OtlpGrpcClientOptions
 
   /** The backoff will be multiplied by this value after each retry attempt. */
   float retry_policy_backoff_multiplier{};
+
+  /**
+   * Optional caller-provided gRPC channel arguments.
+   * This is a non-owning pointer. If set, the pointed-to object must remain valid
+   * until the gRPC exporter or client has been constructed.
+   */
+  const grpc::ChannelArguments *channel_arguments{};
 };
 
 }  // namespace otlp

@@ -1,0 +1,10 @@
+/* custom error: Too many CTE iterations: 500 */
+/* TODO(YQL-20631): postgres can handle it */
+PRAGMA YqlSelect = 'force';
+
+WITH RECURSIVE cycle AS (
+    SELECT CAST(1 AS Int32?) AS val
+    UNION ALL
+    SELECT (val + 1) % 3 AS val FROM cycle
+)
+SELECT * FROM cycle ORDER BY val;

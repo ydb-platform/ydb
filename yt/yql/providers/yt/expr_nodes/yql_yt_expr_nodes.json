@@ -380,6 +380,11 @@
             ]
         },
         {
+            "Name": "TYtPersist",
+            "Base": "TYtTransientOpBase",
+            "Match": {"Type": "Callable", "Name": "YtPersist!"}
+        },
+        {
             "Name": "TYtTouch",
             "Base": "TYtOutputOpBase",
             "Match": {"Type": "Callable", "Name": "YtTouch!"}

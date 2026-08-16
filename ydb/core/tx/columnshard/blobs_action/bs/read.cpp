@@ -4,14 +4,19 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
+
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 void TReadingAction::DoStartReading(THashSet<TBlobRange>&& ranges) {
-    NBlobCache::TReadBlobRangeOptions readOpts{ .CacheAfterRead = true, .IsBackgroud = GetIsBackgroundProcess(), .WithDeadline = false };
+    NBlobCache::TReadBlobRangeOptions readOpts{ .CacheAfterRead = GetCacheAfterRead(), .IsBackgroud = GetIsBackgroundProcess(),
+        .WithDeadline = false };
     std::vector<TBlobRange> rangesLocal(ranges.begin(), ranges.end());
     TActorContext::AsActorContext().Send(
         BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(rangesLocal), std::move(readOpts)));
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("blob_ids", JoinSeq(",", ranges))("count", ranges.size());
+    YDB_LOG_DEBUG("",
+        {"blobIds", JoinSeq(",", ranges)},
+        {"count", ranges.size()});
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

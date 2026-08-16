@@ -1,16 +1,20 @@
+from __future__ import annotations
+
+import dataclasses
 import mimetypes
 import sys
 import typing as t
+import warnings
 from collections import defaultdict
 from datetime import datetime
-from datetime import timedelta
-from http.cookiejar import CookieJar
 from io import BytesIO
 from itertools import chain
 from random import random
 from tempfile import TemporaryFile
 from time import time
-from urllib.request import Request as _UrllibRequest
+from urllib.parse import unquote
+from urllib.parse import urlsplit
+from urllib.parse import urlunsplit
 
 from ._internal import _get_environ
 from ._internal import _make_encode_wrapper
@@ -25,6 +29,8 @@ from .datastructures import Headers
 from .datastructures import MultiDict
 from .http import dump_cookie
 from .http import dump_options_header
+from .http import parse_cookie
+from .http import parse_date
 from .http import parse_options_header
 from .sansio.multipart import Data
 from .sansio.multipart import Epilogue
@@ -32,12 +38,8 @@ from .sansio.multipart import Field
 from .sansio.multipart import File
 from .sansio.multipart import MultipartEncoder
 from .sansio.multipart import Preamble
+from .urls import _urlencode
 from .urls import iri_to_uri
-from .urls import url_encode
-from .urls import url_fix
-from .urls import url_parse
-from .urls import url_unparse
-from .urls import url_unquote
 from .utils import cached_property
 from .utils import get_content_type
 from .wrappers.request import Request
@@ -48,19 +50,32 @@ from .wsgi import get_current_url
 if t.TYPE_CHECKING:
     from _typeshed.wsgi import WSGIApplication
     from _typeshed.wsgi import WSGIEnvironment
+    import typing_extensions as te
 
 
 def stream_encode_multipart(
     data: t.Mapping[str, t.Any],
     use_tempfile: bool = True,
     threshold: int = 1024 * 500,
-    boundary: t.Optional[str] = None,
-    charset: str = "utf-8",
-) -> t.Tuple[t.IO[bytes], int, str]:
+    boundary: str | None = None,
+    charset: str | None = None,
+) -> tuple[t.IO[bytes], int, str]:
     """Encode a dict of values (either strings or file descriptors or
     :class:`FileStorage` objects.) into a multipart encoded string stored
     in a file descriptor.
+
+    .. versionchanged:: 2.3
+        The ``charset`` parameter is deprecated and will be removed in Werkzeug 3.0
     """
+    if charset is not None:
+        warnings.warn(
+            "The 'charset' parameter is deprecated and will be removed in Werkzeug 3.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        charset = "utf-8"
+
     if boundary is None:
         boundary = f"---------------WerkzeugFormPart_{time()}{random()}"
 
@@ -121,6 +136,7 @@ def stream_encode_multipart(
                 chunk = reader(16384)
 
                 if not chunk:
+                    write_binary(encoder.send_event(Data(data=chunk, more_data=False)))
                     break
 
                 write_binary(encoder.send_event(Data(data=chunk, more_data=True)))
@@ -141,11 +157,14 @@ def stream_encode_multipart(
 
 def encode_multipart(
     values: t.Mapping[str, t.Any],
-    boundary: t.Optional[str] = None,
-    charset: str = "utf-8",
-) -> t.Tuple[str, bytes]:
+    boundary: str | None = None,
+    charset: str | None = None,
+) -> tuple[str, bytes]:
     """Like `stream_encode_multipart` but returns a tuple in the form
     (``boundary``, ``data``) where data is bytes.
+
+    .. versionchanged:: 2.3
+        The ``charset`` parameter is deprecated and will be removed in Werkzeug 3.0
     """
     stream, length, boundary = stream_encode_multipart(
         values, use_tempfile=False, boundary=boundary, charset=charset
@@ -153,74 +172,7 @@ def encode_multipart(
     return boundary, stream.read()
 
 
-class _TestCookieHeaders:
-    """A headers adapter for cookielib"""
-
-    def __init__(self, headers: t.Union[Headers, t.List[t.Tuple[str, str]]]) -> None:
-        self.headers = headers
-
-    def getheaders(self, name: str) -> t.Iterable[str]:
-        headers = []
-        name = name.lower()
-        for k, v in self.headers:
-            if k.lower() == name:
-                headers.append(v)
-        return headers
-
-    def get_all(
-        self, name: str, default: t.Optional[t.Iterable[str]] = None
-    ) -> t.Iterable[str]:
-        headers = self.getheaders(name)
-
-        if not headers:
-            return default  # type: ignore
-
-        return headers
-
-
-class _TestCookieResponse:
-    """Something that looks like a httplib.HTTPResponse, but is actually just an
-    adapter for our test responses to make them available for cookielib.
-    """
-
-    def __init__(self, headers: t.Union[Headers, t.List[t.Tuple[str, str]]]) -> None:
-        self.headers = _TestCookieHeaders(headers)
-
-    def info(self) -> _TestCookieHeaders:
-        return self.headers
-
-
-class _TestCookieJar(CookieJar):
-    """A cookielib.CookieJar modified to inject and read cookie headers from
-    and to wsgi environments, and wsgi application responses.
-    """
-
-    def inject_wsgi(self, environ: "WSGIEnvironment") -> None:
-        """Inject the cookies as client headers into the server's wsgi
-        environment.
-        """
-        cvals = [f"{c.name}={c.value}" for c in self]
-
-        if cvals:
-            environ["HTTP_COOKIE"] = "; ".join(cvals)
-        #else:
-        #    environ.pop("HTTP_COOKIE", None)
-
-    def extract_wsgi(
-        self,
-        environ: "WSGIEnvironment",
-        headers: t.Union[Headers, t.List[t.Tuple[str, str]]],
-    ) -> None:
-        """Extract the server's set-cookie headers as cookies into the
-        cookie jar.
-        """
-        self.extract_cookies(
-            _TestCookieResponse(headers),  # type: ignore
-            _UrllibRequest(get_current_url(environ)),
-        )
-
-
-def _iter_data(data: t.Mapping[str, t.Any]) -> t.Iterator[t.Tuple[str, t.Any]]:
+def _iter_data(data: t.Mapping[str, t.Any]) -> t.Iterator[tuple[str, t.Any]]:
     """Iterate over a mapping that might have a list of values, yielding
     all key, value pairs. Almost like iter_multi_items but only allows
     lists, not tuples, of values so tuples can be used for files.
@@ -303,10 +255,12 @@ class EnvironBuilder:
         Serialized with the function assigned to :attr:`json_dumps`.
     :param environ_base: an optional dict of environment defaults.
     :param environ_overrides: an optional dict of environment overrides.
-    :param charset: the charset used to encode string data.
     :param auth: An authorization object to use for the
         ``Authorization`` header value. A ``(username, password)`` tuple
         is a shortcut for ``Basic`` authorization.
+
+    .. versionchanged:: 2.3
+        The ``charset`` parameter is deprecated and will be removed in Werkzeug 3.0
 
     .. versionchanged:: 2.1
         ``CONTENT_TYPE`` and ``CONTENT_LENGTH`` are not duplicated as
@@ -351,49 +305,60 @@ class EnvironBuilder:
     json_dumps = staticmethod(json.dumps)
     del json
 
-    _args: t.Optional[MultiDict]
-    _query_string: t.Optional[str]
-    _input_stream: t.Optional[t.IO[bytes]]
-    _form: t.Optional[MultiDict]
-    _files: t.Optional[FileMultiDict]
+    _args: MultiDict | None
+    _query_string: str | None
+    _input_stream: t.IO[bytes] | None
+    _form: MultiDict | None
+    _files: FileMultiDict | None
 
     def __init__(
         self,
         path: str = "/",
-        base_url: t.Optional[str] = None,
-        query_string: t.Optional[t.Union[t.Mapping[str, str], str]] = None,
+        base_url: str | None = None,
+        query_string: t.Mapping[str, str] | str | None = None,
         method: str = "GET",
-        input_stream: t.Optional[t.IO[bytes]] = None,
-        content_type: t.Optional[str] = None,
-        content_length: t.Optional[int] = None,
-        errors_stream: t.Optional[t.IO[str]] = None,
+        input_stream: t.IO[bytes] | None = None,
+        content_type: str | None = None,
+        content_length: int | None = None,
+        errors_stream: t.IO[str] | None = None,
         multithread: bool = False,
         multiprocess: bool = False,
         run_once: bool = False,
-        headers: t.Optional[t.Union[Headers, t.Iterable[t.Tuple[str, str]]]] = None,
-        data: t.Optional[
-            t.Union[t.IO[bytes], str, bytes, t.Mapping[str, t.Any]]
-        ] = None,
-        environ_base: t.Optional[t.Mapping[str, t.Any]] = None,
-        environ_overrides: t.Optional[t.Mapping[str, t.Any]] = None,
-        charset: str = "utf-8",
-        mimetype: t.Optional[str] = None,
-        json: t.Optional[t.Mapping[str, t.Any]] = None,
-        auth: t.Optional[t.Union[Authorization, t.Tuple[str, str]]] = None,
+        headers: Headers | t.Iterable[tuple[str, str]] | None = None,
+        data: None | (t.IO[bytes] | str | bytes | t.Mapping[str, t.Any]) = None,
+        environ_base: t.Mapping[str, t.Any] | None = None,
+        environ_overrides: t.Mapping[str, t.Any] | None = None,
+        charset: str | None = None,
+        mimetype: str | None = None,
+        json: t.Mapping[str, t.Any] | None = None,
+        auth: Authorization | tuple[str, str] | None = None,
     ) -> None:
         path_s = _make_encode_wrapper(path)
         if query_string is not None and path_s("?") in path:
             raise ValueError("Query string is defined in the path and as an argument")
-        request_uri = url_parse(path)
+        request_uri = urlsplit(path)
         if query_string is None and path_s("?") in path:
             query_string = request_uri.query
+
+        if charset is not None:
+            warnings.warn(
+                "The 'charset' parameter is deprecated and will be"
+                " removed in Werkzeug 3.0",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        else:
+            charset = "utf-8"
+
         self.charset = charset
         self.path = iri_to_uri(request_uri.path)
         self.request_uri = path
         if base_url is not None:
-            base_url = url_fix(iri_to_uri(base_url, charset), charset)
+            base_url = iri_to_uri(
+                base_url, charset=charset if charset != "utf-8" else None
+            )
         self.base_url = base_url  # type: ignore
-        if isinstance(query_string, (bytes, str)):
+        if isinstance(query_string, str):
             self.query_string = query_string
         else:
             if query_string is None:
@@ -460,9 +425,7 @@ class EnvironBuilder:
             self.mimetype = mimetype
 
     @classmethod
-    def from_environ(
-        cls, environ: "WSGIEnvironment", **kwargs: t.Any
-    ) -> "EnvironBuilder":
+    def from_environ(cls, environ: WSGIEnvironment, **kwargs: t.Any) -> EnvironBuilder:
         """Turn an environ dict back into a builder. Any extra kwargs
         override the args extracted from the environ.
 
@@ -497,9 +460,7 @@ class EnvironBuilder:
     def _add_file_from_data(
         self,
         key: str,
-        value: t.Union[
-            t.IO[bytes], t.Tuple[t.IO[bytes], str], t.Tuple[t.IO[bytes], str, str]
-        ],
+        value: (t.IO[bytes] | tuple[t.IO[bytes], str] | tuple[t.IO[bytes], str, str]),
     ) -> None:
         """Called in the EnvironBuilder to add files from the data dict."""
         if isinstance(value, tuple):
@@ -509,7 +470,7 @@ class EnvironBuilder:
 
     @staticmethod
     def _make_base_url(scheme: str, host: str, script_root: str) -> str:
-        return url_unparse((scheme, host, script_root, "", "")).rstrip("/") + "/"
+        return urlunsplit((scheme, host, script_root, "", "")).rstrip("/") + "/"
 
     @property
     def base_url(self) -> str:
@@ -519,13 +480,13 @@ class EnvironBuilder:
         return self._make_base_url(self.url_scheme, self.host, self.script_root)
 
     @base_url.setter
-    def base_url(self, value: t.Optional[str]) -> None:
+    def base_url(self, value: str | None) -> None:
         if value is None:
             scheme = "http"
             netloc = "localhost"
             script_root = ""
         else:
-            scheme, netloc, script_root, qs, anchor = url_parse(value)
+            scheme, netloc, script_root, qs, anchor = urlsplit(value)
             if qs or anchor:
                 raise ValueError("base url must not contain a query string or fragment")
         self.script_root = script_root.rstrip("/")
@@ -533,7 +494,7 @@ class EnvironBuilder:
         self.url_scheme = scheme
 
     @property
-    def content_type(self) -> t.Optional[str]:
+    def content_type(self) -> str | None:
         """The content type for the request.  Reflected from and to
         the :attr:`headers`.  Do not set if you set :attr:`files` or
         :attr:`form` for auto detection.
@@ -548,14 +509,14 @@ class EnvironBuilder:
         return ct
 
     @content_type.setter
-    def content_type(self, value: t.Optional[str]) -> None:
+    def content_type(self, value: str | None) -> None:
         if value is None:
             self.headers.pop("Content-Type", None)
         else:
             self.headers["Content-Type"] = value
 
     @property
-    def mimetype(self) -> t.Optional[str]:
+    def mimetype(self) -> str | None:
         """The mimetype (content type without charset etc.)
 
         .. versionadded:: 0.14
@@ -583,7 +544,7 @@ class EnvironBuilder:
         return CallbackDict(d, on_update)
 
     @property
-    def content_length(self) -> t.Optional[int]:
+    def content_length(self) -> int | None:
         """The content length as integer.  Reflected from and to the
         :attr:`headers`.  Do not set if you set :attr:`files` or
         :attr:`form` for auto detection.
@@ -591,13 +552,13 @@ class EnvironBuilder:
         return self.headers.get("Content-Length", type=int)
 
     @content_length.setter
-    def content_length(self, value: t.Optional[int]) -> None:
+    def content_length(self, value: int | None) -> None:
         if value is None:
             self.headers.pop("Content-Length", None)
         else:
             self.headers["Content-Length"] = str(value)
 
-    def _get_form(self, name: str, storage: t.Type[_TAnyMultiDict]) -> _TAnyMultiDict:
+    def _get_form(self, name: str, storage: type[_TAnyMultiDict]) -> _TAnyMultiDict:
         """Common behavior for getting the :attr:`form` and
         :attr:`files` properties.
 
@@ -646,7 +607,7 @@ class EnvironBuilder:
         self._set_form("_files", value)
 
     @property
-    def input_stream(self) -> t.Optional[t.IO[bytes]]:
+    def input_stream(self) -> t.IO[bytes] | None:
         """An optional input stream. This is mutually exclusive with
         setting :attr:`form` and :attr:`files`, setting it will clear
         those. Do not provide this if the method is not ``POST`` or
@@ -655,7 +616,7 @@ class EnvironBuilder:
         return self._input_stream
 
     @input_stream.setter
-    def input_stream(self, value: t.Optional[t.IO[bytes]]) -> None:
+    def input_stream(self, value: t.IO[bytes] | None) -> None:
         self._input_stream = value
         self._form = None
         self._files = None
@@ -667,12 +628,12 @@ class EnvironBuilder:
         """
         if self._query_string is None:
             if self._args is not None:
-                return url_encode(self._args, charset=self.charset)
+                return _urlencode(self._args, encoding=self.charset)
             return ""
         return self._query_string
 
     @query_string.setter
-    def query_string(self, value: t.Optional[str]) -> None:
+    def query_string(self, value: str | None) -> None:
         self._query_string = value
         self._args = None
 
@@ -686,7 +647,7 @@ class EnvironBuilder:
         return self._args
 
     @args.setter
-    def args(self, value: t.Optional[MultiDict]) -> None:
+    def args(self, value: MultiDict | None) -> None:
         self._query_string = None
         self._args = value
 
@@ -734,7 +695,7 @@ class EnvironBuilder:
                 pass
         self.closed = True
 
-    def get_environ(self) -> "WSGIEnvironment":
+    def get_environ(self) -> WSGIEnvironment:
         """Return the built environ.
 
         .. versionchanged:: 0.15
@@ -755,23 +716,24 @@ class EnvironBuilder:
             input_stream.seek(start_pos)
             content_length = end_pos - start_pos
         elif mimetype == "multipart/form-data":
+            charset = self.charset if self.charset != "utf-8" else None
             input_stream, content_length, boundary = stream_encode_multipart(
-                CombinedMultiDict([self.form, self.files]), charset=self.charset
+                CombinedMultiDict([self.form, self.files]), charset=charset
             )
             content_type = f'{mimetype}; boundary="{boundary}"'
         elif mimetype == "application/x-www-form-urlencoded":
-            form_encoded = url_encode(self.form, charset=self.charset).encode("ascii")
+            form_encoded = _urlencode(self.form, encoding=self.charset).encode("ascii")
             content_length = len(form_encoded)
             input_stream = BytesIO(form_encoded)
         else:
             input_stream = BytesIO()
 
-        result: "WSGIEnvironment" = {}
+        result: WSGIEnvironment = {}
         if self.environ_base:
             result.update(self.environ_base)
 
         def _path_encode(x: str) -> str:
-            return _wsgi_encoding_dance(url_unquote(x, self.charset), self.charset)
+            return _wsgi_encoding_dance(unquote(x, encoding=self.charset), self.charset)
 
         raw_uri = _wsgi_encoding_dance(self.request_uri, self.charset)
         result.update(
@@ -822,7 +784,7 @@ class EnvironBuilder:
 
         return result
 
-    def get_request(self, cls: t.Optional[t.Type[Request]] = None) -> Request:
+    def get_request(self, cls: type[Request] | None = None) -> Request:
         """Returns a request with the data.  If the request class is not
         specified :attr:`request_class` is used.
 
@@ -841,24 +803,28 @@ class ClientRedirectError(Exception):
 
 
 class Client:
-    """This class allows you to send requests to a wrapped application.
+    """Simulate sending requests to a WSGI application without running a WSGI or HTTP
+    server.
 
-    The use_cookies parameter indicates whether cookies should be stored and
-    sent for subsequent requests. This is True by default, but passing False
-    will disable this behaviour.
+    :param application: The WSGI application to make requests to.
+    :param response_wrapper: A :class:`.Response` class to wrap response data with.
+        Defaults to :class:`.TestResponse`. If it's not a subclass of ``TestResponse``,
+        one will be created.
+    :param use_cookies: Persist cookies from ``Set-Cookie`` response headers to the
+        ``Cookie`` header in subsequent requests. Domain and path matching is supported,
+        but other cookie parameters are ignored.
+    :param allow_subdomain_redirects: Allow requests to follow redirects to subdomains.
+        Enable this if the application handles subdomains and redirects between them.
 
-    If you want to request some subdomain of your application you may set
-    `allow_subdomain_redirects` to `True` as if not no external redirects
-    are allowed.
+    .. versionchanged:: 2.3
+        Simplify cookie implementation, support domain and path matching.
 
     .. versionchanged:: 2.1
-        Removed deprecated behavior of treating the response as a
-        tuple. All data is available as properties on the returned
-        response object.
+        All data is available as properties on the returned response object. The
+        response cannot be returned as a tuple.
 
     .. versionchanged:: 2.0
-        ``response_wrapper`` is always a subclass of
-        :class:``TestResponse``.
+        ``response_wrapper`` is always a subclass of :class:``TestResponse``.
 
     .. versionchanged:: 0.5
         Added the ``use_cookies`` parameter.
@@ -866,8 +832,8 @@ class Client:
 
     def __init__(
         self,
-        application: "WSGIApplication",
-        response_wrapper: t.Optional[t.Type["Response"]] = None,
+        application: WSGIApplication,
+        response_wrapper: type[Response] | None = None,
         use_cookies: bool = True,
         allow_subdomain_redirects: bool = False,
     ) -> None:
@@ -885,96 +851,237 @@ class Client:
         self.response_wrapper = t.cast(t.Type["TestResponse"], response_wrapper)
 
         if use_cookies:
-            self.cookie_jar: t.Optional[_TestCookieJar] = _TestCookieJar()
+            self._cookies: dict[tuple[str, str, str], Cookie] | None = {}
         else:
-            self.cookie_jar = None
+            self._cookies = None
 
         self.allow_subdomain_redirects = allow_subdomain_redirects
 
+    @property
+    def cookie_jar(self) -> t.Iterable[Cookie] | None:
+        warnings.warn(
+            "The 'cookie_jar' attribute is a private API and will be removed in"
+            " Werkzeug 3.0. Use the 'get_cookie' method instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        if self._cookies is None:
+            return None
+
+        return self._cookies.values()
+
+    def get_cookie(
+        self, key: str, domain: str = "localhost", path: str = "/"
+    ) -> Cookie | None:
+        """Return a :class:`.Cookie` if it exists. Cookies are uniquely identified by
+        ``(domain, path, key)``.
+
+        :param key: The decoded form of the key for the cookie.
+        :param domain: The domain the cookie was set for.
+        :param path: The path the cookie was set for.
+
+        .. versionadded:: 2.3
+        """
+        if self._cookies is None:
+            raise TypeError(
+                "Cookies are disabled. Create a client with 'use_cookies=True'."
+            )
+
+        return self._cookies.get((domain, path, key))
+
     def set_cookie(
         self,
-        server_name: str,
         key: str,
         value: str = "",
-        max_age: t.Optional[t.Union[timedelta, int]] = None,
-        expires: t.Optional[t.Union[str, datetime, int, float]] = None,
+        *args: t.Any,
+        domain: str = "localhost",
+        origin_only: bool = True,
         path: str = "/",
-        domain: t.Optional[str] = None,
-        secure: bool = False,
-        httponly: bool = False,
-        samesite: t.Optional[str] = None,
-        charset: str = "utf-8",
+        **kwargs: t.Any,
     ) -> None:
-        """Sets a cookie in the client's cookie jar.  The server name
-        is required and has to match the one that is also passed to
-        the open call.
+        """Set a cookie to be sent in subsequent requests.
+
+        This is a convenience to skip making a test request to a route that would set
+        the cookie. To test the cookie, make a test request to a route that uses the
+        cookie value.
+
+        The client uses ``domain``, ``origin_only``, and ``path`` to determine which
+        cookies to send with a request. It does not use other cookie parameters that
+        browsers use, since they're not applicable in tests.
+
+        :param key: The key part of the cookie.
+        :param value: The value part of the cookie.
+        :param domain: Send this cookie with requests that match this domain. If
+            ``origin_only`` is true, it must be an exact match, otherwise it may be a
+            suffix match.
+        :param origin_only: Whether the domain must be an exact match to the request.
+        :param path: Send this cookie with requests that match this path either exactly
+            or as a prefix.
+        :param kwargs: Passed to :func:`.dump_cookie`.
+
+        .. versionchanged:: 2.3
+            The ``origin_only`` parameter was added.
+
+        .. versionchanged:: 2.3
+            The ``domain`` parameter defaults to ``localhost``.
+
+        .. versionchanged:: 2.3
+            The first parameter ``server_name`` is deprecated and will be removed in
+            Werkzeug 3.0. The first parameter is ``key``. Use the ``domain`` and
+            ``origin_only`` parameters instead.
         """
-        assert self.cookie_jar is not None, "cookies disabled"
-        header = dump_cookie(
-            key,
-            value,
-            max_age,
-            expires,
-            path,
-            domain,
-            secure,
-            httponly,
-            charset,
-            samesite=samesite,
+        if self._cookies is None:
+            raise TypeError(
+                "Cookies are disabled. Create a client with 'use_cookies=True'."
+            )
+
+        if args:
+            warnings.warn(
+                "The first parameter 'server_name' is no longer used, and will be"
+                " removed in Werkzeug 3.0. The positional parameters are 'key' and"
+                " 'value'. Use the 'domain' and 'origin_only' parameters instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            domain = key
+            key = value
+            value = args[0]
+
+        cookie = Cookie._from_response_header(
+            domain, "/", dump_cookie(key, value, domain=domain, path=path, **kwargs)
         )
-        environ = create_environ(path, base_url=f"http://{server_name}")
-        headers = [("Set-Cookie", header)]
-        self.cookie_jar.extract_wsgi(environ, headers)
+        cookie.origin_only = origin_only
+
+        if cookie._should_delete:
+            self._cookies.pop(cookie._storage_key, None)
+        else:
+            self._cookies[cookie._storage_key] = cookie
 
     def delete_cookie(
         self,
-        server_name: str,
         key: str,
+        *args: t.Any,
+        domain: str = "localhost",
         path: str = "/",
-        domain: t.Optional[str] = None,
-        secure: bool = False,
-        httponly: bool = False,
-        samesite: t.Optional[str] = None,
+        **kwargs: t.Any,
     ) -> None:
-        """Deletes a cookie in the test client."""
-        self.set_cookie(
-            server_name,
-            key,
-            expires=0,
-            max_age=0,
-            path=path,
-            domain=domain,
-            secure=secure,
-            httponly=httponly,
-            samesite=samesite,
+        """Delete a cookie if it exists. Cookies are uniquely identified by
+        ``(domain, path, key)``.
+
+        :param key: The decoded form of the key for the cookie.
+        :param domain: The domain the cookie was set for.
+        :param path: The path the cookie was set for.
+
+        .. versionchanged:: 2.3
+            The ``domain`` parameter defaults to ``localhost``.
+
+        .. versionchanged:: 2.3
+            The first parameter ``server_name`` is deprecated and will be removed in
+            Werkzeug 3.0. The first parameter is ``key``. Use the ``domain`` parameter
+            instead.
+
+        .. versionchanged:: 2.3
+            The ``secure``, ``httponly`` and ``samesite`` parameters are deprecated and
+            will be removed in Werkzeug 2.4.
+        """
+        if self._cookies is None:
+            raise TypeError(
+                "Cookies are disabled. Create a client with 'use_cookies=True'."
+            )
+
+        if args:
+            warnings.warn(
+                "The first parameter 'server_name' is no longer used, and will be"
+                " removed in Werkzeug 2.4. The first parameter is 'key'. Use the"
+                " 'domain' parameter instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            domain = key
+            key = args[0]
+
+        if kwargs:
+            kwargs_keys = ", ".join(f"'{k}'" for k in kwargs)
+            plural = "parameters are" if len(kwargs) > 1 else "parameter is"
+            warnings.warn(
+                f"The {kwargs_keys} {plural} deprecated and will be"
+                f" removed in Werkzeug 2.4.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        self._cookies.pop((domain, path, key), None)
+
+    def _add_cookies_to_wsgi(self, environ: WSGIEnvironment) -> None:
+        """If cookies are enabled, set the ``Cookie`` header in the environ to the
+        cookies that are applicable to the request host and path.
+
+        :meta private:
+
+        .. versionadded:: 2.3
+        """
+        if self._cookies is None:
+            return
+
+        url = urlsplit(get_current_url(environ))
+        server_name = url.hostname or "localhost"
+        value = "; ".join(
+            c._to_request_header()
+            for c in self._cookies.values()
+            if c._matches_request(server_name, url.path)
         )
 
+        if value:
+            environ["HTTP_COOKIE"] = value
+        #else:
+        #    environ.pop("HTTP_COOKIE", None)
+
+    def _update_cookies_from_response(
+        self, server_name: str, path: str, headers: list[str]
+    ) -> None:
+        """If cookies are enabled, update the stored cookies from any ``Set-Cookie``
+        headers in the response.
+
+        :meta private:
+
+        .. versionadded:: 2.3
+        """
+        if self._cookies is None:
+            return
+
+        for header in headers:
+            cookie = Cookie._from_response_header(server_name, path, header)
+
+            if cookie._should_delete:
+                self._cookies.pop(cookie._storage_key, None)
+            else:
+                self._cookies[cookie._storage_key] = cookie
+
     def run_wsgi_app(
-        self, environ: "WSGIEnvironment", buffered: bool = False
-    ) -> t.Tuple[t.Iterable[bytes], str, Headers]:
+        self, environ: WSGIEnvironment, buffered: bool = False
+    ) -> tuple[t.Iterable[bytes], str, Headers]:
         """Runs the wrapped WSGI app with the given environment.
 
         :meta private:
         """
-        if self.cookie_jar is not None:
-            self.cookie_jar.inject_wsgi(environ)
-
+        self._add_cookies_to_wsgi(environ)
         rv = run_wsgi_app(self.application, environ, buffered=buffered)
-
-        if self.cookie_jar is not None:
-            self.cookie_jar.extract_wsgi(environ, rv[2])
-
+        url = urlsplit(get_current_url(environ))
+        self._update_cookies_from_response(
+            url.hostname or "localhost", url.path, rv[2].getlist("Set-Cookie")
+        )
         return rv
 
     def resolve_redirect(
-        self, response: "TestResponse", buffered: bool = False
-    ) -> "TestResponse":
+        self, response: TestResponse, buffered: bool = False
+    ) -> TestResponse:
         """Perform a new request to the location given by the redirect
         response to the previous request.
 
         :meta private:
         """
-        scheme, netloc, path, qs, anchor = url_parse(response.location)
+        scheme, netloc, path, qs, anchor = urlsplit(response.location)
         builder = EnvironBuilder.from_environ(
             response.request.environ, path=path, query_string=qs
         )
@@ -1035,7 +1142,7 @@ class Client:
         buffered: bool = False,
         follow_redirects: bool = False,
         **kwargs: t.Any,
-    ) -> "TestResponse":
+    ) -> TestResponse:
         """Generate an environ dict from the given arguments, make a
         request to the application using it, and return the response.
 
@@ -1054,11 +1161,6 @@ class Client:
             Removed the ``as_tuple`` parameter.
 
         .. versionchanged:: 2.0
-            ``as_tuple`` is deprecated and will be removed in Werkzeug
-            2.1. Use :attr:`TestResponse.request` and
-            ``request.environ`` instead.
-
-        .. versionchanged:: 2.0
             The request input stream is closed when calling
             ``response.close()``. Input streams for redirects are
             automatically closed.
@@ -1072,7 +1174,7 @@ class Client:
         .. versionchanged:: 0.5
             Added the ``follow_redirects`` parameter.
         """
-        request: t.Optional["Request"] = None
+        request: Request | None = None
 
         if not kwargs and len(args) == 1:
             arg = args[0]
@@ -1096,7 +1198,7 @@ class Client:
         response = self.response_wrapper(*response, request=request)
 
         redirects = set()
-        history: t.List["TestResponse"] = []
+        history: list[TestResponse] = []
 
         if not follow_redirects:
             return response
@@ -1135,42 +1237,42 @@ class Client:
             response.call_on_close(request.input_stream.close)
             return response
 
-    def get(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def get(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``GET``."""
         kw["method"] = "GET"
         return self.open(*args, **kw)
 
-    def post(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def post(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``POST``."""
         kw["method"] = "POST"
         return self.open(*args, **kw)
 
-    def put(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def put(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``PUT``."""
         kw["method"] = "PUT"
         return self.open(*args, **kw)
 
-    def delete(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def delete(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``DELETE``."""
         kw["method"] = "DELETE"
         return self.open(*args, **kw)
 
-    def patch(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def patch(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``PATCH``."""
         kw["method"] = "PATCH"
         return self.open(*args, **kw)
 
-    def options(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def options(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``OPTIONS``."""
         kw["method"] = "OPTIONS"
         return self.open(*args, **kw)
 
-    def head(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def head(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``HEAD``."""
         kw["method"] = "HEAD"
         return self.open(*args, **kw)
 
-    def trace(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
+    def trace(self, *args: t.Any, **kw: t.Any) -> TestResponse:
         """Call :meth:`open` with ``method`` set to ``TRACE``."""
         kw["method"] = "TRACE"
         return self.open(*args, **kw)
@@ -1179,7 +1281,7 @@ class Client:
         return f"<{type(self).__name__} {self.application!r}>"
 
 
-def create_environ(*args: t.Any, **kwargs: t.Any) -> "WSGIEnvironment":
+def create_environ(*args: t.Any, **kwargs: t.Any) -> WSGIEnvironment:
     """Create a new WSGI environ dict based on the values passed.  The first
     parameter should be the path of the request which defaults to '/'.  The
     second one can either be an absolute path (in that case the host is
@@ -1203,8 +1305,8 @@ def create_environ(*args: t.Any, **kwargs: t.Any) -> "WSGIEnvironment":
 
 
 def run_wsgi_app(
-    app: "WSGIApplication", environ: "WSGIEnvironment", buffered: bool = False
-) -> t.Tuple[t.Iterable[bytes], str, Headers]:
+    app: WSGIApplication, environ: WSGIEnvironment, buffered: bool = False
+) -> tuple[t.Iterable[bytes], str, Headers]:
     """Return a tuple in the form (app_iter, status, headers) of the
     application output.  This works best if you pass it an application that
     returns an iterator all the time.
@@ -1225,8 +1327,8 @@ def run_wsgi_app(
     # example) don't affect subsequent requests (such as redirects).
     environ = _get_environ(environ).copy()
     status: str
-    response: t.Optional[t.Tuple[str, t.List[t.Tuple[str, str]]]] = None
-    buffer: t.List[bytes] = []
+    response: tuple[str, list[tuple[str, str]]] | None = None
+    buffer: list[bytes] = []
 
     def start_response(status, headers, exc_info=None):  # type: ignore
         nonlocal response
@@ -1291,8 +1393,7 @@ class TestResponse(Response):
         assumed if missing.
 
     .. versionchanged:: 2.1
-        Removed deprecated behavior for treating the response instance
-        as a tuple.
+        Response instances cannot be treated as tuples.
 
     .. versionadded:: 2.0
         Test client methods always return instances of this class.
@@ -1306,7 +1407,7 @@ class TestResponse(Response):
     resulted in this response.
     """
 
-    history: t.Tuple["TestResponse", ...]
+    history: tuple[TestResponse, ...]
     """A list of intermediate responses. Populated when the test request
     is made with ``follow_redirects`` enabled.
     """
@@ -1320,7 +1421,7 @@ class TestResponse(Response):
         status: str,
         headers: Headers,
         request: Request,
-        history: t.Tuple["TestResponse"] = (),  # type: ignore
+        history: tuple[TestResponse] = (),  # type: ignore
         **kwargs: t.Any,
     ) -> None:
         super().__init__(response, status, headers, **kwargs)
@@ -1336,3 +1437,109 @@ class TestResponse(Response):
         .. versionadded:: 2.1
         """
         return self.get_data(as_text=True)
+
+
+@dataclasses.dataclass
+class Cookie:
+    """A cookie key, value, and parameters.
+
+    The class itself is not a public API. Its attributes are documented for inspection
+    with :meth:`.Client.get_cookie` only.
+
+    .. versionadded:: 2.3
+    """
+
+    key: str
+    """The cookie key, encoded as a client would see it."""
+
+    value: str
+    """The cookie key, encoded as a client would see it."""
+
+    decoded_key: str
+    """The cookie key, decoded as the application would set and see it."""
+
+    decoded_value: str
+    """The cookie value, decoded as the application would set and see it."""
+
+    expires: datetime | None
+    """The time at which the cookie is no longer valid."""
+
+    max_age: int | None
+    """The number of seconds from when the cookie was set at which it is
+    no longer valid.
+    """
+
+    domain: str
+    """The domain that the cookie was set for, or the request domain if not set."""
+
+    origin_only: bool
+    """Whether the cookie will be sent for exact domain matches only. This is ``True``
+    if the ``Domain`` parameter was not present.
+    """
+
+    path: str
+    """The path that the cookie was set for."""
+
+    secure: bool | None
+    """The ``Secure`` parameter."""
+
+    http_only: bool | None
+    """The ``HttpOnly`` parameter."""
+
+    same_site: str | None
+    """The ``SameSite`` parameter."""
+
+    def _matches_request(self, server_name: str, path: str) -> bool:
+        return (
+            server_name == self.domain
+            or (
+                not self.origin_only
+                and server_name.endswith(self.domain)
+                and server_name[: -len(self.domain)].endswith(".")
+            )
+        ) and (
+            path == self.path
+            or (
+                path.startswith(self.path)
+                and path[len(self.path) - self.path.endswith("/") :].startswith("/")
+            )
+        )
+
+    def _to_request_header(self) -> str:
+        return f"{self.key}={self.value}"
+
+    @classmethod
+    def _from_response_header(cls, server_name: str, path: str, header: str) -> te.Self:
+        header, _, parameters_str = header.partition(";")
+        key, _, value = header.partition("=")
+        decoded_key, decoded_value = next(parse_cookie(header).items())
+        params = {}
+
+        for item in parameters_str.split(";"):
+            k, sep, v = item.partition("=")
+            params[k.strip().lower()] = v.strip() if sep else None
+
+        return cls(
+            key=key.strip(),
+            value=value.strip(),
+            decoded_key=decoded_key,
+            decoded_value=decoded_value,
+            expires=parse_date(params.get("expires")),
+            max_age=int(params["max-age"] or 0) if "max-age" in params else None,
+            domain=params.get("domain") or server_name,
+            origin_only="domain" not in params,
+            path=params.get("path") or path.rpartition("/")[0] or "/",
+            secure="secure" in params,
+            http_only="httponly" in params,
+            same_site=params.get("samesite"),
+        )
+
+    @property
+    def _storage_key(self) -> tuple[str, str, str]:
+        return self.domain, self.path, self.decoded_key
+
+    @property
+    def _should_delete(self) -> bool:
+        return self.max_age == 0 or (
+            self.expires is not None and self.expires.timestamp() == 0
+        )

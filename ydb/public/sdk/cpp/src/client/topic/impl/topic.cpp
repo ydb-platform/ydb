@@ -52,6 +52,8 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , RetentionStorageMb_(Proto_.retention_storage_mb() > 0 ? std::optional<uint64_t>(Proto_.retention_storage_mb()) : std::nullopt)
     , PartitionWriteSpeedBytesPerSecond_(Proto_.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
+    , PartitionWriteSpeedMessagesPerSecond_(Proto_.partition_write_speed_messages_per_second())
+    , PartitionWriteBurstMessages_(Proto_.partition_write_burst_messages())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
@@ -59,6 +61,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
+    InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
     PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
@@ -211,6 +214,14 @@ uint64_t TTopicDescription::GetPartitionWriteBurstBytes() const {
     return PartitionWriteBurstBytes_;
 }
 
+uint64_t TTopicDescription::GetPartitionWriteSpeedMessagesPerSecond() const {
+    return PartitionWriteSpeedMessagesPerSecond_;
+}
+
+uint64_t TTopicDescription::GetPartitionWriteBurstMessages() const {
+    return PartitionWriteBurstMessages_;
+}
+
 EMeteringMode TTopicDescription::GetMeteringMode() const {
     return MeteringMode_;
 }
@@ -272,6 +283,10 @@ const std::vector<NScheme::TPermissions>& TTopicDescription::GetPermissions() co
 
 const std::vector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermissions() const {
     return EffectivePermissions_;
+}
+
+bool TTopicDescription::GetInterruptInheritance() const {
+    return InterruptInheritance_;
 }
 
 TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
@@ -892,6 +907,8 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , MeteringMode_(TProtoAccessor::FromProto(proto.metering_mode()))
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
+    , PartitionWriteSpeedMessagesPerSecond_(proto.partition_write_speed_messages_per_second())
+    , PartitionWriteBurstMessages_(proto.partition_write_burst_messages())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::nullopt)
 {
@@ -906,6 +923,8 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     request.set_metering_mode(TProtoAccessor::GetProto(MeteringMode_));
     request.set_partition_write_speed_bytes_per_second(PartitionWriteSpeedBytesPerSecond_);
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
+    request.set_partition_write_speed_messages_per_second(PartitionWriteSpeedMessagesPerSecond_);
+    request.set_partition_write_burst_messages(PartitionWriteBurstMessages_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
     if (MetricsLevel_) {

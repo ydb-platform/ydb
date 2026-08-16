@@ -18,8 +18,11 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
+#include <library/cpp/json/json_writer.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <ydb/core/config/protos/marker.pb.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 template <>
@@ -164,6 +167,45 @@ namespace NKikimr::NYaml {
         config.AllowUnknownFields = allowUnknown;
         config.UnknownFieldsCollector = std::move(unknownFieldsCollector);
         return config;
+    }
+
+    // Tribool feature flags (VALUE_TRUE/VALUE_FALSE) are commonly written as YAML
+    // booleans; the json->proto merge cannot map a bool onto an enum, so rewrite
+    // such booleans to the enum value names before merging, guided by the schema.
+    void CoerceBoolEnumsToNames(NJson::TJsonValue& json, const google::protobuf::Descriptor* descriptor) {
+        using ::google::protobuf::FieldDescriptor;
+        if (!descriptor || !json.IsMap()) {
+            return;
+        }
+        auto& map = json.GetMapSafe();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const FieldDescriptor* field = descriptor->field(i);
+            TString key = field->name();
+            NProtobufJson::ToSnakeCaseDense(&key);
+            auto it = map.find(key);
+            if (it == map.end()) {
+                continue;
+            }
+            NJson::TJsonValue& value = it->second;
+            if (field->cpp_type() == FieldDescriptor::CPPTYPE_ENUM) {
+                if (value.IsBoolean()) {
+                    const char* name = value.GetBoolean() ? "VALUE_TRUE" : "VALUE_FALSE";
+                    if (field->enum_type()->FindValueByName(name)) {
+                        value = TString(name);
+                    }
+                }
+            } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+                if (field->is_repeated()) {
+                    if (value.IsArray()) {
+                        for (auto& elem : value.GetArraySafe()) {
+                            CoerceBoolEnumsToNames(elem, field->message_type());
+                        }
+                    }
+                } else {
+                    CoerceBoolEnumsToNames(value, field->message_type());
+                }
+            }
+        }
     }
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
@@ -637,11 +679,33 @@ namespace NKikimr::NYaml {
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
                     }
+                    const bool hasExpectedSlotSize = drive.HasExpectedSlotSize() && drive.GetExpectedSlotSize();
+                    const bool hasMaxSlots = drive.HasMaxSlots() && drive.GetMaxSlots();
+                    if (hasExpectedSlotSize
+                            && (drive.GetExpectedSlotCount() || drive.GetSlotSizeInUnits())) {
+                        ythrow yexception() << "expected_slot_size is mutually exclusive with expected_slot_count"
+                            << " and slot_size_in_units"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                        ythrow yexception() << "expected_slot_size requires max_slots"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                        ythrow yexception() << "max_slots requires expected_slot_size"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
                     if (drive.HasExpectedSlotCount()) {
                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
+                    }
+                    if (drive.HasExpectedSlotSize()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotSize(drive.GetExpectedSlotSize());
+                    }
+                    if (drive.HasMaxSlots()) {
+                        drive.MutablePDiskConfig()->SetMaxSlots(drive.GetMaxSlots());
                     }
                 }
             }
@@ -1637,6 +1701,36 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
+    const TVector<TOpaqueField>& OpaqueConfigFields() {
+        static const TVector<TOpaqueField> fields = [] {
+            TVector<TOpaqueField> result;
+            const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+            for (int i = 0; i < desc->field_count(); ++i) {
+                const auto* field = desc->field(i);
+                if (field->options().GetExtension(NKikimrConfig::NMarkers::OpaqueConfig)) {
+                    Y_ENSURE(field->cpp_type() == ::google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE);
+                    TString name = field->name();
+                    NProtobufJson::ToSnakeCaseDense(&name);
+                    result.push_back({name});
+                }
+            }
+            return result;
+        }();
+        return fields;
+    }
+
+    void CaptureOpaqueConfigFields(NJson::TJsonValue& configJson) {
+        if (!configJson.IsMap()) {
+            return;
+        }
+        for (const auto& f : OpaqueConfigFields()) {
+            if (!configJson.Has(f.Name)) {
+                continue;
+            }
+            configJson[f.Name] = NJson::TJsonValue(NJson::JSON_MAP);
+        }
+    }
+
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase, bool relaxed) {
         auto runPhase = [phase](EParsePhase value, auto&& func) {
@@ -1680,6 +1774,8 @@ endDiskTypeCheck:   ;
             ClearEphemeralFields(jsonNode);
         }
 
+        CaptureOpaqueConfigFields(jsonNode);
+        CoerceBoolEnumsToNames(jsonNode, config.GetDescriptor());
         runPhase(EParsePhase::JsonToProto, [&] {
             NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
         });

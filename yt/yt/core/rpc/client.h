@@ -2,6 +2,7 @@
 
 #include "public.h"
 #include "channel.h"
+#include "protocol_version.h"
 
 #include <yt/yt/core/actions/future.h>
 
@@ -10,7 +11,6 @@
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
-#include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/rpc/helpers.h>
@@ -18,6 +18,8 @@
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -83,6 +85,14 @@ struct IClientRequest
 
     virtual TMutationId GetMutationId() const = 0;
     virtual void SetMutationId(TMutationId id) = 0;
+
+    //! Direct placement transfer (DPT) of the request's attachments (client -> server).
+    virtual const TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() const = 0;
+    virtual TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() = 0;
+
+    //! Direct placement transfer (DPT) of the response's attachments (server -> client).
+    virtual const TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() const = 0;
+    virtual TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() = 0;
 
     virtual bool IsLegacyRpcCodecsEnabled() = 0;
 
@@ -174,6 +184,12 @@ public:
     const TStreamingParameters& ServerAttachmentsStreamingParameters() const override;
     TStreamingParameters& ServerAttachmentsStreamingParameters() override;
 
+    const TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() const override;
+    TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() override;
+
+    const TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() const override;
+    TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() override;
+
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetRequestAttachmentsStream() const override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetResponseAttachmentsStream() const override;
 
@@ -258,10 +274,13 @@ private:
     TStreamingParameters ClientAttachmentsStreamingParameters_;
     TStreamingParameters ServerAttachmentsStreamingParameters_;
 
+    TDirectPlacementTransferParameters RequestAttachmentsDptParameters_;
+    TDirectPlacementTransferParameters ResponseAttachmentsDptParameters_;
+
     TAttachmentsOutputStreamPtr RequestAttachmentsStream_;
     TAttachmentsInputStreamPtr ResponseAttachmentsStream_;
 
-    std::string User_;
+    std::string User_ = RootUserName;
     std::string UserTag_;
     std::string RequestInfo_;
 
@@ -322,14 +341,23 @@ struct IClientResponseHandler
     /*!
      *  \param message A message containing the response.
      *  \param address Address of the response sender. Empty if it is not supported by the underlying RPC stack.
+     *  \param attachmentsTransfer Non-null iff the response attachments are
+     *  delivered via direct placement transfer (see #TDirectPlacementTransferParameters);
+     *  in that case they are absent from #message and become available only after the
+     *  transfer is driven to completion.
      */
-    virtual void HandleResponse(TSharedRefArray message, const std::string& address) = 0;
+    virtual void HandleResponse(
+        TSharedRefArray message,
+        const std::string& address,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer = {}) = 0;
 
     //! Called if the request fails.
     /*!
      *  \param error An error that has occurred.
+     *  \param address Address of the peer that reported the error. Empty if it is not supported by the underlying
+     *  RPC stack or the request failed before a peer was selected.
      */
-    virtual void HandleError(TError error) = 0;
+    virtual void HandleError(TError error, const std::string& address = {}) = 0;
 
     //! Enables passing streaming data from the service to clients.
     virtual void HandleStreamingPayload(const TStreamingPayload& payload) = 0;
@@ -354,7 +382,12 @@ class TClientResponse
 {
 public:
     DEFINE_BYVAL_RO_PROPERTY(TInstant, StartTime);
-    DEFINE_BYREF_RW_PROPERTY(std::vector<TSharedRef>, Attachments);
+
+    //! Response attachments. When they are delivered via direct placement transfer,
+    //! these abort until the client drives #TryGetResponseAttachmentsTransfer to
+    //! completion.
+    std::vector<TSharedRef>& Attachments();
+    const std::vector<TSharedRef>& Attachments() const;
 
     //! Returns address of the response sender, as it was provided by the channel configuration (FQDN, IP address, etc).
     //! Empty if it is not supported by the underlying RPC stack or the OK response has not been received yet.
@@ -369,6 +402,12 @@ public:
     //! Returns total size: response message size plus attachments.
     size_t GetTotalSize() const;
 
+    //! When the response attachments are delivered via direct placement transfer,
+    //! returns a non-null transfer; the client must drive it to completion, after
+    //! which #Attachments become available (until then they abort). Returns null
+    //! when the attachments are delivered inline.
+    IDirectPlacementTransferPtr TryGetResponseAttachmentsTransfer();
+
 protected:
     const TClientContextPtr ClientContext_;
 
@@ -381,9 +420,12 @@ protected:
     virtual bool TryDeserializeBody(TRef data, std::optional<NCompression::ECodec> codecId = {}) = 0;
 
     // IClientResponseHandler implementation.
-    void HandleError(TError error) override;
+    void HandleError(TError error, const std::string& address) override;
     void HandleAcknowledgement() override;
-    void HandleResponse(TSharedRefArray message, const std::string& address) override;
+    void HandleResponse(
+        TSharedRefArray message,
+        const std::string& address,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override;
     void HandleStreamingPayload(const TStreamingPayload& payload) override;
     void HandleStreamingFeedback(const TStreamingFeedback& feedback) override;
 
@@ -397,12 +439,26 @@ private:
     std::string Address_;
     NProto::TResponseHeader Header_;
     TSharedRefArray ResponseMessage_;
+    //! Holds the response attachments once they are available. Disengaged until
+    //! they are either read from the response message (inline delivery) or produced
+    //! by running #ResponseAttachmentsTransfer_ (direct placement transfer). Mutable
+    //! so the const accessor can lazily engage it when no transfer is pending.
+    mutable std::optional<std::vector<TSharedRef>> Attachments_;
+    //! Non-null iff the response attachments are delivered via direct placement
+    //! transfer; the client must drive it to completion (see
+    //! #TryGetResponseAttachmentsTransfer) to make #Attachments available.
+    IDirectPlacementTransferPtr ResponseAttachmentsTransfer_;
 
     void TraceResponse();
-    void DoHandleError(TError error);
+    void DoHandleError(TError error, const std::string& address);
 
-    void DoHandleResponse(TSharedRefArray message, const std::string& address);
-    TFuture<void> Deserialize(TSharedRefArray responseMessage) noexcept;
+    void DoHandleResponse(
+        TSharedRefArray message,
+        const std::string& address,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer);
+    TFuture<void> Deserialize(
+        TSharedRefArray responseMessage,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) noexcept;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientResponse)

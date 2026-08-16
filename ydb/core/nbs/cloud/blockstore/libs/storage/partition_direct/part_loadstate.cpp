@@ -24,6 +24,8 @@ bool TPartitionActor::PrepareLoadState(
     std::initializer_list<bool> results = {
         db.ReadVolumeConfig(args.VolumeConfig),
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
+        db.ReadAllVChunkConfigs(args.VChunkConfigs),
+        db.ReadAddHostInProgress(args.AddHostInProgress),
     };
 
     bool ready = std::accumulate(
@@ -53,7 +55,23 @@ void TPartitionActor::CompleteLoadState(
         VolumeConfig = *args.VolumeConfig;
 
         if (args.DirectBlockGroupsConnections.Defined()) {
-            Start(ctx, std::move(*args.DirectBlockGroupsConnections));
+            DDiskBlockGroupAllocated = true;
+            Start(
+                ctx,
+                std::move(*args.DirectBlockGroupsConnections),
+                std::move(args.VChunkConfigs));
+
+            // An add-host was in flight at the last restart: hold the single
+            // in-flight slot and replay the BSController request once the fast
+            // path service is ready (see HandleFastPathServiceReady).
+            if (args.AddHostInProgress.Defined()) {
+                AddHostInFlight = TAddHostInFlight{
+                    .DirectBlockGroupId =
+                        args.AddHostInProgress->GetDirectBlockGroupId(),
+                    .NewHostIndex = static_cast<THostIndex>(
+                        args.AddHostInProgress->GetNewHostIndex()),
+                };
+            }
         }
     }
 }

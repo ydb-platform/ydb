@@ -72,7 +72,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
                 auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, *runtimeSettings, env, typeInfoHelper,
-                                                                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
+                                                                    /*countersProvider=*/nullptr, funcName, /*userType=*/nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
                     udfRes->SetError("Failed to resolve signature, error: " + status.GetError());
@@ -143,7 +143,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
 
                     auto runtimeSettings = NYql::MakeRuntimeSettings();
                     auto status = functionRegistry.FindFunctionTypeInfo(resolvedInput->LangVer, *runtimeSettings, env, typeInfoHelper,
-                                                                        nullptr, funcName, mkqlUserType, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
+                                                                        /*countersProvider=*/nullptr, funcName, mkqlUserType, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, logProvider.Get(), &funcInfo);
 
                     if (!status.IsOk()) {
                         hasError = true;

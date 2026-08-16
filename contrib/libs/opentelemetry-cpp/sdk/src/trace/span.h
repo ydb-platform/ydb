@@ -15,7 +15,6 @@
 #include "opentelemetry/trace/span.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_context_kv_iterable.h"
-#include "opentelemetry/trace/span_metadata.h"
 #include "opentelemetry/trace/span_startoptions.h"
 #include "opentelemetry/version.h"
 
@@ -85,7 +84,7 @@ private:
   std::unique_ptr<Recordable> recordable_;
   opentelemetry::common::SteadyTimestamp start_steady_time;
   std::unique_ptr<opentelemetry::trace::SpanContext> span_context_;
-  bool has_ended_;
+  bool has_ended_{false};
 };
 }  // namespace trace
 }  // namespace sdk

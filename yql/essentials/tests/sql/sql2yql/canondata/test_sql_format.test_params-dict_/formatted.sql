@@ -1,4 +1,3 @@
-/* syntax version 1 */
 DECLARE $x AS Dict<String, Int64?>;
 DECLARE $x2 AS Dict<Utf8, Int64?>;
 

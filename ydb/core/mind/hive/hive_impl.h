@@ -171,6 +171,7 @@ protected:
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
+    friend class TMoveDataActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -243,6 +244,11 @@ protected:
     friend class TTxProcessTabletMetrics;
     friend class TTxUpdateLastReassign;
     friend class TTxShrinkPoolReply;
+    friend class TTxShrinkPool;
+    friend class TTxUpdateDomain;
+    friend class TTxConfigureScaleRecommender;
+    friend class TTxProcessBootQueue;
+    friend class TTxUnlockTabletExecution;
 
     friend class TDeleteTabletActor;
 
@@ -254,8 +260,9 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
-    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     void StartReassignActor(std::vector<TReassignOperation> operations);
+    void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -265,6 +272,7 @@ protected:
     ITransaction* CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
+    ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
     ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
@@ -279,7 +287,7 @@ protected:
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
     ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
-    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups = {});
+    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
     ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
@@ -316,7 +324,7 @@ protected:
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
     ITransaction* CreateProcessTabletMetrics();
-    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& event);
+    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr event);
     ITransaction* CreateShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr event);
 
 public:
@@ -325,6 +333,7 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
+    TActorId ConsolePipeClient;
     TActorId ShrinkPoolInitiator;
     TTabletId RootHiveId;
     TTabletId HiveId;
@@ -342,6 +351,7 @@ protected:
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
+    std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetricsDefaults; // built from CurrentConfig
     std::unordered_map<TString, TStoragePoolInfo> StoragePools;
     std::unordered_map<TSubDomainKey, TDomainInfo> Domains;
     std::unordered_set<TOwnerId> BlockedOwners;
@@ -483,6 +493,7 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    TRequests Requests;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -625,6 +636,10 @@ protected:
     void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev);
+    void Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveDataComplete::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev);
+    void Handle(TEvPrivate::TEvLogHangingRequests::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -641,8 +656,9 @@ protected:
     STATEFN(StateInit);
     STATEFN(StateWork);
 
-    void SendToBSControllerPipe(IEventBase* payload);
-    void SendToRootHivePipe(IEventBase* payload);
+    void SendToBSControllerPipe(IEventBase* payload, bool track);
+    void SendToRootHivePipe(IEventBase* payload, bool track);
+    void SendToConsolePipe(IEventBase* payload, bool track);
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
@@ -711,6 +727,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
+    void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -1121,7 +1138,7 @@ protected:
             const TMetrics& after,
             const TTabletInfo* tablet);
     static void DivideMetrics(TMetrics& metrics, ui64 divider);
-    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups);
+    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();
@@ -1135,6 +1152,11 @@ protected:
     template <typename TIt>
     static ui32 CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target);
     void MakeScaleRecommendation();
+
+    void StartShrinkPool(TStoragePoolInfo& pool);
+    bool ReassignInactiveGroups(TStoragePoolInfo& pool);
+    bool MoveDataInactiveGroups(TStoragePoolInfo& pool);
+    void CheckRemainingHistory(TStoragePoolInfo& pool);
 };
 
 } // NHive

@@ -16,7 +16,7 @@ TPyObjectPtr PyRepr(TStringBuf asciiStr, bool intern = false);
 
 template <size_t size> // NOLINTNEXTLINE(modernize-avoid-c-arrays)
 TPyObjectPtr PyRepr(const char (&str)[size]) {
-    return PyRepr(TStringBuf(str, size - 1), true);
+    return PyRepr(TStringBuf(str, size - 1), /*intern=*/true);
 }
 
 TString PyObjectRepr(PyObject* value);

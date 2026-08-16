@@ -775,7 +775,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     const THashMap<TString, TString>& secureParams,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NSo::TSolomonReadActorConfig& cfg)
 {
     const TString& tokenName = source.GetToken().GetName();
@@ -795,7 +795,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         metricsQueueActor = ActorIdFromProto(protoId);
     }
 
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
     TDqSolomonReadActor* actor = new TDqSolomonReadActor(
@@ -815,7 +815,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     return {actor, actor};
 }
 
-void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NSo::NProto::TDqSolomonSource>("SolomonSource",
         [credentialsFactory](
             NYql::NSo::NProto::TDqSolomonSource&& settings,

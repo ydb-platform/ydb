@@ -31,6 +31,7 @@ namespace NYdb {
             ui32 PartitionSeed;
             bool Direct;
             ui32 Codec = 0;
+            TMaybe<ui32> BatchInnerCodec;
             bool UseTransactions = false;
             bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;
@@ -43,6 +44,9 @@ namespace NYdb {
             ui32 KeyCount = 0;
             ui32 KeySeed = 0;
             std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
+            TDuration BatchFlushInterval = TDuration::Seconds(1);
+            std::optional<ui64> BatchFlushSizeBytes;
+            ui32 BatchFlushMessageCount = 1;
         };
 
         struct TTopicWorkloadConfiguratorParams;

@@ -562,12 +562,13 @@ void TRpcRawClient::AbortTransaction(
 
 void TRpcRawClient::CommitTransaction(
     TMutationId& mutationId,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.CommitTransaction");
 
     auto tx = Clients_.Light->AttachTransaction(YtGuidFromUtilGuid(transactionId));
-    WaitAndProcess(tx->Commit(SerializeOptionsForCommitTransaction(mutationId)));
+    WaitAndProcess(tx->Commit(SerializeOptionsForCommitTransaction(mutationId, options)));
 }
 
 TOperationId TRpcRawClient::StartOperation(
@@ -709,7 +710,7 @@ TOperationAttributes TRpcRawClient::GetOperation(
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.GetOperation");
 
-    auto future = Clients_.Light->GetOperation(alias, SerializeOptionsForGetOperation(options, /*useAlias*/ true));
+    auto future = Clients_.Light->GetOperation(std::string(alias), SerializeOptionsForGetOperation(options, /*useAlias*/ true));
     auto result = WaitAndProcess(future);
     return ParseOperationAttributes(result);
 }
@@ -771,7 +772,7 @@ TListOperationsResult TRpcRawClient::ListOperations(const TListOperationsOptions
         result.Operations.push_back(ParseOperationAttributes(operation));
     }
     if (listOperationsResult.PoolCounts) {
-        result.PoolCounts = std::move(*listOperationsResult.PoolCounts);
+        result.PoolCounts = THashMap<TString, i64>(listOperationsResult.PoolCounts->begin(), listOperationsResult.PoolCounts->end());
     }
     if (listOperationsResult.UserCounts) {
         // TODO(babenko): migrate to std::string
@@ -1828,7 +1829,7 @@ TVector<TTabletInfo> TRpcRawClient::GetTabletInfos(
         result.push_back(TTabletInfo{
             .TotalRowCount = info.TotalRowCount,
             .TrimmedRowCount = info.TrimmedRowCount,
-            .BarrierTimestamp = info.BarrierTimestamp,
+            .BarrierTimestamp = info.BarrierTimestamp.Underlying(),
         });
     }
     return result;
@@ -1922,13 +1923,22 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
     return result;
 }
 
+void TRpcRawClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CheckClusterLiveness");
+
+    auto future = Clients_.Light->CheckClusterLiveness(
+        SerializeOptionsForCheckClusterLiveness(options));
+    WaitAndProcess(future);
+}
+
 ui64 TRpcRawClient::GenerateTimestamp()
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.GenerateTimestamp");
 
     auto future = Clients_.Light->GetTimestampProvider()->GenerateTimestamps();
     auto result = WaitAndProcess(future);
-    return result;
+    return result.Underlying();
 }
 
 IRawBatchRequestPtr TRpcRawClient::CreateRawBatchRequest()

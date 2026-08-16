@@ -9,6 +9,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
+    test_old_secrets_usage.py
     test_secrets.py
     test_secrets_usage.py
     test_secrets_monitoring.py
@@ -24,6 +25,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/requests
     ydb/tests/functional/secrets/lib
     ydb/tests/library
     ydb/tests/library/fixtures

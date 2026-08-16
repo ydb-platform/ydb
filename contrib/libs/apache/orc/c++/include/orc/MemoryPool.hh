@@ -42,13 +42,15 @@ namespace orc {
     uint64_t currentSize_;
     // maximal capacity (actual allocated memory)
     uint64_t currentCapacity_;
+    // whether this buffer owns memory lifecycle
+    bool ownBuffer_;
 
     // not implemented
     DataBuffer(DataBuffer& buffer);
     DataBuffer& operator=(DataBuffer& buffer);
 
    public:
-    DataBuffer(MemoryPool& pool, uint64_t size = 0);
+    DataBuffer(MemoryPool& pool, uint64_t size = 0, bool ownBuf = true);
 
     DataBuffer(DataBuffer<T>&& buffer) noexcept;
 
@@ -81,6 +83,9 @@ namespace orc {
     void reserve(uint64_t size);
     void resize(uint64_t size);
     void zeroOut();
+
+    // Attach to an external raw buffer. bufSize is in bytes.
+    void setData(T* buf, size_t bufSize);
   };
 
   // Specializations for char

@@ -17,6 +17,10 @@ inputs:
     description: "File to resolve with --ours (base branch) upon merge conflict"
   merge_theirs:
     description: "File to resolve with --theirs (head branch) upon merge conflict"
+  force_overwrite:
+    description: "If true, fully overwrite all top-level paths from the head branch (100% match)"
+  overwrite_exclude:
+    description: "Paths to preserve from the base branch after force overwrite"
   gh_personal_access_token:
     required: true
     description: "token for access GitHub"
@@ -49,6 +53,11 @@ runs:
         if [ -n "${{ inputs.merge_theirs }}" ]; then
           MERGE_ARGS+=" --merge-theirs ${{ inputs.merge_theirs }}"
         fi
+        if [ "${{ inputs.force_overwrite }}" = "true" ]; then
+          MERGE_ARGS+=" --force-overwrite"
+        fi
+        if [ -n "${{ inputs.overwrite_exclude }}" ]; then
+          MERGE_ARGS+=" --overwrite-exclude ${{ inputs.overwrite_exclude }}"
+        fi
         echo $MERGE_ARGS
         ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}" $MERGE_ARGS
-

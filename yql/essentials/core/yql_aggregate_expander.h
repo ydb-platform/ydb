@@ -136,7 +136,7 @@ inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, 
     const bool useFinalizeByKey, const bool useBlocks, const bool allowSpilling) {
     const bool usePhases = typesCtx.PeepholeFlags.contains("useaggphases");
     TAggregateExpander aggExpander(!useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx,
-        !usePhases, false, usePhases, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
+        !usePhases, /*compactForDistinct=*/false, usePhases, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     return aggExpander.ExpandAggregate();
 }
 

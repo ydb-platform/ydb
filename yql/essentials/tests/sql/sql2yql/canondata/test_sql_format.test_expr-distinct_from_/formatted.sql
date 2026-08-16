@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     1 IS DISTINCT FROM 2,
     1 IS NOT DISTINCT FROM 2,

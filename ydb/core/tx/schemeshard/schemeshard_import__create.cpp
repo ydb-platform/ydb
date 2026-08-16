@@ -8,6 +8,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -23,6 +24,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/core/backup/common/feature_flags.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -300,7 +303,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
 
-                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (!settings.source_prefix().empty() && NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -327,7 +330,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
                 }
 
-                if (AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -701,6 +704,10 @@ private:
             return false;
         }
 
+        if (AppData()->AlwaysSetSystemOwner || AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
+            op.SetNewOwner(BUILTIN_ACL_METADATA);
+        }
+
         Send(Self->SelfId(), std::move(propose));
         return true;
     }
@@ -752,6 +759,8 @@ private:
             record.SetOwner(*importInfo->UserSID);
         }
         FillOwner(record, item.Permissions);
+
+        record.SetOwner(ChooseAppropriateOwner(record, AppData()));
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);
@@ -1088,17 +1097,19 @@ private:
         }
     }
 
-    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
+    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf issue, TStringBuf marker) {
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
             auto& item = importInfo->Items[itemIdx];
 
-            item.Issue = itemIssue;
+            item.Issue = issue;
             PersistImportItemState(db, *importInfo, itemIdx);
 
             if (importInfo->State != EState::Waiting) {
                 return;
             }
+        } else if (issue) {
+            importInfo->Issue = issue;
         }
 
         Cancel(*importInfo, itemIdx, marker);
@@ -1426,23 +1437,29 @@ private:
         Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
 
         if (!msg.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
+            return CancelAndPersist(db, importInfo, -1,
+                TStringBuilder() << "cannot get schema mapping: " << msg.Error, "cannot get schema mapping");
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
             if (importInfo->GetEncryptedBackup() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                return CancelAndPersist(db, importInfo, -1,
+                    importInfo->GetEncryptedBackup()
+                        ? "encryption is requested, but the export is not encrypted"
+                        : "the export is encrypted, but no encryption settings are specified",
+                    "incorrect schema mapping");
             }
         }
 
+        const ui32 itemsSizeBefore = importInfo->Items.size();
         const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
         if (!fillResult.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, fillResult.ErrorMessage);
+            return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
         }
 
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo);
+        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 

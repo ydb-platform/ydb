@@ -15,13 +15,9 @@
 import logging
 import os
 import re
+from logging import NullHandler
 
-__version__ = '1.34.89'
-
-
-class NullHandler(logging.Handler):
-    def emit(self, record):
-        pass
+__version__ = '1.41.6'
 
 
 # Configure default logger to do nothing
@@ -54,11 +50,91 @@ _xform_cache = {
     ('ExecutePartiQLTransaction', '-'): 'execute-partiql-transaction',
     ('ExecutePartiQLBatch', '_'): 'execute_partiql_batch',
     ('ExecutePartiQLBatch', '-'): 'execute-partiql-batch',
+    (
+        'AssociateWhatsAppBusinessAccount',
+        '_',
+    ): 'associate_whatsapp_business_account',
+    (
+        'AssociateWhatsAppBusinessAccount',
+        '-',
+    ): 'associate-whatsapp-business-account',
+    ('CreateWhatsAppMessageTemplate', '_'): 'create_whatsapp_message_template',
+    ('CreateWhatsAppMessageTemplate', '-'): 'create-whatsapp-message-template',
+    (
+        'CreateWhatsAppMessageTemplateFromLibrary',
+        '_',
+    ): 'create_whatsapp_message_template_from_library',
+    (
+        'CreateWhatsAppMessageTemplateFromLibrary',
+        '-',
+    ): 'create-whatsapp-message-template-from-library',
+    (
+        'CreateWhatsAppMessageTemplateMedia',
+        '_',
+    ): 'create_whatsapp_message_template_media',
+    (
+        'CreateWhatsAppMessageTemplateMedia',
+        '-',
+    ): 'create-whatsapp-message-template-media',
+    ('DeleteWhatsAppMessageMedia', '_'): 'delete_whatsapp_message_media',
+    ('DeleteWhatsAppMessageMedia', '-'): 'delete-whatsapp-message-media',
+    ('DeleteWhatsAppMessageTemplate', '_'): 'delete_whatsapp_message_template',
+    ('DeleteWhatsAppMessageTemplate', '-'): 'delete-whatsapp-message-template',
+    (
+        'DisassociateWhatsAppBusinessAccount',
+        '_',
+    ): 'disassociate_whatsapp_business_account',
+    (
+        'DisassociateWhatsAppBusinessAccount',
+        '-',
+    ): 'disassociate-whatsapp-business-account',
+    (
+        'GetLinkedWhatsAppBusinessAccount',
+        '_',
+    ): 'get_linked_whatsapp_business_account',
+    (
+        'GetLinkedWhatsAppBusinessAccount',
+        '-',
+    ): 'get-linked-whatsapp-business-account',
+    (
+        'GetLinkedWhatsAppBusinessAccountPhoneNumber',
+        '_',
+    ): 'get_linked_whatsapp_business_account_phone_number',
+    (
+        'GetLinkedWhatsAppBusinessAccountPhoneNumber',
+        '-',
+    ): 'get-linked-whatsapp-business-account-phone-number',
+    ('GetWhatsAppMessageMedia', '_'): 'get_whatsapp_message_media',
+    ('GetWhatsAppMessageMedia', '-'): 'get-whatsapp-message-media',
+    ('GetWhatsAppMessageTemplate', '_'): 'get_whatsapp_message_template',
+    ('GetWhatsAppMessageTemplate', '-'): 'get-whatsapp-message-template',
+    (
+        'ListLinkedWhatsAppBusinessAccounts',
+        '_',
+    ): 'list_linked_whatsapp_business_accounts',
+    (
+        'ListLinkedWhatsAppBusinessAccounts',
+        '-',
+    ): 'list-linked-whatsapp-business-accounts',
+    ('ListWhatsAppMessageTemplates', '_'): 'list_whatsapp_message_templates',
+    ('ListWhatsAppMessageTemplates', '-'): 'list-whatsapp-message-templates',
+    ('ListWhatsAppTemplateLibrary', '_'): 'list_whatsapp_template_library',
+    ('ListWhatsAppTemplateLibrary', '-'): 'list-whatsapp-template-library',
+    ('PostWhatsAppMessageMedia', '_'): 'post_whatsapp_message_media',
+    ('PostWhatsAppMessageMedia', '-'): 'post-whatsapp-message-media',
+    (
+        'PutWhatsAppBusinessAccountEventDestinations',
+        '_',
+    ): 'put_whatsapp_business_account_event_destinations',
+    (
+        'PutWhatsAppBusinessAccountEventDestinations',
+        '-',
+    ): 'put-whatsapp-business-account-event-destinations',
+    ('SendWhatsAppMessage', '_'): 'send_whatsapp_message',
+    ('SendWhatsAppMessage', '-'): 'send-whatsapp-message',
+    ('UpdateWhatsAppMessageTemplate', '_'): 'update_whatsapp_message_template',
+    ('UpdateWhatsAppMessageTemplate', '-'): 'update-whatsapp-message-template',
 }
-# The items in this dict represent partial renames to apply globally to all
-# services which might have a matching argument or operation. This way a
-# common mis-translation can be fixed without having to call out each
-# individual case.
 ScalarTypes = ('string', 'integer', 'boolean', 'timestamp', 'float', 'double')
 
 BOTOCORE_ROOT = os.path.dirname(__file__)

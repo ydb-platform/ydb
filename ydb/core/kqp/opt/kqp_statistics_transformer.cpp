@@ -1,21 +1,31 @@
 #include "kqp_statistics_transformer.h"
-#include <yql/essentials/utils/log/log.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
-#include <yql/essentials/core/yql_cost_function.h>
-#include <yql/essentials/core/yql_join.h>
+
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
-#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
-
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
-
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+#include <yql/essentials/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <charconv>
 
 namespace NKikimr::NKqp {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -53,7 +63,7 @@ struct TKqpS3ProviderStatistics
  * Currently we look up the number of rows and attributes in the statistics service
  */
 void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext& kqpCtx, TKqpStatsStore* kqpStats) {
+    const NOpt::TKqpOptimizeContext& kqpCtx, TKqpStatsStore* kqpStats) {
 
     auto inputNode = TExprBase(input);
     std::shared_ptr<TOptimizerStatistics> inputStats;
@@ -145,6 +155,40 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     kqpStats->SetStats(input.Get(), stats);
 }
 
+// Vector index search returns at most TopK rows of the main table.
+void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
+    auto read = TExprBase(input).Cast<TKqlReadTableVectorIndex>();
+    auto inputStats = kqpStats->GetStats(read.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    // Literal TopK gives the exact bound; a query parameter isn't known at plan time,
+    // so fall back to a typical KNN TopK.
+    constexpr double DefaultTopK = 16;
+    double nRows = DefaultTopK;
+    if (auto literal = read.TopK().Maybe<TCoUint64>()) {
+        nRows = FromString<double>(literal.Cast().Literal().Value());
+    }
+    int nAttrs = read.Columns().Size();
+    double sizePerRow = inputStats->ByteSize / (inputStats->Nrows == 0 ? 1 : inputStats->Nrows);
+    double byteSize = nRows * sizePerRow * (nAttrs / static_cast<double>(inputStats->Ncols == 0 ? 1 : inputStats->Ncols));
+
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable,
+        nRows,
+        nAttrs,
+        byteSize,
+        0.0,
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType
+    );
+    stats->SourceTableName = inputStats->SourceTableName;
+
+    kqpStats->SetStats(input.Get(), std::move(stats));
+}
+
 std::vector<TOrdering::TItem::EDirection> GetAscDirections(std::size_t n) {
     return std::vector<TOrdering::TItem::EDirection>(n, TOrdering::TItem::EDirection::EAscending);
 }
@@ -159,7 +203,7 @@ std::vector<TOrdering::TItem::EDirection> GetDescDirections(std::size_t n) {
 void InferStatisticsForKqpTable(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx,
+    NOpt::TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
@@ -183,6 +227,22 @@ void InferStatisticsForKqpTable(
     double nRows = tableData.Metadata->RecordsCount;
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
+
+    // Correct for zeros in statistics response:
+    // - If RecordsCount is zero but DataSize is not (sometimes the statistics returns this):
+    //  - Set NRows = DataSize / nAttrs / 10
+    // - If both are still zero - assign them to constants
+    // FIXME: In the second case we should check whether the basic statistics have been collected from the table
+
+    if (nRows == 0 && byteSize != 0) {
+        nRows = byteSize / nAttrs / 10.0;
+    }
+
+    if (nRows == 0 || byteSize == 0) {
+        nRows = 1000.0;
+        byteSize = 100000.0;
+    }
+
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
@@ -214,6 +274,21 @@ void InferStatisticsForKqpTable(
     TString alias;
     if (aliases && aliases->size() == 1) {
         alias = *aliases->begin();;
+    }
+
+    // PRAGMA OptimizerHints: Rows(<label> # N) / Bytes(<label> # N) can override the
+    // base-table row count and byte size before they are propagated through the rest
+    // of the plan. The table is matched by its single-relation alias, short name or
+    // full path.
+    {
+        auto optHints = kqpCtx.GetOptimizerHints();
+        auto candidates = BuildTableHintCandidates(alias, path.StringValue());
+        if (optHints.CardinalityHints) {
+            ApplySingleLabelHint(*optHints.CardinalityHints, candidates, stats->Nrows);
+        }
+        if (optHints.BytesHints) {
+            ApplySingleLabelHint(*optHints.BytesHints, candidates, stats->ByteSize);
+        }
     }
 
     if (!tableData.Metadata->PartitionedByColumns.empty()) {
@@ -280,7 +355,7 @@ void InferStatisticsForKqpTable(
 void InferStatisticsForSteamLookup(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext& kqpCtx,
+    const NOpt::TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
@@ -344,7 +419,7 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
 void InferStatisticsForRowsSourceSettings(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext& kqpCtx,
+    const NOpt::TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
 
@@ -435,7 +510,7 @@ void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotation
 void InferStatisticsForReadTableIndexRanges(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext& kqpCtx,
+    const NOpt::TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto indexRanges = TKqlReadTableIndexRanges(input);
@@ -615,7 +690,7 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign], false);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
                 } else if (compSign == "neq") {
@@ -783,7 +858,7 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
     }
 
     if (result == 0.0) {
-        result = 1000.0;
+        result = 100.0;
     }
 
     if (format != "parquet" && !decoded) {
@@ -819,7 +894,7 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
 void InferStatisticsForDqSourceWrap(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    TKqpOptimizeContext& kqpCtx,
+    NOpt::TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
@@ -932,10 +1007,6 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeC
     }
 
     txStats.push_back(vec);
-}
-
-TJoinColumn GetColumn(const TString& column) {
-    return TJoinColumn::FromString(column);
 }
 
 TString TableAliasToString(TTableAliasMap* tableAlias) {
@@ -1316,6 +1387,50 @@ private:
 // Forward declaration (defined below)
 static void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 
+/***
+ * Statistics transformer is a transformer that propagates statistics and costs from
+ * the leaves of the plan DAG up to the root of the DAG. It handles a number of operators,
+ * but will simply stop propagation if in encounters an operator that it has no rules for.
+ * One of such operators is EquiJoin, but there is a special rule to handle EquiJoin.
+*/
+class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
+    TTypeAnnotationContext* TypeCtx;
+    const TKikimrConfiguration::TPtr& Config;
+    NOpt::TKqpOptimizeContext& KqpCtx;
+    TKqpStatsStore* KqpStats;
+    const NOpt::TKqpProviderContext& KqpPctx;
+    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
+
+    THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
+
+    public:
+        TKqpStatisticsTransformer(
+            const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
+            TTypeAnnotationContext& typeCtx,
+            const TKikimrConfiguration::TPtr& config,
+            const NOpt::TKqpProviderContext& pctx
+        ) :
+            TypeCtx(&typeCtx),
+            Config(config),
+            KqpCtx(*kqpCtx),
+            KqpStats(&kqpCtx->KqpStats),
+            KqpPctx(pctx)
+        {}
+
+        // Main method of the transformer
+        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
+        void Rewind() override {};
+
+    private:
+        bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx);
+
+        bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+};
+
+
 /**
  * DoTransform method matches operators and callables in the query DAG and
  * uses pre-computed statistics and costs of the children to compute their cost.
@@ -1370,6 +1485,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx, KqpStats);
+    }
+    else if(TKqlReadTableVectorIndex::Match(input.Get())){
+        InferStatisticsForReadTableVectorIndex(input, KqpStats);
     }
     else if(TKqlStreamLookupIndex::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx, KqpStats);
@@ -1477,6 +1595,9 @@ bool TKqpStatisticsTransformer::BeforeLambdas(const TExprNode::TPtr& input, TExp
     else if (TCoAggregateMergeFinalize::Match(input.Get())) {
         InferStatisticsForAggregateMergeFinalize(input, KqpStats);
     }
+    else if (TCoWideCombiner::Match(input.Get())) {
+        InferStatisticsForCombiner(input, KqpStats);
+    }
     else if (TCoAsList::Match(input.Get())) {
         InferStatisticsForAsList(input, KqpStats);
     }
@@ -1554,8 +1675,10 @@ bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExpr
     return matched;
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) {
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const NOpt::TKqpProviderContext& pctx) {
     return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
 }
 

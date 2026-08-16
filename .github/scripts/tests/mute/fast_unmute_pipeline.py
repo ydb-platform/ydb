@@ -50,6 +50,8 @@ from mute.fast_unmute_ydb import (
     fetch_all_rows,
     fetch_candidate_issues,
     fetch_currently_muted,
+    fetch_fast_unmute_active_rows,
+    fetch_grace_full_names,
     upsert_fast_unmute_grace_row,
     upsert_rows,
 )
@@ -77,6 +79,104 @@ def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
     Stored on insert so dashboards and TTL stay interpretable even if ``mute_config.json`` changes later.
     """
     return max(1, int(mute_window_days) - int(manual_unmute_window_days))
+
+
+def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
+    """Start grace when fast-unmute tests are no longer muted on branch (merged ``muted_ya``).
+
+    Runs in Job 2 after ``tests_monitor`` refresh so ``grace_started_at`` reflects the actual
+    unmute on main, not the hour when an unmute PR was opened (that PR may merge much later).
+    """
+    try:
+        active_table_path = ydb_wrapper.get_table_path('fast_unmute_active')
+        grace_table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
+        tests_monitor_path = ydb_wrapper.get_table_path('tests_monitor')
+    except KeyError:
+        logging.info('fast_unmute tables not configured — skip enter_fast_unmute_grace')
+        return
+
+    create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
+
+    # NB: intentionally do NOT swallow YDB/query errors below. This step guards the
+    # re-mute decision that runs later in the same job, so silently skipping grace on a
+    # transient failure would re-introduce the race (#45582) with no signal. Let it fail
+    # loudly so the scheduled job can be retried/investigated instead.
+    active_rows = fetch_fast_unmute_active_rows(
+        ydb_wrapper, active_table_path, branch, build_type
+    )
+
+    if not active_rows:
+        logging.info(
+            'enter_fast_unmute_grace: no fast_unmute_active rows for branch=%s build_type=%s',
+            branch,
+            build_type,
+        )
+        return
+
+    currently_muted = fetch_currently_muted(
+        ydb_wrapper, tests_monitor_path, branch, build_type
+    )
+    existing_grace = fetch_grace_full_names(
+        ydb_wrapper, grace_table_path, branch, build_type
+    )
+
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    grace_ttl = grace_ttl_calendar_days(
+        get_mute_window_days(), get_manual_unmute_window_days()
+    )
+    recorded = 0
+    failed = 0
+
+    for row in active_rows:
+        full_name = row.get('full_name')
+        if not full_name or full_name in currently_muted:
+            continue
+        if full_name in existing_grace:
+            continue
+        requested_at = _coerce_dt(row.get('requested_at'))
+        try:
+            upsert_fast_unmute_grace_row(
+                ydb_wrapper,
+                grace_table_path,
+                full_name,
+                branch,
+                build_type,
+                int(row.get('github_issue_number') or 0),
+                requested_at or now,
+                now,
+                grace_ttl,
+            )
+            recorded += 1
+            logging.info(
+                'enter_fast_unmute_grace: started grace for %s (branch=%s build_type=%s)',
+                full_name,
+                branch,
+                build_type,
+            )
+        except Exception as exc:
+            failed += 1
+            logging.warning(
+                'enter_fast_unmute_grace: failed to upsert grace for %s: %s',
+                full_name,
+                exc,
+            )
+
+    if recorded:
+        logging.info(
+            'enter_fast_unmute_grace: recorded grace for %d test(s) on branch=%s build_type=%s',
+            recorded,
+            branch,
+            build_type,
+        )
+
+    # Fail the step if any grace write was lost: proceeding would let update_muted_ya
+    # make the re-mute decision with missing grace for these tests.
+    if failed:
+        raise RuntimeError(
+            'enter_fast_unmute_grace: failed to record grace for '
+            f'{failed} test(s) on branch={branch} build_type={build_type} '
+            '(see warnings above); failing the step to avoid a re-mute with missing grace'
+        )
 
 
 def load_config():
@@ -373,6 +473,24 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
 
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
+        existing_grace = set()
+        # None ⇒ we could not read existing grace rows; in that case skip recording grace
+        # from Job 1 so we never overwrite an already-anchored grace_started_at (#45582).
+        grace_lookup_ok = True
+        if grace_table_path:
+            try:
+                existing_grace = fetch_grace_full_names(
+                    ydb_wrapper, grace_table_path, branch, build_type
+                )
+            except Exception as exc:
+                grace_lookup_ok = False
+                logging.warning(
+                    'manual_unmute_cleanup: failed to load grace names for %s/%s: %s '
+                    '(skipping grace recording this run to avoid resetting grace_started_at)',
+                    branch,
+                    build_type,
+                    exc,
+                )
         for row in group_rows:
             full_name = row.get('full_name')
             if not full_name:
@@ -381,7 +499,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             issue_number = row.get('github_issue_number')
 
             if full_name not in currently_muted:
-                if grace_table_path:
+                if grace_table_path and grace_lookup_ok and full_name not in existing_grace:
                     try:
                         ft_at = requested_at or now
                         upsert_fast_unmute_grace_row(

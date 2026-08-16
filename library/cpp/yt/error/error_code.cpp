@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/string/split.h>
 
@@ -13,7 +13,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(achulkov2): Remove this once we find all duplicate error codes.
-static YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
+static YT_DEFINE_LEAKY_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,11 +62,10 @@ void TErrorCodeRegistry::RegisterErrorCode(int code, const TErrorCodeInfo& error
         if (code == 119) {
             return;
         }
-        YT_LOG_FATAL(
-            "Duplicate error code (Code: %v, StoredCodeInfo: %v, NewCodeInfo: %v)",
-            code,
-            CodeToInfo_[code],
-            errorCodeInfo);
+        YT_TLOG_FATAL("Duplicate error code")
+            .With("Code", code)
+            .With("StoredCodeInfo", CodeToInfo_[code])
+            .With("NewCodeInfo", errorCodeInfo);
     }
 }
 
@@ -91,11 +90,11 @@ void TErrorCodeRegistry::RegisterErrorCodeRange(int from, int to, std::string na
 
     TErrorCodeRangeInfo newRange{from, to, std::move(namespaceName), std::move(formatter)};
     for (const auto& range : ErrorCodeRanges_) {
-        YT_LOG_FATAL_IF(
+        YT_TLOG_FATAL_IF(
             range.Intersects(newRange),
-            "Intersecting error code ranges registered (FirstRange: %v, SecondRange: %v)",
-            range,
-            newRange);
+            "Intersecting error code ranges registered")
+            .With("FirstRange", range)
+            .With("SecondRange", newRange);
     }
     ErrorCodeRanges_.push_back(std::move(newRange));
     CheckCodesAgainstRanges();
@@ -105,14 +104,13 @@ void TErrorCodeRegistry::CheckCodesAgainstRanges() const
 {
     for (const auto& [code, info] : CodeToInfo_) {
         for (const auto& range : ErrorCodeRanges_) {
-            YT_LOG_FATAL_IF(
+            YT_TLOG_FATAL_IF(
                 range.Contains(code),
-                "Error code range contains another registered code "
-                "(Range: %v, Code: %v, RangeCodeInfo: %v, StandaloneCodeInfo: %v)",
-                range,
-                code,
-                range.Get(code),
-                info);
+                "Error code range contains another registered code")
+                .With("Range", range)
+                .With("Code", code)
+                .With("RangeCodeInfo", range.Get(code))
+                .With("StandaloneCodeInfo", info);
         }
     }
 }

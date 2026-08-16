@@ -4,7 +4,6 @@
 #error "Direct inclusion of this file is not allowed, use io.h"
 #include "io.h" // For the sake of sane code completion.
 #endif
-#undef IO_INL_H_
 
 #include "finish_or_die.h"
 

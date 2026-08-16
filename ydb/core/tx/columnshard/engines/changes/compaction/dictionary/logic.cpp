@@ -3,7 +3,7 @@
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
@@ -235,7 +235,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
     IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
         NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
     auto accContext = Context.GetLoader()->BuildAccessorContext(dictArr->GetRecordsCount());
-    auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(dictArr, accContext);
+    auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor().SerializeToBlobAndMeta(dictArr, accContext);
     col.AddPreparedChunk(
         std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), dictArr, TChunkAddress(Context.GetColumnId(), 0),
             Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()), std::move(blobAndMeta.Meta)));

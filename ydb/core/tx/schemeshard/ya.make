@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
     ut_backup
     ut_backup_collection
     ut_backup_collection_reboots
+    ut_incr_backup_reboots
     ut_base
     ut_base_reboots
     ut_bsvolume
@@ -33,6 +34,8 @@ RECURSE_FOR_TESTS(
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
+    ut_full_backup
+    ut_generated_columns
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -51,6 +54,7 @@ RECURSE_FOR_TESTS(
     ut_resource_pool
     ut_resource_pool_reboots
     ut_restore
+    ut_incr_restore_reboots
     ut_rtmr
     ut_rtmr_reboots
     ut_ru_calculator
@@ -62,6 +66,8 @@ RECURSE_FOR_TESTS(
     ut_split_merge_reboots
     ut_secret
     ut_secret_reboots
+    ut_set_column_constraint_reboots
+    ut_set_column_constraint
     ut_stats
     ut_streaming_query
     ut_streaming_query_reboots
@@ -72,6 +78,8 @@ RECURSE_FOR_TESTS(
     ut_sysview_reboots
     ut_topic_splitmerge
     ut_topic_set_boundaries
+    ut_test_shard
+    ut_test_shard_reboots
     ut_transfer
     ut_truncate_table_reboots
     ut_truncate_table_simple
@@ -103,16 +111,17 @@ SRCS(
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
     schemeshard__list_users.cpp
+    schemeshard__local_index_migration.cpp
+    schemeshard__local_index_migration.h
     schemeshard__login.cpp
-    schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
+    schemeshard__monitoring.h
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
-    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -153,6 +162,7 @@ SRCS(
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_backup_collection.cpp
+    schemeshard__operation_create_full_backup_op.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_cdc_stream.cpp
     schemeshard__operation_create_continuous_backup.cpp
@@ -168,6 +178,7 @@ SRCS(
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_secret.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incr_restore_lock_targets.cpp
     schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
@@ -176,6 +187,7 @@ SRCS(
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
+    schemeshard__operation_create_test_shard_set.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_drop_backup_collection.cpp
@@ -197,6 +209,7 @@ SRCS(
     schemeshard__operation_drop_streaming_query.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_sysview.cpp
+    schemeshard__operation_drop_test_shard_set.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
@@ -223,16 +236,21 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
-    schemeshard__user_hashes_migration.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
+    schemeshard_full_backup.cpp
+    schemeshard_full_backup__progress.cpp
+    schemeshard_full_backup__get.cpp
+    schemeshard_full_backup__list.cpp
+    schemeshard_full_backup__forget.cpp
     schemeshard_backup_incremental__forget.cpp
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp
@@ -281,8 +299,6 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
-    schemeshard_login_helper.cpp
-    schemeshard_login_helper.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp
@@ -293,6 +309,14 @@ SRCS(
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
+    schemeshard_set_column_constraint.cpp
+    schemeshard_set_column_constraint.h
+    schemeshard_set_column_constraint__cancel.cpp
+    schemeshard_set_column_constraint__create.cpp
+    schemeshard_set_column_constraint__forget.cpp
+    schemeshard_set_column_constraint__get.cpp
+    schemeshard_set_column_constraint__list.cpp
+    schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
     schemeshard_subop_state_types.cpp
@@ -320,7 +344,11 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
+GENERATE_ENUM_SERIALIZATION(schemeshard_impl.h)
+
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
+
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweepAlert
 
 PEERDIR(
     contrib/libs/protobuf
@@ -333,6 +361,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/common
     ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base
@@ -361,6 +390,7 @@ PEERDIR(
     ydb/core/sys_view/partition_stats
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/common

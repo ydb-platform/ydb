@@ -60,7 +60,7 @@ struct TInstanceResources
     // Bytes per second.
     std::optional<i64> NetBytes;
 
-    TString Type;
+    std::string Type;
     int Vcpu;
 
     bool operator==(const TInstanceResources& resources) const;
@@ -100,7 +100,7 @@ struct TInstanceSize
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
 
-    std::optional<TString> HostTagFilter;
+    std::optional<std::string> HostTagFilter;
 
     REGISTER_YSON_STRUCT(TInstanceSize);
 

@@ -38,6 +38,13 @@ struct TEvBackup {
         EvListBackupCollectionRestoresRequest,
         EvListBackupCollectionRestoresResponse,
 
+        EvGetFullBackupRequest,
+        EvGetFullBackupResponse,
+        EvForgetFullBackupRequest,
+        EvForgetFullBackupResponse,
+        EvListFullBackupsRequest,
+        EvListFullBackupsResponse,
+
         EvEnd
     };
 
@@ -144,6 +151,46 @@ struct TEvBackup {
         }
     };
     DECLARE_EVENT_CLASS(EvListBackupCollectionRestoresResponse) {};
+
+    DECLARE_EVENT_CLASS(EvGetFullBackupRequest) {
+        TEvGetFullBackupRequest() = default;
+
+        explicit TEvGetFullBackupRequest(const TString& dbName, ui64 fullBackupId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetFullBackupId(fullBackupId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvGetFullBackupResponse) {};
+    DECLARE_EVENT_CLASS(EvForgetFullBackupRequest) {
+        TEvForgetFullBackupRequest() = default;
+
+        explicit TEvForgetFullBackupRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 fullBackupId
+            ) {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetFullBackupId(fullBackupId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvForgetFullBackupResponse) {
+        TEvForgetFullBackupResponse() = default;
+
+        explicit TEvForgetFullBackupResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListFullBackupsRequest) {
+        TEvListFullBackupsRequest() = default;
+
+        explicit TEvListFullBackupsRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListFullBackupsResponse) {};
 
 
 #undef DECLARE_EVENT_CLASS

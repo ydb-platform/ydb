@@ -5,7 +5,6 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     columnshard.cpp
-    kqp_benches.cpp
 )
 
 PEERDIR(
@@ -35,5 +34,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(olap_indexes_enums.h)
 
 END()

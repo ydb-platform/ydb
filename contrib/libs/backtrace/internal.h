@@ -1,5 +1,5 @@
 /* internal.h -- Internal header file for stack backtrace library.
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -143,6 +143,8 @@ struct backtrace_state
   const char *filename;
   /* Non-zero if threaded.  */
   int threaded;
+  /* Non-zero if passing additional data.  */
+  int moredata;
   /* The master lock for fileline_fn, fileline_data, syminfo_fn,
      syminfo_data, fileline_initialization_failed and everything the
      data pointers point to.  */
@@ -424,5 +426,8 @@ extern int backtrace_uncompress_lzma (struct backtrace_state *,
 				      backtrace_error_callback, void *data,
 				      unsigned char **uncompressed,
 				      size_t *uncompressed_size);
+
+/* Current expected backtrace_moredata version.  */
+#define BACKTRACE_MOREDATA_VERSION (3)
 
 #endif

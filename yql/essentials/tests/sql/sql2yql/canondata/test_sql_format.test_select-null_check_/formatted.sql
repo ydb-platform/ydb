@@ -1,4 +1,3 @@
-/* postgres can not */
 /* by correct way ;-)
 E   assert 'a;;a' == 'a;Void;b'
 E     - a;;a

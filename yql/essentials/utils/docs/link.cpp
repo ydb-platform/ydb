@@ -92,7 +92,7 @@ TLinks ParseLinks(const NJson::TJsonValue& json) {
     for (const auto& [keyString, value] : json.GetMapSafe()) {
         TLinkKey key = ParseLinkKey(keyString);
         TLinkTarget target = TLinkTarget::Parse(value.GetStringSafe());
-        links[std::move(key)] = std::move(target);
+        links[key] = std::move(target);
     }
     return links;
 }

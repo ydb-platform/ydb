@@ -285,6 +285,14 @@ public:
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
 
+    // True after first TEvBoardInfo. Distinguishes "gossip not started" from "no peers".
+    virtual bool GetInitialBoardSyncDone() const = 0;
+
+    // NodeIds from first board sync; immutable thereafter. Empty until
+    // GetInitialBoardSyncDone(). Unlike GetClusterResources() does not wait for
+    // per-peer TEvSendResources (no RTT).
+    virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
+
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
     virtual ui32 GetNodeId() {
@@ -296,6 +304,8 @@ public:
 struct TResourceSnapshotState {
     std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> Snapshot;
     TMutex Lock;
+    bool InitialBoardSyncReceived = false;
+    TVector<ui32> InitialBoardNodeIds;
 };
 
 struct TEvKqpResourceInfoExchanger {

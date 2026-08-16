@@ -1,24 +1,24 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 template <bool UseLLVM, typename T>
 TRuntimeNode MakeList(TSetup<UseLLVM>& setup, T Start, T End, i64 Step, const auto dateType) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto start = pb.Unwrap(pb.ToIntegral(pb.NewDataLiteral<T>(Start), dateType), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto start = pb.Unwrap(pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, T(Start)), dateType), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
 
-    const auto end = pb.Unwrap(pb.ToIntegral(pb.NewDataLiteral<T>(End), dateType), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto end = pb.Unwrap(pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, T(End)), dateType), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
 
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&Step, sizeof(Step)));
 
-    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step)));
+    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step), {}));
 }
 } // namespace
 
@@ -29,19 +29,12 @@ Y_UNIT_TEST_LLVM(TestCorrectDate) {
     ui16 start = 140;
     ui16 end = 150;
     i64 step = 86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), end - start);
-    NUdf::TUnboxedValue item;
-    for (size_t i = 0; i < end - start; i++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), start + i);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{140, 141, 142, 143, 144, 145, 146, 147, 148, 149});
 }
 Y_UNIT_TEST_LLVM(TestCorrectDateReverse) {
     TSetup<LLVM> setup;
@@ -49,19 +42,12 @@ Y_UNIT_TEST_LLVM(TestCorrectDateReverse) {
     ui16 start = 150;
     ui16 end = 140;
     i64 step = -86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), start - end);
-    NUdf::TUnboxedValue item;
-    for (int i = 0; i < start - end; i++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), start - i);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{150, 149, 148, 147, 146, 145, 144, 143, 142, 141});
 }
 Y_UNIT_TEST_LLVM(TestCorrectDatetime) {
     TSetup<LLVM> setup;
@@ -69,19 +55,12 @@ Y_UNIT_TEST_LLVM(TestCorrectDatetime) {
     ui32 start = 140;
     ui32 end = 150;
     i64 step = 1000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), end - start);
-    NUdf::TUnboxedValue item;
-    for (size_t i = 0; i < end - start; i++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), start + i);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui32>{140, 141, 142, 143, 144, 145, 146, 147, 148, 149});
 }
 Y_UNIT_TEST_LLVM(TestCorrectTimestamp) {
     TSetup<LLVM> setup;
@@ -89,19 +68,12 @@ Y_UNIT_TEST_LLVM(TestCorrectTimestamp) {
     ui64 start = 140;
     ui64 end = 150;
     i64 step = 1LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), end - start);
-    NUdf::TUnboxedValue item;
-    for (size_t i = 0; i < end - start; i++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui64>(), start + i);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui64>{140, 141, 142, 143, 144, 145, 146, 147, 148, 149});
 }
 Y_UNIT_TEST_LLVM(TestWrongIntervalForDate) {
     TSetup<LLVM> setup;
@@ -109,15 +81,12 @@ Y_UNIT_TEST_LLVM(TestWrongIntervalForDate) {
     ui16 start = 140;
     ui16 end = 150;
     i64 step = 86400000001LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 0);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{});
 }
 Y_UNIT_TEST_LLVM(TestWrongIntervalForDatetime) {
     TSetup<LLVM> setup;
@@ -125,22 +94,19 @@ Y_UNIT_TEST_LLVM(TestWrongIntervalForDatetime) {
     ui32 start = 140;
     ui32 end = 150;
     i64 step = 1000003LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 0);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui32>{});
 }
 Y_UNIT_TEST_LLVM(TestWrongStartType) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto value0 = ui32(1000000);
-    const auto start = pb.NewDataLiteral<ui32>(value0);
+    const auto start = NTest::ConvertValueToLiteralNode(pb, ui32(value0));
 
     const auto value1 = ui32(1000005);
     const auto end = pb.NewDataLiteral<NUdf::EDataSlot::Datetime>(
@@ -161,7 +127,7 @@ Y_UNIT_TEST_LLVM(TestWrongEndType) {
         NUdf::TStringRef((const char*)&value0, sizeof(value0)));
 
     const auto value1 = ui32(1000005);
-    const auto end = pb.NewDataLiteral<ui32>(value1);
+    const auto end = NTest::ConvertValueToLiteralNode(pb, ui32(value1));
 
     const auto value2 = i64(1000001LL);
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
@@ -182,7 +148,7 @@ Y_UNIT_TEST_LLVM(TestWrongStepType) {
         NUdf::TStringRef((const char*)&value1, sizeof(value1)));
 
     const auto value2 = i64(1000001LL);
-    const auto step = pb.NewDataLiteral<ui32>(value2);
+    const auto step = NTest::ConvertValueToLiteralNode(pb, ui32(value2));
 
     UNIT_ASSERT_EXCEPTION(pb.ListFromRange(start, end, step), yexception);
 }
@@ -192,15 +158,12 @@ Y_UNIT_TEST_LLVM(TestEmptyListDate) {
     ui16 start = 150;
     ui16 end = 144;
     i64 step = 86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 0);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{});
 }
 Y_UNIT_TEST_LLVM(TestWrongStartEndTypes) {
     TSetup<LLVM> setup;
@@ -226,17 +189,12 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForDate) {
     ui16 start = 4;
     ui16 end = 0;
     i64 step = -518400000000LL; // -6 days
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{4});
 }
 Y_UNIT_TEST_LLVM(TestMinOverflowForDatetime) {
     TSetup<LLVM> setup;
@@ -244,17 +202,12 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForDatetime) {
     ui32 start = 9;
     ui32 end = 0;
     i64 step = -10000000LL; // -10 seconds
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui32>{9});
 }
 Y_UNIT_TEST_LLVM(TestMinOverflowForTimestamp) {
     TSetup<LLVM> setup;
@@ -262,17 +215,12 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForTimestamp) {
     ui64 start = 100;
     ui64 end = 10;
     i64 step = -110LL; // -110 microseconds
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui64>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui64>{100});
 }
 
 Y_UNIT_TEST_LLVM(TestMaxOverflowForDate) {
@@ -281,17 +229,12 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForDate) {
     ui16 start = 100;
     ui16 end = NYql::NUdf::MAX_DATE - 1;
     i64 step = (NYql::NUdf::MAX_DATE - 1) * 24LL * 60 * 60 * 1000000;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{100});
 }
 Y_UNIT_TEST_LLVM(TestMaxOverflowForDatetime) {
     TSetup<LLVM> setup;
@@ -300,17 +243,12 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForDatetime) {
     ui32 start = NYql::NUdf::MAX_DATETIME - 123;
     ui32 end = NYql::NUdf::MAX_DATETIME - 1;
     i64 step = (NYql::NUdf::MAX_DATETIME - 1) * 1000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui32>{NYql::NUdf::MAX_DATETIME - 123});
 }
 Y_UNIT_TEST_LLVM(TestMaxOverflowForTimestamp) {
     TSetup<LLVM> setup;
@@ -319,33 +257,28 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForTimestamp) {
     ui64 start = NYql::NUdf::MAX_TIMESTAMP - 123;
     ui64 end = NYql::NUdf::MAX_TIMESTAMP - 1;
     i64 step = NYql::NUdf::MAX_TIMESTAMP - 1;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    const auto iterator = list.GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui64>(), start);
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(list, TVector<ui64>{NYql::NUdf::MAX_TIMESTAMP - 123});
 }
 Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzDate) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto canada = pb.NewDataLiteral<ui16>(375U);
-    const auto europe = pb.NewDataLiteral<ui16>(459U);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
+    const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
     const auto value2 = i64(24LL * 60 * 60 * 1000000); // 1 Day
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&value2, sizeof(value2)));
 
-    const auto day1 = pb.ToIntegral(pb.NewDataLiteral<ui16>(123), dateType);
-    const auto day2 = pb.ToIntegral(pb.NewDataLiteral<ui16>(123 + 5), dateType);
-    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
-    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, europe), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto day1 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui16(123)), dateType);
+    const auto day2 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui16(123 + 5)), dateType);
+    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, europe), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
     const auto dates = pb.ListFromRange(date1, date2, step);
 
     const auto graph = setup.BuildGraph(dates);
@@ -363,16 +296,16 @@ Y_UNIT_TEST_LLVM(TestSameTimezonesForTzDate) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto canada = pb.NewDataLiteral<ui16>(375U);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto value2 = i64(24LL * 60 * 60 * 1000000); // 1 Day
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&value2, sizeof(value2)));
 
-    const auto day1 = pb.ToIntegral(pb.NewDataLiteral<ui16>(123), dateType);
-    const auto day2 = pb.ToIntegral(pb.NewDataLiteral<ui16>(123 + 5), dateType);
-    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
-    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, canada), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto day1 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui16(123)), dateType);
+    const auto day2 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui16(123 + 5)), dateType);
+    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, canada), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
     const auto dates = pb.ListFromRange(date1, date2, step);
 
     const auto graph = setup.BuildGraph(dates);
@@ -390,17 +323,17 @@ Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzDatetime) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
-    const auto canada = pb.NewDataLiteral<ui16>(375U);
-    const auto europe = pb.NewDataLiteral<ui16>(459U);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
+    const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
+    const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
     const auto value2 = i64(1000000LL); // 1 Second
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&value2, sizeof(value2)));
 
-    const auto day1 = pb.ToIntegral(pb.NewDataLiteral<ui32>(123), dateType);
-    const auto day2 = pb.ToIntegral(pb.NewDataLiteral<ui32>(123 + 5), dateType);
-    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
-    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, europe), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto day1 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui32(123)), dateType);
+    const auto day2 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui32(123 + 5)), dateType);
+    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, canada), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, europe), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
     const auto dates = pb.ListFromRange(date1, date2, step);
 
     const auto graph = setup.BuildGraph(dates);
@@ -418,17 +351,17 @@ Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzTimestamp) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
-    const auto europe = pb.NewDataLiteral<ui16>(459U);
-    const auto canada = pb.NewDataLiteral<ui16>(375U);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
+    const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
+    const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto value2 = i64(1LL); // 1 Microsecond
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&value2, sizeof(value2)));
 
-    const auto day1 = pb.ToIntegral(pb.NewDataLiteral<ui64>(123), dateType);
-    const auto day2 = pb.ToIntegral(pb.NewDataLiteral<ui64>(123 + 5), dateType);
-    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, europe), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
-    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, canada), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0);
+    const auto day1 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui64(123)), dateType);
+    const auto day2 = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, ui64(123 + 5)), dateType);
+    const auto date1 = pb.Unwrap(pb.AddTimezone(day1, europe), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    const auto date2 = pb.Unwrap(pb.AddTimezone(day2, canada), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
     const auto dates = pb.ListFromRange(date1, date2, step);
 
     const auto graph = setup.BuildGraph(dates);
@@ -447,21 +380,78 @@ Y_UNIT_TEST_LLVM(TestResverseUnsignedShorts) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto from = pb.NewDataLiteral<ui16>(60000U);
-    const auto to = pb.NewDataLiteral<ui16>(59990U);
-    const auto step = pb.NewDataLiteral<i16>(-2);
+    const auto from = NTest::ConvertValueToLiteralNode(pb, ui16(60000U));
+    const auto to = NTest::ConvertValueToLiteralNode(pb, ui16(59990U));
+    const auto step = NTest::ConvertValueToLiteralNode(pb, i16(-2));
 
-    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step)));
+    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step), {}));
 
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
-    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 5UL);
-    UNIT_ASSERT_VALUES_EQUAL(list.GetElement(0U).template Get<ui16>(), 60000U);
-    UNIT_ASSERT_VALUES_EQUAL(list.GetElement(1U).template Get<ui16>(), 59998U);
-    UNIT_ASSERT_VALUES_EQUAL(list.GetElement(2U).template Get<ui16>(), 59996U);
-    UNIT_ASSERT_VALUES_EQUAL(list.GetElement(3U).template Get<ui16>(), 59994U);
-    UNIT_ASSERT_VALUES_EQUAL(list.GetElement(4U).template Get<ui16>(), 59992U);
+    AssertUnboxedValueElementEqual(list, TVector<ui16>{60000U, 59998U, 59996U, 59994U, 59992U});
 }
+
+namespace {
+template <bool UseLLVM>
+void TestFloatStep(TSetup<UseLLVM>& setup, float startVal, float endVal, float stepVal, ui64 expectedLength) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto start = NTest::ConvertValueToLiteralNode(pb, startVal);
+    const auto end = NTest::ConvertValueToLiteralNode(pb, endVal);
+    const auto step = NTest::ConvertValueToLiteralNode(pb, stepVal);
+
+    const auto range = pb.ListFromRange(start, end, step);
+
+    const auto graph = setup.BuildGraph(range);
+    const auto list = graph->GetValue();
+    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), expectedLength);
+
+    TVector<float> vector(expectedLength);
+    for (size_t i = 0; i < expectedLength; ++i) {
+        vector[i] = startVal + i * stepVal;
+    }
+    AssertUnboxedValueElementEqual(list, vector);
+}
+} // namespace
+
+Y_UNIT_TEST_LLVM(TestFloatSmallStepNoInfiniteLoop) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0F, 2.0F, 1e-6F, 1000000);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatSmallNegativeStepNoInfiniteLoop) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 2.0F, 1.0F, -1e-6F, 1000000);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatNegativeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0F, 2.0F, -1e-8F, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithInfinityEnd) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 0.0F, INFINITY, 1.0F, 0);
+}
+Y_UNIT_TEST_LLVM(TestFloatWithNegativeInfinityStart) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -INFINITY, 2.0F, 1.0F, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithInfinityStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0F, 2.0F, INFINITY, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithExtraLargeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -0.0000000000000000000000000000000116082984F, 0.0000000000000000096245773F, 6925700880000000000000000000000.0F, 1);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithLargeNegativeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -0.000000000346562223F, -277088.812F, -23368489200000.0F, 1);
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLListFromRangeTest)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

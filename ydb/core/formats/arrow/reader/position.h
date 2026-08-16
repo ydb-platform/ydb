@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>

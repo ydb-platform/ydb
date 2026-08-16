@@ -2,10 +2,20 @@
 PRNG management routines, thin wrappers.
 """
 
+from __future__ import annotations
+
+import warnings
+
 from OpenSSL._util import lib as _lib
 
+warnings.warn(
+    "OpenSSL.rand is deprecated - you should use os.urandom instead",
+    DeprecationWarning,
+    stacklevel=3,
+)
 
-def add(buffer, entropy):
+
+def add(buffer: bytes, entropy: int) -> None:
     """
     Mix bytes from *string* into the PRNG state.
 
@@ -31,7 +41,7 @@ def add(buffer, entropy):
     _lib.RAND_add(buffer, len(buffer), entropy)
 
 
-def status():
+def status() -> int:
     """
     Check whether the PRNG has been seeded with enough data.
 

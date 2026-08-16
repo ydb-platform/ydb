@@ -430,6 +430,7 @@ new_compiler(mod_ty mod, PyObject *filename, PyCompilerFlags *pflags,
 {
     struct compiler *c = PyMem_Calloc(1, sizeof(struct compiler));
     if (c == NULL) {
+        PyErr_NoMemory();
         return NULL;
     }
     if (compiler_setup(c, mod, filename, pflags, optimize, arena) < 0) {
@@ -7844,6 +7845,7 @@ _PyCompile_CodeGen(PyObject *ast, PyObject *filename, PyCompilerFlags *pflags,
 {
     PyObject *res = NULL;
     PyObject *metadata = NULL;
+    PyObject *consts_list = NULL;
 
     if (!PyAST_Check(ast)) {
         PyErr_SetString(PyExc_TypeError, "expected an AST");
@@ -7870,7 +7872,7 @@ _PyCompile_CodeGen(PyObject *ast, PyObject *filename, PyCompilerFlags *pflags,
 
     metadata = PyDict_New();
     if (metadata == NULL) {
-        return NULL;
+        goto finally;
     }
 
     if (compiler_enter_anonymous_scope(c, mod) < 0) {
@@ -7889,7 +7891,6 @@ _PyCompile_CodeGen(PyObject *ast, PyObject *filename, PyCompilerFlags *pflags,
 
     SET_MATADATA_ITEM("name", umd->u_name);
     SET_MATADATA_ITEM("qualname", umd->u_qualname);
-    SET_MATADATA_ITEM("consts", umd->u_consts);
     SET_MATADATA_ITEM("names", umd->u_names);
     SET_MATADATA_ITEM("varnames", umd->u_varnames);
     SET_MATADATA_ITEM("cellvars", umd->u_cellvars);
@@ -7915,12 +7916,21 @@ _PyCompile_CodeGen(PyObject *ast, PyObject *filename, PyCompilerFlags *pflags,
     }
 
     if (_PyInstructionSequence_ApplyLabelMap(INSTR_SEQUENCE(c)) < 0) {
-        return NULL;
+        goto finally;
+    }
+    /* After add_return_at_end: const indices match final instruction stream. */
+    consts_list = consts_dict_keys_inorder(umd->u_consts);
+    if (consts_list == NULL) {
+        goto finally;
+    }
+    if (PyDict_SetItemString(metadata, "consts", consts_list) < 0) {
+        goto finally;
     }
     /* Allocate a copy of the instruction sequence on the heap */
     res = PyTuple_Pack(2, INSTR_SEQUENCE(c), metadata);
 
 finally:
+    Py_XDECREF(consts_list);
     Py_XDECREF(metadata);
     compiler_exit_scope(c);
     compiler_free(c);
@@ -7933,6 +7943,10 @@ _PyCompile_OptimizeCfg(PyObject *seq, PyObject *consts, int nlocals)
 {
     if (!_PyInstructionSequence_Check(seq)) {
         PyErr_SetString(PyExc_ValueError, "expected an instruction sequence");
+        return NULL;
+    }
+    if (!PyList_Check(consts)) {
+        PyErr_SetString(PyExc_TypeError, "consts must be a list");
         return NULL;
     }
     PyObject *const_cache = PyDict_New();

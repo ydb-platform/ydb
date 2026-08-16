@@ -1,4 +1,5 @@
 #pragma once
+#include "host.h"
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -7,13 +8,6 @@
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-using THostIndex = ui8;
-
-constexpr THostIndex InvalidHostIndex = 0xFF;
-constexpr size_t MaxHostCount = 32;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,14 +34,18 @@ public:
     static THostMask MakeEmpty();
     static THostMask MakeOne(THostIndex host);
     static THostMask MakeAll(size_t hostCount);
+    static THostMask MakeFromRoute(const THostRoute& route);
+    static THostMask MakeMask(std::initializer_list<THostIndex> hosts);
 
     void Set(THostIndex host);
     void Reset(THostIndex host);
+    void Update(THostIndex host, bool value);
     [[nodiscard]] bool Get(THostIndex host) const;
 
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t Count() const;
 
+    [[nodiscard]] THostMask LogicalNot() const;
     [[nodiscard]] THostMask LogicalAnd(THostMask other) const;
     [[nodiscard]] THostMask Include(THostMask other) const;
     [[nodiscard]] THostMask Exclude(THostMask other) const;
@@ -62,23 +60,17 @@ public:
 
     bool operator==(const THostMask& other) const = default;
 
+    bool operator<(const THostMask& other) const
+    {
+        return Bits < other.Bits;
+    }
+
     [[nodiscard]] TString Print() const;
 
 private:
     explicit THostMask(ui32 bits);
 
     ui32 Bits = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct THostRoute
-{
-    THostIndex SourceHostIndex = InvalidHostIndex;
-    THostIndex DestinationHostIndex = InvalidHostIndex;
-
-    bool operator==(const THostRoute& other) const = default;
-    bool operator<(const THostRoute& other) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

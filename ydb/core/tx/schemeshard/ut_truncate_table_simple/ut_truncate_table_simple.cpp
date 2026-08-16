@@ -14,8 +14,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
             Columns { Name: "id" Type: "Uint64" }
@@ -74,8 +72,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -136,8 +132,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -202,8 +196,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
-
         TestTruncateTable(runtime, ++txId, "/MyRoot", "NonExistentTable",
                          {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
@@ -213,8 +205,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -245,8 +235,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -356,8 +344,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"

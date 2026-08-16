@@ -30,7 +30,7 @@ namespace NKikimr::NDDisk {
             TString ToString() const;
         };
 
-        ui64 NextRequestId = 1;
+        ui64 NextRequestId;
         THashMap<ui64, TRequestInFlight> RequestsInFlight; // request_id -> TRequestInFlight
 
         TMap<TSegmentLocation, TRequestIt> SegmentsInFlight;
@@ -40,6 +40,9 @@ namespace NKikimr::NDDisk {
         void DropSegment(ui64 tabletId, ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated);
 
     public:
+        TSegmentManager();
+        explicit TSegmentManager(ui64 firstRequestId);
+
         ui64 GetSync(ui64 requestId); // return set of actual subsegments
         void PopRequest(ui64 requestId, std::vector<TSegment> *segments); // return set of actual subsegments
         void PushRequest(ui64 tabletId, ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated);

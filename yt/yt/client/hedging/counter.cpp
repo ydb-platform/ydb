@@ -17,6 +17,7 @@ TCounter::TCounter(
     : SuccessRequestCount(registry.Counter("/requests_success"))
     , CancelRequestCount(registry.Counter("/requests_cancel"))
     , ErrorRequestCount(registry.Counter("/requests_error"))
+    , TotalRequestCount(registry.Counter("/requests_total"))
     , EffectivePenalty(registry.TimeGauge("/effective_penalty"))
     , ExternalPenalty(registry.TimeGauge("/external_penalty"))
     , RequestDuration(
@@ -69,6 +70,13 @@ TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
     const NYPath::TYPath& tablePath,
     const std::vector<std::string>& clusterNames)
     : TLagPenaltyProviderCounters(LagPenaltyProviderProfiler.WithTag("table", tablePath), clusterNames)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+THedgingExecutorCounters::THedgingExecutorCounters(
+    const NProfiling::TTagSet& tagSet)
+    : HedgingRequestRatio(HedgingClientProfiler.WithTags(tagSet).Gauge("/hedging_request_ratio"))
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

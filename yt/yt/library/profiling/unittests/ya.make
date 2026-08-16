@@ -1,4 +1,4 @@
-GTEST()
+GTEST(unittester-library-profiling)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
@@ -7,16 +7,26 @@ IF (OS_LINUX)
 ENDIF()
 
 SRCS(
+    per_cpu_sensor_impl_ut.cpp
+    simple_sensor_impl_ut.cpp
     sensor_ut.cpp
     sensor_service_ut.cpp
     name_conflicts_ut.cpp
     profiler_ut.cpp
     solomon_ut.cpp
+    summary_ut.cpp
     tag_ut.cpp
     cube_ut.cpp
     encoder_ut.cpp
     exporter_ut.cpp
 )
+
+# The rseq-backed sensors exist only on Linux (see rseq_sensor_impl.h).
+IF (OS_LINUX)
+    SRCS(
+        rseq_sensor_impl_ut.cpp
+    )
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 

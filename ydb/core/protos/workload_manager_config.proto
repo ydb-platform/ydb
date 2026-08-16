@@ -14,5 +14,6 @@ message TWorkloadManagerConfig {
     optional double ResourceWeight = 7;
 
     // Memory
-    optional double QueryMemoryLimitPercentPerNode = 8;
+    optional double QueryMemoryLimitPercentPerNode = 8;  // RESERVED for future per-query enforcement, currently ignored
+    optional double TotalMemoryLimitPercentPerNode = 9;  // Pool-wide memory limit
 };

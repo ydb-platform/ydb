@@ -9,6 +9,8 @@
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -117,7 +119,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateConfigOpContext opCtx;
-        Self->ReplaceMainConfigMetadata(Config, false, opCtx);
+        Self->ReplaceMainConfigMetadata(Config, Force, opCtx);
         if (!Force) {
             Self->ValidateMainConfig(opCtx);
         }
@@ -134,6 +136,10 @@ public:
             Cluster = opCtx.Cluster;
             Modify = opCtx.UpdatedConfig != Self->MainYamlConfig || Self->YamlDropped;
 
+            // Snapshot unknown/deprecated fields detected at upload time so the UI can
+            // highlight them later without re-resolving the (expensive) config on each view.
+            BuildYamlConfigUnknownFields(opCtx.UnknownFields, opCtx.DeprecatedFields, UpdatedUnknownFields);
+
             if (IngressDatabase) {
                 WarnDatabaseBypass = true;
             }
@@ -146,7 +152,8 @@ public:
                     // set config dropped by default to support rollback to previous versions
                     // where new config layout is not supported
                     // it will lead to ignoring config from new versions
-                    .Update<Schema::YamlConfig::Dropped>(true);
+                    .Update<Schema::YamlConfig::Dropped>(true)
+                    .Update<Schema::YamlConfig::UnknownFields>(UpdatedUnknownFields.SerializeAsString());
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::YamlConfig>().Key(Version)
@@ -176,7 +183,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceMainYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceMainYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -194,6 +201,7 @@ public:
 
             Self->YamlVersion = Version + 1;
             Self->MainYamlConfig = UpdatedMainConfig;
+            Self->MainYamlConfigUnknownFields = std::move(UpdatedUnknownFields);
             Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
@@ -240,6 +248,7 @@ private:
     ui32 Version;
     TString Cluster;
     TString UpdatedMainConfig;
+    NKikimrConsole::TYamlConfigUnknownFields UpdatedUnknownFields;
 };
 
 class TConfigsManager::TTxReplaceDatabaseYamlConfig
@@ -265,7 +274,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateDatabaseConfigOpContext opCtx;
-        Self->ReplaceDatabaseConfigMetadata(Config, false, opCtx);
+        Self->ReplaceDatabaseConfigMetadata(Config, Force, opCtx);
         if (!Force) {
             Self->ValidateDatabaseConfig(opCtx);
         }
@@ -307,7 +316,7 @@ public:
                 DoInternalAudit(txc, ctx);
 
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::DatabaseYamlConfigs::Config>(Config);
+                    .Update<Schema::DatabaseYamlConfigs::Config>(UpdatedDatabaseConfig);
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version)
@@ -359,7 +368,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceDatabaseYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceDatabaseYamlConfig Complete");
 
         ctx.Send(Response.Release());
 

@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -12,12 +13,43 @@
 
 namespace NKikimr {
 
-bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
+bool ResolveConsumerServiceType(
+    const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQConfig& pqConfig,
+    bool checkServiceType,
+    TString& outServiceType,
+    TString& error)
+{
+    if (consumer.HasServiceType()) {
+        outServiceType = consumer.GetServiceType();
+        return true;
+    }
+    if (!checkServiceType) {
+        outServiceType = "";
+        return true;
+    }
+    if (pqConfig.GetDisallowDefaultClientServiceType()) {
+        error = "service type must be set for all read rules";
+        return false;
+    }
+    outServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+    return true;
+}
+
+bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
     out.set_name(consumerName);
+
+    // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+    if (const auto* readQuota = NPQ::GetReadQuota(config, in.GetName())) {
+        if (readQuota->HasSpeedInBytesPerSecond())
+            out.set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+        if (readQuota->HasSpeedInMessagesPerSecond())
+            out.set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+    }
     out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
     auto version = in.GetVersion();
     if (version != 0)
@@ -31,16 +63,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
     }
-    TString serviceType = "";
-    if (in.HasServiceType()) {
-        serviceType = in.GetServiceType();
-    } else if (checkServiceType) {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
+    TString serviceType;
+    if (!ResolveConsumerServiceType(in, pqConfig, checkServiceType, serviceType, error)) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        return false;
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
@@ -86,7 +112,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
 
-    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
     ConvertDirectoryEntry(inDirEntry, selfEntry, true);
@@ -198,6 +224,24 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         out.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
     }
 
+    // Total read speed for a single partition (across all consumers).
+    // An explicitly stored config value takes precedence over the computed value above.
+    if (partConfig.HasReadSpeedInBytesPerSecond()) {
+        out.set_partition_total_read_speed_bytes_per_second(partConfig.GetReadSpeedInBytesPerSecond());
+    }
+    if (partConfig.HasReadSpeedInMessagesPerSecond()) {
+        out.set_partition_total_read_speed_messages_per_second(partConfig.GetReadSpeedInMessagesPerSecond());
+    }
+
+    // Read speed for reading a single partition without a consumer is stored in
+    // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
+    if (const auto* readQuota = NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER)) {
+        if (readQuota->HasSpeedInBytesPerSecond())
+            out.set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+        if (readQuota->HasSpeedInMessagesPerSecond())
+            out.set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+    }
+
     for (const auto &codec : config.GetCodecs().GetIds()) {
         out.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
     }
@@ -220,7 +264,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
+        if (!FillConsumer(*out.add_consumers(), config, consumer, status, error)) {
             return false;
         }
     }

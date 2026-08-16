@@ -1,3 +1,4 @@
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -53,7 +54,7 @@ ui64 GetFailProbability() {
 }
 
 bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
-    if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+    if (currentLangVersion >= NYql::NFeature::ValidateRegexp.MinLangVer) {
         return true;
     }
     THashType hash = GetStringHash(regexp) % 100;
@@ -235,7 +236,7 @@ private:
                     anchor = RE2::ANCHOR_BOTH;
                     [[fallthrough]];
                 case GREP:
-                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, nullptr, 0));
+                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, /*submatch=*/nullptr, 0));
                 case CAPTURE: {
                     const int count = Regexp_->NumberOfCapturingGroups() + 1;
                     TUnboxedValue* items = nullptr;
@@ -397,7 +398,7 @@ template <bool posix>
 class TIsValidRegexp: public TBoxedValue {
 public:
     explicit TIsValidRegexp(const TOptionsSchema optionsSchema)
-        : OptionsSchema_(std::move(optionsSchema))
+        : OptionsSchema_(optionsSchema)
     {
     }
 

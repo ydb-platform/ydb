@@ -25,22 +25,26 @@ public:
             TActorId chunkKeeperId, ui32 appendBlockSize);
     void StartBuilding();
 
-    // Adds DoNotKeep flags from synclog if needed
-    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
-
     // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit
     // Note: in some obscure cases there may be two active builders simultaneously
     // It shouldn't make any difference though, we just add more flags
-    void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
-    void Recover(TPhantomFlagStorageSnapshot&& snapshot);
+    void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit,
+            ui64 blobSizeLimit);
+    void Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof);
     void Deactivate();
 
     // Read everything from storage
     void RequestSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
     bool IsActive() const;
+    bool IsPersistent() const;
+    TActorId GetProcessorId() const;
+    TPhantomFlagThresholds GetThresholdsCopy();
 
     // Process sync data from neighbours, we do it to update Thresholds
     void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
+
+    // Adds DoNotKeep flags from synclog if needed (non-persistent mode only)
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit, ui64 blobSizeLimit);
 
     ui64 EstimateFlagsMemoryConsumption() const;
     ui64 EstimateThresholdsMemoryConsumption() const;
@@ -51,8 +55,6 @@ public:
 
     std::optional<TPhantomFlagStorageData> GetPersistentData() const;
     void UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data);
-    void FlushWriteBufferIfNeeded();
-    void SyncLogIsCut();
     void Terminate();
 
 private:
@@ -64,9 +66,6 @@ private:
     void AdjustSize(ui64 sizeLimit);
     bool AddFlag(const TLogoBlobRec& blobRec);
 
-    void AddItemToWriteBuffer(const TPhantomFlagStorageItem& item);
-    void FlushWriteBuffer();
-
 private:
     TIntrusivePtr<TSyncLogCtx> SlCtx;
     const TBlobStorageGroupType GType;
@@ -74,21 +73,14 @@ private:
     TPhantomFlags StoredFlags;
     ui64 MaxFlagsStoredCount = 0;
     TSyncedMask SyncedMask;
+    ui64 BlobSizeLimit = 0;
     bool Active = false;
     bool Building = false;
 
     // persistent phantom flag storage
-    bool IsPersistent = false;
+    bool Persistent = false;
     TActorId ProcessorId;
-    std::vector<TPhantomFlagStorageItem> WriteBuffer;
-    ui32 WriteBufferSize = 0;
     std::optional<TPhantomFlagStorageData> PersistentData;
-    TMonotonic WriteBufferFlushTimestamp = TMonotonic::Zero();
-
-private:
-    // TODO: remove write buffer, use sync log
-    constexpr static ui32 WriteBufferSizeLimit = 1_MB;
-    constexpr static TDuration WriteBufferFlushPeriod = TDuration::Seconds(30);
 };
 
 } // namespace NSyncLog

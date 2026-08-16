@@ -52,7 +52,7 @@ private:
         }
 
         struct TAbortableInputStreamBufferTag { };
-        auto readBuffer = TSharedMutableRef::Allocate<TAbortableInputStreamBufferTag>(length);
+        auto readBuffer = TSharedMutableRef::Allocate<TAbortableInputStreamBufferTag>(length, {.InitializeStorage = false});
 
         auto future = UnderlyingStream_->Read(readBuffer);
         {

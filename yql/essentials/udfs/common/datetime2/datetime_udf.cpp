@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
@@ -117,16 +118,16 @@ TStringBuf GetSecondPolyArgType(ESecondPolyArg secondArg, bool wide) {
 TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
     TStringBuilder sb;
     sb << "[";
-    AddBoundaryResourcePolyArgs(true, sb, TMResourceName, GetSecondPolyArgType(secondArg, false));
-    AddBoundaryResourcePolyArgs(false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, true));
+    AddBoundaryResourcePolyArgs(/*first=*/true, sb, TMResourceName, GetSecondPolyArgType(secondArg, /*wide=*/false));
+    AddBoundaryResourcePolyArgs(/*first=*/false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, /*wide=*/true));
     TVector<std::pair<TStringBuf, TStringBuf>> plainDates;
     for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
         if (DataTypeInfos[i].Features & NUdf::ExtDateType) {
-            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, true)));
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, /*wide=*/true)));
         }
 
         if (DataTypeInfos[i].Features & (NUdf::DateType | NUdf::TzDateType)) {
-            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, false)));
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, /*wide=*/false)));
         }
     }
 
@@ -139,15 +140,15 @@ TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
 }
 
 template <typename Type>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     TTypePrinter(*typeInfoHelper, builder.SimpleType<Type>()).Out(strBuilder.Out);
 }
 
 template <typename Type, typename Head, typename... Tail>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     PrintTypeAlternatives<Type>(builder, typeInfoHelper, strBuilder);
     strBuilder << " or ";
@@ -155,8 +156,8 @@ static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
 }
 
 template <typename... Types>
-static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+                         ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     ::TStringBuilder sb;
     sb << "Invalid argument type: got ";
@@ -167,34 +168,34 @@ static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
     builder.SetError(sb);
 }
 
-static void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<
         TResource<TMResourceName>,
         TResource<TM64ResourceName>>(builder, typeInfoHelper, argType);
 }
 
-static void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<TInterval, TInterval64>(builder, typeInfoHelper, argType);
 }
 
 template <const char* TResourceName>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     strBuilder << "'" << TResourceName << "'";
 }
 
 template <const char* TResourceName, const char* Head, const char*... Tail>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     PrintTagAlternatives<TResourceName>(strBuilder);
     strBuilder << " or ";
     PrintTagAlternatives<Head, Tail...>(strBuilder);
 }
 
-static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  TStringRef tag)
+void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
+                           TStringRef tag)
 {
     ::TStringBuilder sb;
     sb << "Unexpected Resource tag: got '" << tag << "', but ";
@@ -277,7 +278,7 @@ public:
     }
 
     static TString BuildPolyArgs() {
-        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, /*full=*/true);
     }
 
     static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
@@ -1290,7 +1291,7 @@ TBlockItem TMakeDateKernelExec<TTzTimestamp>::Make(TTMStorage& storage, const IV
 BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TMResourceName>(args[0]);
-    return TUnboxedValuePod(storage.ToDate(builder, false));
+    return TUnboxedValuePod(storage.ToDate(builder, /*local=*/false));
 }
 END_SIMPLE_ARROW_UDF(TMakeDate, TMakeDateKernelExec<TDate>::Do);
 
@@ -1312,7 +1313,7 @@ BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResource
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TMResourceName>(args[0]);
     try {
-        TUnboxedValuePod result(storage.ToDate(builder, true));
+        TUnboxedValuePod result(storage.ToDate(builder, /*local=*/true));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
     } catch (const std::exception& e) {
@@ -1353,7 +1354,7 @@ SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMRes
 
 SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
     auto& storage = Reference<TM64ResourceName>(args[0]);
-    return TUnboxedValuePod(storage.ToDate32(valueBuilder->GetDateBuilder(), false));
+    return TUnboxedValuePod(storage.ToDate32(valueBuilder->GetDateBuilder(), /*local=*/false));
 }
 
 SIMPLE_STRICT_UDF(TMakeDatetime64, TDatetime64(TAutoMap<TResource<TM64ResourceName>>)) {
@@ -1370,7 +1371,7 @@ SIMPLE_STRICT_UDF(TMakeTzDate32, TTzDate32(TAutoMap<TResource<TM64ResourceName>>
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TM64ResourceName>(args[0]);
     try {
-        TUnboxedValuePod result(storage.ToDate32(builder, true));
+        TUnboxedValuePod result(storage.ToDate32(builder, /*local=*/true));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
     } catch (const std::exception& e) {
@@ -2873,11 +2874,11 @@ struct PrintNDigits {
 
 // Format
 
-static constexpr size_t OSize = sizeof("+0000") - 1;
-static constexpr size_t CSize = sizeof("+00:00") - 1;
+constexpr size_t OSize = sizeof("+0000") - 1;
+constexpr size_t CSize = sizeof("+00:00") - 1;
 
 template <bool WriteOffsetWithColon>
-static size_t PrintUTCOffset(char* out) {
+size_t PrintUTCOffset(char* out) {
     if constexpr (WriteOffsetWithColon) {
         std::memcpy(out, "+00:00", CSize);
         return CSize;
@@ -2888,7 +2889,7 @@ static size_t PrintUTCOffset(char* out) {
 }
 
 template <bool WriteOffsetWithColon>
-static size_t PrintTzOffset(char* out, i32 offset) {
+size_t PrintTzOffset(char* out, i32 offset) {
     Y_ENSURE(offset != 0);
     *out++ = offset > 0 ? '+' : '-';
     offset = std::abs(offset);
@@ -2940,7 +2941,17 @@ public:
         }
 
         size_t optionalArgs = 0;
-        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(2025, 5)) {
+        NYql::TLangVersion WriteOffsetWithColonAvailableSince;
+        TStringRef WriteOffsetWithColonRuntimeSetting(builder.GetRuntimeSetting(TStringRef::Of("MakeWriteOffsetWithColonAvailableSince")));
+        if (WriteOffsetWithColonRuntimeSetting.empty()) {
+            WriteOffsetWithColonAvailableSince = NYql::NFeature::WriteOffsetWithColon.MinLangVer;
+        } else {
+            if (!NYql::ParseLangVersion(WriteOffsetWithColonRuntimeSetting, WriteOffsetWithColonAvailableSince)) {
+                UdfTerminate((TStringBuilder() << "Runtime setting 'MakeWriteOffsetWithColonAvailableSince' is misconfigured").c_str());
+            }
+        }
+
+        if (builder.GetCurrentLangVer() >= WriteOffsetWithColonAvailableSince) {
             optionalArgs = 2;
             builder.OptionalArgs(optionalArgs).Args()->Add<char*>().Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds").Add<TOptional<bool>>().Name("WriteOffsetWithColon");
         } else {
@@ -3527,8 +3538,8 @@ private:
                     break;
                 }
                 case 'z':
-                    if (currentLangVersion < NYql::MakeLangVersion(2025, 5)) {
-                        throw yexception() << "%z specfifier is available since 2025.05";
+                    if (auto x = NYql::EnsureIsAvailableOn(currentLangVersion, NYql::EBackportCompatibleFeaturesMode::None, NYql::NFeature::DateTimeFormatZ); !x) {
+                        throw yexception() << x.error();
                     }
                     if (useTzNameScanner) {
                         throw yexception() << "%Z specifier is already used for parsing";
@@ -3741,7 +3752,7 @@ SIMPLE_MODULE(TDateTime2Module,
               TIntervalFromMinutes,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03),
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   NLegacy::TIntervalFromSeconds,
                   NActual::TIntervalFromSeconds>,
 
@@ -3791,7 +3802,7 @@ SIMPLE_MODULE(TDateTime2Module,
                                   SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03),
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
 

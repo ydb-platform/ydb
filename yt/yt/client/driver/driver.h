@@ -24,6 +24,8 @@
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 namespace NYT::NDriver {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,7 +40,7 @@ struct TDriverRequest
     TGuid Id;
 
     //! Command name to execute.
-    TString CommandName;
+    std::string CommandName;
 
     //! Stream used for reading command input.
     //! The stream must stay alive for the duration of #IDriver::Execute.
@@ -63,13 +65,13 @@ struct TDriverRequest
     std::optional<std::string> UserRemoteAddress;
 
     //! User token.
-    std::optional<TString> UserToken;
+    std::optional<std::string> UserToken;
 
     //! TVM service ticket.
-    std::optional<TString> ServiceTicket;
+    std::optional<std::string> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<std::string> LoggingTags;
+    NLogging::TLoggingTagList LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.
@@ -98,7 +100,7 @@ private:
 struct TCommandDescriptor
 {
     //! Name of the command.
-    TString CommandName;
+    std::string CommandName;
 
     //! Type of data expected by the command at #TDriverRequest::InputStream.
     NFormats::EDataType InputType;
@@ -132,15 +134,15 @@ struct IDriver
 
     //! Returns a descriptor for the command with a given name or
     //! Null if no command with this name is registered.
-    virtual std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const = 0;
+    virtual std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const = 0;
 
     //! Returns a descriptor for then command with a given name.
     //! Fails if no command with this name is registered.
-    TCommandDescriptor GetCommandDescriptor(const TString& commandName) const;
+    TCommandDescriptor GetCommandDescriptor(const std::string& commandName) const;
 
     //! Returns a descriptor for then command with a given name.
     //! Throws if no command with this name is registered.
-    TCommandDescriptor GetCommandDescriptorOrThrow(const TString& commandName) const;
+    TCommandDescriptor GetCommandDescriptorOrThrow(const std::string& commandName) const;
 
     //! Returns the list of descriptors for all supported commands.
     virtual const std::vector<TCommandDescriptor> GetCommandDescriptors() const = 0;

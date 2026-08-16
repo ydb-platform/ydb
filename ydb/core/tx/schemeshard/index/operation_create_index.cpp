@@ -147,9 +147,18 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                checks
-                    .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                    .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                if (internal && TTableIndexInfo::IsLocalIndex(tableIndexCreation.GetType())) {
+                    // Local indexes have no impl table. The parent may be under this same
+                    // operation (CREATE/ALTER) or steady (migration), so only reject
+                    // foreign concurrent operations.
+                    if (parentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
+                } else {
+                    checks
+                        .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                }
             } else {
                 checks.NotBackupTable(); // allow to create backup table with index, but not to build index on a backup table
             }
@@ -177,10 +186,14 @@ public:
             }
 
             if (checks) {
-                checks
-                    .PathsLimit()
-                    .IsValidLeafName(context.UserToken.Get())
-                    .IsValidACL(acl);
+                checks.PathsLimit();
+                if (!internal) {
+                    // Internal operations (e.g. index build auto-provisioning the unique index over
+                    // __ydb_row_id) may legitimately create system-prefixed index names that the
+                    // user-facing reserved-name check would reject.
+                    checks.IsValidLeafName(context.UserToken.Get());
+                }
+                checks.IsValidACL(acl);
             }
 
             if (!checks) {

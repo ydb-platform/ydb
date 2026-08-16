@@ -948,6 +948,9 @@ private:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
+        if (pdiskInfo.GetExpectedSlotSize()) {
+            return pdiskInfo.GetExpectedSlotSize();
+        }
         if (pdiskInfo.GetExpectedSlotCount()) {
             return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
         } else {
@@ -1012,9 +1015,6 @@ private:
             for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                 const NKikimrSysView::TGroupKey& key = entry.GetKey();
                 const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                if (TGroupID(key.GetGroupId()).ConfigurationType() == EGroupConfigurationType::Static) {
-                    continue; // ignore static groups
-                }
                 if (proxyGroups.count(key.GetGroupId())) {
                     continue; // ignore proxy groups
                 }

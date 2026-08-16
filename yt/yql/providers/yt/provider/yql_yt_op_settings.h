@@ -52,7 +52,7 @@ struct TSampleParams {
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial           /* "initial" */,
+    Initial                  /* "initial" */,
     InferScheme              /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
     ForceInferScheme         /* "force_infer_schema" "forceinferschema" */,
     DoNotFailOnInvalidSchema /* "do_not_fail_on_invalid_schema" */,
@@ -99,6 +99,7 @@ enum class EYtSettingType: ui64 {
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
+    ReplaceParentCache       /* "replaceParentCache" */,
     JobCount                 /* "jobCount" */,                 // hybrid supported
     JoinReduce               /* "joinReduce" */,               // hybrid supported
     FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported
@@ -109,14 +110,14 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
-    QLFilter                 /* "qlFilter" */,
-    // Out tables
-    UniqueBy                 /* "uniqueBy" */,
-    OpHash                   /* "opHash" */,
-    // Operations
     MapOutputType            /* "mapOutputType" */,            // hybrid supported
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
+    Transparent              /* "transparent" */,
+    PruneUnusedColumns       /* "prune_unused_columns" "pruneunusedcolumns" */,
+    // Out tables
+    UniqueBy                 /* "uniqueBy" */,
+    OpHash                   /* "opHash" */,
     // Read
     Split                    /* "split" */,
     // Write hints

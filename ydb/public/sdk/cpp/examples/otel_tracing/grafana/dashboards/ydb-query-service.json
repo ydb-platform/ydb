@@ -187,9 +187,96 @@
       ]
     },
     {
+      "type": "row",
+      "title": "SDK Metric Buffer (in-process batching)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }
+    },
+    {
+      "title": "Metric Buffer — Pending Increments (per type)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (instrument) (ydb_sdk_metric_buffer_pending_updates)",
+          "legendFormat": "{{instrument}}"
+        }
+      ]
+    },
+    {
+      "title": "Metric Buffer — Flush Duration p50/p95/p99 (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(ydb_sdk_metric_buffer_flush_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ydb_sdk_metric_buffer_flush_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ydb_sdk_metric_buffer_flush_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "Metric Buffer — Coalescing Ratio (events / flush)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(ydb_sdk_metric_buffer_events_buffered_total[$__rate_interval]) / clamp_min(rate(ydb_sdk_metric_buffer_flushes_total[$__rate_interval]), 1)",
+          "legendFormat": "events per flush"
+        }
+      ]
+    },
+    {
+      "title": "Metric Buffer — Flushes by Trigger (rps)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "bars", "fillOpacity": 30 },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (trigger) (rate(ydb_sdk_metric_buffer_flushes_total[$__rate_interval]))",
+          "legendFormat": "{{trigger}}"
+        }
+      ]
+    },
+    {
       "title": "Recent Traces",
       "type": "table",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 49 },
       "datasource": { "type": "jaeger", "uid": "${jaeger_ds}" },
       "targets": [
         {

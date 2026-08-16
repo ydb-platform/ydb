@@ -158,6 +158,24 @@ NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& f
     return filteredSchema;
 }
 
+class TSingularTypesVisitor : public TDefaultTypeAnnotationVisitor {
+public:
+    void Visit(const TVoidExprType&) override {
+        SingularTypeFlags_ |= NTCF_VOID;
+    }
+
+    void Visit(const TNullExprType&) override {
+        SingularTypeFlags_ |= NTCF_NULL;
+    }
+
+    ui64 SingularTypeFlags() const {
+        return SingularTypeFlags_;
+    }
+
+private:
+    ui64 SingularTypeFlags_ = 0ul;
+};
+
 }
 
 ui64 GetItemNativeYtTypeFlags(const TTypeAnnotationNode& type) {
@@ -395,7 +413,7 @@ bool TYqlRowSpecInfo::ParseFull(const NYT::TNode& rowSpecAttr, const THashMap<TS
 // 3. _infer_schema + schema(SortBy)
 // 4. _read_schema + schema(SortBy)
 // 5. schema
-bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContext& ctx, const TPositionHandle& pos) {
+bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, bool parseExpressionColumns, TExprContext& ctx, const TPositionHandle& pos) {
     *this = {};
     try {
         if (auto rowSpecAttr = attrs.FindPtr(YqlRowSpecAttribute)) {
@@ -418,6 +436,9 @@ bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContex
                 auto schema = NYT::NodeFromYsonString(*schemaAttr);
                 sortInfo = KeyColumnsFromSchema(schema);
                 MergeInferredSchemeWithSort(inferSchema, sortInfo);
+                if (parseExpressionColumns) {
+                    ExpressionColumns = GetExpressionColumnsFromSchema(schema);
+                }
             }
             auto schemaAsRowSpec = YTSchemaToRowSpec(inferSchema, schemaAttr ? &sortInfo : nullptr);
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
@@ -431,6 +452,9 @@ bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContex
             if (auto schemaAttr = attrs.FindPtr(SCHEMA_ATTR_NAME)) {
                 schema = NYT::NodeFromYsonString(*schemaAttr);
                 sortInfo = KeyColumnsFromSchema(schema);
+                if (parseExpressionColumns) {
+                    ExpressionColumns = GetExpressionColumnsFromSchema(schema);
+                }
             }
             auto schemaAsRowSpec = YTSchemaToRowSpec(readSchema, &sortInfo);
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
@@ -442,9 +466,13 @@ bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContex
                 ParseFlagsFromNativeSchema(YTSchemaToRowSpec(filteredSchema));
             }
         } else if (auto schema = attrs.FindPtr(SCHEMA_ATTR_NAME)) {
-            auto schemaAsRowSpec = YTSchemaToRowSpec(NYT::NodeFromYsonString(*schema));
+            auto schemaNode = NYT::NodeFromYsonString(*schema);
+            auto schemaAsRowSpec = YTSchemaToRowSpec(schemaNode);
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
                 return false;
+            }
+            if (parseExpressionColumns) {
+                ExpressionColumns = GetExpressionColumnsFromSchema(schemaNode);
             }
             ParseFlagsFromNativeSchema(schemaAsRowSpec);
         } else {
@@ -1280,9 +1308,15 @@ void TYqlRowSpecInfo::FillDefValues(NYT::TNode& attrs, const NCommon::TStructMem
 void TYqlRowSpecInfo::FillFlags(NYT::TNode& attrs) const {
     attrs[RowSpecAttrStrictSchema] = StrictSchema;
     attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags;
+
     // Backward compatibility. TODO: remove after releasing compatibility flags
     if (NativeYtTypeFlags != 0) {
         attrs[RowSpecAttrUseNativeYtTypes] = true;
+
+        // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
+        TSingularTypesVisitor visitor;
+        Type->Accept(visitor);
+        attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
     }
 }
 
@@ -1339,8 +1373,16 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const
         if (itemType->GetKind() == ETypeAnnotationKind::Data && itemType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
             patchedFields.insert(item->GetName());
         } else {
-            if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            const bool wasOptional = itemType->GetKind() == ETypeAnnotationKind::Optional;
+            if (wasOptional) {
                 itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            const bool singular = itemType->GetKind() == ETypeAnnotationKind::Void
+                || itemType->GetKind() == ETypeAnnotationKind::Null;
+            if (wasOptional && singular && !(NativeYtTypeFlags & NTCF_COMPLEX)) {
+                // Backward compatibility with old optional singulars behavior
+                patchedFields.insert(item->GetName());
+                continue;
             }
             auto flags = GetNativeYtTypeFlagsImpl(itemType);
             if (flags != (flags & NativeYtTypeFlags)) {

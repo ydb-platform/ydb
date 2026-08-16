@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA Greetings;
 PRAGMA Greetings("It's a good day!");
 PRAGMA WarningMsg("Ready to fight!");

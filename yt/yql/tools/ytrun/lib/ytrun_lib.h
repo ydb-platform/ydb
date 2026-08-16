@@ -42,6 +42,9 @@ protected:
     TString FmrJobBin_;
     TString FmrPoolName_;
     TString FmrCoordinatorUrl_;
+    TString CoordinatorYsonPath_;
+    TString WorkerYsonPath_;
+    TString FmrYtServerForUpload_;
     TYtTvmConfig TvmConfig_;
     TYtAccessProviderConfig AccessProviderConfig_;
 };

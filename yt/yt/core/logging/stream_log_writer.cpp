@@ -20,7 +20,7 @@ public:
     TStreamLogWriter(
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-        TString name,
+        std::string name,
         TLogWriterConfigPtr config,
         IOutputStream* stream)
         : TStreamLogWriterBase(
@@ -43,7 +43,7 @@ private:
 ILogWriterPtr CreateStreamLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TLogWriterConfigPtr config,
     IOutputStream* stream)
 {
@@ -60,7 +60,7 @@ ILogWriterPtr CreateStreamLogWriter(
 ILogWriterPtr CreateStderrLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TStderrLogWriterConfigPtr config)
 {
     return CreateStreamLogWriter(
@@ -85,7 +85,7 @@ public:
 
     ILogWriterPtr CreateWriter(
         std::unique_ptr<ILogFormatter> formatter,
-        TString name,
+        std::string name,
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* /*host*/) noexcept override
     {

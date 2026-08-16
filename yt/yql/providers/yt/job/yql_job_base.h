@@ -88,6 +88,9 @@ public:
 
 protected:
     NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr) const;
+    virtual bool NeedWriteStats() {
+        return true;
+    }
 
     void Init();
 

@@ -2,7 +2,9 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -14,13 +16,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadHint ArmLocks(TReadHint readHint)
-{
-    for (auto& hint: readHint.RangeHints) {
-        hint.Lock.Arm();
-    }
-    return readHint;
-}
+constexpr auto SlowRequestTime = TDuration::Seconds(1);
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace
 
@@ -28,20 +26,31 @@ TReadHint ArmLocks(TReadHint readHint)
 
 TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     NActors::TActorSystem const* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TReadHint readHint,
+    TReadRangeHint readHint,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "Read"},
+           {"lsn", readHint.Lsn},
+           {"r", request->Headers.Range},
+           {"vr", readHint.VChunkRange}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
-    , ReadHint(ArmLocks(std::move(readHint)))
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-{}
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
+    , SgList(Request->Sglist.CreateDepender())
+    , ReadHint(std::move(readHint))
+{
+    ReadHint.Lock.Arm();
+}
 
 TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
@@ -49,9 +58,8 @@ TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadSingleLocationRequestExecutor. Reply not sent %s %s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            "%s Reply not sent.",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -59,59 +67,19 @@ TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 
 void TReadSingleLocationRequestExecutor::Run()
 {
-    Y_ABORT_UNLESS(ReadHint.RangeHints.size() == 1);
+    StartAt = TInstant::Now();
+    ScheduleRequestTimeout();
 
-    const auto& hint = ReadHint.RangeHints[0];
+    StartReading();
+}
 
-    auto host = hint.HostMask.Nth(TryNumber);
-    if (!host) {
-        TString error = TStringBuilder()
-                        << "Can't read. Mask:" << hint.HostMask.Print()
-                        << " try:" << TryNumber;
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TReadSingleLocationRequestExecutor failed to find location %s %s "
-            "%s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str(),
-            error.c_str());
+TString TReadSingleLocationRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime() << " " << ExtendedDebugState() << " "
+           << (Promise.IsReady() ? ",Replied" : ",NotReplied");
 
-        Reply(MakeError(E_REJECTED, error));
-        return;
-    }
-
-    const bool fromDDisk = hint.Lsn == 0;
-
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TReadSingleLocationRequestExecutor %s %s. Reading from host %u (%s)",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str(),
-        static_cast<ui32>(*host),
-        fromDDisk ? "DDisk" : "PBuffer");
-
-    auto onReadResponse = [self = shared_from_this()]   //
-        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
-    {
-        self->OnReadResponse(f.GetValue());
-    };
-
-    auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
-                                  VChunkConfig.VChunkIndex,
-                                  *host,
-                                  hint.VChunkRange,
-                                  Request->Sglist,
-                                  TraceId)
-                            : DirectBlockGroup->ReadBlocksFromPBuffer(
-                                  VChunkConfig.VChunkIndex,
-                                  *host,
-                                  hint.Lsn,
-                                  hint.VChunkRange,
-                                  Request->Sglist,
-                                  TraceId);
-    future.Subscribe(std::move(onReadResponse));
+    return result;
 }
 
 NThreading::TFuture<IReadRequestExecutor::TResponse>
@@ -120,43 +88,243 @@ TReadSingleLocationRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
-void TReadSingleLocationRequestExecutor::OnReadResponse(
-    const TDBGReadBlocksResponse& response)
+void TReadSingleLocationRequestExecutor::StartReading()
 {
-    bool retriesLimitReached = TryNumber == 3;
-    if (!HasError(response.Error) || retriesLimitReached) {
-        if (retriesLimitReached) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "TReadSingleLocationRequestExecutor: read failed %s %s with "
-                "error '%s'",
-                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                Request->Headers.Range.Print().c_str(),
-                FormatError(response.Error).c_str());
-        }
-
-        Reply(response.Error);
+    if (Promise.IsReady()) {
         return;
     }
 
-    LOG_INFO(
+    auto candidates = ReadHint.HostMask.Exclude(Requested);
+
+    auto host = candidates.First();
+    if (!host) {
+        if (Requested == Failed) {
+            TStringBuilder message;
+            message << "Read from all available hosts failed. "
+                    << ExtendedDebugState();
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s %s",
+                LogTitle.GetWithTime().c_str(),
+                message.c_str());
+            Reply(MakeError(E_REJECTED, std::move(message)));
+        } else {
+            LOG_DEBUG(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Read started from all available hosts. %s",
+                LogTitle.GetWithTime().c_str(),
+                ExtendedDebugState().c_str());
+        }
+        return;
+    }
+    Requested.Set(*host);
+
+    const bool fromDDisk = ReadHint.Lsn == 0;
+
+    const size_t tryCount = Requested.Count();
+    NActors::NLog::EPriority printPriority =
+        tryCount == 1 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_TRACE;
+    if (!Failed.Empty()) {
+        printPriority = NActors::NLog::PRI_INFO;
+    }
+
+    LOG_LOG(
+        *ActorSystem,
+        printPriority,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will read from %s of %s, try %lu",
+        LogTitle.GetWithTime().c_str(),
+        fromDDisk ? "DDisk" : "PBuffer",
+        PrintHostAndNode(*host).c_str(),
+        tryCount);
+
+    ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
+        *host,
+        ReadHint.Lsn == 0 ? EDataLocation::DDisk : EDataLocation::PBuffer));
+
+    auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
+                                  VChunkConfig.GetVChunkIndex(),
+                                  *host,
+                                  ReadHint.VChunkRange,
+                                  SgList,
+                                  TraceId)
+                            : DirectBlockGroup->ReadBlocksFromPBuffer(
+                                  VChunkConfig.GetVChunkIndex(),
+                                  *host,
+                                  ReadHint.Lsn,
+                                  ReadHint.VChunkRange,
+                                  SgList,
+                                  TraceId);
+    future.Subscribe(
+        [self = shared_from_this(), host = *host]   //
+        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
+        {
+            self->OnReadResponse(host, f.GetValue());   //
+        });
+}
+
+void TReadSingleLocationRequestExecutor::OnReadResponse(
+    THostIndex host,
+    const TDBGReadBlocksResponse& response)
+{
+    if (!HasError(response.Error)) {
+        Reply(response.Error);
+        return;
+    }
+    Failed.Set(host);
+
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadSingleLocationRequestExecutor: OnReadResponse %s %s failed %d "
-        "trying with error '%s'",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str(),
-        TryNumber,
-        FormatError(response.Error).c_str());
+        "%s Response from %s: %s, %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(host).c_str(),
+        FormatError(response.Error).Quote().c_str(),
+        ExtendedDebugState().c_str());
 
-    ++TryNumber;
-    Run();
+    StartReading();
 }
 
 void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    const auto duration = TInstant::Now() - StartAt;
+    if (duration > SlowRequestTime) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s [?] Slow request %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+    }
+
+    if (HasError(error)) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s [!] Reply error: %s %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(error).Quote().c_str(),
+            ExtendedDebugState().c_str());
+    } else {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Reply OK %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+    }
+
+    ReadHint.Lock.Disarm();
+    SgList.Close();
+
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
+}
+
+void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
+{
+    if (!hedgingDelay) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnHedgingTimeout %s %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str(),
+        FormatDuration(hedgingDelay).c_str());
+
+    DirectBlockGroup->Schedule(
+        hedgingDelay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnHedgingTimeout();
+            }
+        });
+}
+
+void TReadSingleLocationRequestExecutor::ScheduleRequestTimeout()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnRequestTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatDuration(RequestTimeout).c_str());
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnRequestTimeout();
+            }
+        });
+}
+
+void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnHedgingTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str());
+
+    const bool allRetriesAreSpent = ReadHint.HostMask == Requested;
+    if (!allRetriesAreSpent) {
+        StartReading();
+    }
+}
+
+void TReadSingleLocationRequestExecutor::OnRequestTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRequestTimeout. %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str());
+
+    Reply(MakeError(E_TIMEOUT, "Request timeout"));
+}
+
+TString TReadSingleLocationRequestExecutor::ExtendedDebugState() const
+{
+    TStringBuilder result;
+    result << "a:" << ReadHint.HostMask.Print();
+    result << ",r:" << Requested.Print();
+    result << ",f:" << Failed.Print();
+    return result;
+}
+
+TString TReadSingleLocationRequestExecutor::PrintHostAndNode(
+    THostIndex host) const
+{
+    return PrintHostAndNodeId(host, DirectBlockGroup->GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -12,6 +12,10 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+RESOURCE(
+    word_break_test.json word_break_test.json
+)
+
 SRCS(
     blobstorage_grouptype_ut.cpp
     fulltext_ut.cpp
@@ -19,12 +23,12 @@ SRCS(
     localdb_ut.cpp
     logoblob_ut.cpp
     memory_stats_ut.cpp
+    mon_auth_ut.cpp
     path_ut.cpp
     state_storage_follower_ids_ut.cpp
     statestorage_guardian_impl_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp
-    json_index_ut.cpp
 )
 
 END()

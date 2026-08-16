@@ -71,8 +71,12 @@ INormalizerTask::TPtr TCleanInsertedPortionsNormalizer::BuildTask(
         }
     }
     auto taskResult = std::make_shared<TNormalizerResult>(std::move(insertedPortions));
-    ACFL_WARN("normalizer", "TCleanInsertedPortionsNormalizer")("message", taskResult->DebugString());
-    ACFL_WARN("normalizer", "TCleanInsertedPortionsNormalizer")("all portions", portions.size());
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanInsertedPortionsNormalizer"},
+        {"message", taskResult->DebugString()});
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanInsertedPortionsNormalizer"},
+        {"allPortions", portions.size()});
     return std::make_shared<TTrivialNormalizerTask>(taskResult);
 }
 

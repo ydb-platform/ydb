@@ -14,6 +14,7 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/forced_compaction.proto";
+import "ydb/core/protos/set_column_constraint.proto";
 import "ydb/core/protos/sys_view_types.proto";
 
 enum EIsolationLevel {
@@ -25,6 +26,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_SNAPSHOT_RO = 5;
     ISOLATION_LEVEL_SNAPSHOT_RW = 6;
     ISOLATION_LEVEL_READ_COMMITTED_RW = 7;
+    ISOLATION_LEVEL_STRICT_SERIALIZABLE = 8;
 };
 
 message TKqpPhyExternalBinding {
@@ -102,6 +104,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {
@@ -232,6 +237,9 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }
+
+    // Estimated number of rows to read, from query optimizer statistics.
+    double EstimatedRows = 9;
 }
 
 message TKqpPhyCnUnionAll {
@@ -321,6 +329,8 @@ message TKqpPhyCnStreamLookup {
     bool IsTableImmutable = 10;
     TKqpPhyVectorTopK VectorTopK = 11;
     repeated string InputColumns = 12;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    uint32 CookieFormatVersion = 13;
 }
 
 message TKqpPhyCnVectorResolve {
@@ -336,6 +346,24 @@ message TKqpPhyCnVectorResolve {
     optional uint32 RootClusterColumnIndex = 10;
     optional uint32 OverlapClusters = 11;
     optional double OverlapRatio = 12;
+}
+
+message TKqpPhyCnVectorSearch {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;          // Main table
+    TKqpPhyTableId LevelTable = 3;     // indexImplLevelTable
+    TKqpPhyTableId PostingTable = 4;   // indexImplPostingTable
+    repeated string Columns = 5;       // Output columns requested from the main table
+    bytes InputType = 6;               // Serialized MiniKQL item type of the target vector input
+    bytes OutputType = 7;              // Serialized MiniKQL item type of the output row
+    TKqpPhyValue TopK = 8;             // LIMIT (top-K); literal or query parameter
+    uint32 LevelTop = 9;               // KMeansTreeSearchTopSize
+    uint32 OverlapClusters = 10;
+    uint32 Levels = 11;                // Number of KMeans tree levels
+    uint32 VectorColumnIndex = 12;     // Index of the embedding column in Columns
+    // Prefixed index: the transform input carries, per prefix group, the root
+    // __ydb_parent id alongside the target vector.
+    bool HasPrefix = 13;
 }
 
 message TKqpPhyCnSequencer {
@@ -373,6 +401,15 @@ message TKqpPhyCnDqSourceStreamLookup {
     uint64 MaxDelayedRows = 14;
     bool IsMultiGet = 15;
     bool IsMultiMatches = 16;
+    optional uint64 FullscanLimit = 17;
+
+    enum EShuffleMode {
+        DEFAULT = 0;
+        OFF = 1;
+        MAP = 2;
+        HASH = 3;
+    }
+    EShuffleMode ShuffleMode = 18;
 }
 
 message TKqpPhyConnection {
@@ -395,6 +432,7 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
+        TKqpPhyCnVectorSearch VectorSearch = 18;
     };
 }
 
@@ -402,6 +440,9 @@ enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
     EKqpFullTextJson = 2;
+    EKqpFullTextCompact = 3;
+    EKqpFullTextCompactRelevance = 4;
+    EKqpFullTextJsonCompact = 5;
 }
 
 message TKqpFullTextSource {
@@ -416,6 +457,14 @@ message TKqpFullTextSource {
 
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated TQueryToken Tokens = 3;
+
+        // Equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Each value is a literal or $param expression resolved at task build time.
+        message TPrefixColumn {
+            optional NKikimrKqp.TKqpColumnMetadataProto Column = 1;
+            optional TKqpPhyValue Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -445,6 +494,10 @@ message TKqpFullTextSource {
     TKqpPhyValue Mode = 14;
 
     optional EKqpFullTextIndexType IndexType = 15;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 16;
 }
 
 message TKqpReadRangesSource {
@@ -561,6 +614,8 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    // Estimated number of rows produced by this stage, from query optimizer statistics.
+    double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
 }
@@ -657,7 +712,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
-        NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
+        NKikimrSetColumnConstraint.TSetColumnConstraintSettings SetColumnConstraint = 55;
         NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 56;
         NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 57;
         NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 58;
@@ -740,12 +795,12 @@ message TKqpPhyQuery {
 
     repeated TKqpTableInfo ViewInfos = 11;
 
-    optional bool EnableOltpSink = 12;
+    reserved 12;
     optional bool EnableOlapSink = 13;
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
     optional bool DisableCheckpoints = 17;
-    optional bool EnableWatermarks = 18;
+    optional bool EnableWatermarks = 18  [deprecated=true];
     optional EIsolationLevel DefaultTxMode = 19;
 }

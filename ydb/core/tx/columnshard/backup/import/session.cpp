@@ -17,8 +17,8 @@ void TSession::Finish() {
     Status = EStatus::Finished;
 }
 
-const TInternalPathId TSession::GetInternalPathId() const {
-    return Task->GetInternalPathId();
+const NColumnShard::TSchemeShardLocalPathId TSession::GetSchemeShardLocalPathId() const {
+    return Task->GetSchemeShardLocalPathId();
 }
 
 const TImportTask &TSession::GetTask() const {
@@ -30,7 +30,11 @@ bool TSession::IsStarted() const {
 }
 
 void TSession::Abort(const TString &errorMessage) {
-    AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
+    if (Status == EStatus::Finished || Status == EStatus::Aborted) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "import_session_abort_ignored")("status", (ui64)Status)(
+            "message", "import session is already in terminal state");
+        return;
+    }
     Status = EStatus::Aborted;
     ErrorMessage = errorMessage;
 }

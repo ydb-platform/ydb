@@ -3,7 +3,9 @@
 #include "yql_opt_proposed_by_data.h"
 #include "yql_linear_checker.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -149,7 +151,7 @@ public:
                     YQL_CLOG(INFO, CoreExecution) << "Rewrite node #" << item.Node->UniqueId() << " to #" << callableOutput->UniqueId()
                         << " in ApplyAsyncChanges()";
                     NewNodes_[item.Node] = callableOutput;
-                    combinedStatus = combinedStatus.Combine(TStatus(TStatus::Repeat, true));
+                    combinedStatus = combinedStatus.Combine(TStatus(TStatus::Repeat, /*hasRestart=*/true));
                     FinishNode(item.DataProvider->GetName(), *item.Node, *callableOutput);
                 }
             }
@@ -243,7 +245,7 @@ public:
         case TExprNode::EState::TypeComplete:
         case TExprNode::EState::ConstrInProgress:
         case TExprNode::EState::ConstrPending:
-            return TStatus(TStatus::Repeat, true);
+            return TStatus(TStatus::Repeat, /*hasRestart=*/true);
         case TExprNode::EState::ExecutionInProgress:
             return TStatus::Async;
         case TExprNode::EState::ExecutionPending:
@@ -254,7 +256,7 @@ public:
         case TExprNode::EState::ExecutionComplete:
             YQL_ENSURE(output->HasResult());
             OnNodeExecutionComplete(output, ctx);
-            return changed ? TStatus(TStatus::Repeat, true) : TStatus(TStatus::Ok);
+            return changed ? TStatus(TStatus::Repeat, /*hasRestart=*/true) : TStatus(TStatus::Ok);
         case TExprNode::EState::Error:
             return TStatus::Error;
         default:
@@ -283,7 +285,7 @@ public:
                     YQL_ENSURE(body->HasResult());
                 } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
                     output->SetState(TExprNode::EState::ExecutionPending);
-                    FreshPendingNodes_.push_back(output.Get());
+                    FreshPendingNodes_.emplace_back(output.Get());
                 }
                 return status;
             } else {
@@ -310,7 +312,7 @@ public:
                     output->SetState(TExprNode::EState::ExecutionPending);
                     status = ExecuteChildren(output, output, ctx, depth + 1);
                     if (TExprNode::EState::ExecutionPending == output->GetState()) {
-                        FreshPendingNodes_.push_back(output.Get());
+                        FreshPendingNodes_.emplace_back(output.Get());
                     }
                     if (status.Level != TStatus::Repeat) {
                         return status;
@@ -980,7 +982,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
             return true;
         };
-        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
+        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile", "WatermarkGenerator"};
         static const THashSet<TStringBuf> NoExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;
@@ -993,7 +995,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             });
         }
 
-        if (!hasErrors && types.LangVer >= MakeLangVersion(2025, 4)) {
+        if (!hasErrors && IsAvailable(NFeature::LinearTypes, types)) {
             hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 

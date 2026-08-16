@@ -24,3 +24,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    trivial_reader
+)

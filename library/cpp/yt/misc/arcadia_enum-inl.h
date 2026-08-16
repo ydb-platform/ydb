@@ -33,7 +33,7 @@ struct TArcadiaEnumTraitsImpl
     static std::optional<T> FindValueByLiteral(TStringBuf literal)
     {
         static const auto LiteralToValue = [] {
-            THashMap<TString, T> result;
+            THashMap<std::string, T> result;
             for (const auto& [value, name] : GetEnumNames<T>()) {
                 result.emplace(name, value);
             }

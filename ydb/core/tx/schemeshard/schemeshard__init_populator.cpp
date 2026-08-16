@@ -9,6 +9,22 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+static bool IsUnderOrphanPlaceholder(const TSchemeShard* self, TPathElement::TPtr path) {
+    for (TPathElement::TPtr cur = path; ; ) {
+        if (cur->IsOrphanPlaceholder) {
+            return true;
+        }
+        if (cur->PathId == self->RootPathId()) {
+            return false;
+        }
+        auto parentIt = self->PathsById.find(cur->ParentPathId);
+        if (parentIt == self->PathsById.end()) {
+            return false;
+        }
+        cur = parentIt->second;
+    }
+}
+
 struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     using TDescription = NSchemeBoard::TTwoPartDescription;
 
@@ -43,6 +59,10 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
             }
 
             if (!Self->PathIsActive(pathId)) {
+                continue;
+            }
+
+            if (Self->HasOrphanPlaceholders && IsUnderOrphanPlaceholder(Self, pathEl)) {
                 continue;
             }
 

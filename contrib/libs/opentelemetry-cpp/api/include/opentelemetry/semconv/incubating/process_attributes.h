@@ -92,8 +92,16 @@ static constexpr const char *kProcessExecutableBuildIdGnu = "process.executable.
 static constexpr const char *kProcessExecutableBuildIdGo = "process.executable.build_id.go";
 
 /**
-  Profiling specific build ID for executables. See the OTel specification for Profiles for more
-  information.
+  Deterministic build ID for executables.
+  <p>
+  GNU and Go build IDs may be stripped or unavailable in some environments
+  (e.g., Alpine Linux, Docker images). This attribute provides a deterministic
+  build ID computed by hashing the first and last 4096 bytes of the file
+  along with its length:
+  @verbatim Input   ← Concat(File[:4096], File[-4096:], BigEndianUInt64(Len(File)))
+  Digest  ← SHA256(Input)
+  BuildID ← Digest[:16] @endverbatimThe result is the first 16 bytes (128 bits) of the SHA256
+  digest, represented as a hex string.
  */
 static constexpr const char *kProcessExecutableBuildIdHtlhash =
     "process.executable.build_id.htlhash";

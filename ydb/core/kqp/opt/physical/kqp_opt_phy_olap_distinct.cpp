@@ -1,6 +1,9 @@
 #include "kqp_opt_phy_rules.h"
 
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -475,7 +478,7 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
     return RebuildCombineInputReplacingBlockRead(combineInput, read, newRead, ctx, pos);
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (node.Maybe<TDqPhyHashCombine>()) {
@@ -772,7 +775,7 @@ void EmitOlapDistinctFallbackMismatchIfNeeded(const TExprNode::TPtr& root, TExpr
     ));
 }
 
-} // namespace
+} // anonymous namespace
 
 bool KqpValidateOlapForceDistinctCombinesPragmaOnRoot(const TExprNode::TPtr& root, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)

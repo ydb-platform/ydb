@@ -17,5 +17,7 @@ RECURSE(
     yql_complete
     yql_facade_run
     yql_highlight
+    yql_language_server
     yql_linter
+    ysondiff
 )

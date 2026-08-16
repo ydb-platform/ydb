@@ -17,7 +17,7 @@
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): просмотр разрешений на объекты базы данных.
 - Генерация DDL-скриптов ([`CREATE`](../../yql/reference/syntax/create_table/index.md)) для любого объекта базы данных.
 - Управление [потоковыми запросами](../../concepts/glossary.md#streaming-query): просмотр, запуск, остановка.
-- [Конвертер SQL-запросов](../sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
+- [Конвертер SQL-запросов](../sql-translation/sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
 - Встроенный [MCP-сервер](#mcp) — прямой доступ к базам данных из AI-ассистентов (Claude Code и других).
 - [Семантический поиск по документации YQL](#rag) (RAG) для AI-assisted написания запросов.
 
@@ -220,7 +220,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 1. Нажмите **Convert**. Результат появится в нижнем поле.
 1. Скопируйте результат для использования в редакторе YQL.
 
-Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-dialect-converter.md).
+Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-translation/sql-dialect-converter.md).
 
 {% note warning %}
 

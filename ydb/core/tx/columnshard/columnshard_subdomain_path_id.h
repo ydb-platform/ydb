@@ -16,6 +16,7 @@ class TSpaceWatcher: public TActorBootstrapped<TSpaceWatcher> {
     std::optional<NKikimr::TLocalPathId> SubDomainPathId;
     std::optional<NKikimr::TLocalPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    bool SubDomainSmallBlobsQuotaExceeded = false;
 
 public:
     friend class TColumnShard;

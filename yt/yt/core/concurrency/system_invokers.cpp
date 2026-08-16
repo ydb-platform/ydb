@@ -1,6 +1,6 @@
 #include "system_invokers.h"
 #include "action_queue.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "single_queue_scheduler_thread.h"
 
 #include <yt/yt/core/misc/shutdown.h>

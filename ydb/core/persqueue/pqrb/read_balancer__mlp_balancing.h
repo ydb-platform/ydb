@@ -6,6 +6,19 @@ namespace NKikimr::NPQ::NBalancing {
 
 class TMLPBalancer;
 
+struct TNextPartitionPersistChanges {
+    std::optional<TReceiveAttemptPartitionUpsert> Upsert;
+    std::vector<TReceiveAttemptPartitionDelete> Deletes;
+};
+
+struct TPrepareGetPartitionResponse {
+    bool IsError = false;
+    Ydb::StatusIds::StatusCode ErrorStatus = Ydb::StatusIds::SUCCESS;
+    TString ErrorMessage;
+    const TPartitionGraph::Node* Node = nullptr;
+    TNextPartitionPersistChanges PersistChanges;
+};
+
 class TMLPConsumer {
 public:
     struct TMetrics {
@@ -15,12 +28,17 @@ public:
     };
 
 public:
-    explicit TMLPConsumer(TMLPBalancer& balancer);
+    explicit TMLPConsumer(TMLPBalancer& balancer, const TString& consumerName);
 
-    const TPartitionGraph::Node* NextPartition();
+    // When receiveAttemptId is set, repeated calls with the same id return the same
+    // partition (kept in a persisted map) so that SQS FIFO replay reads hit one partition.
+    TPrepareGetPartitionResponse PrepareGetPartitionResponse(const TString& receiveAttemptId, TInstant now);
 
-    const NKikimrPQ::TPQTabletConfig& GetConfig() const;
-    const TPartitionGraph& GetPartitionGraph() const;
+    void RestoreReceiveAttemptPartition(const TString& receiveAttemptId, ui32 partitionId, TInstant expiry);
+    std::vector<TReceiveAttemptPartitionDelete> CollectExpiredReceiveAttemptPartitions(TInstant now);
+    std::vector<TReceiveAttemptPartitionDelete> ExtractReceiveAttemptPartitions();
+
+    const TMetrics& GetMetrics() const;
 
     bool SetUseForReading(
         ui32 partitionId,
@@ -32,13 +50,26 @@ public:
     );
     void Rebuild();
 
-    const TMetrics& GetMetrics() const;
+    const NKikimrPQ::TPQTabletConfig& GetConfig() const;
+    const TPartitionGraph& GetPartitionGraph() const;
 
 private:
+    TDuration GetReceiveAttemptIdPeriod() const;
+    TReceiveAttemptPartitionDelete MakeDeleteKey(const TString& receiveAttemptId) const;
+    const TPartitionGraph::Node* PickNextPartition();
+
     const TMLPBalancer& Balancer;
+    const TString ConsumerName;
 
     ui32 PartitionIterator = 0;
     std::vector<ui32> PartitionsForBalancing;
+
+    // Mapping of SQS FIFO receive-request-attempt-id to the partition it was routed to.
+    struct TReceiveAttemptPartition {
+        ui32 PartitionId = 0;
+        TInstant Expiry;
+    };
+    absl::flat_hash_map<TString, TReceiveAttemptPartition> ReceiveAttemptPartitions;
 
     struct TPartitionStatus {
         ui64 Cookie = 0;
@@ -57,14 +88,26 @@ class TMLPBalancer {
 public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
-    void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
+    TPrepareGetPartitionResponse PrepareGetPartitionResponse(
+        const TString& consumerName,
+        const TString& receiveAttemptId,
+        TInstant now
+    );
+    void RestoreReceiveAttemptPartition(
+        const TString& consumerName,
+        const TString& receiveAttemptId,
+        ui32 partitionId,
+        TInstant expiry
+    );
+    std::vector<TReceiveAttemptPartitionDelete> CollectExpiredReceiveAttemptPartitions(TInstant now);
+
     void Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr&);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr&, const TActorContext&);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
 
-    void UpdateConfig(const std::vector<ui32>& addedPartitions);
+    std::vector<TReceiveAttemptPartitionDelete> UpdateConfig(const std::vector<ui32>& addedPartitions);
 
     void SetUseForReading(const TString& consumerName,
                           ui32 partitionId,

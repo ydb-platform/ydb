@@ -6,18 +6,21 @@
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(_WIN32)
 // Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.
 //
-// Licensed under the OpenSSL license (the "License").  You may not use
-// this file except in compliance with the License.  You can obtain a copy
-// in the file LICENSE in the source distribution or at
-// https://www.openssl.org/source/license.html
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 // ====================================================================
 // Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
-// project. The module is, however, dual licensed under OpenSSL and
-// CRYPTOGAMS licenses depending on where you obtain it. For further
-// details see http://www.openssl.org/~appro/cryptogams/.
-//
-// Permission to use under GPLv2 terms is granted.
+// project.
 // ====================================================================
 //
 // SHA256/512 for ARMv8.
@@ -43,10 +46,6 @@
 //	indication of some compiler "pathology", most notably code
 //	generated with -mgeneral-regs-only is significantly faster
 //	and the gap is only 40-90%.
-
-#ifndef	__KERNEL__
-# include <contrib/restricted/google/boringssl/include/openssl/arm_arch.h>
-#endif
 
 .text
 
@@ -1077,111 +1076,111 @@ Loop_hw:
 	orr	v19.16b,v1.16b,v1.16b
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v4.4s
-.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+.long	0x5e2828a4	//sha256su0 v4.4s,v5.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.4s,v6.4s,v7.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v5.4s
-.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+.long	0x5e2828c5	//sha256su0 v5.4s,v6.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.4s,v7.4s,v4.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v6.4s
-.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+.long	0x5e2828e6	//sha256su0 v6.4s,v7.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e056086	//sha256su1 v6.4s,v4.4s,v5.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v7.4s
-.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+.long	0x5e282887	//sha256su0 v7.4s,v4.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.4s,v5.4s,v6.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v4.4s
-.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+.long	0x5e2828a4	//sha256su0 v4.4s,v5.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.4s,v6.4s,v7.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v5.4s
-.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+.long	0x5e2828c5	//sha256su0 v5.4s,v6.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.4s,v7.4s,v4.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v6.4s
-.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+.long	0x5e2828e6	//sha256su0 v6.4s,v7.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e056086	//sha256su1 v6.4s,v4.4s,v5.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v7.4s
-.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+.long	0x5e282887	//sha256su0 v7.4s,v4.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.4s,v5.4s,v6.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v4.4s
-.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+.long	0x5e2828a4	//sha256su0 v4.4s,v5.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.4s,v6.4s,v7.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v5.4s
-.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+.long	0x5e2828c5	//sha256su0 v5.4s,v6.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.4s,v7.4s,v4.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v6.4s
-.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+.long	0x5e2828e6	//sha256su0 v6.4s,v7.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
-.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
+.long	0x5e056086	//sha256su1 v6.4s,v4.4s,v5.4s
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v7.4s
-.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+.long	0x5e282887	//sha256su0 v7.4s,v4.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
-.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.4s,v5.4s,v6.4s
 	ld1	{v17.4s},[x3],#16
 	add	v16.4s,v16.4s,v4.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
 
 	ld1	{v16.4s},[x3],#16
 	add	v17.4s,v17.4s,v5.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
 
 	ld1	{v17.4s},[x3]
 	add	v16.4s,v16.4s,v6.4s
 	sub	x3,x3,#64*4-16	// rewind
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
-.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e104020	//sha256h q0,q1,v16.4s
+.long	0x5e105041	//sha256h2 q1,q2,v16.4s
 
 	add	v17.4s,v17.4s,v7.4s
 	orr	v2.16b,v0.16b,v0.16b
-.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
-.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e114020	//sha256h q0,q1,v17.4s
+.long	0x5e115041	//sha256h2 q1,q2,v17.4s
 
 	add	v0.4s,v0.4s,v18.4s
 	add	v1.4s,v1.4s,v19.4s

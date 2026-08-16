@@ -774,8 +774,8 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
-    if (settings->_MinJobStateSizeToPassViaFile.Get().Defined()) {
-        opOpts.MinJobStateSizeToPassViaFile(*settings->_MinJobStateSizeToPassViaFile.Get());
+    if (auto minSize = settings->_MinJobStateSizeToPassViaFile.Get().GetOrElse(DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE)) {
+        opOpts.MinJobStateSizeToPassViaFile(minSize);
     }
     if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);

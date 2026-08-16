@@ -7,6 +7,8 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
 
+#include <yt/yql/providers/yt/fmr/test_utils/yql_yt_file_test_utils.h>
+
 #include <util/stream/file.h>
 
 using namespace NYql::NFmr;
@@ -34,7 +36,7 @@ Y_UNIT_TEST_SUITE(UtilHelperTests) {
         ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();
 
-        const TString outputYsonContent = TFileInput(outputFile.Name()).ReadAll();
+        const TString outputYsonContent = NYql::NFmr::ReadFileWithSplittedSupport(outputFile.Name());
         UNIT_ASSERT_NO_DIFF(
             GetTextYson(GetBinaryYson(outputYsonContent)),
             GetTextYson(GetBinaryYson(inputYsonContent))

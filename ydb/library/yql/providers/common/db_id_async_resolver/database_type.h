@@ -19,6 +19,7 @@ enum class EDatabaseType {
     Oracle,
     Logging,
     Solomon,
+    MoniumMetrics /* "Monium.Metrics" */,
     Iceberg,
     Redis,
     Prometheus,

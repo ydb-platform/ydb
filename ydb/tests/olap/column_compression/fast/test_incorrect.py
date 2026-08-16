@@ -181,25 +181,3 @@ class TestIncorrectCompression(object):
             )
 
         assert "Column Compression is not supported in row tables" in ex.value.message
-
-    def test_tablestore(self):
-        table_path = f"{self.test_dir}/create_tablestore"
-        with pytest.raises(ydb.issues.Error) as ex:
-            self.ydb_client.query(
-                f"""
-                CREATE TABLESTORE `{table_path}` (
-                    id Uint64 NOT NULL,
-                    val Int64 FAMILY fam1,
-                    PRIMARY KEY(id),
-                    Family default (
-                        COMPRESSION = "lz4"
-                    ),
-                    Family fam1 (
-                        COMPRESSION = "zstd"
-                    ),
-                )
-                WITH (STORE = COLUMN);
-                """
-            )
-
-        assert "TableStore does not support column families" in ex.value.message

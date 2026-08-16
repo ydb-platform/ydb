@@ -5,9 +5,10 @@ The `DROP SECRET` statement deletes an existing [secret](../../../concepts/datam
 ## Syntax {#syntax}
 
 ```sql
-DROP SECRET secret_name
+DROP SECRET [IF EXISTS] secret_name
 ```
 
+* `IF EXISTS` — the statement does not return an error if the secret does not exist; in this case, it is a no-op.
 * `secret_name` — the name of the secret to delete.
 
 ## Permissions {#permissions}
@@ -20,6 +21,12 @@ Delete the secret named `secret_name`:
 
 ```sql
 DROP SECRET secret_name;
+```
+
+Delete the secret named `secret_name` only if it exists; if it does not exist, the statement is a no-op:
+
+```sql
+DROP SECRET IF EXISTS secret_name;
 ```
 
 ## See also {#see-also}

@@ -31,7 +31,7 @@ See the description of the command to init the data load:
 ### Available parameters {#init_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products. Valid values: between 1 and 500000. Default: 100. |
 | `--quantity <value>` | `-q <value>` | Quantity of each product in stock. Default: 1000. |
 | `--orders <value>` | `-o <value>` | Initial number of orders in the database. Default: 100. |
@@ -71,7 +71,7 @@ To run the load, execute the command:
 During this test, workload statistics for each time window are displayed on the screen.
 
 * `workload type`: The [types of workload](#workload_types).
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: Options of a specific load type.
 
 See the description of the command to run the data load:
@@ -79,21 +79,6 @@ See the description of the command to run the data load:
 ```bash
 {{ ydb-cli }} workload run --help
 ```
-
-### Global parameters for all types of load {#global_workload_options}
-
-| Parameter name | Short name | Parameter description |
----|---|---
-| `--seconds <value>` | `-s <value>` | Duration of the test, in seconds. Default: 10. |
-| `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default: 10. |
-| `--rate <value>` | - | Total rate for all threads, in transactions per second. Default: 0 (no rate limit). |
-| `--quiet` | - | Outputs only the total result. |
-| `--print-timestamp` | - | Print the time together with the statistics of each time window. |
-| `--client-timeout` | - | [Transport timeout in milliseconds](../../../../../dev/timeouts.md). |
-| `--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../dev/timeouts.md). |
-| `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../dev/timeouts.md). |
-| `--window` | - | Statistics collection window in seconds. Default: 1. |
-
 
 ## The user-hist workload {#get-customer-history}
 
@@ -117,13 +102,13 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload stock run user-hist [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: [Options of a specific load type](#customer_history_options).
 
 ### Parameters for user-hist {#customer_history_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
 ## The rand-user-hist workload {#get-random-customer-history}
@@ -148,13 +133,13 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload stock run rand-user-hist [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: [Options of a specific load type](#random_customer_history_options).
 
 ### Parameters for rand-user-hist {#random_customer_history_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
 ## The add-rand-order workload {#insert-random-order}
@@ -181,13 +166,13 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload stock run add-rand-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: [Options of a specific load type](#insert_random_order_options).
 
 ### Parameters for add-rand-order {#insert_random_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
 ## The put-rand-order workload {#submit-random-order}
@@ -238,13 +223,13 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload stock run put-rand-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: [Options of a specific load type](#submit_random_order_options).
 
 ### Parameters for put-rand-order {#submit_random_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
 ## The put-same-order workload {#submit-same-order}
@@ -295,13 +280,13 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload stock run put-same-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: The [global options for all types of load](#global_workload_options).
+* `global workload options`: [Global options for all types of load](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options`: [Options of a specific load type](#submit_same_order_options).
 
 ### Parameters for put-same-order {#submit_same_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products per order. Default: 100. |
 
 ## Examples of running the loads

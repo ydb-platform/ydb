@@ -5,6 +5,8 @@
 
 #include <ydb/library/formats/arrow/size_calcer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount,
@@ -36,6 +38,7 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
+    BsIndexBlobBytes = meta.GetBsIndexBlobBytes();
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -45,8 +48,11 @@ TPortionMeta TPortionMetaConstructor::Build() {
     static TAtomicCounter sumValuesMeta = 0;
     static TAtomicCounter countValues = 0;
     //    FirstAndLastPK->Reallocate();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
-        "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
+    YDB_LOG_DEBUG("",
+        {"memorySize", FirstAndLastPK->GetMemorySize()},
+        {"dataSize", FirstAndLastPK->GetDataSize()},
+        {"sum", sumValues.Add(FirstAndLastPK->GetMemorySize())},
+        {"count", countValues.Inc()});
     TMemoryProfileGuard mGuard("meta_construct/others", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
@@ -62,9 +68,14 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.ColumnBlobBytes = *TValidator::CheckNotNull(ColumnBlobBytes);
     result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
     result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
+    result.BsIndexBlobBytes = BsIndexBlobBytes;
     result.NumSlices = *TValidator::CheckNotNull(NumSlices);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result.GetMemorySize())("data_size", result.GetDataSize())(
-        "sum", sumValuesMeta.Add(result.GetMemorySize()))("count", countValues.Inc())("size_of_meta", sizeof(TPortionMeta));
+    YDB_LOG_DEBUG("",
+        {"memorySize", result.GetMemorySize()},
+        {"dataSize", result.GetDataSize()},
+        {"sum", sumValuesMeta.Add(result.GetMemorySize())},
+        {"count", countValues.Inc()},
+        {"sizeOfMeta", sizeof(TPortionMeta)});
 
     return result;
 }
@@ -85,6 +96,9 @@ bool TPortionMetaConstructor::LoadMetadata(
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
+    if (portionMeta.HasBsIndexBlobBytes()) {
+        BsIndexBlobBytes = portionMeta.GetBsIndexBlobBytes();
+    }
     NumSlices = portionMeta.HasNumSlices() ? portionMeta.GetNumSlices() : 1;
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(

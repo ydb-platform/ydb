@@ -105,6 +105,10 @@ public:
             insert({TSchema::WmExitTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 20
                 return info.GetWmExitTime() ? TCell::Make<ui64>(info.GetWmExitTime()) : TCell();
             }});
+
+            insert({TSchema::TraceId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 21
+                return info.HasTraceId() ? TCell(info.GetTraceId().data(), info.GetTraceId().size()) : TCell();
+            }});
         }
     };
 

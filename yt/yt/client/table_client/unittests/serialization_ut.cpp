@@ -1,6 +1,7 @@
 #include <yt/yt/client/table_client/constrained_schema.h>
 #include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/unversioned_row.h>
 
 #include <yt/yt/library/formats/format.h>
 
@@ -270,6 +271,49 @@ TEST(TLegacyOwningKeySerializationTest, CompositeKeys)
         }));
 
 #undef CHECK_SERIALIZE_DESERIALIZE
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TWireBufferSerializationTest, RoundTripAllTypesByPrefix)
+{
+    // A row covering every value type; the test runs on all its prefixes (including the empty one).
+    TUnversionedOwningRowBuilder builder;
+    builder.AddValue(MakeUnversionedInt64Value(-42, 0));
+    builder.AddValue(MakeUnversionedUint64Value(100500, 1));
+    builder.AddValue(MakeUnversionedDoubleValue(3.14, 2));
+    builder.AddValue(MakeUnversionedBooleanValue(true, 3));
+    builder.AddValue(MakeUnversionedStringValue("hello", 4));
+    builder.AddValue(MakeUnversionedAnyValue("[1;2]", 5));
+    builder.AddValue(MakeUnversionedCompositeValue("[3;4]", 6));
+    builder.AddValue(MakeUnversionedNullValue(7));
+    auto row = builder.FinishRow();
+
+    for (int prefixLength = 0; prefixLength <= row.GetCount(); ++prefixLength) {
+        SCOPED_TRACE(Format("prefixLength=%v", prefixLength));
+        TUnversionedValueRange range(row.begin(), row.begin() + prefixLength);
+
+        // SerializeRowToBuffer must produce exactly the same bytes as SerializeToString.
+        auto expected = SerializeToString(range);
+        std::vector<char> buffer(GetUnversionedRowByteSizeForWire(range));
+        char* end = SerializeRowToBuffer(buffer.data(), range);
+        EXPECT_EQ(TStringBuf(buffer.data(), end - buffer.data()), TStringBuf(expected));
+
+        // Read the row back from the buffer.
+        ui32 count;
+        const char* cur = ReadUnversionedRowHeaderFromBuffer(buffer.data(), &count);
+        ASSERT_EQ(count, range.size());
+        std::vector<TUnversionedValue> values(count);
+        for (ui32 i = 0; i < count; ++i) {
+            cur = ReadUnversionedValueFromBuffer(cur, &values[i]);
+        }
+        EXPECT_EQ(cur, end);
+        for (ui32 i = 0; i < count; ++i) {
+            EXPECT_EQ(values[i].Id, range[i].Id);
+            EXPECT_EQ(values[i].Type, range[i].Type);
+            EXPECT_EQ(CompareRowValues(values[i], range[i]), 0);
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

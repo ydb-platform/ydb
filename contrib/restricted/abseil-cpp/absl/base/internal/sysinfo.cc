@@ -50,6 +50,10 @@
 #include <zircon/process.h>
 #endif
 
+#if defined(__FREERTOS__)
+#include <task.h>
+#endif
+
 #include <string.h>
 
 #include <cassert>
@@ -244,8 +248,7 @@ static int64_t ReadMonotonicClockNanos() {
   int rc = clock_gettime(CLOCK_MONOTONIC, &t);
 #endif
   if (rc != 0) {
-    ABSL_INTERNAL_LOG(
-        FATAL, "clock_gettime() failed: (" + std::to_string(errno) + ")");
+    ABSL_RAW_LOG(FATAL, "clock_gettime() failed: (%d)", errno);
   }
   return int64_t{t.tv_sec} * 1000000000 + t.tv_nsec;
 }
@@ -464,6 +467,12 @@ pid_t GetTID() {
   // a kernel object ID (KOID) because zx_handle_t (32-bits) can be cast to a
   // pid_t type without loss of precision, but a zx_koid_t (64-bits) cannot.
   return static_cast<pid_t>(zx_thread_self());
+}
+
+#elif defined(__FREERTOS__)
+
+pid_t GetTID() {
+  return static_cast<pid_t>(uxTaskGetTaskNumber(xTaskGetCurrentTaskHandle()));
 }
 
 #else

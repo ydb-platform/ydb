@@ -53,7 +53,7 @@ public:
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
+            auto* partitioningParams = params.AddPartitioningParams();
             partitioningParams->SetTopicPartitionsCount(partitionCount);
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);
@@ -68,7 +68,7 @@ public:
                 {},
                 TVector<NPq::NProto::TDqReadTaskParams>{params},
                 Driver,
-                {},
+                CredentialsFactory,
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),
@@ -175,7 +175,7 @@ public:
         });
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
-        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
         if (item) {
             auto values = TVector<NUdf::TUnboxedValue>{

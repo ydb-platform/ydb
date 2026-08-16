@@ -41,10 +41,10 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
     virtual double ComputeJoinCost(
-        const NYql::TOptimizerStatistics& leftStats, 
-        const NYql::TOptimizerStatistics& rightStats, 
-        const double outputRows, 
-        const double outputByteSize, 
+        const NYql::TOptimizerStatistics& leftStats,
+        const NYql::TOptimizerStatistics& rightStats,
+        const double outputRows,
+        const double outputByteSize,
         NYql::EJoinAlgoType joinAlgo
     ) const override;
 
@@ -83,10 +83,10 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 
 
 double TDqCBOProviderContext::ComputeJoinCost(
-    const TOptimizerStatistics& leftStats, 
-    const TOptimizerStatistics& rightStats, 
-    const double outputRows, 
-    const double outputByteSize, 
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const double outputRows,
+    const double outputByteSize,
     EJoinAlgoType joinAlgo
 ) const  {
     Y_UNUSED(outputByteSize);
@@ -188,7 +188,7 @@ protected:
                 const auto lateArrivalDelay = TDuration::MilliSeconds(Config->WatermarksLateArrivalDelayMs
                     .Get()
                     .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
-                bool defaultWatermarksMode = Config->WatermarksMode.Get() == "default";
+                bool defaultWatermarksMode = Config->WatermarksMode.Get().GetOrElse("disable") != "disable";
                 return NHopping::RewriteAsHoppingWindow(node, ctx, getParents, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
             } else {
                 NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());

@@ -1,6 +1,15 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
@@ -63,7 +72,7 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
     peepholeSettings.WithFinalStageRules = false;
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    if (const auto status = PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, &(ctx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO OLAP FILTER] Peephole failed with status: " << status << Endl;
@@ -74,25 +83,12 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
 
-void StripAliasesFromInputType(TExprNode::TPtr input, TExprContext& ctx) {
-    const TTypeAnnotationNode* type = input->GetTypeAnn();
-    Y_ENSURE(type && type->GetKind() == ETypeAnnotationKind::Struct);
-    const auto structType = type->Cast<TStructExprType>();
-    TVector<const TItemExprType*> newItemTypes;
-    for (const auto itemType : structType->GetItems()) {
-        auto colName = TString(itemType->GetName());
-        const auto it = colName.find(".");
-        if (it != TString::npos) {
-            colName = colName.substr(it + 1);
-        }
-        newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, itemType->GetItemType()));
-    }
-    input->SetTypeAnn(ctx.MakeType<TStructExprType>(newItemTypes));
-}
-}
+} // anonymous namespace
 
-namespace NKikimr {
-namespace NKqp {
+bool TPushOlapFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Source;
+}
 
 TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
@@ -101,7 +97,7 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     }
 
     const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
-                                           /*StripAliasPrefixForColumnName=*/true);
+                                           /*StripAliasPrefixForColumnName=*/true, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp());
     if (!IsSuitableToPushPredicateToColumnTables(input)) {
         return input;
     }
@@ -145,8 +141,8 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
             auto predicate = lambdaAfterPeephole.Body();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            StripAliasesFromInputType(lArg.Ptr(), ctx.ExprCtx);
-            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(),
+                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
@@ -215,12 +211,13 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     std::optional<TExpression> originalPredicate = read->OriginalPredicate.has_value() ? read->OriginalPredicate : filter->FilterExpr;
     const auto newRead =
         MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
-                               read->GetRanges(), originalPredicate, read->SortDir, read->Props, read->Pos);
+                               read->RangeInfo, originalPredicate, read->SortDir, read->Props, read->Pos);
     if (IsValidPredicateToKeep(remainingFilter)) {
+        // Part of the predicate could not be pushed down and the remaining TOpFilter survives.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
     }
+
+    // The whole predicate was pushed in and no TOpFilter remains.
     return newRead;
 }
-}
-}
-
+} // namespace NKikimr::NKqp

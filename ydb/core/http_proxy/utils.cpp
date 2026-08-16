@@ -1,5 +1,6 @@
-#include "exceptions_mapping.h"
 #include "utils.h"
+
+#include "http_req.h"
 
 namespace NKikimr::NHttpProxy {
 

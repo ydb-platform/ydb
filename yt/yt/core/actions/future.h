@@ -6,6 +6,9 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/yt/misc/strong_typedef.h>
+
+#include <limits>
 #include <optional>
 #include <type_traits>
 
@@ -159,8 +162,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! An opaque future callback id.
-using TFutureCallbackCookie = int;
-constexpr TFutureCallbackCookie NullFutureCallbackCookie = -1;
+YT_DEFINE_STRONG_TYPEDEF(TFutureCallbackCookie, ui32);
+constexpr auto NullFutureCallbackCookie = TFutureCallbackCookie(-1);
 
 ////////////////////////////////////////////////////////////////////////////////
 

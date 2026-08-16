@@ -22,6 +22,7 @@ SRCS(
     mock_env.cpp
     parse_command_line.cpp
     run_ydb.cpp
+    sql_resource_pool.cpp
     supported_codecs.cpp
     supported_codecs_fixture.cpp
     workload-topic.cpp

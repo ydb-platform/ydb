@@ -28,7 +28,7 @@
 #include <ranges>
 #include <utility>
 
-namespace NYql {
+namespace NYql::NCommon {
 
 namespace NPrivate {
 
@@ -148,8 +148,6 @@ concept AttributeFilter = std::predicate<TFilter, std::ranges::range_value_t<TCo
 
 } // namespace NPrivate
 
-namespace NCommon {
-
 class TSettingDispatcher: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TSettingDispatcher>;
@@ -182,6 +180,7 @@ public:
         virtual bool IsPerCluster() const = 0;
         virtual bool IsDeprecated() const = 0;
         virtual bool IgnoreInFullReplay() const = 0;
+        virtual bool HasSerializableValue() const = 0;
         virtual void Serialize(const std::function<void(const TString&, const TString&)>& callback) const = 0;
 
     protected:
@@ -199,8 +198,8 @@ public:
         TSettingHandlerImpl(const TString& name, TConfSetting<TType, SettingType>& setting)
             : TSettingHandler(name)
             , Setting_(setting)
-            , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
-            , Serializer_(::NYql::NPrivate::GetDefaultSerializer<TType>())
+            , Parser_(NPrivate::GetDefaultParser<TType>())
+            , Serializer_(NPrivate::GetDefaultSerializer<TType>())
             , ValueSetter_([this](const TString& cluster, TType value) {
                 Setting_[cluster] = value;
             })
@@ -270,6 +269,14 @@ public:
             return IgnoreInFullReplay_;
         }
 
+        bool HasSerializableValue() const override {
+            YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
+            if constexpr (SettingType == EConfSettingType::Static) {
+                return Setting_.Get().Defined();
+            }
+            return false;
+        }
+
         TSettingHandlerImpl& Lower(TType lower) {
             Validators_.push_back([lower](const TString&, TType value) {
                 if (value < lower) {
@@ -337,22 +344,22 @@ public:
             return *this;
         }
 
-        TSettingHandlerImpl& Parser(::NYql::NPrivate::TParser<TType>&& parser) {
+        TSettingHandlerImpl& Parser(NPrivate::TParser<TType>&& parser) {
             Parser_ = std::move(parser);
             return *this;
         }
 
-        TSettingHandlerImpl& Parser(const ::NYql::NPrivate::TParser<TType>& parser) {
+        TSettingHandlerImpl& Parser(const NPrivate::TParser<TType>& parser) {
             Parser_ = parser;
             return *this;
         }
 
-        TSettingHandlerImpl& Serializer(::NYql::NPrivate::TSerializer<TType>&& serializer) {
+        TSettingHandlerImpl& Serializer(NPrivate::TSerializer<TType>&& serializer) {
             Serializer_ = std::move(serializer);
             return *this;
         }
 
-        TSettingHandlerImpl& Serializer(const ::NYql::NPrivate::TSerializer<TType>& serializer) {
+        TSettingHandlerImpl& Serializer(const NPrivate::TSerializer<TType>& serializer) {
             Serializer_ = serializer;
             return *this;
         }
@@ -360,9 +367,8 @@ public:
         void Serialize(const std::function<void(const TString&, const TString&)>& callback) const override {
             YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
             if constexpr (SettingType == EConfSettingType::Static) {
-                if (auto value = Setting_.Get()) {
-                    callback(Name_, Serializer_(*value));
-                }
+                YQL_ENSURE(HasSerializableValue(), "Setting is not serializable");
+                callback(Name_, Serializer_(*Setting_.Get()));
             }
         }
 
@@ -415,8 +421,8 @@ public:
     private:
         TConfSetting<TType, SettingType>& Setting_;
         TMaybe<TConfSetting<TType, SettingType>> Default_;
-        ::NYql::NPrivate::TParser<TType> Parser_;
-        ::NYql::NPrivate::TSerializer<TType> Serializer_;
+        NPrivate::TParser<TType> Parser_;
+        NPrivate::TSerializer<TType> Serializer_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
         TString Warning_;
@@ -479,26 +485,18 @@ public:
         auto errorCallback = GetDefaultErrorCallback();
         TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
 
-        TVector<TAttribute> flags;
-        if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TAttribute>(activationLabel, QContext_)) {
-            flags = std::move(*loadedFlags);
-        } else {
-            CopyIf(clusterValues.begin(), clusterValues.end(), std::back_inserter(flags), filter);
-        }
+        const auto flags = NCommon::SelectAndSaveActivatedFlags<TAttribute>(
+            activationLabel, QContext_, clusterValues, filter, !ProviderName_.empty());
 
         for (const auto& flag : flags) {
             Dispatch(cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback);
-        }
-
-        if (ProviderName_) {
-            NCommon::SaveActivatedFlagsToQContext<TAttribute>(flags, activationLabel, QContext_);
         }
     }
 
     template <NPrivate::ConfigFeatureList TContainer>
     void Dispatch(const TString& cluster, const TContainer& clusterValues) {
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v : clusterValues) {
+        for (const auto& v : clusterValues) {
             Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
         }
     }
@@ -519,18 +517,19 @@ public:
     static TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx);
     void Enumerate(std::function<void(std::string_view)> callback);
     void SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const;
+    ui64 CountSerializableStaticSettings() const;
 
 protected:
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
-    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    // We use TMap instead of THashMap to keep the order of settings serialization.
+    TMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
     const TString ProviderName_;
     const TQContext QContext_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon
 
 #define REGISTER_SETTING(dispatcher, setting) \
     (dispatcher).AddSetting(#setting, setting)

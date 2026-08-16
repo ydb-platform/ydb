@@ -1,6 +1,4 @@
-/* syntax version 1 */
 /* multirun can not */
-/* postgres can not */
 /* kikimr can not */
 use plato;
 

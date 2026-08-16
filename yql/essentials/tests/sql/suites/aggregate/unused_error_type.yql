@@ -1,0 +1,4 @@
+select age from (
+select some(age) as age,some(text) as text from AS_TABLE([<|age:1|>])
+)
+

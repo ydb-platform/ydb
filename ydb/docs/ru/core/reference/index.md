@@ -9,6 +9,7 @@
 * [{#T}](./ydb-sdk/index.md)
 * [{#T}](./languages-and-apis/index.md)
 * [{#T}](./kafka-api/index.md)
+* [{#T}](./sqs-api/index.md)
 * [{#T}](./configuration/index.md)
 * [{#T}](./observability/index.md)
 * [{#T}](./ydb-dstool/index.md)

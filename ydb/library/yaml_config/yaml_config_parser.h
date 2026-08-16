@@ -51,6 +51,11 @@ namespace NKikimr::NYaml {
         std::map<ui32, TString> GroupErasureSpecies;
     };
 
+    // Top-level TAppConfig fields tagged with the OpaqueConfig marker
+    struct TOpaqueField {
+        TString Name;       // snake_case key
+    };
+
     NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig(
         bool allowUnknownFields = false,
         TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
@@ -78,5 +83,17 @@ namespace NKikimr::NYaml {
     NKikimrConfig::TAppConfig Parse(const TString& data, bool transform = true);
 
     void ValidateMetadata(const NJson::TJsonValue& metadata);
+
+    // Get top-level TAppConfig fields tagged with the OpaqueConfig marker
+    // (computed once)
+    const TVector<TOpaqueField>& OpaqueConfigFields();
+
+    // Handle opaque-marked fields so the cluster accepts their content without
+    // knowing the schema and without allow_unknown_fields.
+    // Replaces the sub-tree with an empty object, so the proto merge stores
+    // an empty message and the unknown-field collector never sees the content
+    // (which is recovered later from the resolved YAML).
+    // Only message field types are supported.
+    void CaptureOpaqueConfigFields(NJson::TJsonValue& configJson);
 
 } // namespace NKikimr::NYaml

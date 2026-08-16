@@ -195,7 +195,7 @@ public:
             throw yexception() << "'extract' attribute should be a callable";
         }
 
-        TPyObjectPtr resultObj = PyObject_CallObject(function.Get(), nullptr);
+        TPyObjectPtr resultObj = PyObject_CallObject(function.Get(), /*args=*/nullptr);
         if (!resultObj) {
             throw yexception() << "Failed to execute:\n"
                                << GetLastErrorAsString();

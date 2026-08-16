@@ -77,7 +77,7 @@ class Shrinker:
 
     def debug(self, *args: object) -> None:
         if self.debugging_enabled:
-            print("DEBUG", self, *args)
+            print("DEBUG", self, *args)  # noqa: T201
 
     @classmethod
     def shrink(cls, initial, predicate, **kwargs):
@@ -161,7 +161,7 @@ class Shrinker:
         Does nothing by default.
         """
 
-    def short_circuit(self):
+    def short_circuit(self) -> bool:
         """Possibly attempt to do some shrinking.
 
         If this returns True, the ``run`` method will terminate early

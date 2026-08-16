@@ -118,9 +118,9 @@ enum class ERequestType: size_t {
     BRIDGE_GETCLUSTERSTATE,
     BRIDGE_UPDATECLUSTERSTATE,
 
-    // TestShard requests
-    TESTSHARD_CREATETESTSHARD,
-    TESTSHARD_DELETETESTSHARD,
+    // TestShardSet requests
+    TESTSHARDSET_CREATETESTSHARDSET,
+    TESTSHARDSET_DELETETESTSHARDSET,
 
     // Nbs 2.0 requests
     NBS_CREATEPARTITION,
@@ -129,6 +129,10 @@ enum class ERequestType: size_t {
     NBS_LISTPARTITIONS,
     NBS_WRITEBLOCKS,
     NBS_READBLOCKS,
+
+    // DistributedStorage requests
+    DISTRIBUTED_STORAGE_STREAMSTORAGESTATE,
+    DISTRIBUTED_STORAGE_REASSIGNVDISK,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

@@ -14,6 +14,9 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+namespace NKikimr::NMiniKQL {
+class TTypeEnvironment;
+}
 
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
@@ -30,9 +33,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const THashMap<TString, TString>& secureParams,
     TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,
@@ -43,6 +47,13 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     TDuration CheckPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod
 );
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);
+void RegisterDqPqReadActorFactory(
+    TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const IPqStaticGateway::TPtr& pqGateway,
+    const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+    const TString& reconnectPeriod = {},
+    bool enableStreamingQueriesCounters = true);
 
 } // namespace NYql::NDq

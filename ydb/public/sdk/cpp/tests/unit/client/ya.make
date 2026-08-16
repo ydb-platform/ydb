@@ -7,10 +7,14 @@ RECURSE(
     driver
     endpoints
     iam
+    iam_private
     oauth2_token_exchange
     observability
     params
+    query
     result
+    row_ranges
+    retry_range
     table
     value
 )

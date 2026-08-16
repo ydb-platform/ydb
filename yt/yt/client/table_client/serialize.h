@@ -2,9 +2,9 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/phoenix/context.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NTableClient {
 

@@ -43,8 +43,8 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 }
 
 int TCommandClusterBootstrap::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    NYdb::NConfig::TConfigClient client(*driver);
+    auto driver = CreateDriver(config);
+    NYdb::NConfig::TConfigClient client(driver);
     auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;
@@ -74,7 +74,8 @@ int TCommandClusterDump::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpCluster(FilePath));
 
     return EXIT_SUCCESS;
@@ -110,7 +111,8 @@ int TCommandClusterRestore::Run(TConfig& config) {
     auto settings = NDump::TRestoreClusterSettings()
         .WaitNodesDuration(WaitNodesDuration);
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreCluster(FilePath, settings));
 
     return EXIT_SUCCESS;

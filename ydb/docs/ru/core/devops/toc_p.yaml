@@ -26,6 +26,3 @@ items:
     path: observability/toc_p.yaml
 - name: Резервное копирование и восстановление
   href: backup-and-recovery/index.md
-  include:
-    mode: link
-    path: backup-and-recovery/toc_p.yaml

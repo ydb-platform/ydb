@@ -36,8 +36,11 @@ std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopyIfOffsetDiffers(std::shared_pt
 
 std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool);
 
+std::shared_ptr<arrow::ArrayData> MakeEmptyArray(std::shared_ptr<arrow::DataType> type,
+                                                 arrow::MemoryPool* memory_pool);
+
 /// \brief Recursive version of ArrayData::Slice() method
-std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len);
+std::shared_ptr<arrow::ArrayData> DeepSlice(const arrow::ArrayData& data, size_t offset, size_t len);
 
 /// \brief Chops first len items of `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len);
@@ -56,7 +59,7 @@ ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 class TResizeableBuffer: public arrow::ResizableBuffer {
 public:
     explicit TResizeableBuffer(arrow::MemoryPool* pool)
-        : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
+        : ResizableBuffer(/*data=*/nullptr, 0, arrow::CPUDevice::memory_manager(pool))
         , Pool_(pool)
     {
     }
@@ -118,6 +121,8 @@ std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity,
     }
     return result;
 }
+
+std::unique_ptr<arrow::ResizableBuffer> CopyBuffer(const arrow::Buffer& src, size_t offset, size_t length, arrow::MemoryPool* pool);
 
 /// \brief owning buffer that calls destructors
 template <typename T>
@@ -242,7 +247,7 @@ inline void SetMemoryContext(void* ptr, void* ctx) {
 }
 
 inline void ZeroMemoryContext(void* ptr) {
-    SetMemoryContext(ptr, nullptr);
+    SetMemoryContext(ptr, /*ctx=*/nullptr);
 }
 
 inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
@@ -266,6 +271,8 @@ inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, 
     if (typeOptOpt) {
         return true;
     } else if (TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type)) {
+        return true;
+    } else if (TVariantTypeInspector(typeInfoHelper, type)) {
         return true;
     }
     return false;

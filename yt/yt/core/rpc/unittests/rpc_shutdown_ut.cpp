@@ -43,6 +43,7 @@ void TestShutdown(const IChannelPtr& channel)
     }
 
     TFileInput shutdownLogInput((GetOutputPath() / "shutdown.log").GetPath());
+    // TODO(babenko): migrate to std::string
     TString buffer;
     int exitCode = 1;
 

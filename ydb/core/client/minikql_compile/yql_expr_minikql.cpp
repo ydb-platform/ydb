@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -389,9 +389,10 @@ private:
             const TTypeAnnotationNode *columnDataType;
             auto typeConstraint = EColumnTypeConstraint::Nullable;
 
-            auto systemColumnType = KikimrSystemColumns().find(columnName);
-            if (systemColumnType != KikimrSystemColumns().end()) {
-                columnDataType = ctx.MakeType<TDataExprType>(systemColumnType->second);
+            auto systemColumn = GetSystemColumns().find(columnName);
+            if (systemColumn != GetSystemColumns().end()) {
+                columnDataType = GetMkqlDataTypeAnnotation(
+                    TDataType::Create(systemColumn->second.TypeId, *MkqlCtx->TypeEnv), ctx);
             } else {
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
@@ -873,7 +874,7 @@ void ValidateCompiledTable(const TExprNode& node, const TTableId& tableId) {
             << " current: " << currentVersion
             << " for table: " << TString(node.Child(0)->Child(0)->Content());
     }
-    auto currentPathId = TKikimrPathId(tableId.PathId.OwnerId, tableId.PathId.LocalPathId).ToString();
+    const TString currentPathId = TStringBuilder() << tableId.PathId.OwnerId << ':' << tableId.PathId.LocalPathId;
     const auto& programPathId = node.Child(0)->Child(2)->Content();
     // TODO: Remove this checks.
     // Check for programPathId just to be able to disable this check

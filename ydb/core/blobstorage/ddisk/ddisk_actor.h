@@ -24,11 +24,19 @@
 #endif
 
 #include <ydb/library/pdisk_io/uring_operation.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 
 #include <ydb/core/util/spsc_circular_queue.h>
 
+#include <array>
 #include <atomic>
 #include <queue>
+
+#include <util/generic/hash_set.h>
+#include <util/system/mutex.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
@@ -38,8 +46,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
 #define LIST_COUNTERS_INTERFACE_OPS(XX) \
     XX(Write) \
     XX(Read) \
-    XX(SyncWithPersistentBuffer) \
-    XX(SyncWithDDisk) \
+    XX(Sync) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(ErasePersistentBuffer) \
@@ -83,10 +90,6 @@ namespace NKikimr::NDDisk {
         TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
         std::vector<std::pair<TString, TString>> CountersChain;
         ui64 DDiskInstanceGuid = RandomNumber<ui64>();
-
-#if defined(__linux__)
-        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
-#endif
 
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
@@ -133,6 +136,7 @@ namespace NKikimr::NDDisk {
     private:
         struct TOpCountersBase {
             NMonitoring::TDynamicCounters::TCounterPtr Requests;
+            NMonitoring::TDynamicCounters::TCounterPtr RequestsInFlight;
             NMonitoring::TDynamicCounters::TCounterPtr Bytes;
             NMonitoring::TDynamicCounters::TCounterPtr BytesInFlight;
             NMonitoring::THistogramPtr RequestSizeKiB;
@@ -140,6 +144,7 @@ namespace NKikimr::NDDisk {
 
             void Request(ui32 bytes = 0) {
                 ++*Requests;
+                ++*RequestsInFlight;
                 if (bytes) {
                     *Bytes += bytes;
                     *BytesInFlight += bytes;
@@ -148,6 +153,7 @@ namespace NKikimr::NDDisk {
             }
 
             void Done(ui32 bytes, double durationMs = 0) {
+                --*RequestsInFlight;
                 *BytesInFlight -= bytes;
                 if (durationMs != 0) {
                     ResponseTime->Collect(durationMs);
@@ -204,11 +210,80 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr RunningCount;
                 NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
+
+#if defined(__linux__)
+            NPDisk::TUringCounters UringCounters;
+#endif
+
+            struct {
+                NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
+                NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+                NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;
+                NMonitoring::TDynamicCounters::TCounterPtr InMemoryCacheSize;
+                NMonitoring::THistogramPtr WriteBatchSize;
+            } PersistentBuffer;
+
+            struct {
+                // External (non-internal) TEvWritePersistentBuffer requests received with no Checksums
+                // attached at all. Checksum validation is opt-in, so this tracks how far we are from being
+                // able to make it mandatory.
+                NMonitoring::TDynamicCounters::TCounterPtr WritesWithoutChecksums;
+                // Sender-supplied checksum mismatches detected on TEvWrite / TEvWritePersistentBuffer(s),
+                // i.e. rejections with TReplyStatus::CORRUPTED. Covers both the DDisk data path and the
+                // PersistentBuffer path, so it lives in its own subsystem rather than under PersistentBuffer.
+                NMonitoring::TDynamicCounters::TCounterPtr ChecksumMismatch;
+            } Checksums;
         };
 
         TCounters Counters;
 
-    private:
+#if defined(__linux__)
+        // we share Counters with UringRouter, so that
+        // UringRouter must be after the counters to have a
+        // proper destruction order
+        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
+#endif
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // The io_uring completion poller thread (via UringRouter's sample sink)
+        // pushes raw TDeviceIoSample-s into DeviceOverestimationSamples under
+        // DeviceOverestimationSamplesMutex. Periodically (WakeupFlushDeviceOverestimationSamples)
+        // the actor thread drains the buffer and forwards a batch to the owning
+        // PDisk actor (BaseInfo.PDiskActorID), which merges it with samples from
+        // other sources (PDisk's own block device, other DDisk/PB slots on the
+        // same PDisk) sharing the same physical device.
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        static constexpr size_t MaxBufferedDeviceOverestimationSamples = 4096;
+        static constexpr TDuration DeviceOverestimationFlushPeriod = TDuration::Seconds(5);
+
+        TMutex DeviceOverestimationSamplesMutex;
+        std::vector<NPDisk::TDeviceIoSample> DeviceOverestimationSamples;
+
+        // Flat cost-estimation constants derived once from PDiskParams (seek
+        // time, read/write speed) in InitUring(). Deliberately reuses PDisk's
+        // measured constants for the first iteration; IO_URING may warrant
+        // its own calibrated constants later.
+        ui64 DeviceOverestimationReadSpeedBps = 0;
+        ui64 DeviceOverestimationWriteSpeedBps = 0;
+
+        static constexpr ui64 NanosecondsPerSecond = 1'000'000'000ull;
+
+        // Estimates the cost of an operation excluding any seek cost (the
+        // owning PDisk actor's aggregator applies seek cost itself based on
+        // the merged, cross-source stream).
+        ui64 EstimateDeviceIoBaseCostNs(bool isWrite, ui64 size) const {
+            const ui64 speedBps = isWrite ? DeviceOverestimationWriteSpeedBps : DeviceOverestimationReadSpeedBps;
+            if (speedBps == 0) {
+                return 0;
+            }
+            return size * NanosecondsPerSecond / speedBps;
+        }
+
+        void OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample);
+        void FlushDeviceOverestimationSamples();
+
+    public:
         struct TEvPrivate {
             enum {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -219,9 +294,38 @@ namespace NKikimr::NDDisk {
                 EvReadPersistentBufferPart,
                 EvInternalSyncWriteResult,
                 EvIssuePersistentBufferChunkAllocation,
+                EvDeallocatePersistentBufferChunk,
+                EvDeallocatePersistentBufferChunkResult,
+                EvRetryListPersistentBuffer,
+            };
+
+           struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
+                TAutoPtr<TEventHandle<TEvListPersistentBuffer>> Ev;
+                ui32 RetriesLeft;
+
+                TEvRetryListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft)
+                    : Ev(ev)
+                    , RetriesLeft(retriesLeft)
+                {}
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
+            };
+
+            struct TEvDeallocatePersistentBufferChunk : TEventLocal<TEvDeallocatePersistentBufferChunk, EvDeallocatePersistentBufferChunk> {
+                ui32 ChunkIdx;
+
+                TEvDeallocatePersistentBufferChunk(ui32 chunkIdx)
+                    : ChunkIdx(chunkIdx)
+                {}
+            };
+
+            struct TEvDeallocatePersistentBufferChunkResult : TEventLocal<TEvDeallocatePersistentBufferChunkResult, EvDeallocatePersistentBufferChunkResult> {
+                ui32 ChunkIdx;
+
+                TEvDeallocatePersistentBufferChunkResult(ui32 chunkIdx)
+                    : ChunkIdx(chunkIdx)
+                {}
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -305,21 +409,33 @@ namespace NKikimr::NDDisk {
             };
         };
 
+    private:
         enum EWakeupTag {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
+            WakeupCollectPbStats = 3,
+            WakeupProcessPersistentBufferBatchWrite = 4,
+            WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupFlushDeviceOverestimationSamples = 6,
         };
+
+        struct TPbOpSnapshot {
+            TInstant Timestamp;
+            ui64 Requests = 0;
+            std::vector<ui64> BucketCounts;
+        };
+
+        // Sliding window of cumulative snapshots for each PB operation,
+        // used to compute IOPS and latency percentiles over the last ~15 seconds.
+        std::unordered_map<TString, std::deque<TPbOpSnapshot>> PbStatsHistory;
+        static constexpr TDuration PbStatsWindow = TDuration::Seconds(15);
+        static constexpr TDuration PbStatsSnapshotPeriod = TDuration::Seconds(1);
+
+        void CollectPbStatsSnapshot();
 
         const bool IsPersistentBufferActor = false;
 
     public:
-        NKikimrServices::TActivity::EType ActorActivityType() const {
-            if (IsPersistentBufferActor) {
-                return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
-            }
-            return NKikimrServices::TActivity::BS_DDISK;
-        }
-
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
@@ -327,7 +443,8 @@ namespace NKikimr::NDDisk {
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd);
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd);
 
         ~TDDiskActor();
         void Bootstrap();
@@ -439,6 +556,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
+        void Handle(TEvDeleteTabletChunks::TPtr ev);
 
         void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev);
         void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev);
@@ -446,7 +564,8 @@ namespace NKikimr::NDDisk {
         ui64 GetFirstLsnToKeep() const;
 
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
-            ui64 *startingPointLsnPtr, std::function<void()> callback);
+            ui64 *startingPointLsnPtr, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete = {});
 
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
@@ -457,19 +576,58 @@ namespace NKikimr::NDDisk {
         // Connection management
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        struct TConnectionInfo {
-            ui64 TabletId;
-            ui32 Generation;
-            ui32 NodeId;
-            TActorId InterconnectSessionId;
+        enum class EConnectionTokenInvalidationReason : ui8 {
+            Reconnect,
+            Disconnect,
         };
-        THashMap<ui64, TConnectionInfo> Connections;
+
+        struct TPreviousConnectionTokenInfo {
+            TConnectionToken Token;
+            ui64 TabletId = 0;
+            ui32 Generation = 0;
+            ui32 DirectBlockGroupIndex = 0;
+            ui64 DDiskSessionSeqNo = 0;
+            EConnectionTokenInvalidationReason InvalidationReason = EConnectionTokenInvalidationReason::Reconnect;
+            bool Valid = false;
+        };
+
+        struct TConnectionInfo {
+            ui64 TabletId = 0;
+            ui32 Generation = 0;
+            ui32 DirectBlockGroupIndex = 0;
+            ui64 DDiskSessionSeqNo = 0;
+            ui32 NodeId = 0;
+            TActorId InterconnectSessionId;
+            TConnectionToken Token;
+            ui8 TokenSequenceNo = 0;
+            std::array<TPreviousConnectionTokenInfo, 2> PreviousTokens;
+            ui32 NextPreviousTokenIndex = 0;
+            bool Active = false;
+        };
+
+        using TConnectionKey = std::pair<ui64, ui32>;
+        TVector<TConnectionInfo> Connections;
+        THashMap<TConnectionKey, ui32> ConnectionIndexBySession;
+        TVector<ui32> FreeConnectionIndices;
 
         void Handle(TEvConnect::TPtr ev);
         void Handle(TEvDisconnect::TPtr ev);
 
-        // validate query credentials against registered connections
-        bool ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const;
+        TConnectionToken IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection);
+
+        void RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason);
+
+        enum class EConnectionResolution : ui8 {
+            Resolved,
+            StaleToken,
+            InvalidToken,
+        };
+
+        // validate query credentials and restore token-backed connection data
+        EConnectionResolution ResolveConnection(const TQueryCredentials& requestCreds, TQueryCredentials* resolvedCreds) const;
+        static TStringBuf ConnectionErrorReason(EConnectionResolution resolution);
+        static TStringBuf ConnectionInvalidationReason(EConnectionTokenInvalidationReason reason);
+        TString DescribeConnectionFailure(const TQueryCredentials& requestCreds, EConnectionResolution resolution) const;
 
         // a general way to send reply to any incoming message
         void SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const;
@@ -477,7 +635,7 @@ namespace NKikimr::NDDisk {
         // common function to validate any incoming event's credentials
         template<typename TEvent, typename TCountersPtr>
         bool CheckQuery(TEventHandle<TEvent>& ev, TCountersPtr counters) const {
-            const auto& record = ev.Get()->Record;
+            auto& record = ev.Get()->Record;
             using TEventType = std::decay_t<TEvent>;
 
             auto registerError = [&] {
@@ -488,22 +646,33 @@ namespace NKikimr::NDDisk {
             };
 
             auto logError = [&](TStringBuf reason) {
-                LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-                    "TDDiskActor::CheckQuery validation failed"
-                    << " reason# " << reason
-                    << " DDiskId# " << DDiskId);
+                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::CheckQuery validation failed",
+                    {"reason", reason},
+                    {"DDiskId", DDiskId},
+                    {"evType", ev.GetTypeRewrite()},
+                    {"sender", ev.Sender},
+                    {"cookie", ev.Cookie},
+                    {"ICSession", ev.InterconnectSession});
             };
 
-            const TQueryCredentials creds(record.GetCredentials());
-            if (!ValidateConnection(ev, creds)) {
-                logError(TStringBuilder() << "session mismatch"
-                    << " tabletId# " << creds.TabletId
-                    << " generation# " << creds.Generation);
-                SendReply(ev, std::make_unique<typename TEvent::TResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH));
+            const TQueryCredentials requestCreds(record.GetCredentials());
+            TQueryCredentials creds;
+            const EConnectionResolution resolution = ResolveConnection(requestCreds, &creds);
+
+            if (resolution != EConnectionResolution::Resolved) {
+                logError(DescribeConnectionFailure(requestCreds, resolution));
+                auto result = std::make_unique<typename TEvent::TResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH
+                );
+                const TStringBuf errorReason = ConnectionErrorReason(resolution);
+                result->Record.SetErrorReason(errorReason.data(), errorReason.size());
+
+                SendReply(ev, std::move(result));
                 registerError();
                 return false;
             }
+
+            creds.SerializeResolvedForRequest(record.MutableCredentials());
 
             using TRecord = std::decay_t<decltype(record)>;
 
@@ -595,11 +764,6 @@ namespace NKikimr::NDDisk {
         };
 
         struct TSyncInFlight {
-            enum ESourceKind {
-                ESK_DDISK,
-                ESK_PERSISTENT_BUFFER
-            };
-
             TActorId Sender;
             ui64 Cookie;
             TActorId InterconnectionSessionId;
@@ -610,32 +774,24 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex = 0;
             ui64 FirstRequestId = Max<ui64>();
             TStringBuilder ErrorReason;
-            ESourceKind SourceKind;
         };
 
         using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
 
         ui64 NextSyncId = 1;
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
+        THashSet<ui64> SyncReadCookiesInFlight;
         TSegmentManager SegmentManager;
 
-        void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
-        void Handle(TEvSyncWithDDisk::TPtr ev);
+        void Handle(TEvSync::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev);
 
-        struct TSyncWithPersistentBufferPolicy;
-        struct TSyncWithDDiskPolicy;
-
-        template <typename TPolicy, typename TEventPtr>
-        void HandleSync(TEventPtr ev);
-
         template <typename TEventPtr>
         void InternalSyncReadResult(TEventPtr ev);
 
-        template <typename TResultEvent, typename TCounters>
-        std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync, TCounters& counters) const;
+        std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync);
 
         void ReplySync(TSyncIt it);
 
@@ -643,8 +799,8 @@ namespace NKikimr::NDDisk {
         // Persistent buffer services
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
-        std::map<TInstant, std::unordered_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
+        std::map<TPersistentBufferId, TPersistentBuffer> PersistentBuffers;
+        std::map<TInstant, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
@@ -664,37 +820,65 @@ namespace NKikimr::NDDisk {
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
 
-        struct TPersistentBufferDiskOperationInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId Session;
-
-            NWilson::TSpan Span;
-            std::set<ui64> OperationCookies;
-
-            ui64 TabletId;
+        struct TEraseLsnId {
             ui32 Generation;
-            ui64 VChunkIndex;
             ui64 Lsn;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            std::vector<TPersistentBufferSectorInfo> Sectors;
-            std::map<ui64, TRope> DataParts;
-            ui32 PartsCount;
+        };
 
+        struct TPersistentBufferDiskOperationInFlight {
+            struct TRecord {
+                TActorId Sender;
+                ui64 Cookie;
+                TActorId Session;
+                NWilson::TSpan Span;
+
+                ui64 TabletId;
+                ui32 Generation;
+                ui64 VChunkIndex;
+                ui64 Lsn;
+                ui32 OffsetInBytes;
+                ui32 Size;
+
+                std::map<ui64, TRope> DataParts;
+                ui32 PartsCount;
+                std::vector<TPersistentBufferSectorInfo> Sectors;
+                // Sender-supplied per-MinSectorSize-block payload checksums for this record, in order.
+                // Empty when the write carried no checksums. See TPersistentBuffer::TRecord::PayloadChecksums.
+                std::vector<ui64> PayloadChecksums;
+
+                TRope JoinData(ui32 sectorSize);
+            };
+
+            std::vector<TRecord> Records;
+
+            absl::flat_hash_set<ui64> OperationCookies;
+            // map operationCookie to <lsn, generation> pairs that were erased by this operation
+            std::unordered_map<ui64, std::vector<TEraseLsnId>> Erases;
+            TRope DataToWrite;
+
+            std::vector<TPersistentBufferSectorInfo> OccupiedSectors;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
 
             NHPTimer::STime StartTs{};
-
-            TRope JoinData(ui32 sectorSize);
         };
 
-        std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
-        std::unordered_map<TPersistentBufferRecordId, std::vector<ui64>> PersistentBufferWriteInflightsByRecord;
+        struct TPersistentBufferEraseInflight {
+            ui64 EraseCookie;
+            std::vector<ui64> OperationsCookie;
+        };
+
+        ui64 PersistentBufferBatchWriteCookie = 0;
+        absl::flat_hash_map<TPersistentBufferLocation, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
+        absl::flat_hash_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
+
+        // map record to operation cookie + record in inflight position
+        absl::flat_hash_map<TPersistentBufferRecordId, std::vector<std::tuple<ui64, ui32>>> PersistentBufferWriteInflightsByRecord;
+        absl::flat_hash_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
+        ui64 PersistentBufferUniqueId = 0;
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
         TPersistentBufferBarriersManager PersistentBufferBarriersManager;
@@ -703,27 +887,47 @@ namespace NKikimr::NDDisk {
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
 
-        std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
-        std::unordered_set<ui32> PersistentBufferAllocatedChunks;
-        std::unordered_set<ui32> PersistentBufferRestoringChunks;
+        absl::flat_hash_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
+        absl::flat_hash_set<ui32> PersistentBufferAllocatedChunks;
+        absl::flat_hash_set<ui32> PersistentBufferRestoringChunks;
 
         TActorId WritePersistentBuffersActor;
         TActorId PersistentBufferActorId;
 
+        ui64 CalculateChecksum(const TRope::TIterator begin) {
+            return CalculateChecksum(begin, SectorSize);
+        }
+
+        ui64 CalculateChecksum(const TRope::TIterator begin, size_t numBytes);
+
         void CreatePersistentBuffer();
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
+        void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void ReplyReadPersistentBuffer(ui64 operationCookie);
         void ReplyReadPersistentBuffer(TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
 
+        bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
+        // ev is taken by reference (not TPtr by value, unlike its sibling above): TPtr is a TAutoPtr
+        // with ownership-transferring copy semantics, so a by-value parameter here would null out the
+        // caller's ev as soon as this is invoked -- including on the "doesn't fit, fall back" (false)
+        // return path, where Handle(TEvWritePersistentBuffer) still needs a valid ev afterwards to retry
+        // via ProcessPersistentBufferWrite.
+        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr& ev);
+        void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
-        void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
-        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
+        void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
+        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);
+        void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase);
+        void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
+        void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight,  ui64 opCookie, ui64 partCookie);
+        void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
@@ -732,9 +936,22 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev);
+        // Returns true if the given tablet currently has at least one persistent-buffer disk
+        // operation (write/erase/read) in flight. TEvListPersistentBuffer must not be answered
+        // while this holds, otherwise it could observe a partially-applied write or erase.
+        bool HasPersistentBufferInflightForTablet(ui64 tabletId) const;
+        void ProcessListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft);
+        void ReplyListPersistentBuffer(TEventHandle<TEvListPersistentBuffer>& ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
+        void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk::TPtr ev);
+        void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev);
         void Handle(TEvGetPersistentBufferInfo::TPtr ev);
 
+        template<typename TEventPtr>
+        void HandlePersistentBufferWriteRequest(TEventPtr& ev);
+
+        void Handle(TEvReadThenWritePersistentBuffers::TPtr ev);
         void Handle(TEvWritePersistentBuffers::TPtr ev);
 
         void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);

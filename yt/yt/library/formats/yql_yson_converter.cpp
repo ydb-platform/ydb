@@ -754,7 +754,7 @@ public:
                 EValueType::Composite,
                 value.Type);
         }
-        TMemoryInput input(value.Data.String, value.Length);
+        TMemoryInput input(value.AsStringBuf());
         TYsonPullParser parser(&input, EYsonType::Node);
         TYsonPullParserCursor cursor(&parser);
         Converter_(&cursor, consumer, totalLimit);

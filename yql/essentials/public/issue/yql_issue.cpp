@@ -122,7 +122,7 @@ void ProgramLinesWithErrors(
 {
     TVector<ui32> rows;
     for (const auto& topIssue : errors) {
-        WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 /*level*/) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 /*level*/) {
             for (ui32 row = issue.Position.Row; row <= issue.EndPosition.Row; row++) {
                 rows.push_back(row);
             }
@@ -156,13 +156,13 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const {
             out << "[";
         }
         for (const auto& topIssue : Issues_) {
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+            WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
                 if (level > 0) {
                     out << " subissue: { ";
                 } else {
                     out << (printWithSpace ? " { " : "{ ");
                 }
-                issue.PrintTo(out, true); },
+                issue.PrintTo(out, /*oneLine=*/true); },
                               [&](const TIssue&, ui16) { out << " }"; });
         }
         if (Issues_.size() > 1) {
@@ -170,7 +170,7 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const {
         }
     } else {
         for (const auto& topIssue : Issues_) {
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+            WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
                 auto shift = level * 4;
                 Indent(out, shift);
                 out << issue << Endl;
@@ -190,7 +190,7 @@ void TIssues::PrintWithProgramTo(
     ProgramLinesWithErrors(programText, Issues_, lines);
 
     for (const TIssue& topIssue : Issues_) {
-        WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
             auto shift = level * 4;
             Indent(out, shift);
             if (colorize) {

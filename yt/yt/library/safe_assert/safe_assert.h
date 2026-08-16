@@ -3,9 +3,10 @@
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/library/coredumper/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <any>
 
@@ -17,15 +18,15 @@ namespace NYT {
 class TAssertionFailedException
 {
 public:
-    DEFINE_BYVAL_RO_PROPERTY(TString, Expression);
-    DEFINE_BYVAL_RO_PROPERTY(TString, StackTrace);
-    DEFINE_BYVAL_RO_PROPERTY(std::optional<TString>, CorePath);
+    DEFINE_BYVAL_RO_PROPERTY(std::string, Expression);
+    DEFINE_BYVAL_RO_PROPERTY(std::string, StackTrace);
+    DEFINE_BYVAL_RO_PROPERTY(std::optional<std::string>, CorePath);
 
 public:
     TAssertionFailedException(
-        const TString& expression,
-        const TString& stackTrace,
-        const std::optional<TString>& corePath);
+        const std::string& expression,
+        const std::string& stackTrace,
+        const std::optional<std::string>& corePath);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

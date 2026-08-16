@@ -5,7 +5,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <library/cpp/cache/cache.h>
 
@@ -16,6 +15,8 @@
 #include <chrono>
 #include <map>
 #include <vector>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NHttpProxy {
 
@@ -38,7 +39,8 @@ namespace NKikimr::NHttpProxy {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::PERSQUEUE, "discovery actor created");
+            YDB_LOG_INFO_CTX(ctx, "Discovery actor created",
+                {"logPrefix", LogPrefix()});
 
             TBase::Become(&TDiscoveryActor::StateWork);
         }
@@ -108,12 +110,16 @@ namespace NKikimr::NHttpProxy {
 
         Ydb::Discovery::ListEndpointsRequest request;
         request.set_database(Settings.Database);
-        LOG_SP_INFO_S(ctx, NKikimrServices::PERSQUEUE, "list endpoints request");
+        YDB_LOG_INFO_CTX(ctx, "List endpoints request",
+            {"logPrefix", LogPrefix()});
 
         NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
                 [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {
                     auto res = std::make_unique<TEvServerlessProxy::TEvListEndpointsResponse>();
-                    LOG_INFO_S(*actorSystem, NKikimrServices::PERSQUEUE, "list endpoints result status: " << status.GRpcStatusCode << " " << status.Msg << " " << status.Details);
+                    YDB_LOG_INFO_CTX(*actorSystem, "List endpoints result",
+                        {"status", status.GRpcStatusCode},
+                        {"statusMsg", status.Msg},
+                        {"statusDetails", status.Details});
                     if (status.Ok()) {
                         res->Record = std::make_unique<Ydb::Discovery::ListEndpointsResponse>();
                         res->Record->CopyFrom(response);
@@ -177,3 +183,4 @@ namespace NKikimr::NHttpProxy {
         return new TDiscoveryProxyActor(credentialsProvider, config);
     }
 } // namespace NKikimr::NHttpProxy
+

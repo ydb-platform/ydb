@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/misc/finally.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/generic/buffer.h>
 
@@ -24,17 +24,17 @@ constinit const auto Logger = HttpLogger;
 
 namespace {
 
-YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
+YT_DEFINE_LEAKY_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
     "connection",
     "host",
 });
 
-YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString("HTTP/1.1 100 Continue\r\n\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString("\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString("0\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString("0\r\n\r\n"));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
 
 } // namespace
 
@@ -108,11 +108,11 @@ TSharedRef THttpParser::Feed(const TSharedRef& input)
         // and 64 bytes after error
         size_t contextEnd = std::min(read + 64, input.Size());
 
-        TString errorContext(input.Begin() + contextStart, contextEnd - contextStart);
+        std::string errorContext(input.Begin() + contextStart, contextEnd - contextStart);
 
         THROW_ERROR_EXCEPTION("HTTP parse error: %v", http_errno_description(http_errno))
-            << TErrorAttribute("parser_error_name", http_errno_name(http_errno))
-            << TErrorAttribute("error_context", EscapeC(errorContext));
+            .With("parser_error_name", http_errno_name(http_errno))
+            .With("error_context", EscapeC(TStringBuf(errorContext)));
     }
 
     if (http_errno == HPE_PAUSED) {
@@ -381,8 +381,8 @@ void THttpInput::Reset()
 TError THttpInput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 void THttpInput::FinishHeaders()
@@ -399,7 +399,7 @@ void THttpInput::FinishHeaders()
 void THttpInput::EnsureHeadersReceived()
 {
     if (!ReceiveHeaders()) {
-        THROW_ERROR(AnnotateError(TError("Connection was closed before the first byte of HTTP message")));
+        THROW_ERROR(AnnotateError(TError(NRpc::EErrorCode::TransportError, "Connection was closed before the first byte of HTTP message")));
     }
 }
 
@@ -474,12 +474,12 @@ void THttpInput::FinishMessage()
 
     auto stats = Connection_->GetReadStatistics();
     if (MessageType_ == EMessageType::Request) {
-        YT_LOG_DEBUG("Finished reading HTTP request body (RequestId: %v, BytesIn: %v, IdleDuration: %v, BusyDuration: %v, Keep-Alive: %v)",
-            RequestId_,
-            GetReadByteCount(),
-            stats.IdleDuration - StartStatistics_.IdleDuration,
-            stats.BusyDuration - StartStatistics_.BusyDuration,
-            Parser_.ShouldKeepAlive());
+        YT_TLOG_DEBUG("Finished reading HTTP request body")
+            .With("RequestId", RequestId_)
+            .With("BytesIn", GetReadByteCount())
+            .With("IdleDuration", stats.IdleDuration - StartStatistics_.IdleDuration)
+            .With("BusyDuration", stats.BusyDuration - StartStatistics_.BusyDuration)
+            .With("KeepAlive", Parser_.ShouldKeepAlive());
     }
 }
 
@@ -560,9 +560,9 @@ void THttpInput::MaybeLogSlowProgress()
 {
     auto now = TInstant::Now();
     if (LastProgressLogTime_ + Config_->BodyReadIdleTimeout < now) {
-        YT_LOG_DEBUG("Reading HTTP message (RequestId: %v, BytesIn: %v)",
-            RequestId_,
-            GetReadByteCount());
+        YT_TLOG_DEBUG("Reading HTTP message")
+            .With("RequestId", RequestId_)
+            .With("BytesIn", GetReadByteCount());
         LastProgressLogTime_ = now;
     }
 }
@@ -624,7 +624,12 @@ const THeadersPtr& THttpOutput::GetHeaders()
 void THttpOutput::SetHost(TStringBuf host, TStringBuf port)
 {
     if (!port.empty()) {
-        HostHeader_ = Format("%v:%v", host, port);
+        auto parseResult = TNetworkAddress::TryParse(host);
+        if (parseResult.IsOK() && parseResult.Value().IsIP6()) {
+            HostHeader_ = Format("[%v]:%v", host, port);
+        } else {
+            HostHeader_ = Format("%v:%v", host, port);
+        }
     } else {
         HostHeader_ = std::string(host);
     }
@@ -743,7 +748,7 @@ TSharedRef THttpOutput::GetHeadersPart(std::optional<size_t> contentLength)
 
     Headers_->WriteTo(&messageHeaders, &FilteredHeaders());
 
-    TString headers;
+    std::string headers;
     messageHeaders.Buffer().AsString(headers);
     return TSharedRef::FromString(headers);
 }
@@ -754,7 +759,7 @@ TSharedRef THttpOutput::GetTrailersPart()
 
     Trailers_->WriteTo(&messageTrailers, &FilteredHeaders());
 
-    TString trailers;
+    std::string trailers;
     messageTrailers.Buffer().AsString(trailers);
     return TSharedRef::FromString(trailers);
 }
@@ -820,8 +825,8 @@ TFuture<void> THttpOutput::Close()
 TError THttpOutput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 TFuture<void> THttpOutput::FinishChunked()
@@ -882,26 +887,26 @@ void THttpOutput::OnWriteFinish()
     auto now = TInstant::Now();
     auto stats = Connection_->GetWriteStatistics();
     if (LastProgressLogTime_ + Config_->WriteIdleTimeout < now) {
-        YT_LOG_DEBUG("Writing HTTP message (RequestId: %v, BytesOut: %v, IdleDuration: %v, BusyDuration: %v)",
-            RequestId_,
-            GetWriteByteCount(),
-            stats.IdleDuration - StartStatistics_.IdleDuration,
-            stats.BusyDuration - StartStatistics_.BusyDuration);
+        YT_TLOG_DEBUG("Writing HTTP message")
+            .With("RequestId", RequestId_)
+            .With("BytesOut", GetWriteByteCount())
+            .With("IdleDuration", stats.IdleDuration - StartStatistics_.IdleDuration)
+            .With("BusyDuration", stats.BusyDuration - StartStatistics_.BusyDuration);
         LastProgressLogTime_ = now;
     }
 
     if (MessageType_ == EMessageType::Response) {
         if (HeadersFlushed_ && !HeadersLogged_) {
             HeadersLogged_ = true;
-            YT_LOG_DEBUG("Finished writing HTTP headers (RequestId: %v, StatusCode: %v)",
-                RequestId_,
-                Status_);
+            YT_TLOG_DEBUG("Finished writing HTTP headers")
+                .With("RequestId", RequestId_)
+                .With("StatusCode", Status_);
         }
 
         if (MessageFinished_) {
-            YT_LOG_DEBUG("Finished writing HTTP response (RequestId: %v, BytesOut: %v)",
-                RequestId_,
-                GetWriteByteCount());
+            YT_TLOG_DEBUG("Finished writing HTTP response")
+                .With("RequestId", RequestId_)
+                .With("BytesOut", GetWriteByteCount());
         }
     }
 }

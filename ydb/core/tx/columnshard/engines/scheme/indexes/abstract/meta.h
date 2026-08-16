@@ -112,7 +112,7 @@ public:
     {
     }
 
-    NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
+    NJson::TJsonValue SerializeDataToJson(const TString& iChunk, const TIndexInfo& indexInfo) const;
 
     TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
         if (!newMeta) {

@@ -172,6 +172,7 @@ class Stubber:
         self.client = client
         self._event_id = 'boto_stubber'
         self._expected_params_event_id = 'boto_stubber_expected_params'
+        self._stub_account_id_event_id = 'boto_stubber_stub_account_id'
         self._queue = deque()
 
     def __enter__(self):
@@ -195,6 +196,11 @@ class Stubber:
             self._get_response_handler,
             unique_id=self._event_id,
         )
+        self.client.meta.events.register(
+            'before-endpoint-resolution.*',
+            self._set_account_id_for_endpoint_resolution,
+            unique_id=self._stub_account_id_event_id,
+        )
 
     def deactivate(self):
         """
@@ -209,6 +215,11 @@ class Stubber:
             'before-call.*.*',
             self._get_response_handler,
             unique_id=self._event_id,
+        )
+        self.client.meta.events.unregister(
+            'before-endpoint-resolution.*',
+            self._stub_account_id_event_id,
+            unique_id=self._stub_account_id_event_id,
         )
 
     def add_response(self, method, service_response, expected_params=None):
@@ -239,8 +250,8 @@ class Stubber:
     def _add_response(self, method, service_response, expected_params):
         if not hasattr(self.client, method):
             raise ValueError(
-                "Client %s does not have method: %s"
-                % (self.client.meta.service_model.service_name, method)
+                f"Client {self.client.meta.service_model.service_name} "
+                f"does not have method: {method}"
             )
 
         # Create a successful http response
@@ -365,6 +376,14 @@ class Stubber:
                 reason=f'Operation mismatch: found response for {name}.',
             )
 
+    def _set_account_id_for_endpoint_resolution(self, builtins, **kwargs):
+        # Account ID comes from credentials and will try to resolve on endpoint resolution
+        # when it's a builtin.  This breaks any stubber in environments where credentials
+        # are not available.  We mock it to be a None value so that we don't attempt to
+        # resolve credentials.
+        if 'AWS::Auth::AccountId' in builtins:
+            builtins['AWS::Auth::AccountId'] = None
+
     def _get_response_handler(self, model, params, context, **kwargs):
         self._assert_expected_call_order(model, params)
         # Pop off the entire response once everything has been validated
@@ -383,16 +402,20 @@ class Stubber:
             if param not in params or expected_params[param] != params[param]:
                 raise StubAssertionError(
                     operation_name=model.name,
-                    reason='Expected parameters:\n%s,\nbut received:\n%s'
-                    % (pformat(expected_params), pformat(params)),
+                    reason=(
+                        f'Expected parameters:\n{pformat(expected_params)},\n'
+                        f'but received:\n{pformat(params)}'
+                    ),
                 )
 
         # Ensure there are no extra params hanging around
         if sorted(expected_params.keys()) != sorted(params.keys()):
             raise StubAssertionError(
                 operation_name=model.name,
-                reason='Expected parameters:\n%s,\nbut received:\n%s'
-                % (pformat(expected_params), pformat(params)),
+                reason=(
+                    f'Expected parameters:\n{pformat(expected_params)},\n'
+                    f'but received:\n{pformat(params)}'
+                ),
             )
 
     def _should_not_stub(self, context):

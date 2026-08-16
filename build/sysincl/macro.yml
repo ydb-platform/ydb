@@ -1226,6 +1226,10 @@
     - CUDA_STD_HEADER(type_traits):   $U/cuda/std/type_traits
     - CUDA_STD_HEADER(utility):       $U/cuda/std/utility
 
+- source_filter: "^contrib/libs"
+  includes:
+    - HWY_TARGET_INCLUDE: contrib/libs/highway/hwy/foreach_target.h
+    
 - source_filter: "^contrib/restricted/libgpg-error"
   includes:
     - _ESTREAM_PRINTF_EXTRA_INCLUDE: $U/gpgrt-int.h

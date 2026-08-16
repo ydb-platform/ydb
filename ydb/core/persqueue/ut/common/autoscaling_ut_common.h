@@ -110,6 +110,7 @@ struct TestReadSessionSettings {
     bool AutoPartitioningSupport = true;
     std::vector<std::string> Topics = {TEST_TOPIC};
     std::optional<TDuration> ReadLag;
+    bool WithoutConsumer = false;
 };
 
 struct ITestReadSession {

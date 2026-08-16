@@ -1,17 +1,26 @@
 #include "kqp_operator.h"
+#include "kqp_rbo_utils.h"
+
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 using TStatus = NYql::IGraphTransformer::TStatus;
 
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg", "variance_1_1"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -75,6 +84,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
     }
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
 
+    if (read->OriginalPredicate.has_value()) {
+        auto& lambda = read->OriginalPredicate.value().Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {newStructType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update original filter lambda arg types.";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate original filter lambda.");
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+        Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
+    }
+
     if (IsNeededToUpdateOlapReadType(read->OlapFilterLambda)) {
         auto& lambda = read->OlapFilterLambda;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.ExprCtx.MakeType<TFlowExprType>(structType)}, ctx.ExprCtx)) {
@@ -124,9 +148,11 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
         const TTypeAnnotationNode* subplanType;
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
-            auto subplan = subplanEntry.Plan;
-            auto subplanTupleType = CastOperator<IOperator>(subplan)->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            subplanType = subplanTupleType->GetItems()[0]->GetItemType();
+            auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
+            const auto resultIUs = GetSubplanResultIUs(subplan);
+            Y_ENSURE(!resultIUs.empty(), "Scalar subplan has no result columns");
+            subplanType = subplan->GetIUType(resultIUs.front());
+            Y_ENSURE(subplanType, "Cannot infer scalar subplan result type for " << resultIUs.front().GetFullName());
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
@@ -209,13 +235,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto typeItems = structType->GetItems();
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    if (!map->Project) {
-        const TTypeAnnotationNode* inputType = map->GetInput()->Type;
-        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename()) {
+            Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
+            renameSources.insert(mapElement.GetRename());
+        }
+    }
 
-        for (const auto* item : structType->GetItems()) {
+    for (const auto* item : structType->GetItems()) {
+        if (!renameSources.contains(TInfoUnit(TString(item->GetName())))) {
             resStructItemTypes.push_back(item);
         }
     }
@@ -268,16 +298,45 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
-    auto leftInputType = unionAll->GetLeftInput()->Type;
-    // TODO: Add sanity checks.
-    unionAll->Type = leftInputType;
+    TVector<const TStructExprType*> inputStructTypes;
+    inputStructTypes.reserve(unionAll->Children.size());
+    for (const auto& input : unionAll->Children) {
+        inputStructTypes.push_back(input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+    }
+
+    // The output type of every column is taken from the first input.
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(unionAll->Columns.size());
+    for (const auto& column : unionAll->Columns) {
+        const TTypeAnnotationNode* resultType = nullptr;
+        for (size_t i = 0; i < inputStructTypes.size(); ++i) {
+            const auto* inputType = inputStructTypes[i]->FindItemType(column.GetFullName());
+            Y_ENSURE(inputType, "Missing UnionAll source type for input " << i << ": " << column.GetFullName());
+
+            // FIXME: This currently does not pass after UnionAll semantic update
+            // Y_ENSURE(!resultType || IsSameAnnotation(*resultType, *inputType),
+            //     "UnionAll source type mismatch for " << column.GetFullName());
+
+            if (!resultType) {
+                resultType = inputType;
+            }
+        }
+
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), resultType));
+    }
+
+    auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
+    unionAll->Type = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
     return TStatus::Ok;
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const bool scalarAggregation = aggregate->KeyColumns.empty();
+    TPositionHandle pos = aggregate->Pos;
+    const auto aggregationPhase = aggregate->GetAggregationPhase();
+    Y_ENSURE(!aggregate->AggregationTraitsList.empty(), "There are no traits for aggregation.");
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -286,29 +345,58 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
 
-    for (const auto& keyColumn : aggregate->KeyColumns) {
-        auto it = aggTraitsMap.find(keyColumn.GetFullName());
-        Y_ENSURE(it != aggTraitsMap.end());
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+    if (!aggregate->IsDistinctAll()) {
+        for (const auto& keyColumn : aggregate->KeyColumns) {
+            const auto it = aggTraitsMap.find(keyColumn.GetFullName());
+            Y_ENSURE(it != aggTraitsMap.end());
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+        }
+    }
+
+    // In case type annotation is running for final aggregation.
+    // (resultColName, (aggFunction, isOptional)).
+    THashMap<TString, std::pair<TString, bool>> intermediateAggregation;
+    if (aggregate->GetInput()->GetKind() == EOperator::Aggregate && aggregationPhase == EOpPhase::Final) {
+        const auto& aggTraitsList = CastOperator<TOpAggregate>(aggregate->GetInput())->AggregationTraitsList;
+        for (const auto& aggTraits : aggTraitsList) {
+            const auto resultColName = aggTraits.ResultColName.GetFullName();
+            const auto& aggFunc = aggTraits.AggFunction;
+            const auto itemType = structType->FindItemType(resultColName);
+            Y_ENSURE(itemType, "Cannot find field name in input type.");
+            intermediateAggregation.emplace(resultColName, std::make_pair(aggFunc, itemType->IsOptionalOrNull()));
+        }
     }
 
     for (const auto& traits : aggregate->AggregationTraitsList) {
         const auto originalColName = traits.OriginalColName.GetFullName();
         const auto& aggFunction = traits.AggFunction;
+        Y_ENSURE(SupportedAggregationFunctions.contains(aggFunction), TStringBuilder() << "Unsupported aggregation function: " << aggFunction;);
         const auto resultColName = traits.ResultColName.GetFullName();
-        auto it = aggTraitsMap.find(originalColName);
-        Y_ENSURE(it != aggTraitsMap.end());
-        const auto* aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        const auto it = aggTraitsMap.find(originalColName);
+        Y_ENSURE(it != aggTraitsMap.end(), "Cannot find aggregation input " << originalColName
+            << " for " << aggregate->ToString(ctx.ExprCtx) << " in input type " << *inputType);
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for avg aggregation function");
+            if (auto unwrappedType = &RemoveOptionality(*aggFieldType); unwrappedType->GetKind() != ETypeAnnotationKind::Tuple) {
+                Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for avg aggregation function");
+            }
+        } else if (aggFunction == "variance_1_1") {
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for variance aggregation function");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (aggregationPhase != EOpPhase::Intermediate && scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
+            const auto it = intermediateAggregation.find(originalColName);
+            // count -> count::intermediate + sum::final
+            if ((it == intermediateAggregation.end()) || (it->second.first != "count")) {
+                aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
+            }
         }
 
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
@@ -365,14 +453,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
         } while (status == IGraphTransformer::TStatus::Repeat);
     }
 
-    if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
+    if (!JoinOutputsRight(join->JoinKind)) {
         rightItemTypes = {};
-    } else if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+    } else if (!JoinOutputsLeft(join->JoinKind)) {
         leftItemTypes = {};
     } else if (join->JoinKind == "Left") {
         rightItemTypes = AddOptional(rightItemTypes, ctx);
     } else if (join->JoinKind == "Right") {
         leftItemTypes = AddOptional(leftItemTypes, ctx);
+    } else if (join->JoinKind == "Full") {
+        leftItemTypes = AddOptional(leftItemTypes, ctx);
+        rightItemTypes = AddOptional(rightItemTypes, ctx);
     }
 
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
@@ -417,6 +508,101 @@ TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
+    const auto table = ResolveTable(lookup->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    TVector<TCoAtom> columns;
+    for (const auto& column : lookup->FetchColumns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, lookup->Pos).Value(column).Done());
+    }
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, lookup->Pos).Add(columns).Done();
+
+    const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster,
+        table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto itemType : rowType->Cast<TStructExprType>()->GetItems()) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(lookup->FetchColumns.begin(), lookup->FetchColumns.end(), columnName);
+        const auto columnIndex = std::distance(lookup->FetchColumns.begin(), it);
+        const auto fullName = lookup->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+
+    if (!lookup->IsJoin()) {
+        lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
+        return TStatus::Ok;
+    }
+
+    if (lookup->FetchedRowFilter) {
+        auto& lambda = lookup->FetchedRowFilter->Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {newStructType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update the lookup join filter lambda arg types";
+            return TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        TStatus status(TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == TStatus::Repeat);
+
+        if (!lambda->GetTypeAnn()) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not infer the lookup join filter lambda type, status = " << status;
+            return TStatus::Error;
+        }
+        if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.ExprCtx, true)) {
+            return TStatus::Error;
+        }
+    }
+
+    const auto* leftItemType = lookup->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+    if (!EnsureStructType(lookup->Pos, *leftItemType, ctx.ExprCtx)) {
+        return TStatus::Error;
+    }
+
+    TVector<const TTypeAnnotationNode*> tupleItemTypes;
+    tupleItemTypes.push_back(leftItemType);
+    tupleItemTypes.push_back(ctx.ExprCtx.MakeType<TOptionalExprType>(newStructType));
+    tupleItemTypes.push_back(ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64));
+    lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TTupleExprType>(tupleItemTypes));
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpIndexLookupJoin> lookupJoin, TRBOContext& ctx) {
+    const auto* itemType = lookupJoin->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+    if (!EnsureTupleType(lookupJoin->Pos, *itemType, ctx.ExprCtx)) {
+        return TStatus::Error;
+    }
+
+    const auto* tupleType = itemType->Cast<TTupleExprType>();
+    // (left row, optional(right row), cookie)
+    Y_ENSURE(tupleType->GetSize() == 3, "Unexpected lookup join input tuple");
+    const auto leftItemTypes = tupleType->GetItems()[0]->Cast<TStructExprType>()->GetItems();
+
+    TVector<const TItemExprType*> structItemTypes;
+    structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+
+    if (JoinOutputsRight(lookupJoin->JoinKind)) {
+        auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+        // An unmatched left row of a left join produces NULLs on the right side.
+        if (lookupJoin->JoinKind == "Left") {
+            rightItemTypes = AddOptional(rightItemTypes, ctx);
+        }
+        structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    }
+
+    lookupJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props);
 
 TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanProps& props) {
@@ -457,6 +643,12 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     else if (MatchOperator<TOpSort>(op)) {
         return ComputeTypes(CastOperator<TOpSort>(op), ctx);
     }
+    else if (MatchOperator<TOpTableLookup>(op)) {
+        return ComputeTypes(CastOperator<TOpTableLookup>(op), ctx);
+    }
+    else if (MatchOperator<TOpIndexLookupJoin>(op)) {
+        return ComputeTypes(CastOperator<TOpIndexLookupJoin>(op), ctx);
+    }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
     }
@@ -468,14 +660,11 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
-    for (auto it = begin(); it != end(); it++) {
-        auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
+    for (const auto& item : *this) {
+        auto status = ::NKikimr::NKqp::ComputeTypes(item.Current, ctx, PlanProps);
         if (status != TStatus::Ok) {
             return status;
         }
@@ -483,5 +672,4 @@ TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-}
-}
+} // namespace NKikimr::NKqp

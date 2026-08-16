@@ -37,7 +37,13 @@ void TPartitionActor::CompleteStorePartitionIds(
     const TActorContext& ctx,
     TTxPartition::TStorePartitionIds& args)
 {
-    Start(ctx, args.DirectBlockGroupsConnections);
+    // No persisted vchunk configs at first allocation: vchunks fall back to
+    // TVChunkConfig::Make().
+    Start(
+        ctx,
+        args.DirectBlockGroupsConnections,
+        {}   // vChunkConfigs
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select -128t as i8_min;
 select  127t as i8_max;
 

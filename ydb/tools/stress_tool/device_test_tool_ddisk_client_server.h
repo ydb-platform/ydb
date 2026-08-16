@@ -182,7 +182,8 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
+                NDDisk::TPersistentBufferFormat pbFormat{512, 512, 128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
+                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);
                 TBase::Setup->LocalServices.push_back(

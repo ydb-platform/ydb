@@ -61,7 +61,7 @@ TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConv
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::Unordered, ctx);
                 makeUnordered = false;
             }
-            if (!opts.KeepDirecRead_) {
+            if (!opts.KeepDirectRead_) {
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::DirectRead, ctx);
             }
             if (opts.Settings_) {
@@ -775,7 +775,7 @@ TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ct
 }
 
 TConvertInputOpts::TConvertInputOpts()
-            : KeepDirecRead_(false)
+            : KeepDirectRead_(false)
             , MakeUnordered_(false)
             , ClearUnordered_(false)
 {
@@ -817,8 +817,8 @@ TConvertInputOpts::ExplicitFields(const TStructExprType& type, TPositionHandle p
 }
 
 TConvertInputOpts&
-TConvertInputOpts::KeepDirecRead(bool keepDirecRead) {
-    KeepDirecRead_ = keepDirecRead;
+TConvertInputOpts::KeepDirectRead(bool keepDirectRead) {
+    KeepDirectRead_ = keepDirectRead;
     return *this;
 }
 
@@ -1149,19 +1149,17 @@ bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& 
     if (type.GetKind() == ETypeAnnotationKind::Variant) {
         for (auto tupleItemType: type.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems()) {
             if (tupleItemType->HasBareYson() && (NYql::GetNativeYtTypeFlags(*tupleItemType->Cast<TStructExprType>()) & NTCF_COMPLEX)) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tupleItemType));
+                ReportNonWritableBareYsonError(ctx.GetPosition(pos), *tupleItemType->Cast<TStructExprType>(), ctx);
                 return false;
             }
         }
 
     } else if (type.HasBareYson() && (NYql::GetNativeYtTypeFlags(*type.Cast<TStructExprType>()) & NTCF_COMPLEX)) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                    << type));
+        ReportNonWritableBareYsonError(ctx.GetPosition(pos), *type.Cast<TStructExprType>(), ctx);
         return false;
     }
 
     return true;
 }
 
-}  // namespace NYql
+} // namespace NYql

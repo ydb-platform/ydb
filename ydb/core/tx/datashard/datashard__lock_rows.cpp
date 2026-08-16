@@ -72,6 +72,10 @@ private:
 class TDataShard::TLockRowsTxObserver : public NTable::ITransactionObserver {
 public:
     TRowVersion VolatileVersion = TRowVersion::Min();
+    // Record conflicting tx ids, but add conflicts later, and only if we can actually lock the row.
+    // If we have to wait for another lock to be released, ignore them, the conflicts will be
+    // re-checked when we retry.
+    TVector<ui64> ReadConflicts;
 
     TLockRowsTxObserver(TDataShard& self)
         : Self(self)
@@ -84,7 +88,7 @@ public:
                 Self.SysLocksTable().AddVolatileDependency(txId);
             }
         } else {
-            Self.SysLocksTable().AddReadConflict(txId);
+            ReadConflicts.push_back(txId);
         }
     }
 
@@ -243,6 +247,12 @@ TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
 
 void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev) {
     auto* msg = ev->Get();
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        "Handle TEvLockRows: at tablet# " << TabletID()
+        << ", sender: " << ev->Sender
+        << ", RequestId: " << msg->Record.GetRequestId()
+        << ", LockId: " << msg->Record.GetLockId()
+        << ", LockNode: " << msg->Record.GetLockNodeId());
 
     TLockRowsRequestId requestId(ev->Sender, msg->Record.GetRequestId());
 
@@ -301,6 +311,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     const ui32 lockNodeId = msg->Record.GetLockNodeId();
     const TTableId tableId = msg->GetTableId();
     const bool skipLocked = msg->Record.GetSkipLocked();
+    const bool skipAbsent = msg->Record.GetSkipAbsent();
 
     {
         NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
@@ -661,6 +672,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 };
 
                 auto finishLocked = [&]() {
+                    for (ui64 txId : observer->ReadConflicts) {
+                        SysLocksTable().AddReadConflict(txId);
+                    }
                     success->Record.AddLockedKeys(processedKeys);
                     if (modified) {
                         success->Record.AddModifiedKeys(processedKeys);
@@ -669,8 +683,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     ++processedKeys;
                 };
 
-                auto finishSkipped = [&]() {
-                    success->Record.AddSkippedKeys(processedKeys);
+                auto finishSkippedLocked = [&]() {
+                    success->Record.AddSkippedLockedKeys(processedKeys);
                     runtimeLock.Reset();
                     ++processedKeys;
                 };
@@ -755,9 +769,22 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     }
                 }
 
+                // Note: we run the skipAbsent check *after* we check that we already have the lock
+                // for this key. The purpose of skipAbsent is to allow other transactions to lock and
+                // insert a row to this key if this transaction is trying to update/delete a row that
+                // is not there. If we already locked the key, this means that previously in this
+                // transaction we inserted the row, so it should be able to do other operations
+                // to it, and we shouldn't skip even if no committed row exists.
+                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
+                    success->Record.AddSkippedAbsentKeys(processedKeys);
+                    runtimeLock.Reset();
+                    ++processedKeys;
+                    continue;
+                }
+
                 // Don't bother waiting in skipLocked mode when current owner conflicts with us
                 if (skipLocked && currentOwner && !IsCompatibleRowLockMode(currentLockMode, lockMode)) {
-                    finishSkipped();
+                    finishSkippedLocked();
                     continue;
                 }
 
@@ -773,7 +800,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     Y_ENSURE(runtimeLock.IsValid());
                     if (!runtimeLock.IsOwner()) {
                         if (skipLocked) {
-                            finishSkipped();
+                            finishSkippedLocked();
                             continue;
                         }
 

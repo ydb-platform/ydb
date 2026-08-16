@@ -1,5 +1,6 @@
 #include "localrecovery_public.h"
 #include "localrecovery_logreplay.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
@@ -80,6 +81,7 @@ namespace NKikimr {
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
+        bool LocalRecoveryTokenRequested = false;
         bool HullLogoBlobsDBInitialized = false;
         bool HullBlocksDBInitialized = false;
         bool HullBarriersDBInitialized = false;
@@ -101,15 +103,30 @@ namespace NKikimr {
             HullBarriersDBInitialized && SyncLogInitialized;
         }
 
+        void QueryToken(const TActorContext& ctx) {
+            Y_ABORT_UNLESS(!LocalRecoveryTokenRequested);
+            ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
+                new TEvAcquireVDiskOperationToken(MakeBlobStorageVDiskID(
+                    SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                    Config->BaseInfo.PDiskId),
+                IEventHandle::FlagTrackDelivery);
+            LocalRecoveryTokenRequested = true;
+        }
+
+        void ReleaseToken(const TActorContext& ctx) {
+            if (LocalRecoveryTokenRequested) {
+                ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
+                    new TEvReleaseVDiskOperationToken(MakeBlobStorageVDiskID(
+                        SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                        Config->BaseInfo.PDiskId));
+                LocalRecoveryTokenRequested = false;
+            }
+        }
+
         void SignalErrorAndDie(const TActorContext &ctx, NKikimrProto::EReplyStatus status, const TString &reason) {
             LocRecCtx->RecovInfo->SuccessfulRecovery = false;
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::Error;
-            LOG_CRIT(ctx, BS_LOCALRECOVERY,
-                    VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                        "LocalRecovery FINISHED: %s reason# %s status# %s;"
-                        "VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR",
-                        LocRecCtx->RecovInfo->ToString().data(), reason.data(),
-                        NKikimrProto::EReplyStatus_Name(status).data()));
+            YDB_LOG_CRIT_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery FINISHED: %s reason# %s status# %s;" "VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR", LocRecCtx->RecovInfo->ToString().data(), reason.data(), NKikimrProto::EReplyStatus_Name(status).data()));
             ctx.Send(SkeletonId, new TEvBlobStorage::TEvLocalRecoveryDone(
                                                 status,
                                                 LocRecCtx->RecovInfo,
@@ -130,6 +147,7 @@ namespace NKikimr {
                                                 {},
                                                 nullptr,
                                                 false));
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -145,9 +163,7 @@ namespace NKikimr {
             auto lsnMngr = MakeIntrusive<TLsnMngr>(RecoveredLsn, lsnToSyncLogRecovered, true);
             LocRecCtx->RecovInfo->SetRecoveredLogStartLsn(lsnMngr->GetStartLsn());
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::Done;
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "LocalRecovery FINISHED: %s", LocRecCtx->RecovInfo->ToString().data()));
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery FINISHED: %s", LocRecCtx->RecovInfo->ToString().data()));
             ctx.Send(SkeletonId,
                      new TEvBlobStorage::TEvLocalRecoveryDone(NKikimrProto::OK,
                                                               LocRecCtx->RecovInfo,
@@ -166,6 +182,7 @@ namespace NKikimr {
                                                               std::move(MetadataEntryPoint),
                                                               std::move(LocRecCtx->ChunkKeeperData),
                                                               HasMetadata));
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -190,13 +207,7 @@ namespace NKikimr {
             // store last indexed lsn (i.e. lsn of the last record that already in DiskRecLog)
             SyncLogMaxLsnStored = LocRecCtx->SyncLogRecovery->GetLastLsnOfIndexRecord();
 
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                             "MAX LSNS: LogoBlobs# %s Blocks# %s Barriers# %s SyncLog# %" PRIu64,
-                             LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->GetCompactedLsn().ToString().data(),
-                             LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->GetCompactedLsn().ToString().data(),
-                             LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->GetCompactedLsn().ToString().data(),
-                             SyncLogMaxLsnStored));
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "MAX LSNS: LogoBlobs# %s Blocks# %s Barriers# %s SyncLog# %" PRIu64, LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->GetCompactedLsn().ToString().data(), LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->GetCompactedLsn().ToString().data(), LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->GetCompactedLsn().ToString().data(), SyncLogMaxLsnStored));
 
             // set up blocks cache
             LocRecCtx->HullDbRecovery->BuildBlocksCache();
@@ -515,7 +526,7 @@ namespace NKikimr {
             bool enableTinyDisks = AppData(ctx)->FeatureFlags.GetEnableTinyDisks();
 
             auto logFunc = [&] (const TString &msg) {
-                LOG_DEBUG(ctx, BS_HULLHUGE, msg);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, msg);
             };
             TStartingPoints::const_iterator it;
             it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint);
@@ -611,8 +622,7 @@ namespace NKikimr {
 
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 
-                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                    "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
                 // create context for HullDs
                 Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
@@ -659,10 +669,7 @@ namespace NKikimr {
                 const TStartingPoints &startingPoints = ev->Get()->StartingPoints;
                 // save starting points into info
                 for (const auto &x : startingPoints) {
-                    LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                              VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                                    "STARTING POINT: signature# %" PRIu32 " record# %s",
-                                    ui32(x.first), x.second.ToString().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "STARTING POINT: signature# %" PRIu32 " record# %s", ui32(x.first), x.second.ToString().data()));
                     LocRecCtx->RecovInfo->SetStartingPoint(x.first, x.second.Lsn);
                     switch (x.first) {
                         case TLogSignature::SignatureSyncLogIdx:
@@ -677,9 +684,7 @@ namespace NKikimr {
                             break;
 
                         default:
-                            LOG_CRIT(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                                "Unknown starting point Signature# %" PRIu32 " record# %s",
-                                (ui32)x.first, x.second.ToString().data()));
+                            YDB_LOG_CRIT_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Unknown starting point Signature# %" PRIu32 " record# %s", (ui32)x.first, x.second.ToString().data()));
                             break;
                     }
                 }
@@ -727,20 +732,34 @@ namespace NKikimr {
                 ctx.Send(handle.release());
             }
 
-            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s delay %lf sec",
-                            ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s delay %lf sec", ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(), ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
         }
 
-        void Bootstrap(const TActorContext &ctx) {
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
-
+        void ContinueYardInit(const TActorContext &ctx) {
             SendYardInit(ctx, TDuration::Zero());
             Become(&TThis::StateInitialize);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
+
+            QueryToken(ctx);
+            Become(&TThis::StateAwaitToken);
+        }
+
+        void Handle(TEvVDiskOperationToken::TPtr&, const TActorContext& ctx) {
+            Y_ABORT_UNLESS(LocalRecoveryTokenRequested);
+            ContinueYardInit(ctx);
+        }
+
+        void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
+                // No localrecovery broker service. Continue without it.
+                YDB_LOG_WARN_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery broker is not available, continuing without it"));
+                LocalRecoveryTokenRequested = false;
+                ContinueYardInit(ctx);
+            }
         }
 
         void Handle(THullIndexLoaded::TPtr &ev, const TActorContext &ctx) {
@@ -764,17 +783,14 @@ namespace NKikimr {
         }
 
         void HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
-            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "Undelivered TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s",
-                            ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Undelivered TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s", ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(), ctx.SelfID.ToString().data()));
 
             SendYardInit(ctx, TDuration::Seconds(1));
         }
 
         void HandlePoison(const TActorContext &ctx) {
             ActiveActors.KillAndClear(ctx);
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -785,6 +801,13 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));
         }
 
+
+        STRICT_STFUNC(StateAwaitToken,
+            HFunc(TEvVDiskOperationToken, Handle)
+            HFunc(TEvents::TEvUndelivered, HandleBrokerUndelivered)
+            CFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison)
+            HFunc(NMon::TEvHttpInfo, Handle)
+        )
 
         STRICT_STFUNC(StateInitialize,
             HFunc(NPDisk::TEvYardInitResult, Handle)

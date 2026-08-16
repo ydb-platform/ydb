@@ -1,6 +1,5 @@
 #include "host_mask.h"
 
-#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 #include <bit>
@@ -37,6 +36,25 @@ THostMask THostMask::MakeAll(size_t hostCount)
     return THostMask((ui32(1) << hostCount) - 1);
 }
 
+// static
+THostMask THostMask::MakeFromRoute(const THostRoute& route)
+{
+    THostMask result;
+    result.Set(route.SourceHostIndex);
+    result.Set(route.DestinationHostIndex);
+    return result;
+}
+
+// static
+THostMask THostMask::MakeMask(std::initializer_list<THostIndex> hosts)
+{
+    THostMask mask;
+    for (auto host: hosts) {
+        mask.Set(host);
+    }
+    return mask;
+}
+
 void THostMask::Set(THostIndex host)
 {
     Y_ABORT_UNLESS(host < MaxHostCount);
@@ -47,6 +65,16 @@ void THostMask::Reset(THostIndex host)
 {
     Y_ABORT_UNLESS(host < MaxHostCount);
     Bits &= ~(ui32(1) << host);
+}
+
+void THostMask::Update(THostIndex host, bool value)
+{
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    if (value) {
+        Set(host);
+    } else {
+        Reset(host);
+    }
 }
 
 bool THostMask::Get(THostIndex host) const
@@ -63,6 +91,11 @@ bool THostMask::Empty() const
 size_t THostMask::Count() const
 {
     return std::bitset<32>(Bits).count();
+}
+
+THostMask THostMask::LogicalNot() const
+{
+    return THostMask(~Bits);
 }
 
 THostMask THostMask::LogicalAnd(THostMask other) const
@@ -158,21 +191,11 @@ TString THostMask::Print() const
         if (!first) {
             result << ",";
         }
-        result << "H" << ui32(host);
+        result << PrintHostIndex(host);
         first = false;
     }
     result << "]";
     return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool THostRoute::operator<(const THostRoute& other) const
-{
-    if (SourceHostIndex != other.SourceHostIndex) {
-        return SourceHostIndex < other.SourceHostIndex;
-    }
-    return DestinationHostIndex < other.DestinationHostIndex;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

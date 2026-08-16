@@ -51,12 +51,12 @@ struct TCheckStateResult;
 
 struct TState {
     TString AntiForgeryToken;
-    TString CookieSuffix;
+    TString RequestedAddress;
     TMaybe<TInstant> ExpirationTime;
 
     bool operator==(const TState& other) const {
         return AntiForgeryToken == other.AntiForgeryToken
-            && CookieSuffix == other.CookieSuffix
+            && RequestedAddress == other.RequestedAddress
             && ExpirationTime == other.ExpirationTime;
     }
 };
@@ -75,27 +75,25 @@ struct TDecodeStateResult {
 struct TCheckStateResult {
     bool Ok = true;
     TString ErrorMessage;
-    TString CookieSuffix;
+    TString RequestedAddress;
 
-    static TCheckStateResult Error(const TString& errorMessage, const TString& cookieSuffix = "");
-    static TCheckStateResult Success(const TString& cookieSuffix = "");
+    static TCheckStateResult Error(const TString& errorMessage, const TString& requestedAddress = "");
+    static TCheckStateResult Success(const TString& requestedAddress = "");
 
 private:
-    TCheckStateResult(bool ok, const TString& cookieSuffix, const TString& errorMessage);
+    TCheckStateResult(bool ok, const TString& errorMessage, const TString& requestedAddress);
 };
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId);
-TString CreateNameYdbOidcCookie(TStringBuf suffix = "");
 TString CreateNameSessionCookie(TStringBuf key);
 TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
-TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix = "");
 TString EncodeState(const TState& payload, TStringBuf signingKey);
 TDecodeStateResult DecodeState(TStringBuf encodedState);
 TCheckStateResult CheckState(const TString& state, const TString& key);

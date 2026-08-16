@@ -1,7 +1,7 @@
 #include "action_queue.h"
 
 #include "single_queue_scheduler_thread.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "invoker_queue.h"
 
 #include <yt/yt/core/actions/invoker_detail.h>

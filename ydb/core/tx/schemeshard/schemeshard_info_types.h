@@ -11,6 +11,7 @@
 
 #include <util/generic/yexception.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -29,12 +30,14 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -174,6 +177,29 @@ struct TBackupSettings {
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
         S3Settings.Register(icb);
+    }
+};
+
+// Per-incremental restore orchestrator rate-limit settings. Sentinel -1 means unbounded.
+struct TIncrementalRestoreSettings {
+    TControlWrapper MaxIncrementalRestoreTablesInFlight;
+    // Wall-clock deadlines (seconds). Sentinel -1 disables the deadline.
+    TControlWrapper MaxIncrementalRestoreOverallDurationSeconds;
+    TControlWrapper MaxIncrementalRestoreStageDurationSeconds;
+
+    TIncrementalRestoreSettings()
+        : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
+        , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
+        , MaxIncrementalRestoreStageDurationSeconds(86400, -1, 604800)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreOverallDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
     }
 };
 
@@ -388,6 +414,9 @@ struct TPartitionStats {
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
     ui64 ByKeyFilterSize = 0;
+
+    ui64 SmallBlobsVolumeBytes = 0;
+    ui64 SmallBlobsCount = 0;
 
     struct TStoragePoolStats {
         ui64 DataSize = 0;
@@ -706,6 +735,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
         bool IsBuildInProgress = false;
+        bool SetNotNullInProgress = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
@@ -796,6 +826,12 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    // True when partition rows are stored in TablePartitionsByShardIdx (keyed by ShardIdx).
+    // False (default) when stored in TablePartitions/MigratedTablePartitions (keyed by position);
+    // both legacy tables are scheduled for removal once migration is complete, after which this
+    // flag and its branches can be deleted.
+    // Toggled during the first split/merge after EnableTablePartitionsFormatShardIdx changes.
+    bool PartitionsInShardIdxFormat = false;
     bool IsRestore = false;
     bool IsTemporary = false;
     TActorId OwnerActorId;
@@ -818,6 +854,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
     bool IsExternalBlobsEnabled = false;
+
+    mutable ui64 LastVerifyConsistencyTime = 0;
 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
@@ -855,6 +893,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     NKikimrSchemeOp::TTTLSettings& MutableTTLSettings() {
         TTLColumnId.Clear();
         return *TableDescription.MutableTTLSettings();
+    }
+
+    bool HasMultiColumnStatistics() const { return TableDescription.MultiColumnStatisticsSize() > 0; }
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>& MultiColumnStatistics() const {
+        return TableDescription.GetMultiColumnStatistics();
+    }
+    ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>* MutableMultiColumnStatistics() {
+        return TableDescription.MutableMultiColumnStatistics();
     }
 
     /**
@@ -910,8 +956,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
+    static constexpr ui32 InvalidColumnId = Max<ui32>();
+    // TODO(flown4qqqq):: rework this into a fast way.
+    ui32 GetColumnIdByNameSlow(const TString& columnName) const;
+
 private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
+    void CalculateColumnIdByName() const;
 
     // Stable-address store: THashMap uses separate chaining, so element references
     // survive insert.  Also serves as the O(1) ShardIdx lookup index.
@@ -965,7 +1016,10 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
-        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
+        bool EnableDetailedMetrics;
+        bool EnableColumnStatistics = false;
+        bool EnableGeneratedStored = false;
+        bool EnableGeneratedVirtual = false;
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -1411,6 +1465,18 @@ public:
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
                 pr.second.DefaultValue == name)
             {
+                // A column scheduled to be dropped by the pending alter no longer keeps the
+                // sequence alive. This lets a single ALTER drop a serial column and cascade
+                // a DropSequence sub-operation for its backing sequence in the same operation:
+                // the AlterTable part is proposed first (marking the column for deletion in
+                // AlterData), so the DropSequence part that follows does not see the sequence
+                // as still in use.
+                if (AlterData) {
+                    auto it = AlterData->Columns.find(pr.first);
+                    if (it != AlterData->Columns.end() && it->second.DeleteVersion == AlterData->AlterVersion) {
+                        continue;
+                    }
+                }
                 return true;
             }
         }
@@ -1604,6 +1670,10 @@ struct TShardInfo {
     static TShardInfo BlobDepotInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::BlobDepot);
     }
+
+    static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::TestShard);
+    }
 };
 
 /**
@@ -1636,19 +1706,12 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
             return PartitionId == rhs.PartitionId
                 && GroupId == rhs.GroupId;
         }
-
-        struct THash {
-            inline size_t operator()(const TPartitionToAdd& obj) const {
-                const ::THash<ui32> hashFn;
-                return CombineHashes(hashFn(obj.PartitionId), hashFn(obj.GroupId));
-            }
-        };
     };
 
     ui64 TotalGroupCount = 0;
     ui64 TotalPartitionCount = 0;
     ui32 NextPartitionId = 0;
-    THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
+    TVector<TPartitionToAdd> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
     THashMap<ui32, TMaybe<TTopicTabletInfo::TKeyRange>> KeyRangesToChange;
     ui32 MaxPartsPerTablet = 0;
@@ -1703,14 +1766,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     bool FillKeySchema(const TString& tabletConfig);
 
     bool HasBalancer() const { return bool(BalancerTabletID); }
-
-    ui32 GetTotalPartitionCountWithAlter() const {
-        ui32 res = 0;
-        for (const auto& shard : Shards) {
-            res += shard.second->PartsCount();
-        }
-        return res;
-    }
 
     ui32 ExpectedShardCount() const {
 
@@ -1874,16 +1929,28 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
     virtual void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
-    virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
+    virtual void ChangeSmallBlobsVolumeBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCount(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountHardQuota(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountSoftQuota(i64 delta) = 0;
+    virtual void ChangeSimpleCounter(ESimpleCounters counter, i64 delta) = 0;
     virtual void ChangePathCount(i64 delta) = 0;
     virtual void SetPathCount(ui64 value) = 0;
     virtual void SetPathsQuota(ui64 value) = 0;
     virtual void ChangeShardCount(i64 delta) = 0;
     virtual void SetShardCount(ui64 value) = 0;
     virtual void SetShardsQuota(ui64 value) = 0;
+};
+
+enum class EQuotaUsageStatus {
+    AboveHardQuota,
+    InBetween,
+    BelowSoftQuota,
 };
 
 enum class EPathCategory : ui8 {
@@ -1931,6 +1998,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
                 }
             );
         }
+    };
+
+    struct TSmallBlobsQuotas {
+        ui64 VolumeHardQuota = 0;
+        ui64 VolumeSoftQuota = 0;
+        ui64 CountHardQuota = 0;
+        ui64 CountSoftQuota = 0;
+    };
+
+    struct TSmallBlobsUsage {
+        ui64 VolumeBytes = 0;
+        ui64 Count = 0;
     };
 
     TSubDomainInfo() = default;
@@ -2249,16 +2328,20 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
         if (!AlterData->DatabaseQuotas && DatabaseQuotas && !isExternal) {
             AlterData->DatabaseQuotas = DatabaseQuotas;
+            AlterData->SmallBlobsStorageUnits = SmallBlobsStorageUnits;
         }
 
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
+        AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
 
-        // Update DiskSpaceUsage and recheck quotas (which may have changed by an alter)
+        // Update usage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
-        AlterData->CheckDiskSpaceQuotas(counters);
+        AlterData->SmallBlobsUsage = SmallBlobsUsage;
+        AlterData->CheckQuotas(counters);
 
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
+        CountSmallBlobsQuotas(counters, GetSmallBlobsQuotas(), AlterData->GetSmallBlobsQuotas());
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
     }
@@ -2289,6 +2372,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
+    static void CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next);
+
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
     }
@@ -2307,11 +2392,25 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     TDiskSpaceQuotas GetDiskSpaceQuotas() const;
 
+    TSmallBlobsQuotas GetSmallBlobsQuotas() const;
+
     /*
     Checks current disk usage against disk quotas.
     Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
+
+    /*
+    Checks current small-blobs usage against small-blobs quotas.
+    Returns true when the SmallBlobsQuotaExceeded flag has changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
+
+    /*
+    Rechecks disk space and small blobs quotas in one go.
+    Returns true when any flag changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
@@ -2484,11 +2583,16 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
+    void AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {
         return DiskSpaceUsage;
+    }
+
+    const TSmallBlobsUsage& GetSmallBlobsUsage() const {
+        return SmallBlobsUsage;
     }
 
     const TMaybe<NKikimrSubDomains::TSchemeQuotas>& GetDeclaredSchemeQuotas() const {
@@ -2505,17 +2609,21 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas) {
         DatabaseQuotas.ConstructInPlace(databaseQuotas);
+        RecomputeSmallBlobsStorageUnits();
     }
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
         auto prev = GetDiskSpaceQuotas();
+        auto prevSmallBlobs = GetSmallBlobsQuotas();
         auto prevs = GetStreamShardsQuota();
         auto prevrs = GetStreamReservedStorageQuota();
-        DatabaseQuotas.ConstructInPlace(databaseQuotas);
+        SetDatabaseQuotas(databaseQuotas);
         auto next = GetDiskSpaceQuotas();
+        auto nextSmallBlobs = GetSmallBlobsQuotas();
         auto nexts = GetStreamShardsQuota();
         auto nextrs = GetStreamReservedStorageQuota();
         CountDiskSpaceQuotas(counters, prev, next);
+        CountSmallBlobsQuotas(counters, prevSmallBlobs, nextSmallBlobs);
         CountStreamShardsQuota(counters, prevs, nexts);
         CountStreamReservedStorageQuota(counters, prevrs, nextrs);
     }
@@ -2598,6 +2706,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
+    bool GetSmallBlobsQuotaExceeded() const {
+        return SmallBlobsQuotaExceeded;
+    }
+
+    void SetSmallBlobsQuotaExceeded(bool value) {
+        SmallBlobsQuotaExceeded = value;
+    }
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2639,6 +2755,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    ETablesMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    void SetTablesMetricsLevel(ETablesMetricsLevel level) {
+        TablesMetricsLevel = level;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2647,6 +2771,9 @@ private:
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
+    bool SmallBlobsQuotaExceeded = false;
+    // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
+    double SmallBlobsStorageUnits = 0;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;
@@ -2659,6 +2786,11 @@ private:
     ui64 BackupPathsCount = 0;
     ui64 SystemPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
+    TSmallBlobsUsage SmallBlobsUsage;
+
+    void RecomputeSmallBlobsStorageUnits();
+    // Returns whether the quota exceeded status was flipped
+    bool ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters);
 
     THashSet<TShardIdx> InternalShards;
     THashSet<TShardIdx> BackupShards;
@@ -2676,6 +2808,8 @@ private:
     ui64 SecurityStateVersion = 0;
 
     TMaybeAuditSettings AuditSettings;
+
+    ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
@@ -2981,9 +3115,21 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
                 Y_ASSERT(description.empty());
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled (the serialized description is then non-empty); legacy JSON indexes have none.
+                if (!description.empty()) {
+                    auto success = SpecializedIndexDescription
+                        .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                        .ParseFromString(description);
+                    Y_ENSURE(success, description);
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 auto success = SpecializedIndexDescription
@@ -2993,15 +3139,30 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
                     .ParseFromString(description);
                 Y_ENSURE(success, description);
                 break;
             }
-            default:
-                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomNGrammFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 break;
         }
     }
@@ -3024,6 +3185,10 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return std::visit([]<typename T>(const T& v) {
             if constexpr (std::is_same_v<std::monostate, T>) {
                 return TString{};
+            } else if constexpr (std::is_same_v<NKikimrSchemeOp::TBloomNGrammFilter, T>) {
+                TString str;
+                Y_ENSURE(v.SerializeToString(&str));
+                return str;
             } else {
                 TString str{v.SerializeAsString()};
                 Y_ENSURE(!str.empty());
@@ -3036,8 +3201,15 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
+    static bool IsLocalIndex(EType type) {
+        return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax
+            || type == NKikimrSchemeOp::EIndexTypeLocalCountMinSketch;
+    }
+
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
-        if (!config.KeyColumnNamesSize()) {
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
             errMsg += TStringBuilder() << "no key columns in index creation config";
             return nullptr;
         }
@@ -3046,7 +3218,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ENSURE(!alterData->IndexKeys.empty());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
@@ -3055,18 +3229,75 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled; otherwise there is no specialized index description.
+                if (config.HasFulltextIndexDescription()) {
+                    alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
-            default:
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
+        }
+
+        return result;
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TIndexAlteringConfig& config, TString& errMsg) {
+        if (!config.HasType() || !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "TIndexAlteringConfig requires a valid local index type to be set";
+            return nullptr;
+        }
+
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "no key columns in index altering config";
+            return nullptr;
+        }
+
+        TPtr result = NotExistedYet(config.GetType());
+
+        TPtr alterData = result->CreateNextVersion();
+        alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
+
+        alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        switch (GetIndexType(config)) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                alterData->SpecializedIndexDescription = std::monostate{};
+                break;
+            default:
+                errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << NKikimrSchemeOp::EIndexType_Name(config.GetType());
                 return nullptr;
         }
 
@@ -3084,7 +3315,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
-        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        NKikimrSchemeOp::TBloomFilter,
+        NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {
@@ -3837,17 +4070,14 @@ struct TIncrementalRestoreState {
         Running = 1,
         Finalizing = 2,
         Completed = 3,
+        Failed = 4,
     };
 
     EState State = EState::Running;
 
-    // The backup collection path this restore belongs to
-    TPathId BackupCollectionPathId; // used for DB scoping and finalization
-
-    // Global id of the original incremental restore operation
+    TPathId BackupCollectionPathId;
     ui64 OriginalOperationId = 0;
 
-    // Sequential incremental backup processing
     struct TIncrementalBackup {
         TPathId BackupPathId;
         TString BackupPath;
@@ -3866,6 +4096,10 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
+        // When true, completion is detected from per-shard reports rather than
+        // Self->Operations.contains(txId) (no schema transaction was proposed).
+        bool RequestsDispatched = false;
+
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
@@ -3877,20 +4111,125 @@ struct TIncrementalRestoreState {
         bool HasFailures() const {
             return !FailedShards.empty();
         }
+
+        bool HasNonRetriableFailure = false;
+
+        // Idempotent against re-delivery: the first terminal report wins.
+        bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {
+            if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
+                return false;
+            }
+            if (success) {
+                CompletedShards.insert(shardIdx);
+            } else {
+                FailedShards.insert(shardIdx);
+                if (!retriable) {
+                    HasNonRetriableFailure = true;
+                }
+            }
+            return true;
+        }
     };
 
-    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    // Pending sub-op dispatched in batches bounded by MaxIncrementalRestoreTablesInFlight.
+    // Both Table and Index sub-ops share the queue so indexes don't fan out unbounded.
+    struct TPendingRestoreOp {
+        enum class EKind { Table, Index };
+        EKind Kind = EKind::Table;
+
+        TString BackupName;
+        TString TablePath;
+
+        TString IndexName;
+        TString TargetTablePath;
+        TString SpecificImplTableName;
+    };
+
+    // Sorted by timestamp.
+    TVector<TIncrementalBackup> IncrementalBackups;
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
 
-    // Operation completion tracking for current incremental backup
+    bool RetryNeeded = false;
+
+    // Two-tier wall-clock deadline anchors. Persisted across reboots so the
+    // budget cannot be defeated by a reboot loop.
+    TInstant RestoreStartedAt;
+    TInstant CurrentStageStartedAt;
+
+    // Two-phase backoff guard: set when a retry is scheduled, cleared when it fires.
+    // Prevents concurrent completion events from double-counting retries.
+    bool RetryScheduled = false;
+    TInstant NextRetryAttemptAt;
+
+    bool NonRetriableFailure = false;
+
+    // Set by TTxInit when retryNeeded=true. The first post-reboot retry-fire
+    // absorbs failed sub-ops as completed rather than re-dispatching (pre-reboot
+    // scan data is authoritative; re-dispatch won't get a fresh reply).
+    bool FreshBootRetryAbsorbPending = false;
+
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 
-    // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    THashSet<TShardIdx> InvolvedShards;
+    struct TPerShardDispatch {
+        TPathId SrcPathId;
+        TPathId DstPathId;
+        ui64 SchemeShardGeneration = 0;
+        THashMap<TShardIdx, TTabletId> ShardTablets;
+    };
+    THashMap<TOperationId, TPerShardDispatch> ShardDispatchByOp;
+
+    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingIncrementalRestoreTables.
+    // In-memory only; rebuilt after reboot from backup-collection contents.
+    TDeque<TPendingRestoreOp> PendingTables;
+
+    // ui32 maps to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED);
+    // typed here to avoid pulling Ydb::StatusIds into the header.
+    ui32 FinalStatus = 0;
+    TString FinalIssues;
+
+    // Per-sub-op tracking. Items move from PendingItems to InFlightItems once
+    // TxAllocatorClient supplies a TxId.
+    struct TItem {
+        enum class EKind : ui32 {
+            Table = 0,
+            Index = 1,
+            Finalize = 2,
+        };
+        ui32 ItemSeq = 0;
+        EKind Kind = EKind::Table;
+        TPathId TablePathId;
+        TPathId SrcTablePathId; // 0/0 for Finalize items or unresolved src path
+        // 0 == awaiting allocation.
+        ui64 WaitTxId = 0;
+
+        // Filled in and sent once TxAllocatorClient replies. In-memory only;
+        // rebuilt on reboot via the orchestrator's re-entry path.
+        TAutoPtr<NActors::IEventBase> PendingRequest;
+    };
+
+    ui32 NextItemSeq = 0;
+    TDeque<TItem> PendingItems;
+    THashMap<ui32 /*ItemSeq*/, TItem> InFlightItems;
+    THashMap<ui64 /*WaitTxId*/, ui32 /*ItemSeq*/> WaitTxIdToItemSeq;
+
+    // Returns progress within the current incremental as a fraction [0.0, 1.0]
+    // based on per-shard completion across all table operations
+    float CalcCurrentIncrementalProgress() const {
+        ui32 totalShards = 0;
+        ui32 doneShards = 0;
+        for (const auto& [_, tableOp] : TableOperations) {
+            totalShards += tableOp.ExpectedShards.size();
+            doneShards += tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+        }
+        if (totalShards == 0) {
+            return 0.0f;
+        }
+        return static_cast<float>(doneShards) / totalShards;
+    }
 
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
@@ -3905,11 +4244,15 @@ struct TIncrementalRestoreState {
         // If we started processing the current incremental but there are no operations at all,
         // it means no table backups were found in this incremental backup, so consider it complete
         // TODO: probably have to ensure that empty backups are impossible
-        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+            && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed
-        return InProgressOperations.empty() && !CompletedOperations.empty();
+        // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
+        return InProgressOperations.empty()
+            && PendingTables.empty()
+            && PendingItems.empty()
+            && !CompletedOperations.empty();
     }
 
     void MarkCurrentIncrementalComplete() {
@@ -3923,11 +4266,17 @@ struct TIncrementalRestoreState {
             CurrentIncrementalIdx++;
             CurrentIncrementalStarted = false;
 
-            // Reset operation tracking for next incremental
             InProgressOperations.clear();
             CompletedOperations.clear();
+            // TableOperations.clear() also clears HasNonRetriableFailure on each table.
             TableOperations.clear();
-            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
+            PendingTables.clear();
+
+            // Stage deadline anchor reset is owned by the caller (HandleAllOperationsComplete)
+            // because it needs ctx.Now() and a paired db.Update.
+            RetryScheduled = false;
+            NextRetryAttemptAt = TInstant::Zero();
+            NonRetriableFailure = false;
         }
     }
 
@@ -4031,6 +4380,97 @@ struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
     }
 };
 
+// Trackable full backup op (the aggregator over a BackupBackupCollection's
+// CCT). Mirrors TIncrementalBackupInfo with three changes:
+//   - Adds Failed terminal state (header + item).
+//   - Stores BackupCollectionPathId so reboot can rebuild
+//     Self->BCPathToFullBackup from non-terminal rows.
+//   - Stores FinalIssues for hard-fail diagnostics surfaced via GET.
+struct TFullBackupInfo : public TSimpleRefCount<TFullBackupInfo> {
+    using TPtr = TIntrusivePtr<TFullBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Failed = 230,
+        Done = 240,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Failed = 230,
+            Done = 240,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+    TPathId BackupCollectionPathId;
+
+    // Planned number of items (base tables + non-omitted index impl tables).
+    // Advisory only (drives the progress percentage); the terminal state is
+    // decided by control op completion, not by this count.
+    ui32 ExpectedItemCount = 0;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+    TString FinalIssues;
+
+    explicit TFullBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , State(EState::Invalid)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsFailed() const {
+        return State == EState::Failed;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsFailed();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // True if any observed item is in the Failed terminal state. Drives the
+    // Done-vs-Failed choice when operation completion finalizes the header
+    // (see FinalizeFullBackupOnOpComplete).
+    bool HasAnyFailed() const {
+        for (const auto& [_, item] : Items) {
+            if (item.State == TItem::EState::Failed) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
 struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
     using TPtr = TIntrusivePtr<TSecretInfo>;
 
@@ -4079,6 +4519,18 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
 };
 
+struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
+    using TPtr = TIntrusivePtr<TTestShardSetInfo>;
+
+    NKikimrClient::TTestShardControlRequest::TCmdInitialize CmdInitialize;
+    THashMap<TShardIdx, TTabletId> TestShards; // ShardIdx -> TabletId
+    ui64 AlterVersion = 0;
+
+    explicit TTestShardSetInfo(ui64 alterVersion)
+        : AlterVersion(alterVersion)
+    {}
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
@@ -4108,7 +4560,13 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
 NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
-    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+    // The fulltext rowid column carries the system prefix but is user-facing: callers may
+    // pre-create it (or ALTER ADD it) and the schemeshard auto-provisions it. Always accept it,
+    // so a plain user CREATE/ALTER naming it is not rejected as a forbidden system column.
+    if (!allowSystemColumnNames
+        && name != NTableIndex::NFulltext::RowIdColumn
+        && name.StartsWith(SYSTEM_COLUMN_PREFIX))
+    {
         return false;
     }
 

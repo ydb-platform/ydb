@@ -228,11 +228,6 @@ public:
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 
-        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
-            return result;
-        }
-
         const auto& truncateTableOp = Transaction.GetTruncateTable();
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), truncateTableOp.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
@@ -435,6 +430,9 @@ bool DfsOnTableChildrenTree(
                             case NKikimrSchemeOp::EIndexTypeGlobalJson:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndex)) {
@@ -443,6 +441,12 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                                // Local index scheme objects are not supported yet in row tables
+                                break;
                         }
 
                         break;

@@ -1289,7 +1289,7 @@ public:
 class TClientCommandSchemaUserAttribute: public TClientCommandTree {
 public:
     TClientCommandSchemaUserAttribute()
-        : TClientCommandTree("user-attribute", { "ua" }, "User attribute operations")
+        : TClientCommandTree("attribute", { "user-attribute", "ua" }, "User attribute operations")
     {
         AddCommand(std::make_unique<TClientCommandSchemaUserAttributeGet>());
         AddCommand(std::make_unique<TClientCommandSchemaUserAttributeSet>());

@@ -6,6 +6,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -29,9 +30,13 @@ protected:
         return ++TxCounter;
     }
 
+    bool SendTabletTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx);
+
 protected:
     void ExecuteTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
-        AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
+        if (!SendTabletTransaction(std::move(tx))) {
+            PassAway();
+        }
     }
 
     void SaveSessionProgress();
@@ -59,8 +64,9 @@ public:
     void Handle(TEvSessionControl::TPtr& ev);
 
     STATEFN(StateInProgress) {
-        const NActors::TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_BACKGROUND,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLocalTransactionCompleted, Handle);
             hFunc(TEvSessionControl, Handle);

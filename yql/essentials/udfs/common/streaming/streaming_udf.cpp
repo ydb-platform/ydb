@@ -801,7 +801,7 @@ public:
             bool typesOnly = (flags & TFlags::TypesOnly);
 
             auto optionalStringType = builder.Optional()->Item<char*>().Build();
-            auto rowType = builder.Struct(1)->AddField("Data", TDataType<char*>::Id, nullptr).Build();
+            auto rowType = builder.Struct(1)->AddField("Data", TDataType<char*>::Id, /*index=*/nullptr).Build();
             auto rowsType = builder.Stream()->Item(rowType).Build();
             auto stringListType = builder.List()->Item(TDataType<char*>::Id).Build();
             auto optionalStringListType = builder.Optional()->Item(stringListType).Build();

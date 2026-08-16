@@ -81,4 +81,6 @@ const TStringBuf MrPartitionListViewMember = "TableView";
 
 extern const TVector<TStringBuf> YAMR_FIELDS;
 
+extern const TVector<TStringBuf> ORDERED_TABLE_READ_ONLY_FIELDS;
+
 }

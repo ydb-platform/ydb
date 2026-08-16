@@ -13,15 +13,7 @@ using namespace NKikimr::Tests::NGrpc;
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("PQv1");
     setup->GetServer().EnableLogs({
-            NKikimrServices::PQ_MLP_READER,
-            NKikimrServices::PQ_MLP_WRITER,
-            NKikimrServices::PQ_MLP_COMMITTER,
-            NKikimrServices::PQ_MLP_UNLOCKER,
-            NKikimrServices::PQ_MLP_DEADLINER,
-            NKikimrServices::PQ_MLP_PURGER,
-            NKikimrServices::PQ_MLP_CONSUMER,
-            NKikimrServices::PQ_MLP_ENRICHER,
-            NKikimrServices::PQ_MLP_DLQ_MOVER,
+            NKikimrServices::PQ_SCHEMA,
             NKikimrServices::PQ_MLP_DESCRIBER,
         },
         NActors::NLog::PRI_DEBUG
@@ -38,24 +30,20 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
 }
 
 template<typename TRequest, typename TResponse>
-std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& runtime, const TRequest& request) {
+std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& runtime, const TRequest& request, TString path = "/Root/test_db/topic1", TString database = "/Root/test_db") {
     auto result = std::make_shared<TResultHolder<TResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
 
     auto ctx = new TRequestCtx<TRequest, TResponse>(
         request,
-        "/Root/test_db/topic1",
-        "/Root/test_db",
-        result
+        path,
+        database,
+        result,
+        edgeActor
     );
     runtime.Register(CreateCreateTopicActor(ctx));
 
-    for (int i = 0; i < 50; ++i) {
-        if (result->ResultStatus) {
-            break;
-        }
-
-        Sleep(TDuration::MilliSeconds(50));
-    }
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(10));
 
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;
@@ -66,10 +54,9 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
-Y_UNIT_TEST_SUITE(CreateTopic) {
+Y_UNIT_TEST_SUITE(CreateTopic_PQv1API) {
 
 Y_UNIT_TEST(SharedConsumer) {
-
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
@@ -168,6 +155,57 @@ Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
     const auto& partitionConfig = topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetWriteSpeedInMessagesPerSecond(), 777);
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetBurstSizeInMessages(), 777);
+}
+
+Y_UNIT_TEST(CreateTopicWithNameEqDB) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request, "/Root", "/Root");
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SCHEME_ERROR, result->Issues.ToString());
+}
+
+Y_UNIT_TEST(ContentBasedDeduplication) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root/test_db/topic1");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.set_content_based_deduplication(true);
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(runtime.AllocateEdgeActor(), "/Root/test_db", {"/Root/test_db/topic1"}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    auto topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    auto config = topic.Info->Description.GetPQTabletConfig();
+    UNIT_ASSERT_VALUES_EQUAL(config.GetContentBasedDeduplication(), true);
 }
 
 };

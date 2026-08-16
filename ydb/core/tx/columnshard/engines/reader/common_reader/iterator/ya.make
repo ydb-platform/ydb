@@ -17,9 +17,12 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/reader/tracing
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/skip_index
+    ydb/core/tx/columnshard/engines/reader/common
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/util/evlog
     yql/essentials/minikql
 )

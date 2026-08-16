@@ -12,6 +12,7 @@ private:
 
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& ranges) override;
+    virtual void DoRetryRead(const TBlobRange& range) override;
 
     virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const override {
         return TBlobsGlueing::GroupRanges(std::move(ranges), TBlobsGlueing::TBlobGluePolicy(8LLU << 20));

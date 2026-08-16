@@ -8,6 +8,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -261,7 +262,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         Send(new IEventHandle(
             CheckpointCoordinator,
             StorageProxy,
-            new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), GraphDescId)));
+            new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), GraphDescId, 0)));
     }
 
     void MockNodeStateSavedEvent(TCheckpointId& checkpointId, TActorId& sender) {
@@ -337,7 +338,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper : public TTestBootstrap
     {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = "PqSource")
+        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource))
             : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType) {
         }
         

@@ -35,6 +35,8 @@
 
 namespace {
 
+constexpr ui64 MaxSupportedBlockCount = 1048576;
+
 void FillLatency(
     const NYdb::NBS::TLatencyHistogram& hist,
     NYdb::NBS::NProto::TLatency& latency)
@@ -104,8 +106,8 @@ public:
         DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
-        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 1048576) {
-            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 1048576]";
+        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() >= MaxSupportedBlockCount) {
+            ythrow NKikimr::TLoadActorException() << "Range must be in [0, " << (MaxSupportedBlockCount - 1) << "]";
         }
         if (RangeTest.GetZeroRate() > 0) {
             ythrow NKikimr::TLoadActorException() << "ZeroRate is unsupported";

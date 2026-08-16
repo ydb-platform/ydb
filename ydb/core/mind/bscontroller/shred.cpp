@@ -1,6 +1,8 @@
 #include "impl.h"
 #include "config.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SHRED
+
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxUpdateShred : public TTransactionBase<TBlobStorageController> {
@@ -33,7 +35,9 @@ namespace NKikimr::NBsController {
         {}
 
         void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSC00, "received TEvControllerShredRequest", (Record, ev->Get()->Record));
+            YDB_LOG_DEBUG("Received TEvControllerShredRequest",
+                {"marker", "BSSC00"},
+                {"record", ev->Get()->Record});
             Self->Execute(new TTxUpdateShred(this, ev));
         }
 
@@ -102,8 +106,10 @@ namespace NKikimr::NBsController {
             }
 
             for (auto& [nodeId, ev] : outbox) {
-                STLOG(PRI_DEBUG, BS_SHRED, BSSC01, "issuing TEvControllerNodeServiceSetUpdate", (NodeId, nodeId),
-                    (Record, ev->Record));
+                YDB_LOG_DEBUG("Issuing TEvControllerNodeServiceSetUpdate",
+                    {"marker", "BSSC01"},
+                    {"nodeId", nodeId},
+                    {"record", ev->Record});
                 Self->Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }
         }
@@ -123,9 +129,13 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredFinished(TPDiskId pdiskId, TPDiskInfo& pdiskInfo, ui64 generation, TTransactionContext& txc) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSC02, "shred finished", (PDiskId, pdiskId), (Generation, generation),
-                (ShredInProgress, pdiskInfo.ShredInProgress), (ShredComplete, pdiskInfo.ShredComplete),
-                (CurrentGeneration, GetCurrentGeneration()));
+            YDB_LOG_DEBUG("Shred finished",
+                {"marker", "BSSC02"},
+                {"PDiskId", pdiskId},
+                {"generation", generation},
+                {"shredInProgress", pdiskInfo.ShredInProgress},
+                {"shredComplete", pdiskInfo.ShredComplete},
+                {"currentGeneration", GetCurrentGeneration()});
 
             if (pdiskInfo.ShredInProgress && !pdiskInfo.ShredComplete && generation == GetCurrentGeneration()) {
                 pdiskInfo.ShredComplete = true;
@@ -151,8 +161,11 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredAborted(TPDiskId pdiskId, TPDiskInfo& pdiskInfo) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSC03, "shred aborted", (PDiskId, pdiskId),
-                (ShredInProgress, pdiskInfo.ShredInProgress), (ShredComplete, pdiskInfo.ShredComplete));
+            YDB_LOG_DEBUG("Shred aborted",
+                {"marker", "BSSC03"},
+                {"PDiskId", pdiskId},
+                {"shredInProgress", pdiskInfo.ShredInProgress},
+                {"shredComplete", pdiskInfo.ShredComplete});
 
             EndShredForPDisk(pdiskId, pdiskInfo);
         }

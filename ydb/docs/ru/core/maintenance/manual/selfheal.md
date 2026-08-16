@@ -9,7 +9,7 @@ SelfHeal позволяет:
 * обнаружить неисправные элементы системы;
 * перенести неисправные элементы в щадящем режиме без потери данных и расформирования групп хранения.
 
-SelfHeal включен по умолчанию.
+SelfHeal включен по умолчанию и автоматически изменяет конфигурацию [динамических групп](../../concepts/glossary.md#dynamic-group). В кластерах с конфигурацией V2 можно также включить [SelfHeal статической группы](../../devops/configuration-management/configuration-v2/static-group-self-heal.md).
 
 Компонент {{ ydb-short-name }}, отвечающий за SelfHeal, называется Sentinel.
 
@@ -30,8 +30,6 @@ ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
-
-{% endlist %}
 
 ## Настройки SelfHeal {#settings}
 

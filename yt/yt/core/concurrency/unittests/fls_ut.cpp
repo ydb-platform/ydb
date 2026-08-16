@@ -19,7 +19,7 @@ std::atomic<int> DtorCalls;
 
 struct TMyValue
 {
-    TString Value;
+    std::string Value;
     static void Reset()
     {
         CtorCalls = 0;

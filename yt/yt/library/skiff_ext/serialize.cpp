@@ -22,7 +22,7 @@ void Deserialize(EWireType& wireType, NYT::NYTree::INodePtr node)
             node->GetType(),
             NYT::NYTree::ENodeType::String);
     }
-    wireType = ::FromString<EWireType>(node->GetValue<TString>());
+    wireType = ::FromString<EWireType>(node->GetValue<std::string>());
 }
 
 void Deserialize(EWireType& wireType, NYT::NYson::TYsonPullParserCursor* cursor)

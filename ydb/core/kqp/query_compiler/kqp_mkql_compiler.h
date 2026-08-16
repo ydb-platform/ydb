@@ -17,18 +17,24 @@ public:
     TKqlCompileContext(const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData>& tablesData,
         const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
+        ui32 streamLookupJoinCookieVersion = 0)
         : Cluster_(cluster)
         , TablesData_(tablesData)
-        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry)) {}
+        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry))
+        , StreamLookupJoinCookieVersion_(streamLookupJoinCookieVersion) {}
 
     NMiniKQL::TKqpProgramBuilder& PgmBuilder() const { return *PgmBuilder_; }
     const NYql::TKikimrTableMetadata& GetTableMeta(const NYql::NNodes::TKqpTable& table) const;
+
+    // Cookie wire format version to emit for the index lookup join consumer node.
+    ui32 StreamLookupJoinCookieVersion() const { return StreamLookupJoinCookieVersion_; }
 
 private:
     TString Cluster_;
     TIntrusivePtr<NYql::TKikimrTablesData> TablesData_;
     THolder<NMiniKQL::TKqpProgramBuilder> PgmBuilder_;
+    ui32 StreamLookupJoinCookieVersion_;
 };
 
 TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(

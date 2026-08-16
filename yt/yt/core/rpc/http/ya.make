@@ -4,8 +4,10 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     channel.cpp
+    config.cpp
     helpers.cpp
     server.cpp
+    GLOBAL backend.cpp
 )
 
 PEERDIR(
@@ -16,3 +18,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    unittests
+)

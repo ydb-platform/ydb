@@ -132,7 +132,14 @@ private:
             }
             default: {
                 auto* result = Response_.MutablePurgeQueue();
-                MakeError(result, NErrors::INTERNAL_FAILURE, response.ErrorDescription);
+                if (response.Status == Ydb::StatusIds::SCHEME_ERROR) {
+                    // The topic (and therefore the queue) no longer exists: the queue is
+                    // being deleted or recreated. Match AWS SQS / GetQueueAttributes and
+                    // report NonExistentQueue without leaking the internal topic path.
+                    MakeError(result, NErrors::NON_EXISTENT_QUEUE);
+                } else {
+                    MakeError(result, NErrors::INTERNAL_FAILURE, response.ErrorDescription);
+                }
                 return SendReplyAndDie();
             }
         }

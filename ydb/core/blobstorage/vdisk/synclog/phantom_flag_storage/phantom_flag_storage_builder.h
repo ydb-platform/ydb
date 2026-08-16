@@ -13,7 +13,7 @@ namespace NSyncLog {
 // Creates the actor that asynchronously reads snapshot
 ////////////////////////////////////////////////////////////////////////////
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-        const TActorId& keeperId, TSyncLogSnapshotPtr snapshot);
+        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds);
 
 }
 

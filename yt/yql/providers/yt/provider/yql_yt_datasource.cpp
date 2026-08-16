@@ -172,6 +172,7 @@ public:
     }
 
     TMaybe<TString> ResolveClusterToken(const TString& cluster) override {
+        YQL_ENSURE(cluster != YtUnspecifiedCluster);
         if (!State_->Configuration->IsValidCluster(cluster)) {
             return {};
         }

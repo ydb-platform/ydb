@@ -99,6 +99,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 TABLED() {
                                     if (node) {
                                         for (auto* parent : node->DirectParents) {
+                                            if (!parent) {
+                                                continue;
+                                            }
                                             HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
                                             str << ", ";
                                         }
@@ -107,6 +110,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 TABLED() {
                                     if (node) {
                                         for (auto* child : node->DirectChildren) {
+                                            if (!child) {
+                                                continue;
+                                            }
                                             HREF("#" + partitionAnchor(child->Id)) { str << child->Id; }
                                             str << ", ";
                                         }

@@ -103,6 +103,25 @@ COLORS = {
 }
 
 
+def ansi_truecolor_spec_to_css_color(spec: str) -> str:
+    parts = spec.split(';')
+    if len(parts) >= 4 and parts[0] == '2':
+        r, g, b = int(parts[1]), int(parts[2]), int(parts[3])
+        return 'rgb(%d,%d,%d)' % (r, g, b)
+    return 'inherit'
+
+
+def ast_html_syntax_stylesheet() -> str:
+    return '\n'.join(
+        '.syntax_%s { color: %s; }' % (name, ansi_truecolor_spec_to_css_color(spec))
+        for name, spec in COLORS.items()
+    )
+
+
+def html_syntax_span_open(color_name: str) -> str:
+    return '<span class="syntax_%s">' % color_name
+
+
 class TerminalPrinter:
     class TermColorWrapper:
         def __init__(self, color_name):
@@ -143,20 +162,20 @@ class HtmlPrinter:
     prev_style_depth: int
 
     class HtmlColorWrapper:
-        color: str
+        color_name: str | None
         style_stack: list[str]
 
-        def __init__(self, style_stack: list[str], color: str):
-            self.color = color
+        def __init__(self, style_stack: list[str], color_name: str | None):
+            self.color_name = color_name if (color_name and color_name in COLORS) else None
             self.style_stack = style_stack
 
         def __enter__(self):
-            if self.color:
-                self.style_stack.append(self.color)
+            if self.color_name:
+                self.style_stack.append(self.color_name)
             return self
 
         def __exit__(self, exc_type, exc_value, traceback):
-            if self.color:
+            if self.color_name:
                 self.style_stack.pop()
 
     def __init__(self):
@@ -171,7 +190,7 @@ class HtmlPrinter:
         if self.prev_style_depth > 0:
             self.curr_line += '</span>'
         if len(self.style_stack) > 0:
-            self.curr_line += '<span class="syntax_%s">' % self.style_stack[-1]
+            self.curr_line += html_syntax_span_open(self.style_stack[-1])
         self.prev_style_depth = len(self.style_stack)
 
     def color(self, color_name):
@@ -188,11 +207,17 @@ class HtmlPrinter:
         self.lines.append(self.curr_line)
         self.curr_line = ''
         if len(self.style_stack) > 0:
-            self.curr_line += '<span class="syntax_%s">' % self.style_stack[-1]
+            self.curr_line += html_syntax_span_open(self.style_stack[-1])
+        self.prev_style_depth = len(self.style_stack)
 
     def finalize(self):
         if self.curr_line:
             self.endl()
+        sys.stdout.write('<style>\n')
+        sys.stdout.write(ast_html_syntax_stylesheet())
+        sys.stdout.write('\n</style>\n<pre>\n')
+        sys.stdout.write('\n'.join(self.lines))
+        sys.stdout.write('\n</pre>\n')
 
 
 class List:
@@ -776,13 +801,12 @@ def parse_and_process(lines, replace_refs_options: ReplaceRefsOptions):
     return simplified_program
 
 
-def htmlmain(input):
+def htmlmain():
     input = sys.stdin.read()
     program = parse_and_process(input.split('\n'), ReplaceRefsOptions())
     printer = HtmlPrinter()
     print_list(sys.stdout, program, {}, Context(tabstops=False, printer=printer))
     printer.finalize()
-    return printer.lines
 
 
 def climain():
@@ -791,6 +815,11 @@ def climain():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('-n', '--nodes', default=[], action='append')
     argparser.add_argument('-r', '--repo', default=None)
+    argparser.add_argument(
+        '--html',
+        action='store_true',
+        help='Write HTML: <style> for .syntax_* classes, then <pre> with colored AST to stdout',
+    )
     argparser.add_argument('-t', '--tabstops', action='store_true', default=False)
     argparser.add_argument(
         '-i',
@@ -855,7 +884,7 @@ def climain():
 
     input = sys.stdin.read()
     program = parse_and_process(input.split('\n'), ReplaceRefsOptions(max_uses_for_inlining=args.max_uses_for_inlining))
-    printer = TerminalPrinter()
+    printer = HtmlPrinter() if args.html else TerminalPrinter()
     print_list(sys.stdout, program, callables, Context(tabstops=tabstops, printer=printer))
     printer.finalize()
 

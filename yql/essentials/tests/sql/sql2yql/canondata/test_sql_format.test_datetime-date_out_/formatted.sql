@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(CAST(18000u AS date) AS string)
 ;

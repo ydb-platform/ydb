@@ -1,0 +1,8 @@
+/* custom error: The linear value changed lambda scope */
+$b={4:5};
+
+select ($x)->(Block(($a)->{
+    $d = ToMutDict($b, $a);
+    $d = MutDictUpsert($d, $x, 1);
+    return FromMutDict($d);
+}))(a) from AS_TABLE(Opaque([<|a:1|>, <|a:2|>, <|a:3|>]))

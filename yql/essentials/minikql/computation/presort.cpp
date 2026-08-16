@@ -352,11 +352,11 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
             auto iterator = value.GetListIterator();
             NUdf::TUnboxedValue item;
             while (iterator.Next(item)) {
-                EncodeBool<false>(output, true);
+                EncodeBool<false>(output, /*value=*/true);
                 EncodeValue(itemType, item, output);
             }
 
-            EncodeBool<false>(output, false);
+            EncodeBool<false>(output, /*value=*/false);
             break;
         }
 
@@ -412,7 +412,7 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
                 NUdf::TUnboxedValue key;
                 NUdf::TUnboxedValue payload;
                 while (iter.NextPair(key, payload)) {
-                    EncodeBool<false>(output, true);
+                    EncodeBool<false>(output, /*value=*/true);
                     EncodeValue(dictType->GetKeyType(), key, output);
                     EncodeValue(dictType->GetPayloadType(), payload, output);
                 }
@@ -432,13 +432,13 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
                 Sort(items.begin(), items.end());
                 // output values
                 for (const auto& x : items) {
-                    EncodeBool<false>(output, true);
+                    EncodeBool<false>(output, /*value=*/true);
                     output.insert(output.end(), x.KeyBuffer.begin(), x.KeyBuffer.end());
                     EncodeValue(dictType->GetPayloadType(), x.Payload, output);
                 }
             }
 
-            EncodeBool<false>(output, false);
+            EncodeBool<false>(output, /*value=*/false);
             break;
         }
 

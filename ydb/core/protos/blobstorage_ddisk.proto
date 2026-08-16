@@ -49,6 +49,7 @@ message TReplyStatus {
         // The I/O subsystem cannot fulfill the request right now. Possible causes:
         // - io_uring submission queue pressure (EAGAIN / EWOULDBLOCK)
         // - out of disk space (ENOSPC) or memory (ENOMEM)
+        // - pending events queue overfill
         // The caller should retry after a back-off.
         OVERLOADED = 9;
 
@@ -56,6 +57,20 @@ message TReplyStatus {
         // - not enough free space in the persistent buffer
         // - the per-tablet space occupation limit in the persistent buffer has been reached
         OVERFILL = 10;
+
+        // The request can't be executed right now, the caller must retry later. Possible causes:
+        // - chunk deletion requested while chunk allocation is in progress
+        BUSY = 11;
+
+        // The sender-supplied per-block payload checksum does not match the checksum recomputed
+        // over the received payload before writing. The write was not performed.
+        // Not retryable as-is: resending the same payload/checksums will fail identically, since the
+        // mismatch is in data the sender itself provided. The sender must treat this as data corruption
+        // and recover upstream (e.g. resend from a known-good source) rather than blindly retry.
+        CORRUPTED = 12;
+
+        // The device is broken. Service should decommission the device.
+        BROKEN = 13;
     }
 }
 
@@ -67,14 +82,47 @@ message TDDiskId {
     uint32 DDiskSlotId = 3;
 }
 
-// DDisk query credentials define who asks for an operation: tablet identifier, its generation (to prevent races with
-// obsolete instances) and DDiskInstanceGuid to identify cases when DDisk data was lost.
+// Opaque connection handle issued by DDisk:
+// - Low[0..31]   — connection-vector index
+// - Low[32..63]  — low 32 bits of TabletId
+// - High[0..7]   — sequence number of this vector slot
+// - High[8..15]  — random restart sanity check
+// - High[16..31] — low 16 bits of NodeId
+// - High[32..47] — low 16 bits of PDiskId
+// - High[48..63] — low 16 bits of VSlotId
+// Callers must return both parts unchanged.
+message TConnectionToken {
+    fixed64 Low = 1;
+    fixed64 High = 2;
+}
+
+// DDisk query credentials define who asks for an operation: tablet identifier, direct block group index, tablet
+// generation and session sequence number (to prevent races with obsolete instances), and DDiskInstanceGuid to identify
+// cases when DDisk data was lost.
 
 message TQueryCredentials {
+    enum ERequestKind {
+        REQUEST_KIND_TO_DDISK = 0;
+        REQUEST_KIND_TO_PERSISTENT_BUFFER = 1;
+        REQUEST_KIND_INTERNAL = 2;
+    }
+
     uint64 TabletId = 1;
     uint32 Generation = 2;
     optional fixed64 DDiskInstanceGuid = 3;
-    bool FromPersistentBuffer = 4;
+    ERequestKind RequestKind = 4;
+    uint64 DDiskSessionSeqNo = 5;
+    uint32 DirectBlockGroupIndex = 6;
+}
+
+message TRequestCredentials {
+    oneof Credentials {
+        TConnectionToken ConnectionToken = 1;
+
+        // DDisk-to-DDisk/PBuffer forwarding carries server-side context instead
+        // of a client connection token.
+        TQueryCredentials Internal = 2;
+    }
 }
 
 // DDisk block selector defines the range of blocks we are operating at; it includes through-numbered vChunk index and
@@ -124,13 +172,14 @@ message TEvConnectResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     fixed64 DDiskInstanceGuid = 3; // instance guid gets changed every time DDisk loses its data
+    TConnectionToken ConnectionToken = 4;
 }
 
 // DDisk disconnect query is issued when tablet is going to be stopped gracefully and don't need DDisk to keep any
 // context about that tablet anymore.
 
 message TEvDisconnect {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
 }
 
 message TEvDisconnectResult {
@@ -139,9 +188,15 @@ message TEvDisconnectResult {
 }
 
 message TEvWrite {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     TWriteInstruction Instruction = 3;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed.
+    repeated fixed64 Checksums = 4;
 }
 
 message TEvWriteResult {
@@ -150,7 +205,7 @@ message TEvWriteResult {
 }
 
 message TEvRead {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     TReadInstruction Instruction = 3;
 }
@@ -159,13 +214,32 @@ message TEvReadResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
+    // Reserved for checksum piggybacking: same raw XXH3_64(data) per MinSectorSize block of ReadResult
+    // payload as TEvWrite.Checksums, no identity/salt mixed in; not filled yet.
+    repeated fixed64 Checksums = 4;
+}
+
+message TEvDeleteTabletChunks {
+    TRequestCredentials Credentials = 1;
+}
+
+message TEvDeleteTabletChunksResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+
 }
 
 message TEvWritePersistentBuffer {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed.
+    repeated fixed64 Checksums = 5;
 }
 
 message TEvWritePersistentBufferResult {
@@ -176,7 +250,7 @@ message TEvWritePersistentBufferResult {
 }
 
 message TEvReadThenWritePersistentBuffers {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     uint64 Lsn = 2;
     uint32 Generation = 3;
     repeated TDDiskId PersistentBufferIds = 4;
@@ -184,12 +258,19 @@ message TEvReadThenWritePersistentBuffers {
 }
 
 message TEvWritePersistentBuffers {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
     repeated TDDiskId PersistentBufferIds = 5;
     uint32 ReplyTimeoutMicroseconds = 6;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed. Forwarded as-is to every
+    // fanned-out TEvWritePersistentBuffer sent to each PersistentBufferIds entry.
+    repeated fixed64 Checksums = 7;
 }
 
 message TEvWritePersistentBuffersResult {
@@ -202,7 +283,7 @@ message TEvWritePersistentBuffersResult {
 }
 
 message TEvReadPersistentBuffer {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TReadInstruction Instruction = 4;
@@ -216,6 +297,12 @@ message TEvReadPersistentBufferResult {
     uint64 VChunkIndex = 4;
     uint32 OffsetInBytes = 5;
     uint32 SizeInBytes = 6;
+    // Same raw XXH3_64(data) per MinSectorSize block of ReadResult payload as
+    // TEvWritePersistentBuffer.Checksums, no identity/salt mixed in. Opt-in: populated only when the
+    // persisted record itself carries sender-supplied checksums (empty for legacy/checksum-less
+    // records). Forwarded verbatim by TWritePersistentBuffersRequestActor when re-replicating a
+    // record via TEvReadThenWritePersistentBuffers.
+    repeated fixed64 Checksums = 7;
 }
 
 message TSegmentResult {
@@ -223,38 +310,34 @@ message TSegmentResult {
     optional string ErrorReason = 2;
 }
 
-message TEvSyncWithPersistentBuffer {
+message TEvSync {
     message TSegment {
+        message TDDiskSegment {
+        }
+
+        message TPersistentBufferSegment {
+            uint64 Lsn = 1;
+            uint32 Generation = 2;
+        }
+
         TBlockSelector Selector = 1;
-        uint64 Lsn = 2;
-        uint32 Generation = 3;
+        oneof SourceSegment {
+            TDDiskSegment DDiskSegment = 2;
+            TPersistentBufferSegment PersistentBufferSegment = 3;
+        }
     }
 
-    TQueryCredentials Credentials = 1;
-    repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
-}
-
-message TEvSyncWithPersistentBufferResult {
-    TReplyStatus.E Status = 1;
-    optional string ErrorReason = 2;
-
-    repeated TSegmentResult SegmentResults = 3;
-}
-
-message TEvSyncWithDDisk {
-    message TSegment {
-        TBlockSelector Selector = 1;
+    message TSource {
+        TDDiskId DDiskId = 1;
+        fixed64 DDiskInstanceGuid = 2;
+        repeated TSegment Segments = 3;
     }
 
-    TQueryCredentials Credentials = 1;
-    repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
+    TRequestCredentials Credentials = 1;
+    repeated TSource Sources = 2;
 }
 
-message TEvSyncWithDDiskResult {
+message TEvSyncResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
 
@@ -262,7 +345,7 @@ message TEvSyncWithDDiskResult {
 }
 
 message TEvErasePersistentBuffer {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     reserved 2;
     uint64 Lsn = 3; // Erase all lsns for tablet less than or equal to
     reserved 4;
@@ -276,7 +359,7 @@ message TEvBatchErasePersistentBuffer {
         uint32 Generation = 3;
     }
 
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
     repeated TEraseInfo Erases = 2;
 }
 
@@ -288,7 +371,7 @@ message TEvErasePersistentBufferResult {
 }
 
 message TEvListPersistentBuffer {
-    TQueryCredentials Credentials = 1;
+    TRequestCredentials Credentials = 1;
 }
 
 message TEvListPersistentBufferResult {
@@ -301,6 +384,7 @@ message TEvListPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     repeated TPersistentBufferRecord Records = 3;
+    uint64 BarrierLsn = 4;
 }
 
 message TDirectBlockGroupAllocation {

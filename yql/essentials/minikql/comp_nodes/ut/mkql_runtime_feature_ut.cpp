@@ -1,4 +1,6 @@
 #include "mkql_computation_node_ut.h"
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -11,16 +13,14 @@ Y_UNIT_TEST_LLVM(HostRuntimeSetting) {
     setup.RuntimeSettings->TestHostSetting.Set(true);
 
     const auto lookup = [&](TStringBuf name) {
-        auto graph = setup.BuildGraph(pb.HostRuntimeSetting(pb.NewDataLiteral<NUdf::EDataSlot::String>(name)));
+        auto graph = setup.BuildGraph(pb.HostRuntimeSetting(NTest::ConvertValueToLiteralNode(pb, name)));
         return graph->GetValue();
     };
 
     const auto found = lookup("TestHostSetting");
-    UNIT_ASSERT(found);
-    const NUdf::TUnboxedValue foundValue = found.GetOptionalValue();
-    UNIT_ASSERT_VALUES_EQUAL(TString(foundValue.AsStringRef()), "true");
+    AssertUnboxedValueElementEqual(found, TMaybe<TStringBuf>{"true"});
 
-    UNIT_ASSERT(!lookup("NonExistentSetting"));
+    AssertUnboxedValueElementEqual(lookup("NonExistentSetting"), TMaybe<TStringBuf>{});
 }
 
 Y_UNIT_TEST_LLVM(UdfRuntimeSetting) {
@@ -31,18 +31,16 @@ Y_UNIT_TEST_LLVM(UdfRuntimeSetting) {
 
     const auto lookup = [&](TStringBuf module, TStringBuf key) {
         auto graph = setup.BuildGraph(pb.UdfRuntimeSetting(
-            pb.NewDataLiteral<NUdf::EDataSlot::String>(module),
-            pb.NewDataLiteral<NUdf::EDataSlot::String>(key)));
+            NTest::ConvertValueToLiteralNode(pb, module),
+            NTest::ConvertValueToLiteralNode(pb, key)));
         return graph->GetValue();
     };
 
     const auto found = lookup("MyModule", "myKey");
-    UNIT_ASSERT(found);
-    const NUdf::TUnboxedValue foundValue = found.GetOptionalValue();
-    UNIT_ASSERT_VALUES_EQUAL(TString(foundValue.AsStringRef()), "myValue");
+    AssertUnboxedValueElementEqual(found, TMaybe<TStringBuf>{"myValue"});
 
-    UNIT_ASSERT(!lookup("MyModule", "missingKey"));
-    UNIT_ASSERT(!lookup("UnknownModule", "myKey"));
+    AssertUnboxedValueElementEqual(lookup("MyModule", "missingKey"), TMaybe<TStringBuf>{});
+    AssertUnboxedValueElementEqual(lookup("UnknownModule", "myKey"), TMaybe<TStringBuf>{});
 }
 
 } // Y_UNIT_TEST_SUITE(TRuntimeFeatureTest)

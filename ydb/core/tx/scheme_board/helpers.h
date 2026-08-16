@@ -10,24 +10,6 @@
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 
-#if defined SB_LOG_T || \
-    defined SB_LOG_D || \
-    defined SB_LOG_I || \
-    defined SB_LOG_N || \
-    defined SB_LOG_W || \
-    defined SB_LOG_E || \
-    defined SB_LOG_CRIT
-#error log macro redefinition
-#endif
-
-#define SB_LOG_T(service, stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_D(service, stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_I(service, stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_N(service, stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_W(service, stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_E(service, stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_CRIT(service, stream) LOG_CRIT_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-
 namespace NKikimr {
 namespace NSchemeBoard {
 

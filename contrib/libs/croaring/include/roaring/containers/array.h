@@ -1,6 +1,14 @@
 /*
  * array.h
  *
+ * Array containers store a sparse set of 16-bit integers as a sorted dynamic
+ * array. The cardinality field tracks how many values are present, capacity
+ * tracks the allocated length, and array points to the sorted values.
+ *
+ * This representation is used for low-cardinality containers because it is
+ * compact and supports fast iteration and binary-search-based membership
+ * tests. When the number of stored values grows beyond DEFAULT_MAX_SIZE,
+ * CRoaring will typically switch to a denser container representation.
  */
 
 #ifndef INCLUDE_CONTAINERS_ARRAY_H_
@@ -333,30 +341,72 @@ static inline bool array_container_remove(array_container_t *arr,
 /* Check whether x is present.  */
 inline bool array_container_contains(const array_container_t *arr,
                                      uint16_t pos) {
-    //    return binarySearch(arr->array, arr->cardinality, pos) >= 0;
-    // binary search with fallback to linear search for short ranges
-    int32_t low = 0;
-    const uint16_t *carr = (const uint16_t *)arr->array;
-    int32_t high = arr->cardinality - 1;
-    //    while (high - low >= 0) {
-    while (high >= low + 16) {
-        int32_t middleIndex = (low + high) >> 1;
-        uint16_t middleValue = carr[middleIndex];
-        if (middleValue < pos) {
-            low = middleIndex + 1;
-        } else if (middleValue > pos) {
-            high = middleIndex - 1;
-        } else {
-            return true;
+    /**
+     * SIMD Quad algorithm
+     * Daniel Lemire, "You can beat the binary search," in Daniel Lemire's blog,
+     *  April 27, 2026,
+     * https://lemire.me/blog/2026/04/27/you-can-beat-the-binary-search/.
+     */
+    const int32_t gap = 16;
+    const uint16_t *carr = arr->array;
+    int32_t cardinality = arr->cardinality;
+    if (cardinality < gap) {
+        for (int32_t j = 0; j < cardinality; j++) {
+            if (carr[j] >= pos) return carr[j] == pos;
         }
+        return false;
+    }
+    int32_t num_blocks = cardinality / gap;
+    int32_t base = 0;
+    int32_t n = num_blocks;
+    while (n > 3) {
+        int32_t quarter = n >> 2;
+
+        int32_t k1 = carr[(base + quarter + 1) * gap - 1];
+        int32_t k2 = carr[(base + 2 * quarter + 1) * gap - 1];
+        int32_t k3 = carr[(base + 3 * quarter + 1) * gap - 1];
+
+        int32_t c1 = (k1 < pos);
+        int32_t c2 = (k2 < pos);
+        int32_t c3 = (k3 < pos);
+
+        base += (c1 + c2 + c3) * quarter;
+        n -= 3 * quarter;
+    }
+    while (n > 1) {
+        int32_t half = n >> 1;
+        base = (carr[(base + half + 1) * gap - 1] < pos) ? base + half : base;
+        n -= half;
+    }
+    int32_t lo = (carr[(base + 1) * gap - 1] < pos) ? base + 1 : base;
+
+    if (lo < num_blocks) {
+        const uint16_t *blk = carr + lo * gap;
+#ifdef CROARING_USENEON
+        uint16x8_t needle = vdupq_n_u16(pos);
+        uint16x8_t v0 = vld1q_u16(blk);
+        uint16x8_t v1 = vld1q_u16(blk + 8);
+        uint16x8_t hit =
+            vorrq_u16(vceqq_u16(v0, needle), vceqq_u16(v1, needle));
+        return vmaxvq_u16(hit) != 0;
+#elif defined(CROARING_IS_X64)
+        __m128i needle = _mm_set1_epi16((short)pos);
+        __m128i v0 = _mm_loadu_si128((const __m128i *)blk);
+        __m128i v1 = _mm_loadu_si128((const __m128i *)(blk + 8));
+        __m128i hit = _mm_or_si128(_mm_cmpeq_epi16(v0, needle),
+                                   _mm_cmpeq_epi16(v1, needle));
+        return _mm_movemask_epi8(hit) != 0;
+#else
+        for (int32_t j = 0; j < gap; j++) {
+            if (blk[j] >= pos) return blk[j] == pos;
+        }
+        return false;
+#endif
     }
 
-    for (int i = low; i <= high; i++) {
-        uint16_t v = carr[i];
-        if (v == pos) {
-            return true;
-        }
-        if (v > pos) return false;
+    for (int32_t j = num_blocks * gap; j < cardinality; j++) {
+        uint16_t v = carr[j];
+        if (v >= pos) return (v == pos);
     }
     return false;
 }

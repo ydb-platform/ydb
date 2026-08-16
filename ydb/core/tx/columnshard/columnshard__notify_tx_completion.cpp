@@ -15,15 +15,15 @@ public:
         LOG_S_DEBUG("TTxNotifyTxCompletion.Execute at tablet " << Self->TabletID());
 
         const ui64 txId = Ev->Get()->Record.GetTxId();
-        auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(txId);
+        auto txOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::Any, /*optional*/ true);
         if (txOperator) {
             txOperator->RegisterSubscriber(Ev->Sender);
             return true;
         }
         Result.reset(new TEvColumnShard::TEvNotifyTxCompletionResult(Self->TabletID(), txId));
         auto& opResult = *Result->Record.MutableOpResult();
-        if (Self->LastCompletedBackupTransaction.GetTxId() == txId) {
-            opResult = Self->LastCompletedBackupTransaction.GetOpResult();
+        if (const auto* backupTx = Self->LastCompletedBackupTransactionsByTxId.FindPtr(txId)) {
+            opResult = backupTx->GetOpResult();
             return true;
         }
 

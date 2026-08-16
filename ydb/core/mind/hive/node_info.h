@@ -283,7 +283,13 @@ public:
     }
 
     const TSubDomainKey& GetServicedDomain() const {
-        return ServicedDomains.empty() ? InvalidSubDomainKey : ServicedDomains.front();
+        if (!ServicedDomains.empty()) {
+            return ServicedDomains.front();
+        }
+        if (!LastSeenServicedDomains.empty()) {
+            return LastSeenServicedDomains.front();
+        }
+        return InvalidSubDomainKey;
     }
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);

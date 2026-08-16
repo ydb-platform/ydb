@@ -255,8 +255,8 @@ private:
             .DoListFor(Registry_->ListSensors(), [&] (TFluentList fluent, const TSensorInfo& sensorInfo) {
                 if (!sensorInfo.Error.IsOK()) {
                     THROW_ERROR_EXCEPTION("Broken sensor")
-                        << TErrorAttribute("name", sensorInfo.Name)
-                        << sensorInfo.Error;
+                        .With("name", sensorInfo.Name)
+                        .With(sensorInfo.Error);
                 }
 
                 fluent

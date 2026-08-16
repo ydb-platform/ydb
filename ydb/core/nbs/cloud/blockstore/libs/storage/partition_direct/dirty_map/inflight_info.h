@@ -37,8 +37,11 @@ struct IReadyQueue
     // the old one.
     virtual void Register(ui64 lsn, EQueueType queueType) = 0;
 
-    // Removes all registrations from Lsn.
-    virtual void UnRegister(ui64 lsn) = 0;
+    // Removes Lsn registration.
+    virtual void UnRegister(ui64 lsn, EQueueType queueType) = 0;
+
+    // Notifies of flushes completion to DDisks.
+    virtual void FlushCompleted(ui64 lsn, THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -78,7 +81,12 @@ class TInflightInfo: public TDisableCopy
 public:
     enum class EState
     {
-        // During the recovery, a item without quorum was detected. It must be
+        // The lsn is generated but the write has not been acknowledged yet.
+        // Tracked only to hold the cleanup watermark; invisible to reads (a
+        // concurrent read sees the pre-write data on DDisk, as before).
+        PBufferPendingWrite,
+
+        // During the recovery, an item without quorum was detected. It must be
         // copied to other PBuffers.
         // Reading will be possible only after receiving a quorum.
         PBufferIncompleteWrite,
@@ -104,26 +112,38 @@ public:
         PBufferErased,
     };
 
+    // Restored from PBuffer on recovery.
     TInflightInfo(
         IReadyQueue* readyQueues,
+        THostMask desiredDDisks,
+        THostMask disabled,
         ui64 lsn,
         size_t byteCount,
         THostIndex host);
+
+    // Pending write: lsn is generated but data is not in any PBuffer yet.
+    // ReadMask is empty (reads wait on the quorum future) and the write is not
+    // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
     TInflightInfo(
-        IReadyQueue* readyQueues,
+        IReadyQueue* readyQueue,
+        THostMask desiredDDisks,
+        THostMask disabled,
         ui64 lsn,
-        size_t byteCount,
-        THostMask writeRequested,
-        THostMask writeConfirmed);
+        size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
 
-    // Detach from ReadyQueue.
+    // Detach from ReadyQueue. Called before parent DirtyMap destroyed.
     void Detach();
 
+    // Instance of PBuffer record found on host during recovery.
     void RestorePBuffer(THostIndex host);
+
+    // Transitions a pending write (see the byteCount-only constructor) to the
+    // written state once a quorum of PBuffers confirmed it.
+    void OnWritten(THostMask writeRequested, THostMask writeConfirmed);
 
     [[nodiscard]] EState GetState() const;
 
@@ -138,20 +158,27 @@ public:
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
     [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
-    void ConfirmFlush(THostRoute route);
-    void FlushFailed(THostRoute route);
-    [[nodiscard]] THostMask GetRequestedFlushes() const;
+    void ConfirmFlush(THostIndex host);
+    void FlushFailed(THostIndex host);
+    [[nodiscard]] THostMask GetInflightFlushes() const;
 
-    // Returns true when erase request needed.
-    [[nodiscard]] bool RequestErase(THostIndex host);
+    void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
     [[nodiscard]] bool ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
+    // Hosts where a write was requested but erase is not yet
+    // requested/confirmed.
+    [[nodiscard]] THostMask GetEraseNeeded() const;
+
+    // Update state according to the changed configuration.
+    void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
+
+    TString DebugPrint(TInstant now) const;
 
 private:
     void ApplyBytes(
@@ -163,6 +190,12 @@ private:
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
 
+    void SetState(EState newState);
+
+    void MaybeAdvanceToFlushed();
+    void MaybeAdvanceToErased();
+    void MaybeQueryErase();
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
@@ -172,9 +205,10 @@ private:
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
 
+    THostMask DesiredDDisks;
+    THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
-    THostMask FlushDesired;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

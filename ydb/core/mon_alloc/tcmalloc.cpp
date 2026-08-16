@@ -274,6 +274,7 @@ private:
     }
 
     void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep, bool forLog) {
+        Y_UNUSED(UseDwarfBacktracePrinting, forLog); // if !defined(USE_DWARF_BACKTRACE)
 #if defined(USE_DWARF_BACKTRACE)
         if (UseDwarfBacktracePrinting) {
             PrintDwarfBackTrace(out, stack, sz, sep, forLog);

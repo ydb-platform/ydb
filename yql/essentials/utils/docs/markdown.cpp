@@ -37,7 +37,7 @@ public:
                     ResetSection(std::move(line));
                 } else if (depth == 0 || HeaderDepth_ < depth) {
                     line.append('\n');
-                    Section_.Body.append(std::move(line));
+                    Section_.Body.append(line);
                 } else {
                     onSection(std::move(Section_));
                     IsSkipping_ = true;

@@ -1,0 +1,4 @@
+{"boobee"=5;"xx"=["\x80\x00\x01\x3a";];};
+{"boobee"=6;"xx"=["\xFF\xFF\xFF\xFF";];};
+{"boobee"=7;"xx"=[];};
+{"boobee"=8};

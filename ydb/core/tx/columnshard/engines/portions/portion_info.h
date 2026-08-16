@@ -366,8 +366,8 @@ public:
         }
     }
 
-    bool CheckForCleanup(const TSnapshot& snapshot) const {
-        return IsRemovedFor(snapshot);
+    virtual bool MayGetForScanAt(const TSnapshot& snapshot) const {
+        return !IsRemovedFor(snapshot);
     }
 
     bool CheckForCleanup() const {
@@ -415,8 +415,11 @@ public:
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
         const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
-            "snapshot", snapshot.DebugString());
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "IsVisible"},
+            {"analyzePortion", DebugString()},
+            {"visible", visible},
+            {"snapshot", snapshot.DebugString()});
         return visible;
     }
 
@@ -451,6 +454,10 @@ public:
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();
     }
+
+    // There can be at most one small blob in blob storage for a portion.
+    // If bytes = 0, the portion does not have a small blob in blob storage.
+    ui64 GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const;
 
     ui64 GetTotalRawBytes() const {
         return GetColumnRawBytes() + GetIndexRawBytes();

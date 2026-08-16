@@ -1,3 +1,4 @@
+# cython: freethreading_compatible = True
 import sys
 from typing import Iterable, Any, Optional
 
@@ -22,10 +23,17 @@ cdef char * errors = 'strict'
 cdef char * utf8 = 'utf8'
 cdef dict array_templates = {}
 cdef bint must_swap = sys.byteorder == 'big'
-cdef array.array swapper = array.array('Q', [0])
 
-for c in 'bBuhHiIlLqQfd':
+for c in 'bBhHiIlLqQfd':
     array_templates[c] = array.array(c, [])
+
+
+cdef inline unsigned long long _bswap_uint64(unsigned long long v):
+    """Byte-swap a 64-bit unsigned integer for big-endian systems."""
+    return (((v & 0xFF) << 56) | (((v >> 8) & 0xFF) << 48) |
+            (((v >> 16) & 0xFF) << 40) | (((v >> 24) & 0xFF) << 32) |
+            (((v >> 32) & 0xFF) << 24) | (((v >> 40) & 0xFF) << 16) |
+            (((v >> 48) & 0xFF) << 8) | ((v >> 56) & 0xFF))
 
 
 cdef class ResponseBuffer:
@@ -159,18 +167,29 @@ cdef class ResponseBuffer:
         cdef unsigned char b
         cdef char* buf
         while x < num_rows:
-            sz = 0
-            shift = 0
-            while 1:
-                if self.buf_loc < self.buf_sz:
-                    b = self.buffer[self.buf_loc]
-                    self.buf_loc += 1
-                else:
-                    b = self._read_byte_load()
-                sz += ((b & 0x7f) << shift)
-                if (b & 0x80) == 0:
-                    break
-                shift += 7
+            # Fast path: 1-byte varint covers most string lengths < 128
+            if self.buf_loc < self.buf_sz:
+                b = self.buffer[self.buf_loc]
+                self.buf_loc += 1
+            else:
+                b = self._read_byte_load()
+
+            if (b & 0x80) == 0:
+                sz = b
+            else:
+                sz = b & 0x7f
+                shift = 7
+                while 1:
+                    if self.buf_loc < self.buf_sz:
+                        b = self.buffer[self.buf_loc]
+                        self.buf_loc += 1
+                    else:
+                        b = self._read_byte_load()
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
+                    if (b & 0x80) == 0:
+                        break
+                    shift += 7
+
             buf = self.read_bytes_c(sz)
             if encoding:
                 try:
@@ -194,21 +213,29 @@ cdef class ResponseBuffer:
         cdef char * null_map = <char *> PyMem_Malloc(<size_t> num_rows)
         memcpy(<void *> null_map, <void *> self.read_bytes_c(num_rows), num_rows)
         for x in range(num_rows):
+            # Fast path: 1-byte varint covers most string lengths < 128
             if self.buf_loc < self.buf_sz:
                 b = self.buffer[self.buf_loc]
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            shift = 0
-            sz = b & 0x7f
-            while b & 0x80:
-                shift += 7
-                if self.buf_loc < self.buf_sz:
-                    b = self.buffer[self.buf_loc]
-                    self.buf_loc += 1
-                else:
-                    b = self._read_byte_load()
-                sz += ((b & 0x7f) << shift)
+
+            if (b & 0x80) == 0:
+                sz = b
+            else:
+                sz = b & 0x7f
+                shift = 7
+                while 1:
+                    if self.buf_loc < self.buf_sz:
+                        b = self.buffer[self.buf_loc]
+                        self.buf_loc += 1
+                    else:
+                        b = self._read_byte_load()
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
+                    if (b & 0x80) == 0:
+                        break
+                    shift += 7
+
             buf = self.read_bytes_c(sz)
             if null_map[x]:
                 v = null_obj
@@ -251,7 +278,7 @@ cdef class ResponseBuffer:
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            sz += ((b & 0x7f) << shift)
+            sz += (<unsigned long long>(b & 0x7f)) << shift
             if (b & 0x80) == 0:
                 return sz
             shift += 7
@@ -260,11 +287,11 @@ cdef class ResponseBuffer:
     @cython.wraparound(False)
     def read_uint64(self) -> int:
         cdef ull_wrapper* x
+        cdef unsigned long long tmp
         cdef char* b = self.read_bytes_c(8)
         if must_swap:
-            memcpy(swapper.data.as_voidptr, b, 8)
-            swapper.byteswap()
-            return swapper[0]
+            memcpy(&tmp, b, 8)
+            return _bswap_uint64(tmp)
         x = <ull_wrapper *> b
         return x.int_value
 

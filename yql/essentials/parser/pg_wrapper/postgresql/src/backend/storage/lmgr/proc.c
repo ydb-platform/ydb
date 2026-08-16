@@ -1630,7 +1630,7 @@ ProcWakeup(PGPROC *proc, ProcWaitStatus waitStatus)
 	proc->waitLock = NULL;
 	proc->waitProcLock = NULL;
 	proc->waitStatus = waitStatus;
-	pg_atomic_write_u64(&MyProc->waitStart, 0);
+	pg_atomic_write_u64(&proc->waitStart, 0);
 
 	/* And awaken it */
 	SetLatch(&proc->procLatch);

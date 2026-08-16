@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
@@ -70,7 +72,7 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
     }
     {
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), false, false);
+        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/false, /*initiallyAcquired=*/false);
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
         {
             auto guard = Guard(alloc);
@@ -123,6 +125,18 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
     delete[] ptrs;
 }
 #endif
+
+Y_UNIT_TEST(ArrowAllocateWithDefaultArrowAllocator) {
+    TScopedAlloc alloc(__LOCATION__);
+    UseDefaultArrowAllocator();
+
+    constexpr ui64 size = 1_KB;
+    auto* ptr = MKQLArrowAllocate(size);
+    UNIT_ASSERT(ptr);
+
+    MKQLArrowFree(ptr, size);
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLAllocTest)
 
 } // namespace NKikimr::NMiniKQL

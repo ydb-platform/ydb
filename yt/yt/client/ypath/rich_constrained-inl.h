@@ -3,14 +3,13 @@
 // For the sake of sane code completion.
 #include "rich_constrained.h"
 #endif
-#undef RICH_CONSTRAINED_INL_H_
 
 #include "parser_detail.h"
 
 #include <yt/yt/client/chunk_client/read_limit.h>
 
-#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
+#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/versioned_io_options.h>
 
@@ -34,7 +33,7 @@ auto RunAttributeAccessor(const TConstrainedRichYPath<TValidator...>& path, cons
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv of rich YPath %v",
             key,
-            path.GetPath()) << ex;
+            path.GetPath()).With(ex);
     }
 }
 
@@ -78,7 +77,7 @@ std::optional<std::vector<NYTree::IMapNodePtr>> CollectRawRangeNodes(const TCons
             THROW_ERROR_EXCEPTION("YPath cannot be annotated with both multiple (\"ranges\" attribute) "
                 "and single (\"lower_limit\" or \"upper_limit\" attributes) ranges");
         }
-        THashMap<TString, NYTree::IMapNodePtr> rangeNode;
+        THashMap<std::string, NYTree::IMapNodePtr> rangeNode;
         if (optionalLowerLimitNode) {
             rangeNode["lower_limit"] = optionalLowerLimitNode;
         }
@@ -194,7 +193,7 @@ TConstrainedRichYPath<TValidator...> TConstrainedRichYPath<TValidator...>::Norma
         attributes = NYTree::CreateEphemeralAttributes();
     }
     attributes->MergeFrom(Attributes());
-    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);;
+    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);
 }
 
 template <class... TValidator>
@@ -388,8 +387,8 @@ std::vector<NChunkClient::TReadRange> TConstrainedRichYPath<TValidator...>::GetN
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NYPath::EErrorCode::InvalidReadRange, "Invalid read range")
-                << TErrorAttribute("range", rangeNodeCopy)
-                << ex;
+                .With("range", rangeNodeCopy)
+                .With(ex);
         }
     }
 
@@ -444,9 +443,9 @@ bool TConstrainedRichYPath<TValidator...>::HasNontrivialRanges() const
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetFileName() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetFileName() const
 {
-    return FindAttribute<TString>(*this, "file_name");
+    return FindAttribute<std::string>(*this, "file_name");
 }
 
 template <class... TValidator>
@@ -502,7 +501,7 @@ std::optional<i64> TConstrainedRichYPath<TValidator...>::GetRowCountLimit() cons
         auto rowCountLimit = FindAttribute<i64>(*this, "row_count_limit");
         if (rowCountLimit && *rowCountLimit < 0) {
             THROW_ERROR_EXCEPTION("Row count limit should be non-negative")
-                << TErrorAttribute("row_count_limit", rowCountLimit);
+                .With("row_count_limit", rowCountLimit);
         }
         return rowCountLimit;
     });
@@ -664,15 +663,15 @@ NTableClient::TVersionedWriteOptions TConstrainedRichYPath<TValidator...>::GetVe
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
+std::optional<ELayerAccessMethod> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
 {
-    return FindAttribute<TString>(*this, "access_method");
+    return FindAttribute<ELayerAccessMethod>(*this, "access_method");
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
 {
-    return FindAttribute<TString>(*this, "input_query");
+    return FindAttribute<std::string>(*this, "input_query");
 }
 
 template <class... TValidator>
@@ -713,7 +712,7 @@ template <class... TValidator>
 void TRequiredAttributesValidator<AttributeKey...>::operator()(const TConstrainedRichYPath<TValidator...>& path) const
 {
     auto validateOne = [&] (const char* attributeName) {
-        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %Qv does not have attribute %Qv", path, attributeName);
+        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %v does not have attribute %Qv", path, attributeName);
     };
     (validateOne(AttributeKey), ...);
 }
@@ -729,7 +728,7 @@ void TWhitelistAttributesValidator<AttributeKey...>::operator()(const TConstrain
             continue;
         }
 
-        THROW_ERROR_EXCEPTION("YPath %Qv has unexpected attribute %Qv", path, key);
+        THROW_ERROR_EXCEPTION("YPath %v has unexpected attribute %Qv", path, key);
     }
 }
 

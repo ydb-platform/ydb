@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_chunk_id_formatter.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_driveestimator.h"
+#include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
@@ -25,6 +26,24 @@
 namespace NKikimr { namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
+
+    Y_UNIT_TEST(FreeChunksSortingCanBeToggled) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        auto counter = counters->GetCounter("FreeChunks");
+        TFreeChunks freeChunks(counter, 3);
+
+        freeChunks.SetSortingEnabled(false);
+        freeChunks.Push(5);
+        freeChunks.Push(1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 5);
+
+        freeChunks.Push(4);
+        freeChunks.Push(2);
+        freeChunks.Push(3);
+        freeChunks.SetSortingEnabled(true);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 2);
+    }
 
     Y_UNIT_TEST(AtomicBlockCounterFunctional) {
         TAtomicBlockCounter counter;
@@ -507,6 +526,29 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         device->PwriteSync(data.Get(), size, 0, {}, {});
         device->PreadSync(readData.Get(), size, 0, {}, {});
         UNIT_ASSERT(memcmp(data.Get(), readData.Get(), size) == 0);
+    }
+
+    Y_UNIT_TEST(TPDiskMonWriteOpCounters) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+
+        mon->CountLogWriteOpRequest(TWriteSource::WriteLogEntry, 100);
+        mon->CountLogWriteOpRequest(TWriteSource::SyncLogCommitterCommit, 200);
+        mon->CountLogWriteOpRequest(TWriteSource::Unknown, 300);
+
+        auto pdiskGroup = counters->GetSubgroup("subsystem", "pdisk");
+        auto getCounterValue = [&](const TString& opName, const TString& counterName) -> i64 {
+            return pdiskGroup->GetSubgroup("op", opName)->GetCounter(counterName, true)->Val();
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogBytesByOp"), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogBytesByOp"), 200);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogBytesByOp"), 300);
     }
 
     Y_UNIT_TEST(FormatSectorMap) {

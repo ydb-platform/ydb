@@ -2,7 +2,6 @@
 
 #include "admin_commands.h"
 #include "authentication_commands.h"
-#include "ban_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
@@ -67,6 +66,7 @@ static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
 {
     auto result = TClientOptions::Root();
     result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    result.AbandonMasterTransactionsOnFailedCommit = config->AbandonMasterTransactionsOnFailedCommit;
     return result;
 }
 
@@ -100,14 +100,14 @@ void TDriverRequest::Reset()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandDescriptor IDriver::GetCommandDescriptor(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptor(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     YT_VERIFY(descriptor);
     return *descriptor;
 }
 
-TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     if (!descriptor) {
@@ -193,7 +193,7 @@ public:
 
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
-        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, false);
+        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);
         REGISTER_ALL(TReadTableCommand,                    "read_table",                      Null,       Tabular,    false, true );
         REGISTER_ALL(TReadBlobTableCommand,                "read_blob_table",                 Null,       Binary,     false, true );
         REGISTER_ALL(TLocateSkynetShareCommand,            "locate_skynet_share",             Null,       Structured, false, true );
@@ -338,6 +338,7 @@ public:
         REGISTER_ALL(TExecuteBatchCommand,                 "execute_batch",                   Null,       Structured, true,  false);
 
         REGISTER    (TDiscoverProxiesCommand,              "discover_proxies",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TCheckClusterLivenessCommand,         "check_cluster_liveness",          Null,       Structured, false, false);
 
         REGISTER_ALL(TBuildSnapshotCommand,                "build_snapshot",                  Null,       Structured, true,  false);
         REGISTER_ALL(TBuildMasterSnapshotsCommand,         "build_master_snapshots",          Null,       Structured, true,  false);
@@ -428,10 +429,6 @@ public:
         REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
         REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
-        REGISTER    (TGetUserBannedCommand,                "get_user_banned",                 Null,       Structured, false, true,  ApiVersion4);
-        REGISTER    (TSetUserBannedCommand,                "set_user_banned",                 Null,       Null,       true,  true,  ApiVersion4);
-        REGISTER    (TListBannedUsersCommand,              "list_banned_users",               Null,       Structured, false, false, ApiVersion4);
-
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
             REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
@@ -474,10 +471,10 @@ public:
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);
 
-        YT_LOG_DEBUG("Command received (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            identity.User);
+        YT_TLOG_DEBUG("Command received")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", identity.User);
 
         auto options = TClientOptions::FromAuthenticationIdentity(identity);
         options.RequirePasswordInAuthenticationCommands = Config_->RequirePasswordInAuthenticationCommands;
@@ -486,6 +483,7 @@ public:
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
         options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
+        options.AbandonMasterTransactionsOnFailedCommit = Config_->AbandonMasterTransactionsOnFailedCommit;
 
         auto client = ClientCache_->Get(identity, options);
 
@@ -502,7 +500,7 @@ public:
             .Run();
     }
 
-    std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const override
+    std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const override
     {
         auto it = CommandNameToEntry_.find(commandName);
         return it == CommandNameToEntry_.end() ? std::nullopt : std::make_optional(it->second.Descriptor);
@@ -582,7 +580,7 @@ private:
         TExecuteCallback Execute;
     };
 
-    THashMap<TString, TCommandEntry> CommandNameToEntry_;
+    THashMap<std::string, TCommandEntry> CommandNameToEntry_;
 
 
     template <class TCommand>
@@ -601,9 +599,7 @@ private:
     {
         const auto& request = context->Request();
 
-        if (request.LoggingTags) {
-            Logger().WithRawTag(*request.LoggingTags);
-        }
+        auto Logger = DriverLogger().WithTags(request.LoggingTags);
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
@@ -611,10 +607,10 @@ private:
             traceContext->AddTag("request_id", request.Id);
         });
 
-        YT_LOG_DEBUG("Command started (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            request.AuthenticatedUser);
+        YT_TLOG_DEBUG("Command started")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", request.AuthenticatedUser);
 
         TError result;
         try {
@@ -624,15 +620,16 @@ private:
         }
 
         if (result.IsOK()) {
-            YT_LOG_DEBUG("Command completed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command completed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser);
         } else {
-            YT_LOG_DEBUG(result, "Command failed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command failed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser)
+                .With(result);
         }
 
         context->Finish();

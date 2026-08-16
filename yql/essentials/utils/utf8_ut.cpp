@@ -27,7 +27,7 @@ Y_UNIT_TEST(CharSize) {
 
 Y_UNIT_TEST(RoundingDown) {
     auto checkDown = [](std::string_view in, std::string_view out) {
-        auto res = NYql::RoundToNearestValidUtf8(in, true);
+        auto res = NYql::RoundToNearestValidUtf8(in, /*roundDown=*/true);
         UNIT_ASSERT(res);
         UNIT_ASSERT(NYql::IsUtf8(*res));
         UNIT_ASSERT_VALUES_EQUAL(*res, out);
@@ -42,7 +42,7 @@ Y_UNIT_TEST(RoundingDown) {
 
 Y_UNIT_TEST(RoundingUp) {
     auto checkUp = [](std::string_view in, std::string_view out) {
-        auto res = NYql::RoundToNearestValidUtf8(in, false);
+        auto res = NYql::RoundToNearestValidUtf8(in, /*roundDown=*/false);
         UNIT_ASSERT(res);
         UNIT_ASSERT(NYql::IsUtf8(*res));
         UNIT_ASSERT_VALUES_EQUAL(*res, out);

@@ -625,7 +625,7 @@ def get_remote_tmp_path(host: str, *localpath: str) -> str:
 
 
 class LongRemoteExecution(AbstractContextManager):
-    def __init__(self, host: str, *cmd: str):
+    def __init__(self, host: str, *cmd: str, env: dict[str, str] = {}):
         self.host = host
         self.cmd = shlex.join(cmd)
         self_hash = f're_{abs(hash((self.host, self.cmd)))}_{random.randint(0, 1000000)}'
@@ -640,12 +640,15 @@ class LongRemoteExecution(AbstractContextManager):
         self._err = None
         self._finished = False
         self.allure = None
+        self.env = env
 
     def start(self) -> None:
         assert not self._finished, 'command cannot be started again'
         local_script_path = yatest.common.work_path(os.path.basename(self._script_path))
+        env_script = ''.join([f'export {var}="{val}"\n' for var, val in self.env.items()])
         with open(local_script_path, 'w') as script_file:
             script_file.write(f'''#!/bin/bash
+                {env_script}
                 {self.cmd} >{self._out_path} 2>{self._err_path}
                 echo -n $? >{self._return_code_path}
             ''')

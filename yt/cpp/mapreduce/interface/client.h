@@ -249,7 +249,7 @@ public:
     /// All changes that are made by transactions become visible globally or to parent transaction.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#commit_tx)
-    virtual void Commit() = 0;
+    virtual void Commit(const TCommitTransactionOptions& options = {}) = 0;
 
     ///
     /// @brief Abort transaction.
@@ -576,6 +576,15 @@ public:
     /// Cluster configs location is defined in |TConfig::ConfigRemotePatchPath|.
     ///
     virtual const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile);
+
+    ///
+    /// @brief Check cluster liveness.
+    ///
+    /// Throws if any requested liveness check fails. At least one check must be requested.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#check_cluster_liveness)
+    virtual void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) = 0;
 
     ///
     /// @brief Suspend operation.

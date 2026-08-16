@@ -2,8 +2,7 @@
 
 #include "dq_channel_service.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
@@ -80,16 +79,19 @@ namespace NYql::NDq {
 
 class TOutputSerializer {
 public:
-    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize)
+    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize)
         : Buffer(buffer)
         , RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , BufferPageAllocSize(bufferPageAllocSize)
     {}
 
     virtual ~TOutputSerializer() {};
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
+    virtual void Push(NDqProto::TWatermark&& watermark) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) = 0;
     virtual void Flush(bool finished) = 0;
 
@@ -97,15 +99,17 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     TMaybe<size_t> BufferPageAllocSize;
 };
 
 class TInputDeserializer {
 public:
-    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
         : RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , HolderFactory(holderFactory) {
     }
 
@@ -115,12 +119,13 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
 };
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local);
 std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer);
-std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 class TChannelStub : public IChannelBuffer {
 public:
@@ -242,8 +247,8 @@ public:
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     bool FinishPushed = false;
-    TInstant LastOutputNotificationTime;
-    TInstant LastInputNotificationTime;
+    std::atomic<TInstant> LastOutputNotificationTime;
+    std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
 
     std::atomic<bool> NeedToNotifyOutput = false;
@@ -264,14 +269,16 @@ class TNodeState;
 class TOutputDescriptor {
 public:
     TOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
-        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes)
+        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , ColdInflightBytes(coldInflightBytes)
         , QuotaManager(quotaManager)
+        , QuotaManagerAssigned(QuotaManager != nullptr)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -289,9 +296,61 @@ public:
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
     void AbortChannelByMemoryLimit(ui64 bytes);
-    void HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+
+    // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
+    // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a
+    // valid instance), so QuotaManagerAssigned is the only allowed way to test QuotaManager for null:
+    // the pointer itself is published by the release store below and never changed afterwards, hence
+    // readers which observe the flag set may read it without any lock and without a data race.
+    // Chunks pushed before the assignment are not tracked by the quota at all (TOutputItem::IsQuoted).
+
+    bool IsQuotaAssigned() const {
+        return QuotaManagerAssigned.load(std::memory_order_acquire);
+    }
+
+    // must be called only if IsQuotaAssigned() is true
+    bool AllocateQuota(ui64 bytes) {
+        return QuotaManager->AllocateQuota(bytes);
+    }
+
+    // must be called only for the bytes allocated by AllocateQuota
+    void FreeQuota(ui64 bytes) {
+        QuotaManager->FreeQuota(bytes);
+    }
+
+    IMemoryQuotaManager::TPtr GetQuotaManager() const {
+        return IsQuotaAssigned() ? QuotaManager : nullptr;
+    }
+
+    void SetQuotaManager(IMemoryQuotaManager::TPtr quotaManager) {
+        if (quotaManager && !QuotaManagerAssigned.load(std::memory_order_relaxed)) {
+            QuotaManager = std::move(quotaManager);
+            QuotaManagerAssigned.store(true, std::memory_order_release);
+        }
+    }
+
+    // Must be called under WaitQueueMutex right before the chunk is pushed into the WaitQueue. Accounts
+    // the chunk in UnquotedWaitBytes or, if the chunk lost the race with the QuotaManager assignment and
+    // some quoted chunk is already waiting, allocates quota for it - SendFromWaiters relies on the fact
+    // that unquoted chunks always precede quoted ones in the WaitQueue.
+    // Returns false if the quota limit is exceeded, the caller has to abort the channel then.
+    bool PrepareWaitQuota(bool& quoted, ui64 bytes) {
+        if (!quoted) {
+            if (WaitQueueBytes.load() > UnquotedWaitBytes) {
+                // there is a quoted chunk in the queue already, so QuotaManager is definitely assigned
+                if (!AllocateQuota(bytes)) {
+                    return false;
+                }
+                quoted = true;
+            } else {
+                UnquotedWaitBytes += bytes;
+            }
+        }
+        return true;
+    }
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -310,6 +369,7 @@ public:
     std::atomic<ui64> WaitQueueBytes = 0;
     std::atomic<ui64> WaitQueueSize = 0;
     mutable std::queue<TDataChunk> WaitQueue;
+    ui64 UnquotedWaitBytes = 0; // bytes of the WaitQueue chunks which are not tracked by QuotaManager
     mutable TInstant WaitTimestamp;
 
     mutable std::mutex FlowControlMutex;
@@ -319,6 +379,7 @@ public:
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
     std::atomic<ui64> SpilledBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished = false;
@@ -326,15 +387,18 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
-    std::atomic<bool> Leading = false;
+    std::atomic<bool> Leading = true;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
 
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
+    const ui64 ColdInflightBytes;
 
+private:
     IMemoryQuotaManager::TPtr QuotaManager;
+    std::atomic<bool> QuotaManagerAssigned;
 };
 
 struct TOutputDescriptorCompare {
@@ -352,15 +416,18 @@ public:
         Sent
     };
 
-    TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor)
-        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init) {
+    TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor, bool quoted)
+        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init), IsQuoted(quoted) {
     }
     ~TOutputItem();
 
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
-    ui64 SeqNo;
+    const bool IsQuoted; // whether Data.Bytes is tracked by Descriptor's QuotaManager
+    ui64 SeqNo = 0;
+    bool Leading = false;
+    ui64 ChannelSeqNo = 0;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -429,8 +496,8 @@ public:
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
-    ui64 PeerGenMajor = 0;
-    NActors::TActorId PeerActorId;
+    ui64 OutputNodeGenMajor = 0;
+    NActors::TActorId OutputNodeActorId;
     bool IsBound = false;
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
@@ -440,12 +507,14 @@ public:
     std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;
     std::atomic<ui64> InflightBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyInput = false;
     std::atomic<bool> FinishPushed = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Aborted = false;
+    std::atomic<bool> Finishing = false;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
@@ -522,14 +591,15 @@ struct TEvPrivate {
     };
 
     struct TEvFreeNodeSession : public NActors::TEventLocal<TEvFreeNodeSession, EvFreeNodeSession> {
-        TEvFreeNodeSession(ui32 nodeId, bool force) : NodeId(nodeId), Force(force) {}
+        TEvFreeNodeSession(ui32 nodeId) : NodeId(nodeId) {}
         const ui32 NodeId;
-        const bool Force;
     };
 
     struct TEvCleanup : public NActors::TEventLocal<TEvCleanup, EvCleanup> {
     };
 };
+
+const int ReconciliationLogSize = 40;
 
 class TNodeState {
 public:
@@ -551,9 +621,16 @@ public:
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
+        SessionMessagesSent = counters->GetCounter("Session/MessagesSent", true);
+        SessionMessagesResent = counters->GetCounter("Session/MessagesResent", true);
+        SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
+        auto now = TInstant::Now();
+        LastPeerActivity.store(now);
+        LastCleanup = now;
     }
 
     virtual ~TNodeState();
+    void FailDescriptors();
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -569,22 +646,26 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
+    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
-    void StartReconciliation(bool major);
-    void DoReconciliation();
-    void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
-    TString LogIdent();
+    void StartReconciliation(bool major, char logSymbol);
+    void DoReconciliation(char logSymbol);
+    void AddReconciliationLog(char logSymbol);
+    TString GetReconciliationLog();
+    void SendDiscovery();
 
     NActors::TActorId NodeActorId;
+    TString LogPrefix;
     mutable std::mutex Mutex;
     mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
     NActors::TActorSystem* ActorSystem;
@@ -594,7 +675,6 @@ public:
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
-    bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     // Sender
     ui64 GenMajor = 1;
@@ -602,12 +682,12 @@ public:
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
     std::atomic<ui64> InflightBytes = 0;
+    NActors::TActorId InputNodeActorId;
     // Receiver
-    NActors::TActorId PeerActorId;
-    std::atomic<ui64> PeerGenMajor = 0;
-    std::atomic<ui64> PeerGenMinor = 0;
+    NActors::TActorId OutputNodeActorId;
+    std::atomic<ui64> OutputNodeGenMajor = 0;
+    std::atomic<ui64> OutputNodeGenMinor = 0;
     ui64 ConfirmedSeqNo = 0;
-    TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
@@ -629,11 +709,23 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
-    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(250);
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
+    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
-    std::atomic<TInstant> LastActivity;
+    std::atomic<TInstant> LastPeerActivity;
+    TInstant LastCleanup;
+    std::atomic<bool> Terminating = false;
+    std::atomic<bool> ResendAsked = false;
+    std::deque<char> ReconciliationLog;
+    TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
+    std::atomic<ui64> SendCount = 0;
+    std::atomic<ui64> ResendCount = 0;
+    std::atomic<ui64> ReconCount = 0;
+    std::atomic<TInstant> ReconSent;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -710,13 +802,15 @@ public:
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
-    void FreeNodeSession(ui32 nodeId, bool force);
+    void FreeNodeSession(ui32 nodeId, NActors::TActorId sender);
 
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
     // binded helpers
     std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) final;
+    // binding
+    void SetServiceActorId(NActors::TActorId serviceActorId) final;
     // remote buffers
     std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage);
     std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager);
@@ -730,6 +824,7 @@ public:
     TString GetDebugInfo();
 
     NActors::TActorSystem* ActorSystem;
+    NActors::TActorId ServiceActorId;
     ui32 NodeId;
     NMonitoring::TDynamicCounterPtr Counters;
     const TDqChannelLimits Limits;
@@ -739,6 +834,7 @@ public:
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
+    std::atomic<bool> CleanupScheduled = false;
 };
 
 class TFastDqOutputChannel : public IDqOutputChannel {
@@ -787,12 +883,16 @@ public:
         }
     }
 
-    void Push(NDqProto::TWatermark&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TWatermark&& watermark) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(watermark));
+        }
     }
 
-    void Push(NDqProto::TCheckpoint&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(checkpoint));
+        }
     }
 
     void Finish() override {
@@ -889,7 +989,7 @@ public:
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
         PopStats.Level = settings.Level;
-        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, *settings.HolderFactory);
+        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize, *settings.HolderFactory);
     }
 
     mutable TDqInputStats PopStats;
@@ -903,13 +1003,16 @@ public:
     }
 
     bool Empty() const override {
+        if (PausedByCheckpoint) {
+            return true;
+        }
         return Buffer->IsEmpty();
     }
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Buffer->IsFinished();
+        return Buffer->IsFinished() && !PausedByCheckpoint;
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -927,31 +1030,17 @@ public:
     }
 
     void PauseByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(!PausedByCheckpoint);
+        PausedByCheckpoint = true;
     }
 
     void ResumeByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(PausedByCheckpoint);
+        PausedByCheckpoint = false;
     }
 
     bool IsPausedByCheckpoint() const override {
-        Y_ENSURE(false);
-    }
-
-    void AddWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void PauseByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void ResumeByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    bool IsPausedByWatermark() const override {
-        Y_ENSURE(false);
+        return PausedByCheckpoint;
     }
 
 // IDqInputChannel
@@ -983,11 +1072,17 @@ public:
         return IsLocalChannel;
     }
 
+    void SetCallback(IDqInputChannelCallbacks* callback) override {
+        Callback = callback;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    IDqInputChannelCallbacks* Callback = nullptr;
+    bool PausedByCheckpoint = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {
@@ -997,14 +1092,6 @@ public:
     {}
 
     void Bootstrap() {
-
-        NActors::TMon* mon = NKikimr::AppData()->Mon;
-        if (mon) {
-            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "kqp_channels", "KQP Channels", false,
-                NActors::TActivationContext::ActorSystem(), SelfId());
-        }
-
         Become(&TChannelServiceActor::StateFunc);
     }
 
@@ -1015,7 +1102,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvServiceLookup, Handle);
             hFunc(TEvPrivate::TEvFreeNodeSession, Handle);
-            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
+            cFunc(TEvPrivate::TEvCleanup::EventType, HandleCleanup);
             hFunc(NActors::NMon::TEvHttpInfo, Handle);
         }
     }
@@ -1024,11 +1111,6 @@ public:
         std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
-        if (!CleanupScheduled) {
-            // we need no cleanup until very first incoming msg
-            CleanupScheduled = true;
-            Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
-        }
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
@@ -1050,18 +1132,16 @@ public:
     }
 
     void Handle(TEvPrivate::TEvFreeNodeSession::TPtr& ev) {
-        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Get()->Force);
+        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Sender);
     }
 
-    void HandleWakeup() {
+    void HandleCleanup() {
         ChannelService->NotifyCleanup();
-        Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
 
     void Handle(NActors::NMon::TEvHttpInfo::TPtr& ev);
 
     std::shared_ptr<TDqChannelService> ChannelService;
-    bool CleanupScheduled = false;
 };
 
 class TNodeSessionActor : public NActors::TActor<TNodeSessionActor> {
@@ -1083,7 +1163,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvReconciliation, Handle);
-            hFunc(TEvPrivate::TEvCleanup, Handle);
+            cFunc(TEvPrivate::TEvCleanup::EventType, HandleCleanup);
         }
     }
 
@@ -1125,7 +1205,7 @@ public:
         NodeState->HandleReconciliation(ev);
     }
 
-    void Handle(TEvPrivate::TEvCleanup::TPtr&) {
+    void HandleCleanup() {
         NodeState->HandleCleanup();
     }
 
@@ -1150,7 +1230,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvReconciliation, Handle);
-            hFunc(TEvPrivate::TEvCleanup, Handle);
+            cFunc(TEvPrivate::TEvCleanup::EventType, HandleCleanup);
             hFunc(TEvPrivate::TEvProcessPending, Handle);
         }
     }
@@ -1219,7 +1299,7 @@ public:
         NodeState->HandleReconciliation(ev);
     }
 
-    void Handle(TEvPrivate::TEvCleanup::TPtr&) {
+    void HandleCleanup() {
         NodeState->HandleCleanup();
     }
 
@@ -1256,4 +1336,3 @@ public:
 };
 
 }
-

@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     cbo_hints.cpp
     cbo_interesting_orderings.cpp
+    cbo_optimizer_hints.cpp
     cbo_optimizer_new.cpp
     kqp_statistics.cpp
 )

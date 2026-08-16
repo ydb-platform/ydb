@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/parser/common/error.h>
+#include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
 #include <yql/essentials/parser/common/antlr4/error_listener.h>
 #include <yql/essentials/parser/common/antlr4/lexer_tokens_collector.h>
 
@@ -11,7 +12,8 @@
 #endif
 #include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 
-#include <utility>
+#include <util/generic/maybe.h>
+#include <util/generic/scope.h>
 
 namespace NProtoAST {
 using namespace NAST;
@@ -41,9 +43,11 @@ public:
         TString queryName = "query",
         google::protobuf::Arena* arena = nullptr,
         bool isAmbiguityError = false,
-        bool isAmbiguityDebugging = false)
+        bool isAmbiguityDebugging = false,
+        TMaybe<size_t> maxParseTreeDepth = Nothing())
         : QueryName_(std::move(queryName))
         , IsAmbiguityError_(isAmbiguityError)
+        , MaxParseTreeDepth_(maxParseTreeDepth)
         , InputStream_(data)
         , Lexer_(&InputStream_)
         , TokenStream_(&Lexer_)
@@ -57,25 +61,38 @@ public:
     }
 
     google::protobuf::Message* BuildAST(IErrorCollector& errors) {
-        // TODO: find a better way to break on lexer errors
-        typename antlr4::YqlErrorListener listener(&errors, &Parser_.error, IsAmbiguityError_);
         Parser_.removeErrorListeners();
-        Parser_.addErrorListener(&listener);
+
+        // TODO: find a better way to break on lexer errors
+        typename antlr4::YqlErrorListener errorListener(&errors, &Parser_.error, IsAmbiguityError_);
+        Parser_.addErrorListener(&errorListener);
+        Y_DEFER {
+            Parser_.removeErrorListener(&errorListener);
+        };
+
+        TMaybe<NAntlrAST::TDepthLimitingListener> depthLimiter;
+        if (MaxParseTreeDepth_) {
+            depthLimiter.ConstructInPlace(*MaxParseTreeDepth_);
+            Parser_.addParseListener(depthLimiter.Get());
+        }
+        Y_DEFER {
+            if (depthLimiter) {
+                Parser_.removeParseListener(depthLimiter.Get());
+            }
+        };
+
         try {
             auto result = Parser_.Parse(&errors);
-            Parser_.removeErrorListener(&listener);
             if (Parser_.error) {
                 result = nullptr;
             }
             Parser_.error = false;
             return result;
         } catch (const TTooManyErrors&) {
-            Parser_.removeErrorListener(&listener);
             Parser_.error = false;
             return nullptr;
         } catch (...) {
             errors.Error(0, 0, CurrentExceptionMessage());
-            Parser_.removeErrorListener(&listener);
             Parser_.error = false;
             return nullptr;
         }
@@ -84,6 +101,7 @@ public:
 private:
     TString QueryName_;
     bool IsAmbiguityError_;
+    TMaybe<size_t> MaxParseTreeDepth_;
 
     antlr4::ANTLRInputStream InputStream_;
     TLexer Lexer_;

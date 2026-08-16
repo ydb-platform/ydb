@@ -36,6 +36,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
+    PortionsIndexSnapshot = GranuleMeta->GetPortionsIndex().GetPortionsSnapshot();
 }
 
 void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
@@ -47,6 +48,7 @@ void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSh
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     self.BackgroundController.FinishCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
+    self.TryScheduleCompaction({});
     Y_ABORT_UNLESS(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();

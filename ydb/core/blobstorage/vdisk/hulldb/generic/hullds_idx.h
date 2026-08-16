@@ -292,6 +292,10 @@ namespace NKikimr {
             return Fresh.NeedsCompaction(yardFreeUpToLsn, force);
         }
 
+        ui64 GetFreshFreeInPlaceSizeApproximation() const {
+            return Fresh.GetFreeInPlaceSizeApproximation();
+        }
+
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }

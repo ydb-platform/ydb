@@ -10,11 +10,17 @@ https://www.unicode.org/reports/tr29/
 from __future__ import annotations
 
 # std imports
+import sys
+import unicodedata
 from enum import IntEnum
 from functools import lru_cache
 
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Optional, NamedTuple
 
+__lazy_modules__ = [
+    "wcwidth.bisearch",
+    "wcwidth.table_grapheme",
+]
 # local
 from .bisearch import bisearch as _bisearch
 from .table_grapheme import (GRAPHEME_L,
@@ -35,6 +41,12 @@ from .table_grapheme import (GRAPHEME_L,
 if TYPE_CHECKING:  # pragma: no cover
     # std imports
     from collections.abc import Iterator
+
+# check for python 3.15 for new iter_graphemes() function
+_HAS_PYTHON315_ITER_GRAPHEMES = (
+    sys.version_info >= (3, 15)
+    and hasattr(unicodedata, 'iter_graphemes')
+)
 
 # Maximum backward scan distance when finding grapheme cluster boundaries.
 # Covers all known Unicode grapheme clusters with margin; longer sequences are pathological.
@@ -130,7 +142,7 @@ class BreakResult(NamedTuple):
 
 
 @lru_cache(maxsize=1024)
-def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> BreakResult | None:
+def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> Optional[BreakResult]:
     """
     Check simple GCB-pair-based break rules (cacheable).
 
@@ -245,13 +257,13 @@ def _should_break(
     return BreakResult(should_break=True, ri_count=ri_count)
 
 
-def iter_graphemes(
+def _iter_graphemes_stdlib(
     unistr: str,
     start: int = 0,
-    end: int | None = None,
+    end: Optional[int] = None,
 ) -> Iterator[str]:
     r"""
-    Iterate over grapheme clusters in a Unicode string.
+    Iterate over grapheme clusters using :func:`unicodedata.iter_graphemes`.
 
     Grapheme clusters are "user-perceived characters" - what a user would
     consider a single character, which may consist of multiple Unicode
@@ -266,9 +278,55 @@ def iter_graphemes(
 
         >>> list(iter_graphemes('cafe\u0301'))
         ['c', 'a', 'f', 'e\u0301']
-        >>> list(iter_graphemes('\U0001F468\u200D\U0001F469\u200D\U0001F467'))
+        >>> list(iter_graphemes('ok\U0001F468\u200D\U0001F469\u200D\U0001F467'))
         ['o', 'k', '\U0001F468\u200D\U0001F469\u200D\U0001F467']
-        >>> list(iter_graphemes('\U0001F1FA\U0001F1F8'))
+        >>> list(iter_graphemes('ok\U0001F1FA\U0001F1F8'))
+        ['o', 'k', '\U0001F1FA\U0001F1F8']
+
+    .. versionadded:: 0.3.0
+    """
+    if not unistr:
+        return
+
+    length = len(unistr)
+
+    if end is None:
+        end = length
+
+    if start >= end or start >= length:
+        return
+
+    end = min(end, length)
+
+    full_segment = unistr[start:end]
+    for seg in unicodedata.iter_graphemes(full_segment):  # type: ignore[attr-defined]  # pylint: disable=no-member
+        yield full_segment[seg.start:seg.end]
+
+
+def _iter_graphemes_python(
+    unistr: str,
+    start: int = 0,
+    end: int | None = None,
+) -> Iterator[str]:
+    r"""
+    Iterate over grapheme clusters using :func:`unicodedata.iter_graphemes`.
+
+    Grapheme clusters are "user-perceived characters" - what a user would
+    consider a single character, which may consist of multiple Unicode
+    codepoints (e.g., a base character with combining marks, emoji sequences).
+
+    :param unistr: The Unicode string to segment.
+    :param start: Starting index (default 0).
+    :param end: Ending index (default len(unistr)).
+    :yields: Grapheme cluster substrings.
+
+    Example::
+
+        >>> list(iter_graphemes('cafe\u0301'))
+        ['c', 'a', 'f', 'e\u0301']
+        >>> list(iter_graphemes('ok\U0001F468\u200D\U0001F469\u200D\U0001F467'))
+        ['o', 'k', '\U0001F468\u200D\U0001F469\u200D\U0001F467']
+        >>> list(iter_graphemes('ok\U0001F1FA\U0001F1F8'))
         ['o', 'k', '\U0001F1FA\U0001F1F8']
 
     .. versionadded:: 0.3.0
@@ -390,7 +448,7 @@ def grapheme_boundary_before(unistr: str, pos: int) -> int:
 def iter_graphemes_reverse(
     unistr: str,
     start: int = 0,
-    end: int | None = None,
+    end: Optional[int] = None,
 ) -> Iterator[str]:
     r"""
     Iterate over grapheme clusters in reverse order (last to first).
@@ -426,3 +484,10 @@ def iter_graphemes_reverse(
             break
         yield unistr[cluster_start:pos]
         pos = cluster_start
+
+
+# Bind iter_graphemes at module level to avoid per-call dispatch overhead.
+iter_graphemes = (
+    _iter_graphemes_stdlib if _HAS_PYTHON315_ITER_GRAPHEMES
+    else _iter_graphemes_python
+)

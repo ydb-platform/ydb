@@ -118,6 +118,7 @@ void TPersistentQueue<T, ChunkSize>::Enqueue(T value)
     auto& size = this->Size_;
 
     if (!head.CurrentChunk_) {
+        ++this->ChunkCount_;
         auto chunk = New<TChunk>();
         head.CurrentChunk_ = tail.CurrentChunk_ = chunk;
         head.CurrentIndex_ = tail.CurrentIndex_ = 0;
@@ -127,6 +128,7 @@ void TPersistentQueue<T, ChunkSize>::Enqueue(T value)
     ++size;
 
     if (head.CurrentIndex_ == ChunkSize) {
+        ++this->ChunkCount_;
         auto chunk = New<TChunk>();
         head.CurrentChunk_->Next = chunk;
         head.CurrentChunk_ = chunk;
@@ -148,6 +150,9 @@ T TPersistentQueue<T, ChunkSize>::Dequeue()
     if (tail.CurrentIndex_ == ChunkSize) {
         tail.CurrentChunk_ = tail.CurrentChunk_->Next;
         tail.CurrentIndex_ = 0;
+
+        YT_VERIFY(this->ChunkCount_ > 0);
+        --this->ChunkCount_;
     }
 
     return result;
@@ -159,6 +164,13 @@ void TPersistentQueue<T, ChunkSize>::Clear()
     this->Head_ = TPersistentQueueIterator<T, ChunkSize>();
     this->Tail_ = TPersistentQueueIterator<T, ChunkSize>();
     this->Size_ = 0;
+    this->ChunkCount_ = 0;
+}
+
+template <class T, size_t ChunkSize>
+i64 TPersistentQueue<T, ChunkSize>::GetByteSize() const
+{
+    return this->ChunkCount_ * sizeof(TChunk);
 }
 
 template <class T, size_t ChunkSize>
@@ -208,6 +220,12 @@ void TIndexedPersistentQueue<T, ChunkSize>::Clear()
     }
 
     return TBase::Clear();
+}
+
+template <class T, size_t ChunkSize>
+i64 TIndexedPersistentQueue<T, ChunkSize>::GetByteSize() const
+{
+    return TBase::GetByteSize() + Chunks_.size() * sizeof(TChunk*);
 }
 
 template <class T, size_t ChunkSize>

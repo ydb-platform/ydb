@@ -736,7 +736,7 @@ public:
                 OutputColumns_.back(),
                 Nothing(),
                 outputSpec.GetSchemaOptions().ListIsOptional,
-                false,
+                /*enableRecursiveRenaming=*/false,
                 {});
 
             auto factory = outputSpec.GetFactory(i);

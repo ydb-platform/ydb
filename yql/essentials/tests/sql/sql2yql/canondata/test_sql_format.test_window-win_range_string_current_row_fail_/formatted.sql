@@ -1,6 +1,6 @@
 PRAGMA WindowNewPipeline;
 
-/* custom error: Range frame for non numeric expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW */
+/* custom error: RANGE frames over an ORDER BY expression of type "String" support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode */
 $data = [
     <|a: 'apple', b: 1, count: 1|>,
     <|a: 'banana', b: 1, count: 2|>,

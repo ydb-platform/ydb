@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vhost/nbs2_rename.h"
+
 #include <stdbool.h>
 
 #ifdef __cplusplus

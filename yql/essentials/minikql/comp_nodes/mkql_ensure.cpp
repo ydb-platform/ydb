@@ -5,39 +5,38 @@
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TEnsureWrapper: public TMutableCodegeneratorNode<TEnsureWrapper> {
-    typedef TMutableCodegeneratorNode<TEnsureWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TEnsureWrapper>;
 
 public:
     TEnsureWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* predicate,
                    IComputationNode* message, const NUdf::TSourcePosition& pos)
         : TBaseComputation(mutables, value->GetRepresentation())
-        , Arg(value)
-        , Predicate(predicate)
-        , Message(message)
-        , Pos(pos)
+        , Arg_(value)
+        , Predicate_(predicate)
+        , Message_(message)
+        , Pos_(pos)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& predicate = Predicate->GetValue(ctx);
+        const auto& predicate = Predicate_->GetValue(ctx);
         if (predicate && predicate.Get<bool>()) {
-            return Arg->GetValue(ctx).Release();
+            return Arg_->GetValue(ctx).Release();
         }
 
         Throw(this, &ctx);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto predicate = GetNodeValue(Predicate, ctx, block);
+        const auto predicate = GetNodeValue(Predicate_, ctx, block);
         const auto pass = CastInst::Create(Instruction::Trunc, predicate, Type::getInt1Ty(context), "bool", block);
 
         const auto kill = BasicBlock::Create(context, "kill", ctx.Func);
@@ -51,17 +50,17 @@ public:
         new UnreachableInst(context, block);
 
         block = good;
-        return GetNodeValue(Arg, ctx, block);
+        return GetNodeValue(Arg_, ctx, block);
         ;
     }
 #endif
 
 private:
     [[noreturn]] static void Throw(TEnsureWrapper const* thisPtr, TComputationContext* ctxPtr) {
-        auto message = thisPtr->Message->GetValue(*ctxPtr);
+        auto message = thisPtr->Message_->GetValue(*ctxPtr);
         auto messageStr = message.AsStringRef();
         TStringBuilder res;
-        res << thisPtr->Pos << " Condition violated";
+        res << thisPtr->Pos_ << " Condition violated";
         if (messageStr.Size() > 0) {
             res << ":\n\n"
                 << TStringBuf(messageStr) << "\n\n";
@@ -71,14 +70,14 @@ private:
     }
 
     void RegisterDependencies() const final {
-        DependsOn(Arg);
-        DependsOn(Predicate);
+        DependsOn(Arg_);
+        DependsOn(Predicate_);
     }
 
-    IComputationNode* const Arg;
-    IComputationNode* const Predicate;
-    IComputationNode* const Message;
-    const NUdf::TSourcePosition Pos;
+    IComputationNode* const Arg_;
+    IComputationNode* const Predicate_;
+    IComputationNode* const Message_;
+    const NUdf::TSourcePosition Pos_;
 };
 
 } // namespace
@@ -98,5 +97,4 @@ IComputationNode* WrapEnsure(TCallable& callable, const TComputationNodeFactoryC
     return new TEnsureWrapper(ctx.Mutables, value, predicate, message, NUdf::TSourcePosition(row, column, file));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

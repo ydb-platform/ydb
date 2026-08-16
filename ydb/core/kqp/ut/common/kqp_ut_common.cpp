@@ -140,11 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetNeedStatsCollectors(settings.NeedsStatsCollectors);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -160,7 +160,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             auto* logStream = settings.LogStream;
             ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
                 });
             });
         } else {
@@ -176,6 +176,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     if (settings.DescribeSchemaSecretsServiceFactory) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
+    }
+
+    if (settings.QueryReplayBackendFactory) {
+        ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
     }
 
     Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
@@ -829,6 +833,11 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 }
 
 void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
     auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     return AssertTableStats(stats, table, expectedStats);
 }

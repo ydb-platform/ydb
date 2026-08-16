@@ -1,6 +1,7 @@
 import re
 
 import _common
+from ymake import macro, Unit
 
 
 def get_coverage_filter_regexp(pattern, cache={}):
@@ -39,7 +40,8 @@ def get_coverage_filters(unit, filters=[]):
     return filters
 
 
-def onset_cpp_coverage_flags(unit):
+@macro
+def SET_CPP_COVERAGE_FLAGS(unit: Unit):
     if unit.get("CLANG_COVERAGE") != "yes":
         return
     filters = get_coverage_filters(unit)
@@ -47,7 +49,8 @@ def onset_cpp_coverage_flags(unit):
         unit.on_setup_clang_coverage()
 
 
-def on_filter_py_coverage(unit):
+@macro
+def _FILTER_PY_COVERAGE(unit: Unit):
     if unit.get("PYTHON_COVERAGE") != "yes":
         return
 

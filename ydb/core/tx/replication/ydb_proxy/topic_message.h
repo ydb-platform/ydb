@@ -21,6 +21,7 @@ public:
     const TString& GetData() const;
     TString& GetData();
     ui64 GetOffset() const;
+    ui64 GetLogicalMessageCount() const;
     ui64 GetSeqNo() const;
     TInstant GetCreateTime() const;
     TInstant GetWriteTime() const;

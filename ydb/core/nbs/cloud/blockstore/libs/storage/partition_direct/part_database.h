@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -13,6 +14,8 @@ class TPartitionDatabase: public NKikimr::NIceDb::TNiceDb
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+    using TAddHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
 
 public:
     enum class EBlobIndexScanProgress
@@ -35,11 +38,19 @@ public:
     bool ReadDirectBlockGroupsConnections(
         TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections);
 
+    bool ReadAllVChunkConfigs(TVector<TVChunkConfig>& out);
+
     void StoreVolumeConfig(
         const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
     void StoreDirectBlockGroupsConnections(
         const TDirectBlockGroupsConnections& directBlockGroupsConnections);
+
+    void StoreVChunkConfig(const TVChunkConfig& cfg);
+
+    bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);
+    void StoreAddHostInProgress(const TAddHostInProgress& addHostInProgress);
+    void ClearAddHostInProgress();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

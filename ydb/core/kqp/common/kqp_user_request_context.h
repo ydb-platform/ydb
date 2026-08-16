@@ -24,8 +24,10 @@ namespace NKikimr::NKqp {
         TString PoolId;
         std::optional<NResourcePool::TPoolSettings> PoolConfig;
         bool IsStreamingQuery = false;
+        bool UseBatchPool = false;
         TString CheckpointId;
         TString StreamingQueryPath;
+        TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 
         TUserRequestContext() = default;

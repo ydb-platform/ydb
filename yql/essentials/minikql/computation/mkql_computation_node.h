@@ -57,9 +57,9 @@ struct TComputationOptsFull: public TComputationOpts {
                          NUdf::ICountersProvider* countersProvider,
                          const NUdf::ILogProvider* logProvider,
                          NYql::TLangVersion langver,
-                         const NYql::TRuntimeSettings& runtimeSettings);
+                         NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
-    ~TComputationOptsFull();
+    ~TComputationOptsFull() = default;
 
     TAllocState& AllocState;
     const TTypeEnvironment& TypeEnv;
@@ -70,7 +70,7 @@ struct TComputationOptsFull: public TComputationOpts {
     NUdf::ICountersProvider* const CountersProvider;
     const NUdf::ILogProvider* const LogProvider;
     const NYql::TLangVersion LangVer;
-    const NYql::TRuntimeSettings& RuntimeSettings;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 };
 
 struct TWideFieldsInitInfo {
@@ -130,13 +130,17 @@ struct TComputationContext: public TComputationContextLLVM {
     TMaybe<NUdf::TSourcePosition>& NotConsumedLinear;
     const NYql::TRuntimeSettings& RuntimeSettings;
 
+    // If computation node receives Yield fetch status and
+    // FlushingMode is set, then the node must flush its accumulated buffers
+    bool FlushingMode = false;
+
     TComputationContext(const THolderFactory& holderFactory,
                         const NUdf::IValueBuilder* builder,
                         const TComputationOptsFull& opts,
                         const TComputationMutables& mutables,
                         arrow::MemoryPool& arrowMemoryPool,
                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear,
-                        const NYql::TRuntimeSettings& RuntimeSettings);
+                        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
     ~TComputationContext();
 
@@ -147,11 +151,13 @@ struct TComputationContext: public TComputationContextLLVM {
 
     void UpdateUsageAdjustor(ui64 memLimit);
     NUdf::TLoggerPtr MakeLogger() const;
+    NYql::TRuntimeSettings::TConstPtr GetRuntimeSettingsSharedPtr() const;
 
 private:
     NUdf::ITypeInfoHelper::TPtr MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target);
 
 private:
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettingsPtr_;
     ui64 InitRss_ = 0ULL;
     ui64 LastRss_ = 0ULL;
     NUdf::TLoggerPtr RssLogger_;
@@ -338,6 +344,8 @@ public:
     virtual TString SaveGraphState() = 0;
     virtual void LoadGraphState(TStringBuf state) = 0;
     virtual TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() = 0;
+    virtual bool GetFlushingMode() const = 0;
+    virtual void SetFlushingMode(bool value) = 0;
 };
 
 class TNodeFactory;

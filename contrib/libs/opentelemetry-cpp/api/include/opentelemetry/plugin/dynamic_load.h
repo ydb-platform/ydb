@@ -15,6 +15,21 @@
 #  include "opentelemetry/plugin/detail/dynamic_load_unix.h"  // IWYU pragma: export
 #endif
 
+// Always print a warning
+
+#if defined(__clang__) || defined(__GNUC__)
+#  pragma GCC warning "opentelemetry/plugin/ is deprecated, and will be removed. Do not use."
+#elif defined(_MSC_VER)
+#  pragma message( \
+      "[WARNING]: opentelemetry/plugin/ is deprecated, and will be removed. Do not use.")
+#endif
+
+// And fail in deprecated-free builds
+
+#ifdef OPENTELEMETRY_NO_DEPRECATED_CODE
+#  error "header <opentelemetry/plugin/> is deprecated."
+#endif
+
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace plugin
 {

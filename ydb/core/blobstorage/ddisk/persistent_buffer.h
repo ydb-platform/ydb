@@ -3,12 +3,27 @@
 #include "defs.h"
 
 namespace NKikimr::NDDisk {
+
+    struct TPersistentBufferLocation {
+        ui32 ChunkIdx;
+        ui32 SectorIdx;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferLocation& x, const TPersistentBufferLocation& y) = default;
+    };
+
     struct TPersistentBufferSectorInfo {
         ui64 ChunkIdx : 32;
         ui64 SectorIdx : 16;
         ui64 HasSignatureCorrection : 1;
         ui64 Reserved : 15;
         ui64 Checksum : 64;
+    };
+
+    struct TPersistentBufferId {
+        ui64 TabletId;
+        ui32 Generation;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferId& x, const TPersistentBufferId& y) = default;
     };
 
     struct TPersistentBufferRecordId {
@@ -28,6 +43,10 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex;
             TInstant Timestamp;
             std::unordered_set<ui64> ReadInflight;
+            // Sender-supplied per-MinSectorSize-block payload checksums, in order, covering
+            // [OffsetInBytes, OffsetInBytes + Size). Empty when the record was written without
+            // checksums (legacy / internal writes) - opt-in, mirrors the wire-level semantics.
+            std::vector<ui64> PayloadChecksums;
         };
 
         std::map<ui64, TRecord> Records;
@@ -40,6 +59,13 @@ namespace NKikimr::NDDisk {
     struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
         inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
             return MultiHash(r.TabletId, r.Generation, r.Lsn);
+        }
+    };
+
+    template <>
+    struct hash<NKikimr::NDDisk::TPersistentBufferLocation> {
+        inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferLocation& r) const {
+            return MultiHash(r.ChunkIdx, r.SectorIdx);
         }
     };
  }

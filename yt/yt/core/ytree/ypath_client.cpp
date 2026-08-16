@@ -1,4 +1,5 @@
 #include "ypath_client.h"
+
 #include "helpers.h"
 #include "exception_helpers.h"
 #include "ypath_detail.h"
@@ -201,6 +202,26 @@ NRpc::TStreamingParameters& TYPathRequest::ServerAttachmentsStreamingParameters(
     YT_ABORT();
 }
 
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters()
+{
+    YT_ABORT();
+}
+
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters()
+{
+    YT_ABORT();
+}
+
 NConcurrency::IAsyncZeroCopyOutputStreamPtr TYPathRequest::GetRequestAttachmentsStream() const
 {
     YT_ABORT();
@@ -272,7 +293,7 @@ TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     // NB: If Arcadia protobuf is used, the cast is no-op `const TYPath&` -> `const TYPath&`.
-    // If vanilla protobuf is used, the cast is `std::string` -> `TString`.
+    // If vanilla protobuf is used, the cast is `std::string` -> `std::string`.
     // So in both cases the cast is correct and the most effective possible.
     return TYPathMaybeRef(ypathExt.target_path());
 }
@@ -371,8 +392,8 @@ void ResolveYPath(
                 NYTree::EErrorCode::ResolveError,
                 "Error resolving path %v",
                 originalPath)
-                << TErrorAttribute("method", context->GetMethod())
-                << ex;
+                .With("method", context->GetMethod())
+                .With(ex);
         }
     }
 }
@@ -477,7 +498,7 @@ std::string SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
     auto future = ExecuteVerb(service, request);
     auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
-    return FromProto<TString>(optionalResult->ValueOrThrow()->value());
+    return FromProto<std::string>(optionalResult->ValueOrThrow()->value());
 }
 
 TYsonString SyncYPathGet(
@@ -579,7 +600,7 @@ TFuture<std::vector<std::string>> AsyncYPathList(
 
 INodePtr WalkNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const TNodeWalkOptions& options)
 {
     auto currentNode = root;
@@ -637,7 +658,7 @@ INodePtr WalkNodeByYPath(
 
 void SetNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const INodePtr& value,
     bool force)
 {
@@ -645,14 +666,14 @@ void SetNodeByYPath(
 
     NYPath::TTokenizer tokenizer(path);
 
-    TString currentToken;
-    TString currentLiteralValue;
+    std::string currentToken;
+    std::string currentLiteralValue;
     auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
         tokenizer.Expect(NYPath::ETokenType::Literal);
-        currentToken = TString(tokenizer.GetToken());
+        currentToken = std::string(tokenizer.GetToken());
         currentLiteralValue = tokenizer.GetLiteralValue();
     };
 
@@ -724,9 +745,7 @@ void SetNodeByYPath(
     factory->Commit();
 }
 
-bool RemoveNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+bool RemoveNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     auto node = WalkNodeByYPath(root, path, FindNodeByYPathOptions);
     if (!node) {
@@ -738,22 +757,20 @@ bool RemoveNodeByYPath(
     return true;
 }
 
-void ForceYPath(
-    const INodePtr& root,
-    const TYPath& path)
+void ForceYPath(const INodePtr& root, TYPathBuf path)
 {
     auto currentNode = root;
 
     NYPath::TTokenizer tokenizer(path);
 
-    TString currentToken;
-    TString currentLiteralValue;
+    std::string currentToken;
+    std::string currentLiteralValue;
     auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
         tokenizer.Expect(NYPath::ETokenType::Literal);
-        currentToken = TString(tokenizer.GetToken());
+        currentToken = std::string(tokenizer.GetToken());
         currentLiteralValue = tokenizer.GetLiteralValue();
     };
 
@@ -979,23 +996,17 @@ TNodeWalkOptions FindNodeByYPathNoThrowOptions {
     },
 };
 
-INodePtr GetNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr GetNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, GetNodeByYPathOptions);
 }
 
-INodePtr FindNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr FindNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, FindNodeByYPathOptions);
 }
 
-INodePtr FindNodeByYPathNoThrow(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr FindNodeByYPathNoThrow(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, FindNodeByYPathNoThrowOptions);
 }

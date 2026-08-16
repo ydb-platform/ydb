@@ -2,8 +2,12 @@
 #include "kqp_opt_phy_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -51,6 +55,7 @@ TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const 
 }
 
 namespace {
+
 bool IsSuitableToDisableOlapBlocks(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
     if (columnsLimit == 0 || !node.Maybe<TCoTake>() || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
         return false;
@@ -58,7 +63,8 @@ bool IsSuitableToDisableOlapBlocks(TExprBase node, TTypeAnnotationContext& types
 
     return !!FindNode(node.Ptr(), [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadOlapTableRanges>(node); });
 }
-} // namespace
+
+} // anonymous namespace
 
 TExprBase KqpDisableOlapBlocksOnLimit(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
     if (!IsSuitableToDisableOlapBlocks(node, typesCtx, columnsLimit)) {
@@ -870,4 +876,3 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
 }
 
 } // namespace NKikimr::NKqp::NOpt
-

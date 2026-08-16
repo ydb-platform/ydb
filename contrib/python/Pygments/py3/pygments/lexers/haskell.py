@@ -4,7 +4,7 @@
 
     Lexers for Haskell and related languages.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -53,7 +53,8 @@ class HaskellLexer(RegexLexer):
             (r'\bmodule\b', Keyword.Reserved, 'module'),
             (r'\berror\b', Name.Exception),
             (r'\b({})(?!\')\b'.format('|'.join(reserved)), Keyword.Reserved),
-            (r"'[^\\]'", String.Char),  # this has to come before the TH quote
+            (r"'[^\\]'", String.Char),  # character literal
+            (r"'\\.'", String.Char),  # escape character literal (e.g. '\n')
             (r'^[_' + uni.Ll + r'][\w\']*', Name.Function),
             (r"'?[_" + uni.Ll + r"][\w']*", Name),
             (r"('')?[" + uni.Lu + r"][\w\']*", Keyword.Type),
@@ -302,9 +303,9 @@ class AgdaLexer(RegexLexer):
         'abstract', 'codata', 'coinductive', 'constructor', 'data', 'do',
         'eta-equality', 'field', 'forall', 'hiding', 'in', 'inductive', 'infix',
         'infixl', 'infixr', 'instance', 'interleaved', 'let', 'macro', 'mutual',
-        'no-eta-equality', 'open', 'overlap', 'pattern', 'postulate', 'primitive',
+        'no-eta-equality', 'opaque', 'open', 'overlap', 'pattern', 'postulate', 'primitive',
         'private', 'quote', 'quoteTerm', 'record', 'renaming', 'rewrite',
-        'syntax', 'tactic', 'unquote', 'unquoteDecl', 'unquoteDef', 'using',
+        'syntax', 'tactic', 'unfolding', 'unquote', 'unquoteDecl', 'unquoteDef', 'using',
         'variable', 'where', 'with',
     )
 

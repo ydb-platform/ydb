@@ -2,7 +2,7 @@
 
 #include "counters.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/fq/libs/config/protos/test_connection.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
@@ -14,29 +14,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
-
-#define TC_LOG_D(s) \
-    LOG_YQ_TEST_CONNECTION_DEBUG(s)
-#define TC_LOG_I(s) \
-    LOG_YQ_TEST_CONNECTION_INFO(s)
-#define TC_LOG_W(s) \
-    LOG_YQ_TEST_CONNECTION_WARN(s)
-#define TC_LOG_E(s) \
-    LOG_YQ_TEST_CONNECTION_ERROR(s)
-#define TC_LOG_T(s) \
-    LOG_YQ_TEST_CONNECTION_TRACE(s)
-
-#define TC_LOG_AS_D(a, s) \
-    LOG_YQ_TEST_CONNECTION_AS_DEBUG(a, s)
-#define TC_LOG_AS_I(a, s) \
-    LOG_YQ_TEST_CONNECTION_AS_INFO(a, s)
-#define TC_LOG_AS_W(a, s) \
-    LOG_YQ_TEST_CONNECTION_AS_WARN(a, s)
-#define TC_LOG_AS_E(a, s) \
-    LOG_YQ_TEST_CONNECTION_AS_ERROR(a, s)
-#define TC_LOG_AS_T(a, s) \
-    LOG_YQ_TEST_CONNECTION_AS_TRACE(a, s)
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;
@@ -53,7 +30,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TCommonConfig& commonConfig,
         const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
@@ -66,7 +43,7 @@ NActors::IActor* CreateTestDataStreamsConnectionActor(
         const NActors::TActorId& sender,
         ui64 cookie,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
@@ -80,7 +57,7 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
         const NFq::NConfig::TCommonConfig& commonConfig,
         const NActors::TActorId& sender,
         ui64 cookie,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         NYql::IHTTPGateway::TPtr gateway,
         const TString& scope,
         const TString& user,
@@ -93,7 +70,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const NActors::TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
         const TString& token,

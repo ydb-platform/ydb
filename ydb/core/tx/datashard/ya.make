@@ -39,7 +39,6 @@ SRCS(
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
     create_persistent_snapshot_unit.cpp
-    create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     block_fail_point_unit.cpp
@@ -50,7 +49,6 @@ SRCS(
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
     datashard__cleanup_uncommitted.cpp
-    datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__conditional_erase_rows.cpp
@@ -84,6 +82,7 @@ SRCS(
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
+    datashard_direct_import.cpp
     datashard_cdc_stream_common.cpp
     datashard_cdc_stream_common.h
     datashard_change_receiving.cpp
@@ -159,6 +158,7 @@ SRCS(
     follower_edge.cpp
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
+    incremental_restore_src_actor.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
@@ -248,7 +248,7 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
     library/cpp/html/pcdata
@@ -262,6 +262,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
+    ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
@@ -275,6 +276,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert
@@ -305,8 +307,10 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
+        export_parquet.cpp
         export_s3_buffer.cpp
         export_s3_uploader.cpp
+        export_ydb_dump.cpp
         import_s3.cpp
     )
 ENDIF()
@@ -315,12 +319,13 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
-    ut_column_stats
     ut_compaction
     ut_disk_quotas
+    ut_direct_restore
     ut_erase_rows
     ut_export
     ut_external_blobs

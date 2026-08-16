@@ -44,9 +44,9 @@ void Deserialize(TConstrainedRichYPath<>& richPath, INodePtr node)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TString>& GetWellKnownRichYPathAttributes()
+const std::vector<std::string>& GetWellKnownRichYPathAttributes()
 {
-    static const std::vector<TString> WellKnownAttributes = {
+    static const std::vector<std::string> WellKnownAttributes = {
         "append",
         "teleport",
         "primary",

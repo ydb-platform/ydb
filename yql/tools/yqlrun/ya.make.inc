@@ -34,7 +34,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/sql
     yql/essentials/sql/pg
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

@@ -29,8 +29,11 @@
 #include <arrow/io/memory.h>
 
 #include <util/string/builder.h>
+#include <util/string/strip.h>
 
 #include <array>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NExternalSource {
 
@@ -40,7 +43,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
                                           NActors::TActorSystem* actorSystem,
                                           size_t pathsLimit,
-                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                          std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                           bool enableInfer,
                                           bool allowLocalFiles)
         : HostnamePatterns(hostnamePatterns)
@@ -149,6 +152,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
             throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
         }
 
+        if (StripString(proto.GetLocation()).empty()) {
+            throw TExternalSourceException() << "ObjectStorage source must specify a non-empty location pointing to a bucket";
+        }
+
         ValidateHostname(HostnamePatterns, proto.GetLocation());
     }
 
@@ -160,6 +167,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateCompressionForFormat(objectStorage.format(), objectStorage.compression()));
         issues.AddIssues(ValidateSchema(schema));
         issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
@@ -222,6 +230,16 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
 
             issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
+        }
+        return issues;
+    }
+
+    static NYql::TIssues ValidateCompressionForFormat(const TString& format, const TString& compression) {
+        NYql::TIssues issues;
+        if (compression == "lz4"sv && (format == "raw"sv || format == "json_list"sv)) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << "Compression '" << compression << "' is not supported for format '" << format
+                                 << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
         }
         return issues;
     }
@@ -291,7 +309,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << "Double optional types are not supported (you have '" 
+                    TStringBuilder{} << "Double optional types are not supported (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
         }
@@ -315,7 +333,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (ValidateDateOrTimeType(column.type())) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << "Date, Timestamp and Interval types are not allowed in json_list format (you have '" 
+                    TStringBuilder{} << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
         }
@@ -341,14 +359,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (!ValidateStringType(column.type())) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '" 
+                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
             ++realSchemaColumnsCount;
         }
 
         if (realSchemaColumnsCount != 1) {
-            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
         }
         return issues;
@@ -377,7 +395,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         // Stage 1: credentials.
-        const NYql::TS3Credentials credentials(CredentialsFactory, BuildStructuredToken(*meta, CredentialsFactory));
+        const NYql::TS3Credentials credentials(CredentialsFactory, BuildStructuredToken(*meta));
 
         const TString path = meta->TableLocation;
         const TString filePattern = meta->Attributes.Value("filepattern", TString{});
@@ -399,11 +417,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         // Stage 3: kick off all listings in parallel.
         auto httpGateway = NYql::IHTTPGateway::Make();
-        auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
         futures.reserve(plan.Requests.size());
         for (const auto& req : plan.Requests) {
-            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, s3HttpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
             futures.push_back(s3Lister->Next());
         }
         auto afterListing = NThreading::WaitExceptionOrAll(futures).Apply(
@@ -478,10 +496,7 @@ private:
     };
 
     // Build a structured token JSON for an external source's auth.
-    static TString BuildStructuredToken(
-        const TMetadata& meta,
-        const std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory>& credentialsFactory)
-    {
+    TString BuildStructuredToken(const TMetadata& meta) {
         NYql::TStructuredTokenBuilder builder;
         if (std::holds_alternative<NAuth::TAws>(meta.Auth)) {
             const auto& aws = std::get<NAuth::TAws>(meta.Auth);
@@ -490,7 +505,7 @@ private:
             params.SetAwsRegion(aws.Region);
             builder.SetBasicAuth(params.SerializeAsString(), aws.SecretAccessKey);
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta.Auth)) {
-            if (!credentialsFactory) {
+            if (!CredentialsFactory) {
                 throw yexception{} << "trying to authenticate with service account credentials, internal error";
             }
             const auto& sa = std::get<NAuth::TServiceAccount>(meta.Auth);
@@ -652,9 +667,9 @@ private:
         if (!buildStatus.ok() || !finishStatus.ok()) {
             // Couldn't build the in-memory CSV buffer for partition values: fall back
             // to whatever types AppendPartitionColumns assigned (UTF8 by default).
-            LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_GATEWAY,
-                "couldn't build arrow buffer for partition column type inference: build="
-                << buildStatus.ToString() << " finish=" << finishStatus.ToString());
+            YDB_LOG_WARN_CTX(*ActorSystem, "Couldn't build arrow buffer for partition column type inference",
+                {"build", buildStatus.ToString()},
+                {"finish", finishStatus.ToString()});
             return result;
         }
 
@@ -667,7 +682,7 @@ private:
                         inferredTypes[column.name()] = column.type();
                     }
                 }
-                
+
                 for (auto& destColumn : *meta->Schema.mutable_column()) {
                     if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
                         destColumn.mutable_type()->set_type_id(type->type_id());
@@ -980,7 +995,7 @@ private:
     const std::vector<TRegExMatch> HostnamePatterns;
     const size_t PathsLimit;
     NActors::TActorSystem* ActorSystem = nullptr;
-    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
+    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CredentialsFactory;
     const bool EnableInfer = false;
     const bool AllowLocalFiles;
 };
@@ -991,7 +1006,7 @@ private:
 IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
-                                                        std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                        std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                         bool enableInfer,
                                                         bool allowLocalFiles) {
     return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);

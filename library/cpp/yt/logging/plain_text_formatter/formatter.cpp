@@ -1,10 +1,15 @@
 #include "formatter.h"
 
+#include <library/cpp/yt/logging/structured_payload.h>
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/misc/port.h>
 
-#ifdef YT_USE_SSE42
+#include <variant>
+
+#ifdef __SSE4_2__
     #include <emmintrin.h>
     #include <pmmintrin.h>
 #endif
@@ -93,7 +98,7 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
 {
     auto current = message.begin();
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     auto vectorLow = _mm_set1_epi8(PrintableASCIILow);
     auto vectorHigh = _mm_set1_epi8(PrintableASCIIHigh);
 #endif
@@ -120,7 +125,7 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
             out->AppendString(TStringBuf("...<message truncated>"));
             break;
         }
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
         // Use SSE for optimization.
         if (current + 16 > message.end()) {
             appendChar();
@@ -143,6 +148,37 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
         // Unoptimized version.
         appendChar();
 #endif
+    }
+}
+
+// Formats |Message (Key: Value, ...)|, with well-known tags (e.g. an error) appended
+// after the |(...)| group. Well-known tags are always written last, so a single pass
+// suffices. Every piece -- message, tag keys/values, and the newline separating a
+// well-known tag -- goes through FormatMessage and is escaped, so the rendered payload
+// stays on a single physical line (a newline is emitted as the literal "\n").
+void FormatPayload(TBaseFormatter* out, const TTaggedLogEventPayload& payload)
+{
+    TTaggedPayloadReader reader(payload);
+    FormatMessage(out, reader.ReadMessage());
+    bool parenOpen = false;
+    while (auto tag = reader.TryReadTag()) {
+        if (tag->IsWellKnown) {
+            if (parenOpen) {
+                out->AppendChar(')');
+                parenOpen = false;
+            }
+            FormatMessage(out, "\n"_sb);
+            FormatMessage(out, tag->Value);
+        } else {
+            out->AppendString(parenOpen ? ", "_sb : " ("_sb);
+            parenOpen = true;
+            FormatMessage(out, tag->Key);
+            out->AppendString(": "_sb);
+            FormatMessage(out, tag->Value);
+        }
+    }
+    if (parenOpen) {
+        out->AppendChar(')');
     }
 }
 
@@ -186,7 +222,13 @@ void TPlainTextEventFormatter::Format(TBaseFormatter* buffer, const TLogEvent& e
 
     buffer->AppendChar('\t');
 
-    FormatMessage(buffer, event.MessageRef.ToStringBuf());
+    if (const auto* tagged = std::get_if<TTaggedLogEventPayload>(&event.Payload)) {
+        FormatPayload(buffer, *tagged);
+    } else {
+        // A structured event routed to a plain-text writer: emit its raw YSON fragment
+        // (escaped, so the record stays a single physical line).
+        FormatMessage(buffer, GetYsonFromStructuredPayload(std::get<TStructuredLogEventPayload>(event.Payload)).AsStringBuf());
+    }
 
     buffer->AppendChar('\t');
 

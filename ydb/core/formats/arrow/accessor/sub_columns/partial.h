@@ -3,7 +3,7 @@
 #include "others_storage.h"
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 namespace NKikimr::NArrow::NAccessor {
 

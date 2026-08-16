@@ -124,7 +124,7 @@ protected:
         INodePtr child,
         bool recursive) override;
 
-    std::pair<TString, INodePtr> PrepareSetChild(
+    std::pair<std::string, INodePtr> PrepareSetChild(
         INodeFactory* factory,
         const TYPath& path,
         INodePtr child,
@@ -139,7 +139,7 @@ protected:
         bool recursive) final;
 
 private:
-    std::pair<TString, INodePtr> PrepareSetChildOrChildValue(
+    std::pair<std::string, INodePtr> PrepareSetChildOrChildValue(
         INodeFactory* factory,
         const TYPath& path,
         std::variant<INodePtr, NYson::TYsonString> childOrChildValue,

@@ -245,8 +245,6 @@ bool IsNormalizedDependsOn(const TExprNode& node);
 
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner);
 
-bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
-
 bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
 
 bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types);

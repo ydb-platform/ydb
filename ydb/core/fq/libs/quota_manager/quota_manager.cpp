@@ -16,27 +16,7 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_W(stream) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_T(stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-
-#define LOG_AS_E(actorSystem, stream) \
-    LOG_ERROR_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_AS_W(actorSystem, stream) \
-    LOG_WARN_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_AS_I(actorSystem, stream) \
-    LOG_INFO_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_AS_D(actorSystem, stream) \
-    LOG_DEBUG_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
-#define LOG_AS_T(actorSystem, stream) \
-    LOG_TRACE_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_QUOTA_SERVICE
 
 namespace NFq {
 
@@ -193,7 +173,7 @@ public:
         DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN));
         Send(NActors::GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
         Become(&TQuotaManagementService::StateFunc);
-        LOG_I("STARTED");
+        YDB_LOG_INFO("STARTED");
     }
 
 private:
@@ -213,7 +193,9 @@ private:
     );
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_I("UNDELIVERED to Peer " << ev->Sender.NodeId() << ", " << ev->Get()->Reason);
+        YDB_LOG_INFO("UNDELIVERED to Peer",
+            {"senderNodeId", ev->Sender.NodeId()},
+            {"reason", ev->Get()->Reason});
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodesInfo::TPtr& ev) {
@@ -227,7 +209,9 @@ private:
         }
         *ServiceCounters->GetCounter("PeerCount") = NodeIds.size();
         if (oldPeerCount != NodeIds.size()) {
-            LOG_D("IC Peers[" << NodeIds.size() << "]: " << ToString(NodeIds));
+            YDB_LOG_DEBUG("IC Peers[",
+                {"nodeIdsCount", NodeIds.size()},
+                {"nodeIds", ToString(NodeIds)});
         }
         NActors::TActivationContext::Schedule(TDuration::Seconds(NodeIds.empty() ? 1 : 5), new IEventHandle(NActors::GetNameserviceActorId(), SelfId(), new NActors::TEvInterconnect::TEvListNodes()));
     }
@@ -244,7 +228,9 @@ private:
             for (auto& it : infoMap) {
                 response->Quotas.emplace(it.first, TQuotaUsage(it.second.DefaultLimit));
             }
-            LOG_T(subjectType << ".<defaults>: " << ToString(response->Quotas));
+            YDB_LOG_TRACE("Dump subjectType, responseQuotas",
+                {"subjectType", subjectType},
+                {"responseQuotas", ToString(response->Quotas)});
             Send(ev->Sender, response.Release());
             return;
         }
@@ -252,10 +238,14 @@ private:
         auto it = subjectMap.find(subjectId);
 
         if (it == subjectMap.end()) {
-            LOG_D(subjectType << "." << subjectId << " NOT CASHED, Loading ...");
+            YDB_LOG_DEBUG("NOT CASHED, Loading",
+                {"subjectType", subjectType},
+                {"subjectId", subjectId});
         } else {
             if (it->second.LoadedAt + LimitRefreshPeriod < Now()) {
-                LOG_D(subjectType << "." << subjectId << " FORCE CASHE RELOAD, Loading ...");
+                YDB_LOG_DEBUG("FORCE CASHE RELOAD, Loading",
+                    {"subjectType", subjectType},
+                    {"subjectId", subjectId});
                 it = subjectMap.end();
             }
         }
@@ -266,7 +256,10 @@ private:
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];
-                    LOG_D(executer.State.SubjectType << "." << executer.State.SubjectId << ToString(cache.UsageMap) << " LOADED");
+                    YDB_LOG_DEBUG("LOADED",
+                        {"subjectType", executer.State.SubjectType},
+                        {"subjectId", executer.State.SubjectId},
+                        {"usageMap", ToString(cache.UsageMap)});
                     CheckUsageMaybeReply(executer.State.SubjectType, executer.State.SubjectId, cache, allowStaleUsage, sender, cookie);
                 }
             );
@@ -288,7 +281,10 @@ private:
                     if (it != infoMap.end()) {
                         if (it->second.QuotaController != NActors::TActorId{}) {
                             if (!cache.PendingUsage.contains(metricName)) {
-                                LOG_T(subjectType << "." << subjectId << "." << metricName << " IS STALE, Refreshing ...");
+                                YDB_LOG_TRACE("IS STALE, Refreshing",
+                                    {"subjectType", subjectType},
+                                    {"subjectId", subjectId},
+                                    {"metricName", metricName});
                                 Send(it->second.QuotaController, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName));
                                 cache.PendingUsage.insert(metricName);
                                 cachedUsage.RequestedAt = Now();
@@ -344,7 +340,8 @@ private:
                 if (cached.Usage.Limit.Value != limit) {
                     cached.Usage.Limit.Value = limit;
                     cached.Usage.Limit.UpdatedAt = Now();
-                    LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Changed");
+                    YDB_LOG_TRACE("LIMIT Changed",
+                        {"usage", cached.Usage.ToString(subjectType, subjectId, metricName)});
                     SyncQuota(subjectType, subjectId, metricName, cached);
                 }
             }
@@ -381,7 +378,8 @@ private:
             if (cached.Usage.Limit.Value != ev->Get()->Limit) {
                 cached.Usage.Limit.Value = ev->Get()->Limit;
                 cached.Usage.Limit.UpdatedAt = Now();
-                LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Change Accepted");
+                YDB_LOG_TRACE("LIMIT Change Accepted",
+                    {"usage", cached.Usage.ToString(subjectType, subjectId, metricName)});
                 SyncQuota(subjectType, subjectId, metricName, cached);
             }
         }
@@ -438,7 +436,10 @@ private:
                 auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                 auto& cache = subjectMap[executer.State.SubjectId];
 
-                LOG_T(executer.State.SubjectType << "." << executer.State.SubjectId << " " << ToString(executer.State.UsageMap) << " FROM DB");
+                YDB_LOG_TRACE("FROM DB",
+                    {"subjectType", executer.State.SubjectType},
+                    {"subjectId", executer.State.SubjectId},
+                    {"usageMap", ToString(executer.State.UsageMap)});
 
                 // 1. Fill from DB
                 for (auto& itUsage : executer.State.UsageMap) {
@@ -476,7 +477,8 @@ private:
             actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectType, subjectId, callback, future]() {
                 auto issues = GetIssuesFromYdbStatus(executable, future);
                 if (issues) {
-                    LOG_E("ReadQuota finished with error: " << issues->ToOneLineString());
+                    YDB_LOG_ERROR("ReadQuota finished with",
+                        {"error", issues->ToOneLineString()});
                     this->ReadQuota(subjectType, subjectId, callback); // TODO: endless retry possible
                 }
             }));
@@ -490,7 +492,10 @@ private:
         for (auto it : cache.UsageMap) {
             response->Quotas.emplace(it.first, it.second.Usage);
         }
-        LOG_T(subjectType << "." << subjectId << ToString(response->Quotas) << " SEND QUOTAS");
+        YDB_LOG_TRACE("SEND QUOTAS",
+            {"subjectType", subjectType},
+            {"subjectId", subjectId},
+            {"quotas", ToString(response->Quotas)});
         Send(receivedId, response.Release(), 0, cookie);
     }
 
@@ -502,12 +507,15 @@ private:
             usage.Usage->Value = record.metric_usage();
             usage.Usage->UpdatedAt = NProtoInterop::CastFromProto(record.usage_updated_at());
         }
-        LOG_T(usage.ToString(record.subject_type(), record.subject_id(), record.metric_name()) << " UPDATE from Peer " << ev->Sender.NodeId());
+        YDB_LOG_TRACE("UPDATE from Peer",
+            {"usage", usage.ToString(record.subject_type(), record.subject_id(), record.metric_name())},
+            {"senderNodeId", ev->Sender.NodeId()});
         UpdateQuota(record.subject_type(), record.subject_id(), record.metric_name(), usage);
     }
 
     void NotifyClusterNodes(const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaUsage& usage) {
-        LOG_T(usage.ToString(subjectType, subjectId, metricName) << " NOTIFY CHANGE");
+        YDB_LOG_TRACE("NOTIFY CHANGE",
+            {"usage", usage.ToString(subjectType, subjectId, metricName)});
         for (auto nodeId : NodeIds) {
             Fq::Quota::EvQuotaUpdateNotification notification;
             notification.set_subject_type(subjectType);
@@ -532,7 +540,10 @@ private:
             if (itm != metricMap.end()) {
                 auto& info = itm->second;
                 if (info.QuotaController != NActors::TActorId{}) {
-                    LOG_T(request.SubjectType << "." << request.SubjectId << "." << request.MetricName << " FORCE UPDATE, Updating ...");
+                    YDB_LOG_TRACE("FORCE UPDATE, Updating",
+                        {"subjectType", request.SubjectType},
+                        {"subjectId", request.SubjectId},
+                        {"metricName", request.MetricName});
                     Send(info.QuotaController, new TEvQuotaService::TQuotaUsageRequest(request.SubjectType, request.SubjectId, request.MetricName));
                 }
             }
@@ -631,7 +642,8 @@ private:
                         auto& cached = itQ->second;
                         cached.SyncInProgress = false;
                         if (cached.ChangedAfterSync) { // this check will be processed in a separate event
-                            LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
+                            YDB_LOG_TRACE("RESYNC",
+                                {"usage", cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName)});
                             this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
                     }
@@ -643,7 +655,8 @@ private:
             actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectId, subjectType, metricName, future]() {
                 auto issues = GetIssuesFromYdbStatus(executable, future);
                 if (issues) {
-                    LOG_E("SyncQuota finished with error: " << issues->ToOneLineString());
+                    YDB_LOG_ERROR("SyncQuota finished with",
+                        {"error", issues->ToOneLineString()});
                     auto& subjectMap = this->QuotaCacheMap[subjectType];
                     auto it = subjectMap.find(subjectId);
                     if (it != subjectMap.end()) {
@@ -652,7 +665,8 @@ private:
                         if (itQ != cache.UsageMap.end()) {
                             auto& cached = itQ->second;
                             cached.SyncInProgress = false;
-                            LOG_T(cached.Usage.ToString(metricName, subjectId, metricName) << " RESYNC after error");
+                            YDB_LOG_TRACE("RESYNC after error",
+                                {"usage", cached.Usage.ToString(metricName, subjectId, metricName)});
                             this->SyncQuota(subjectType, subjectId, metricName, cached); // TODO: endless retry possible
                         }
                     }
@@ -670,7 +684,9 @@ private:
             if (itQ != cache.UsageMap.end()) {
                 auto& cached = itQ->second;
                 cached.Usage.Merge(usage);
-                LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " MERGED " << reinterpret_cast<ui64>(&cached));
+                YDB_LOG_TRACE("MERGED",
+                    {"usage", cached.Usage.ToString(subjectType, subjectId, metricName)},
+                    {"cachePtr", reinterpret_cast<ui64>(&cached)});
             }
         }
     }
@@ -683,7 +699,11 @@ private:
         auto it = subjectMap.find(subjectId);
 
         if (!ev->Get()->Success) {
-            LOG_E("TQuotaUsageResponse error for subject type: " << subjectType << ", subject id: " << subjectId << ", metrics name: " << metricName << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("TQuotaUsageResponse error for subject, subject, metrics",
+                {"type", subjectType},
+                {"id", subjectId},
+                {"name", metricName},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(ev->Sender, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName)); // retry. TODO: it may be useful to report the error to the user
             return;
         }
@@ -700,7 +720,8 @@ private:
         if (itQ != cache.UsageMap.end()) {
             // if metric is not defined - ignore usage update
             itQ->second.Usage.Usage = TTimedValue(ev->Get()->Usage, TInstant::Now());
-            LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
+            YDB_LOG_TRACE("REFRESHED",
+                {"usage", itQ->second.Usage.ToString(subjectType, subjectId, metricName)});
             SyncQuota(subjectType, subjectId, metricName, itQ->second);
         }
 
@@ -724,7 +745,10 @@ private:
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];
-                    LOG_D(executer.State.SubjectType << "." << executer.State.SubjectId << ToString(cache.UsageMap) << " LOADED");
+                    YDB_LOG_DEBUG("LOADED",
+                        {"subjectType", executer.State.SubjectType},
+                        {"subjectId", executer.State.SubjectId},
+                        {"usageMap", ToString(cache.UsageMap)});
                     ChangeLimitsAndReply(executer.State.SubjectType, executer.State.SubjectId, cache, limits, sender, cookie);
                 }
             );

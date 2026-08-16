@@ -1,5 +1,4 @@
-/* Copyright (c) 2006, Google Inc.
- * All rights reserved.
+/* Copyright 2006 Google LLC
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
  * copyright notice, this list of conditions and the following disclaimer
  * in the documentation and/or other materials provided with the
  * distribution.
- *     * Neither the name of Google Inc. nor the names of its
+ *     * Neither the name of Google LLC nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
  *
@@ -118,6 +117,7 @@ typedef struct {
 #include "minidump_cpu_mips.h"
 #include "minidump_cpu_ppc.h"
 #include "minidump_cpu_ppc64.h"
+#include "minidump_cpu_riscv.h"
 #include "minidump_cpu_sparc.h"
 #include "minidump_cpu_x86.h"
 
@@ -698,6 +698,8 @@ typedef enum {
   MD_CPU_ARCHITECTURE_PPC64     = 0x8002, /* Breakpad-defined value for PPC64 */
   MD_CPU_ARCHITECTURE_ARM64_OLD = 0x8003, /* Breakpad-defined value for ARM64 */
   MD_CPU_ARCHITECTURE_MIPS64    = 0x8004, /* Breakpad-defined value for MIPS64 */
+  MD_CPU_ARCHITECTURE_RISCV     = 0x8005, /* Breakpad-defined value for RISCV */
+  MD_CPU_ARCHITECTURE_RISCV64   = 0x8006, /* Breakpad-defined value for RISCV64 */
   MD_CPU_ARCHITECTURE_UNKNOWN   = 0xffff  /* PROCESSOR_ARCHITECTURE_UNKNOWN */
 } MDCPUArchitecture;
 
@@ -1109,9 +1111,22 @@ typedef struct {
 } MDRawSimpleStringDictionary;
 
 typedef struct {
+  MDRVA name;
+  uint16_t type;
+  uint16_t reserved;
+  MDRVA value;
+} MDRawCrashpadAnnotation;
+
+typedef struct {
+  uint32_t count;
+  MDLocationDescriptor objects[0]; /* MDRawCrashpadAnnotation */
+} MDRawCrashpadAnnotationList;
+
+typedef struct {
   uint32_t version;
   MDLocationDescriptor list_annotations;
   MDLocationDescriptor simple_annotations;  /* MDRawSimpleStringDictionary */
+  MDLocationDescriptor annotation_objects;  /* MDRawCrashpadAnnotationList */
 } MDRawModuleCrashpadInfo;
 
 typedef struct {
@@ -1130,6 +1145,8 @@ typedef struct {
   MDGUID client_id;
   MDLocationDescriptor simple_annotations;  /* MDRawSimpleStringDictionary */
   MDLocationDescriptor module_list;  /* MDRawModuleCrashpadInfoList */
+  uint32_t reserved;
+  uint64_t address_mask;
 } MDRawCrashpadInfo;
 
 #if defined(_MSC_VER)

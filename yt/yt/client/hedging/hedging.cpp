@@ -17,6 +17,8 @@
 
 #include <yt/yt/core/logging/log.h>
 
+#include <yt/yt/core/net/local_address.h>
+
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/rpc/dispatcher.h>
@@ -26,6 +28,7 @@
 #include <util/generic/va_args.h>
 
 #include <util/system/compiler.h>
+#include <util/system/env.h>
 
 namespace NYT::NClient::NHedging::NRpc {
 
@@ -164,8 +167,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, TruncateJournal, (const TYPath&, i64, const TTruncateJournalOptions&));
-    UNSUPPORTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const TString&, const TGetFileFromCacheOptions&));
-    UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const TString&, const TPutFileToCacheOptions&));
+    UNSUPPORTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const std::string&, const TGetFileFromCacheOptions&));
+    UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const std::string&, const TPutFileToCacheOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (const TGetCurrentUserOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));
@@ -196,7 +199,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (const std::string&, const NScheduler::TOperationIdOrAlias&, NYTree::EPermission, const TCheckOperationPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
-    UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));
+    UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<std::string>&, const NYson::TYsonString&, const TPollJobShellOptions&));
     UNSUPPORTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (NJobTrackerClient::TJobId, const std::optional<std::string>&, const std::string&, const TRunJobShellCommandOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortJob, (NJobTrackerClient::TJobId, const TAbortJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DumpJobProxyLog, (NJobTrackerClient::TJobId, NJobTrackerClient::TOperationId, const NYPath::TYPath&, const TDumpJobProxyLogOptions&));
@@ -207,15 +210,18 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (const TGetMasterConsistentStateOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, FreezeHydraPeer, (NHydra::TCellId, const std::string&, const TFreezeHydraPeerOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TruncateChangelog, (NHydra::TCellId, const std::string&, const TTruncateChangelogOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, ScheduleRestart, (NHydra::TCellId, const std::string&, const TScheduleRestartOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (const TResetDynamicallyPropagatedMasterCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResetStateHash, (NObjectClient::TCellId, const TResetStateHashOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, GCCollect, (const TGCCollectOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, KillProcess, (const std::string&, const TKillProcessOptions&));
-    UNSUPPORTED_METHOD(TFuture<TString>, WriteCoreDump, (const std::string&, const TWriteCoreDumpOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::string>, WriteCoreDump, (const std::string&, const TWriteCoreDumpOptions&));
     UNSUPPORTED_METHOD(TFuture<TGuid>, WriteLogBarrier, (const std::string&, const TWriteLogBarrierOptions&));
-    UNSUPPORTED_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (NJobTrackerClient::TOperationId, const TWriteOperationControllerCoreDumpOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (NJobTrackerClient::TOperationId, const TWriteOperationControllerCoreDumpOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, HealExecNode, (const std::string&, const THealExecNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SuspendCoordinator, (NObjectClient::TCellId, const TSuspendCoordinatorOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResumeCoordinator, (NObjectClient::TCellId, const TResumeCoordinatorOptions&));
@@ -226,7 +232,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, ResumeTabletCells, (const std::vector<NObjectClient::TCellId>&, const TResumeTabletCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<NChaosClient::TReplicationCardPtr>, GetReplicationCard, (NChaosClient::TReplicationCardId, const TGetReplicationCardOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, UpdateChaosTableReplicaProgress, (NChaosClient::TReplicaId, const TUpdateChaosTableReplicaProgressOptions&));
-    UNSUPPORTED_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (EMaintenanceComponent, const std::string&, EMaintenanceType, const TString&, const TAddMaintenanceOptions&));
+    UNSUPPORTED_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (EMaintenanceComponent, const std::string&, EMaintenanceType, const std::string&, const TAddMaintenanceOptions&));
     UNSUPPORTED_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (EMaintenanceComponent, const std::string&, const TMaintenanceFilter&, const TRemoveMaintenanceOptions&));
     UNSUPPORTED_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (const std::string&, const std::vector<TGuid>&, const TDisableChunkLocationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const std::string&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
@@ -234,11 +240,11 @@ public:
     UNSUPPORTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
     UNSUPPORTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
     UNSUPPORTED_METHOD(TFuture<TPullRowsResult>, PullRows, (const TYPath&, const TPullRowsOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
-    UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const TString&, const TString&, const TRevokeTokenOptions&));
-    UNSUPPORTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const TString&, const TListUserTokensOptions&));
-    UNSUPPORTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const std::string&, const std::string&, const TSetUserPasswordOptions&));
+    UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
+    UNSUPPORTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
+    UNSUPPORTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const std::string&, const TStartQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TQueryResult>, GetQueryResult, (NQueryTrackerClient::TQueryId, i64, const TGetQueryResultOptions&));
     UNSUPPORTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));
@@ -277,6 +283,11 @@ NApi::IClientPtr DoCreateHedgingClient(
         counterTagSet.AddTag(NProfiling::TTag(tagName, tagValue));
     }
 
+    std::string localDataCenter;
+    if (config->RemoteDataCenterPenalty != TDuration::Zero()) {
+        localDataCenter = NNet::GetLocalYPCluster();
+    }
+
     std::vector<THedgingExecutor::TNode> executorNodes;
     executorNodes.reserve(config->Connections.size());
     for (auto& connectionConfig : config->Connections) {
@@ -295,7 +306,20 @@ NApi::IClientPtr DoCreateHedgingClient(
     }
 
     return New<THedgingClient>(
-        New<THedgingExecutor>(executorNodes, config->BanPenalty, config->BanDuration, penaltyProvider));
+        New<THedgingExecutor>(
+            executorNodes,
+            config->BanPenalty,
+            config->BanDuration,
+            penaltyProvider,
+            config->RatioCounterBucketCount,
+            config->RatioCounterShiftPeriod,
+            config->HedgingRatioLimit,
+            config->HedgingRequestDelays,
+            config->RemoteDataCenterPenalty,
+            localDataCenter,
+            New<THedgingExecutorCounters>(counterTagSet)
+        )
+    );
 }
 
 } // namespace

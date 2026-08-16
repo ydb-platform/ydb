@@ -1,5 +1,3 @@
-/* postgres can not */
-/* syntax version 1 */
 $data = <|x: [<|y: 2|>], z: 5|>;
 
 -- set field function

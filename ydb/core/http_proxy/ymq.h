@@ -4,6 +4,6 @@
 
 namespace NKikimr::NHttpProxy {
 
-std::shared_ptr<const IHttpController> CreateYmqHttpController(const NKikimrConfig::TServerlessProxyConfig& config);
+const IHttpController* GetYmqHttpController();
 
 } // namespace NKikimr::NHttpProxy

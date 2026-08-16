@@ -1,7 +1,7 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -187,13 +187,6 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }
 
-TChunkedArraySerialized::TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData)
-    : Array(array)
-    , SerializedData(serializedData) {
-    AFL_VERIFY(serializedData);
-    AFL_VERIFY(Array);
-    AFL_VERIFY(Array->GetRecordsCount());
-}
 
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {

@@ -82,6 +82,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/utils/memory_profiling
 )
 
@@ -113,4 +114,5 @@ RECURSE_FOR_TESTS(
     benchmark
     ut
     sanitizer_ut
+    udf_value_test_support
 )

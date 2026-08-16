@@ -41,6 +41,14 @@ Configuration example:
 - `splits` - on which splits benchmark should run
 - `sample_rate` - how many random samples from split should be evaluated
 - `include_samples` - include full statistics for each sample into final statistics
+- `statistics_prefix` - optional prefix prepended to the statistics file name (e.g. `glm47_run1_` produces `glm47_run1_wiki-sql.json`); useful to keep results from multiple runs side-by-side
+
+After few runs statistic may be collected by using script `report/wiki_sql_report.py` (each run must include only one model and only one split). Example for one split `test` and sample rate `0.1`:
+
+```bash
+cd report
+python3 wiki_sql_report.py test0.1
+```
 
 ## Benchmark run
 

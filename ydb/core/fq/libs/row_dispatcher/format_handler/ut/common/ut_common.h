@@ -72,7 +72,7 @@ public:
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
 };
 
-NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner);
+NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay = {});
 
 void CheckSuccess(const TStatus& status);
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage);

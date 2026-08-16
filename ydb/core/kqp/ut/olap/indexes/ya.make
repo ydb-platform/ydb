@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/local_indexes/bloom
     yql/essentials/sql/pg_dummy
     yql/essentials/public/udf/service/exception_policy
     ydb/core/tx/columnshard/hooks/testing
@@ -30,6 +31,5 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(indexes_test_enums.h)
 
 END()

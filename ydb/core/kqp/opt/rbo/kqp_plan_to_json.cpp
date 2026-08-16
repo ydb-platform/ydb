@@ -1,11 +1,15 @@
 #include "kqp_operator.h"
+
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+#include <yql/essentials/utils/log/log.h>
+
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
-namespace {
+namespace NKikimr::NKqp {
 
-using namespace NKikimr::NKqp;
+namespace {
 
 void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperator>& op) {
     json["E-Rows"] = TStringBuilder() << op->Props.Statistics->ERows;
@@ -13,10 +17,15 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
     auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
+    return res;
+}
+
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+    auto res = MakeJson(op, explainFlags);
     res["OperatorId"] = operatorId;
     return res;
 }
@@ -64,7 +73,12 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags));
+    auto operatorJson = MakeJson(op, ctx.ExplainFlags);
+    // Synthetic operators that are absent from the execution plan cannot be correlated with runtime stats.
+    if (auto operatorId = ctx.OperatorIds.find(op.Get()); operatorId != ctx.OperatorIds.end()) {
+        operatorJson["OperatorId"] = operatorId->second;
+    }
+    operatorList.AppendValue(std::move(operatorJson));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
@@ -132,7 +146,9 @@ bool FindStageAndOpByOpId(NJson::TJsonValue& planNode, int opId, NJson::TJsonVal
             auto& operatorArray = planNode.GetMapSafe().at("Operators").GetArraySafe();
             for (size_t i=0; i<operatorArray.size(); i++) {
                 auto& item = operatorArray.at(i);
-                if (item.GetMapSafe().at("OperatorId").GetInteger() == opId) {
+                auto& itemMap = item.GetMapSafe();
+                auto itemId = itemMap.find("OperatorId");
+                if (itemId != itemMap.end() && itemId->second.GetInteger() == opId) {
                     operatorIdx = i;
                     stage = &planNode;
                     op = &item;
@@ -207,6 +223,15 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     return currCpuTime;
 }
 
+bool IsTableReadOperator(const TString& opName) {
+    return opName == "TableFullScan" || opName == "TableRangeScan";
+}
+
+TString GetLastPathComponent(const TString& path) {
+    auto slash = path.rfind('/');
+    return (slash == TString::npos) ? path : path.substr(slash + 1);
+}
+
 void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     auto& simplifiedPlan = txPlan.GetMapSafe().at("SimplifiedPlan");
     auto& execPlan = txPlan.GetMapSafe().at("Plans")[0];
@@ -246,10 +271,24 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
         bool operatorRows = false;
         bool operatorSize = false;
 
-        if (opName == "TableFullScan" && stats.contains("Table")) {
+        if (IsTableReadOperator(opName) && stats.contains("Table")) {
+            TString tableName;
+            if (explainPlanOp->GetMapSafe().contains("Path")) {
+                tableName = explainPlanOp->GetMapSafe().at("Path").GetStringSafe();
+            } else if (explainPlanOp->GetMapSafe().contains("Table")) {
+                tableName = explainPlanOp->GetMapSafe().at("Table").GetStringSafe();
+            }
+
             for (auto& opStat : stats.at("Table").GetArraySafe()) {
                 if (opStat.IsMap()) {
                     auto& opMap = opStat.GetMapSafe();
+                    if (tableName && opMap.contains("Path")) {
+                        const auto statPath = opMap.at("Path").GetStringSafe();
+                        if (statPath != tableName && GetLastPathComponent(statPath) != tableName) {
+                            continue;
+                        }
+                    }
+
                     if (opMap.contains("ReadRows")) {
                         explainPlanOp->InsertValue("A-Rows", opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble());
                         operatorRows = true;
@@ -258,6 +297,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                         explainPlanOp->InsertValue("A-Size", opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble());
                         operatorSize = true;
                     }
+                    break;
                 }
             }
         } else if(stats.contains("Operator")) {
@@ -326,10 +366,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
@@ -353,9 +390,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
     std::set<int> stages;
     ui32 operatorId = 0;
 
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         auto & currOp = it.Current;
-        operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;
         if (!stageOpMap.contains(stageId)) {
             stageOpMap.insert({stageId, {}});
@@ -363,8 +399,9 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
         auto & stageOps = stageOpMap.at(stageId);
 
-        //if (currOp->Kind != EOperator::Map && currOp->Kind != EOperator::EmptySource) {
         if (currOp->Kind != EOperator::EmptySource) {
+            // This map defines which operators can be correlated across execution and simplified plans.
+            operatorIds.insert({currOp.Get(), operatorId++});
 
             YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
 
@@ -495,7 +532,12 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
     Y_UNUSED(queryStats);
     Y_UNUSED(poolId);
-    auto txPlan = txPlans.at(txPlans.size()-1);
+
+    if (txPlans.empty()) {
+        return "";
+    }
+
+    auto txPlan = txPlans.back();
     NJson::TJsonValue txPlanJson;
     NJson::ReadJsonTree(txPlan, &txPlanJson, true);
 
@@ -503,5 +545,4 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     return SerializeRBOExplainPlan(txPlanJson);
 }
 
-}
-}
+} // namespace NKikimr::NKqp

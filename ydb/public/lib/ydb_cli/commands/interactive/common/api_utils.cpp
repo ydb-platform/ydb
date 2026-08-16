@@ -32,6 +32,11 @@ TKeepAliveHttpClient::THeaders CreateApiHeaders(const TString& authToken) {
 TProgressWaiterBase::TProgressWaiterBase(TDuration granularity)
     : Granularity(granularity)
 {
+    // NOTE: worker thread is started by the derived class via Start() after
+    // its constructor has finished setting up the vtable. See Start() doc.
+}
+
+void TProgressWaiterBase::Start() {
     Worker = std::thread([this]() {
         const char* frames[] = {"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"};
         int frameIndex = 0;
@@ -95,7 +100,11 @@ TDuration TProgressWaiterBase::Stop(bool success) {
 
 TStaticProgressWaiter::TStaticProgressWaiter(const TString& message)
     : Message(message)
-{}
+{
+    // Start the worker only now, when the vtable is fully set up — see
+    // TProgressWaiterBase::Start().
+    Start();
+}
 
 TString TStaticProgressWaiter::PrintProgress(TDuration elapsed) {
     return TStringBuilder() << " " << Message << " " << Sprintf("%.1fs", elapsed.SecondsFloat());

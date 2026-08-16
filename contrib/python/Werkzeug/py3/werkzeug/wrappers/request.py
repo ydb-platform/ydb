@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import functools
 import json
-import typing
 import typing as t
 from io import BytesIO
 
@@ -11,6 +12,8 @@ from ..datastructures import FileStorage
 from ..datastructures import ImmutableMultiDict
 from ..datastructures import iter_multi_items
 from ..datastructures import MultiDict
+from ..exceptions import BadRequest
+from ..exceptions import UnsupportedMediaType
 from ..formparser import default_stream_factory
 from ..formparser import FormDataParser
 from ..sansio.request import Request as _SansIORequest
@@ -18,10 +21,8 @@ from ..utils import cached_property
 from ..utils import environ_property
 from ..wsgi import _get_server
 from ..wsgi import get_input_stream
-from werkzeug.exceptions import BadRequest
 
 if t.TYPE_CHECKING:
-    import typing_extensions as te
     from _typeshed.wsgi import WSGIApplication
     from _typeshed.wsgi import WSGIEnvironment
 
@@ -50,12 +51,14 @@ class Request(_SansIORequest):
         it unavailable to the final application.
 
     .. versionchanged:: 2.1
+        Old ``BaseRequest`` and mixin classes were removed.
+
+    .. versionchanged:: 2.1
         Remove the ``disable_data_descriptor`` attribute.
 
     .. versionchanged:: 2.0
         Combine ``BaseRequest`` and mixins into a single ``Request``
-        class. Using the old classes is deprecated and will be removed
-        in Werkzeug 2.1.
+        class.
 
     .. versionchanged:: 0.5
         Read-only mode is enforced with immutable classes for all data.
@@ -67,10 +70,8 @@ class Request(_SansIORequest):
     #: parsing fails because more than the specified value is transmitted
     #: a :exc:`~werkzeug.exceptions.RequestEntityTooLarge` exception is raised.
     #:
-    #: Have a look at :doc:`/request_data` for more details.
-    #:
     #: .. versionadded:: 0.5
-    max_content_length: t.Optional[int] = None
+    max_content_length: int | None = None
 
     #: the maximum form field size.  This is forwarded to the form data
     #: parsing function (:func:`parse_form_data`).  When set and the
@@ -78,10 +79,8 @@ class Request(_SansIORequest):
     #: data in memory for post data is longer than the specified value a
     #: :exc:`~werkzeug.exceptions.RequestEntityTooLarge` exception is raised.
     #:
-    #: Have a look at :doc:`/request_data` for more details.
-    #:
     #: .. versionadded:: 0.5
-    max_form_memory_size: t.Optional[int] = None
+    max_form_memory_size: int | None = None
 
     #: The maximum number of multipart parts to parse, passed to
     #: :attr:`form_data_parser_class`. Parsing form data with more than this
@@ -92,11 +91,11 @@ class Request(_SansIORequest):
 
     #: The form data parser that should be used.  Can be replaced to customize
     #: the form date parsing.
-    form_data_parser_class: t.Type[FormDataParser] = FormDataParser
+    form_data_parser_class: type[FormDataParser] = FormDataParser
 
     #: The WSGI environment containing HTTP headers and information from
     #: the WSGI server.
-    environ: "WSGIEnvironment"
+    environ: WSGIEnvironment
 
     #: Set when creating the request object. If ``True``, reading from
     #: the request body will cause a ``RuntimeException``. Useful to
@@ -105,7 +104,7 @@ class Request(_SansIORequest):
 
     def __init__(
         self,
-        environ: "WSGIEnvironment",
+        environ: WSGIEnvironment,
         populate_request: bool = True,
         shallow: bool = False,
     ) -> None:
@@ -113,12 +112,8 @@ class Request(_SansIORequest):
             method=environ.get("REQUEST_METHOD", "GET"),
             scheme=environ.get("wsgi.url_scheme", "http"),
             server=_get_server(environ),
-            root_path=_wsgi_decoding_dance(
-                environ.get("SCRIPT_NAME") or "", self.charset, self.encoding_errors
-            ),
-            path=_wsgi_decoding_dance(
-                environ.get("PATH_INFO") or "", self.charset, self.encoding_errors
-            ),
+            root_path=_wsgi_decoding_dance(environ.get("SCRIPT_NAME") or ""),
+            path=_wsgi_decoding_dance(environ.get("PATH_INFO") or ""),
             query_string=environ.get("QUERY_STRING", "").encode("latin1"),
             headers=EnvironHeaders(environ),
             remote_addr=environ.get("REMOTE_ADDR"),
@@ -130,7 +125,7 @@ class Request(_SansIORequest):
             self.environ["werkzeug.request"] = self
 
     @classmethod
-    def from_values(cls, *args: t.Any, **kwargs: t.Any) -> "Request":
+    def from_values(cls, *args: t.Any, **kwargs: t.Any) -> Request:
         """Create a new request object based on the values provided.  If
         environ is given missing values are filled from there.  This method is
         useful for small scripts when you need to simulate a request from an URL.
@@ -150,8 +145,9 @@ class Request(_SansIORequest):
         """
         from ..test import EnvironBuilder
 
-        charset = kwargs.pop("charset", cls.charset)
-        kwargs["charset"] = charset
+        kwargs.setdefault(
+            "charset", cls.charset if not isinstance(cls.charset, property) else None
+        )
         builder = EnvironBuilder(*args, **kwargs)
         try:
             return builder.get_request(cls)
@@ -159,9 +155,7 @@ class Request(_SansIORequest):
             builder.close()
 
     @classmethod
-    def application(
-        cls, f: t.Callable[["Request"], "WSGIApplication"]
-    ) -> "WSGIApplication":
+    def application(cls, f: t.Callable[[Request], WSGIApplication]) -> WSGIApplication:
         """Decorate a function as responder that accepts the request as
         the last argument.  This works like the :func:`responder`
         decorator but the function is passed the request object as the
@@ -200,10 +194,10 @@ class Request(_SansIORequest):
 
     def _get_file_stream(
         self,
-        total_content_length: t.Optional[int],
-        content_type: t.Optional[str],
-        filename: t.Optional[str] = None,
-        content_length: t.Optional[int] = None,
+        total_content_length: int | None,
+        content_type: str | None,
+        filename: str | None = None,
+        content_length: int | None = None,
     ) -> t.IO[bytes]:
         """Called to get a stream for the file upload.
 
@@ -246,14 +240,16 @@ class Request(_SansIORequest):
 
         .. versionadded:: 0.8
         """
+        charset = self._charset if self._charset != "utf-8" else None
+        errors = self._encoding_errors if self._encoding_errors != "replace" else None
         return self.form_data_parser_class(
-            self._get_file_stream,
-            self.charset,
-            self.encoding_errors,
-            self.max_form_memory_size,
-            self.max_content_length,
-            self.parameter_storage_class,
+            stream_factory=self._get_file_stream,
+            charset=charset,
+            errors=errors,
+            max_form_memory_size=self.max_form_memory_size,
+            max_content_length=self.max_content_length,
             max_form_parts=self.max_form_parts,
+            cls=self.parameter_storage_class,
         )
 
     def _load_form_data(self) -> None:
@@ -312,7 +308,7 @@ class Request(_SansIORequest):
         for _key, value in iter_multi_items(files or ()):
             value.close()
 
-    def __enter__(self) -> "Request":
+    def __enter__(self) -> Request:
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> None:  # type: ignore
@@ -320,21 +316,30 @@ class Request(_SansIORequest):
 
     @cached_property
     def stream(self) -> t.IO[bytes]:
-        """
-        If the incoming form data was not encoded with a known mimetype
-        the data is stored unmodified in this stream for consumption.  Most
-        of the time it is a better idea to use :attr:`data` which will give
-        you that data as a string.  The stream only returns the data once.
+        """The WSGI input stream, with safety checks. This stream can only be consumed
+        once.
 
-        Unlike :attr:`input_stream` this stream is properly guarded that you
-        can't accidentally read past the length of the input.  Werkzeug will
-        internally always refer to this stream to read data which makes it
-        possible to wrap this object with a stream that does filtering.
+        Use :meth:`get_data` to get the full data as bytes or text. The :attr:`data`
+        attribute will contain the full bytes only if they do not represent form data.
+        The :attr:`form` attribute will contain the parsed form data in that case.
+
+        Unlike :attr:`input_stream`, this stream guards against infinite streams or
+        reading past :attr:`content_length` or :attr:`max_content_length`.
+
+        If ``max_content_length`` is set, it can be enforced on streams if
+        ``wsgi.input_terminated`` is set. Otherwise, an empty stream is returned.
+
+        If the limit is reached before the underlying stream is exhausted (such as a
+        file that is too large, or an infinite stream), the remaining contents of the
+        stream cannot be read safely. Depending on how the server handles this, clients
+        may show a "connection reset" failure instead of seeing the 413 response.
+
+        .. versionchanged:: 2.3
+            Check ``max_content_length`` preemptively and while reading.
 
         .. versionchanged:: 0.9
-           This stream is now always available but might be consumed by the
-           form parser later on.  Previously the stream was only set if no
-           parsing happened.
+            The stream is always set (but may be consumed) even if form parsing was
+            accessed first.
         """
         if self.shallow:
             raise RuntimeError(
@@ -342,46 +347,51 @@ class Request(_SansIORequest):
                 " from the input stream is disabled."
             )
 
-        return get_input_stream(self.environ)
+        return get_input_stream(
+            self.environ, max_content_length=self.max_content_length
+        )
 
     input_stream = environ_property[t.IO[bytes]](
         "wsgi.input",
-        doc="""The WSGI input stream.
+        doc="""The raw WSGI input stream, without any safety checks.
 
-        In general it's a bad idea to use this one because you can
-        easily read past the boundary.  Use the :attr:`stream`
-        instead.""",
+        This is dangerous to use. It does not guard against infinite streams or reading
+        past :attr:`content_length` or :attr:`max_content_length`.
+
+        Use :attr:`stream` instead.
+        """,
     )
 
     @cached_property
     def data(self) -> bytes:
-        """
-        Contains the incoming request data as string in case it came with
-        a mimetype Werkzeug does not handle.
+        """The raw data read from :attr:`stream`. Will be empty if the request
+        represents form data.
+
+        To get the raw data even if it represents form data, use :meth:`get_data`.
         """
         return self.get_data(parse_form_data=True)
 
-    @typing.overload
+    @t.overload
     def get_data(  # type: ignore
         self,
         cache: bool = True,
-        as_text: "te.Literal[False]" = False,
+        as_text: t.Literal[False] = False,
         parse_form_data: bool = False,
     ) -> bytes:
         ...
 
-    @typing.overload
+    @t.overload
     def get_data(
         self,
         cache: bool = True,
-        as_text: "te.Literal[True]" = ...,
+        as_text: t.Literal[True] = ...,
         parse_form_data: bool = False,
     ) -> str:
         ...
 
     def get_data(
         self, cache: bool = True, as_text: bool = False, parse_form_data: bool = False
-    ) -> t.Union[bytes, str]:
+    ) -> bytes | str:
         """This reads the buffered incoming data from the client into one
         bytes object.  By default this is cached but that behavior can be
         changed by setting `cache` to `False`.
@@ -414,11 +424,11 @@ class Request(_SansIORequest):
             if cache:
                 self._cached_data = rv
         if as_text:
-            rv = rv.decode(self.charset, self.encoding_errors)
+            rv = rv.decode(self._charset, self._encoding_errors)
         return rv
 
     @cached_property
-    def form(self) -> "ImmutableMultiDict[str, str]":
+    def form(self) -> ImmutableMultiDict[str, str]:
         """The form parameters.  By default an
         :class:`~werkzeug.datastructures.ImmutableMultiDict`
         is returned from this function.  This can be changed by setting
@@ -437,7 +447,7 @@ class Request(_SansIORequest):
         return self.form
 
     @cached_property
-    def values(self) -> "CombinedMultiDict[str, str]":
+    def values(self) -> CombinedMultiDict[str, str]:
         """A :class:`werkzeug.datastructures.CombinedMultiDict` that
         combines :attr:`args` and :attr:`form`.
 
@@ -466,7 +476,7 @@ class Request(_SansIORequest):
         return CombinedMultiDict(args)
 
     @cached_property
-    def files(self) -> "ImmutableMultiDict[str, FileStorage]":
+    def files(self) -> ImmutableMultiDict[str, FileStorage]:
         """:class:`~werkzeug.datastructures.MultiDict` object containing
         all uploaded files.  Each key in :attr:`files` is the name from the
         ``<input type="file" name="">``.  Each value in :attr:`files` is a
@@ -533,14 +543,17 @@ class Request(_SansIORequest):
     json_module = json
 
     @property
-    def json(self) -> t.Optional[t.Any]:
+    def json(self) -> t.Any | None:
         """The parsed JSON data if :attr:`mimetype` indicates JSON
         (:mimetype:`application/json`, see :attr:`is_json`).
 
         Calls :meth:`get_json` with default arguments.
 
         If the request content type is not ``application/json``, this
-        will raise a 400 Bad Request error.
+        will raise a 415 Unsupported Media Type error.
+
+        .. versionchanged:: 2.3
+            Raise a 415 error instead of 400.
 
         .. versionchanged:: 2.1
             Raise a 400 error if the content type is incorrect.
@@ -549,36 +562,39 @@ class Request(_SansIORequest):
 
     # Cached values for ``(silent=False, silent=True)``. Initialized
     # with sentinel values.
-    _cached_json: t.Tuple[t.Any, t.Any] = (Ellipsis, Ellipsis)
+    _cached_json: tuple[t.Any, t.Any] = (Ellipsis, Ellipsis)
 
     @t.overload
     def get_json(
-        self, force: bool = ..., silent: "te.Literal[False]" = ..., cache: bool = ...
+        self, force: bool = ..., silent: t.Literal[False] = ..., cache: bool = ...
     ) -> t.Any:
         ...
 
     @t.overload
     def get_json(
         self, force: bool = ..., silent: bool = ..., cache: bool = ...
-    ) -> t.Optional[t.Any]:
+    ) -> t.Any | None:
         ...
 
     def get_json(
         self, force: bool = False, silent: bool = False, cache: bool = True
-    ) -> t.Optional[t.Any]:
+    ) -> t.Any | None:
         """Parse :attr:`data` as JSON.
 
         If the mimetype does not indicate JSON
         (:mimetype:`application/json`, see :attr:`is_json`), or parsing
         fails, :meth:`on_json_loading_failed` is called and
         its return value is used as the return value. By default this
-        raises a 400 Bad Request error.
+        raises a 415 Unsupported Media Type resp.
 
         :param force: Ignore the mimetype and always try to parse JSON.
         :param silent: Silence mimetype and parsing errors, and
             return ``None`` instead.
         :param cache: Store the parsed JSON to return for subsequent
             calls.
+
+        .. versionchanged:: 2.3
+            Raise a 415 error instead of 400.
 
         .. versionchanged:: 2.1
             Raise a 400 error if the content type is incorrect.
@@ -615,7 +631,7 @@ class Request(_SansIORequest):
 
         return rv
 
-    def on_json_loading_failed(self, e: t.Optional[ValueError]) -> t.Any:
+    def on_json_loading_failed(self, e: ValueError | None) -> t.Any:
         """Called if :meth:`get_json` fails and isn't silenced.
 
         If this method returns a value, it is used as the return value
@@ -624,11 +640,14 @@ class Request(_SansIORequest):
 
         :param e: If parsing failed, this is the exception. It will be
             ``None`` if the content type wasn't ``application/json``.
+
+        .. versionchanged:: 2.3
+            Raise a 415 error instead of 400.
         """
         if e is not None:
             raise BadRequest(f"Failed to decode JSON object: {e}")
 
-        raise BadRequest(
+        raise UnsupportedMediaType(
             "Did not attempt to load JSON data because the request"
             " Content-Type was not 'application/json'."
         )

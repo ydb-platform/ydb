@@ -404,19 +404,19 @@ public:
         ythrow yexception() << "TPgDummyBuilder::ConvertToPg does nothing";
     }
 
-    NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
+    [[nodiscard]] NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
         Y_UNUSED(typeLen);
         Y_UNUSED(targetTypeId);
         Y_UNUSED(data);
         ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
     }
 
-    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+    [[nodiscard]] NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
         Y_UNUSED(value);
         ythrow yexception() << "TPgDummyBuilder::AsCStringBuffer does nothing";
     }
 
-    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+    [[nodiscard]] NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
         Y_UNUSED(value);
         ythrow yexception() << "TPgDummyBuilder::AsTextBuffer does nothing";
     }
@@ -431,7 +431,7 @@ public:
         ythrow yexception() << "TPgDummyBuilder::MakeText does nothing";
     }
 
-    NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
+    [[nodiscard]] NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
         Y_UNUSED(value);
         Y_UNUSED(length);
         ythrow yexception() << "TPgDummyBuilder::AsFixedStringBuffer does nothing";

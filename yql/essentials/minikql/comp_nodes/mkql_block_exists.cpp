@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -55,8 +54,7 @@ IComputationNode* WrapBlockExists(TCallable& callable, const TComputationNodeFac
     TComputationNodePtrVector argsNodes = {compute};
     TVector<TType*> argsTypes = {callable.GetInput(0).GetStaticType()};
     auto kernel = MakeBlockExistsKernel(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Exists", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), "Exists", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -1,44 +1,50 @@
-# Working with MySQL Databases
+# Working with MySQL databases
 
-This section provides basic information about working with external [MySQL](https://www.mysql.com/) databases.
+{% include [!](_includes/experimental_connectors_warning.md) %}
 
-To work with an external MySQL database, you need to follow these steps:
+This section describes basic information about working with an external [MySQL](https://www.mysql.com/) database.
+
+To work with an external MySQL database, you need to perform the following steps:
 
 1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
 
-    ```yql
-    CREATE SECRET mysql_datasource_user_password WITH (value = "<password>");
-    ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `mysql`). The `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+   ```yql
+   CREATE SECRET mysql_datasource_user_password WITH (value = "<password>");
+   ```
 
-    ```yql
-    CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
-        SOURCE_TYPE="MySQL",
-        LOCATION="<host>:<port>",
-        DATABASE_NAME="<database>",
-        AUTH_METHOD="BASIC",
-        LOGIN="user",
-        PASSWORD_SECRET_PATH="mysql_datasource_user_password",
-        USE_TLS="TRUE"
-    );
-    ```
+2. Create an [external data source](../../datamodel/external_data_source.md) describing a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. `DATABASE_NAME` specifies the database name (for example, `mysql`). For authentication to the external database, the values of the `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used. You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
+
+
+   ```yql
+   CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
+       SOURCE_TYPE="MySQL",
+       LOCATION="<host>:<port>",
+       DATABASE_NAME="<database>",
+       AUTH_METHOD="BASIC",
+       LOGIN="user",
+       PASSWORD_SECRET_PATH="mysql_datasource_user_password",
+       USE_TLS="TRUE"
+   );
+   ```
 
 3. {% include [!](_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
-## Query Syntax {#query}
+## Query syntax {#query}
 
-The following SQL query format is used to work with MySQL:
+The following SQL query form is used to work with MySQL:
+
 
 ```yql
 SELECT * FROM mysql_datasource.<table_name>
 ```
 
+
 where:
 
-- `mysql_datasource` - the external data source identifier;
-- `<table_name>` - the table name within the external data source.
+- `mysql_datasource`: external data source identifier
+- `<table_name>` is the name of the table inside the external data source.
 
 ## Limitations {#limitations}
 
@@ -50,57 +56,57 @@ When working with MySQL clusters, there are a number of limitations:
 
    {% include [!](_includes/predicate_pushdown_examples.md) %}
 
-    Supported data types for filter pushdown:
+   Supported data types for filter pushdown:
 
-    |{{ ydb-short-name }} Data Type|
-    |----|
-    |`Bool`|
-    |`Int8`|
-    |`Uint8`|
-    |`Int16`|
-    |`Uint16`|
-    |`Int32`|
-    |`Uint32`|
-    |`Int64`|
-    |`Uint64`|
-    |`Float`|
-    |`Double`|
+   | Data type {{ ydb-short-name }} |
+   | --- |
+   | `Bool` |
+   | `Int8` |
+   | `Uint8` |
+   | `Int16` |
+   | `Uint16` |
+   | `Int32` |
+   | `Uint32` |
+   | `Int64` |
+   | `Uint64` |
+   | `Float` |
+   | `Double` |
 
-## Supported Data Types
+## Supported data types
 
-In the MySQL database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column in the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Therefore, all basic MySQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system they should be mapped to [optional](../../../yql/reference/types/optional.md).
+In MySQL, the optionality of column values (whether a column is allowed or not allowed to contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for any column of any table is stored as the value of the `IS_NULLABLE` column of the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Consequently, all basic MySQL types can by default contain `NULL` values, and in the {{ ydb-full-name }} type system they must be mapped to [optional](../../../yql/reference/types/optional.md) types.
 
-Below is a correspondence table between MySQL types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
+Below is a table of correspondence between MySQL types and {{ ydb-short-name }}. All other data types, except those listed, are not supported.
 
-| MySQL Data Type | {{ ydb-full-name }} Data Type | Notes |
-|---|----|------|
-|`bool`|`Optional<Bool>`||
-|`tinyint`|`Optional<Int8>`||
-|`tinyint unsigned`|`Optional<Uint8>`||
-|`smallint`|`Optional<Int16>`||
-|`smallint unsigned`|`Optional<Uint16>`||
-|`mediumint`|`Optional<Int32>`||
-|`mediumint unsigned`|`Optional<Uint32>`||
-|`int`|`Optional<Int32>`||
-|`int unsigned`|`Optional<Uint32>`||
-|`bigint`|`Optional<Int64>`||
-|`bigint unsigned`|`Optional<Uint64>`||
-|`float`|`Optional<Float>`||
-|`real`|`Optional<Float>`||
-|`double`|`Optional<Double>`||
-|`date`|`Optional<Date>`|Valid date range from 1970-01-01 to 2105-12-31. Values outside this range return `NULL`.|
-|`datetime`| `Optional<Timestamp>` | Valid time range from 1970-01-01 00:00:00 to 2105-12-31 23:59:59. Values outside this range return `NULL`.|
-|`timestamp`| `Optional<Timestamp>` | Valid time range from 1970-01-01 00:00:00 to 2105-12-31 23:59:59. Values outside this range return `NULL`.|
-|`tinyblob`|`Optional<String>`||
-|`blob`|`Optional<String>`||
-|`mediumblob`|`Optional<String>`||
-|`longblob`|`Optional<String>`||
-|`tinytext`|`Optional<String>`||
-|`text`|`Optional<String>`||
-|`mediumtext`|`Optional<String>`||
-|`longtext`|`Optional<String>`||
-|`char`|`Optional<Utf8>`||
-|`varchar`|`Optional<Utf8>`||
-|`binary`|`Optional<String>`||
-|`varbinary`|`Optional<String>`||
-|`json`|`Optional<Json>`||
+| MySQL data type | Data type {{ ydb-full-name }} | Notes |
+| --- | --- | --- |
+| `bool` | `Optional<Bool>` |  |
+| `tinyint` | `Optional<Int8>` |  |
+| `tinyint unsigned` | `Optional<Uint8>` |  |
+| `smallint` | `Optional<Int16>` |  |
+| `smallint unsigned` | `Optional<Uint16>` |  |
+| `mediumint` | `Optional<Int32>` |  |
+| `mediumint unsigned` | `Optional<Uint32>` |  |
+| `int` | `Optional<Int32>` |  |
+| `int unsigned` | `Optional<Uint32>` |  |
+| `bigint` | `Optional<Int64>` |  |
+| `bigint unsigned` | `Optional<Uint64>` |  |
+| `float` | `Optional<Float>` |  |
+| `real` | `Optional<Float>` |  |
+| `double` | `Optional<Double>` |  |
+| `date` | `Optional<Date>` | Valid date range from 1970-01-01 to 2105-12-31. If the value goes beyond the range boundaries, `NULL` is returned. |
+| `datetime` | `Optional<Timestamp>` | Valid time range from 1970-01-01 00:00:00 to 2105-12-31 23:59:59. If the value goes beyond the range boundaries, the value `NULL` is returned. |
+| `timestamp` | `Optional<Timestamp>` | Valid time range from 1970-01-01 00:00:00 to 2105-12-31 23:59:59. If the value goes beyond the range boundaries, the value `NULL` is returned. |
+| `tinyblob` | `Optional<String>` |  |
+| `blob` | `Optional<String>` |  |
+| `mediumblob` | `Optional<String>` |  |
+| `longblob` | `Optional<String>` |  |
+| `tinytext` | `Optional<String>` |  |
+| `text` | `Optional<String>` |  |
+| `mediumtext` | `Optional<String>` |  |
+| `longtext` | `Optional<String>` |  |
+| `char` | `Optional<Utf8>` |  |
+| `varchar` | `Optional<Utf8>` |  |
+| `binary` | `Optional<String>` |  |
+| `varbinary` | `Optional<String>` |  |
+| `json` | `Optional<Json>` |  |

@@ -795,6 +795,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
             for (const auto& pq : pqShard->Partitions) {
+                if (pq->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                    continue;
+                }
                 if (pq->CreateVersion <= pqGroupInfo->AlterVersion
                         || pq->AlterVersion <= pqGroupInfo->AlterVersion) {
                     auto partition = allocate->MutablePartitions()->Add();

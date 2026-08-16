@@ -450,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 14}, // 2 + 4 + 8 = sum(clusters^i for i=1..levels) = levels=3, clusters=2 with default levelTop=10
                 {"/Root/Vectors/vector_idx/indexImplPostingTable", 100}, // all rows scanned with large levelTop
-                {"/Root/Vectors", 100} // same as posting
+                // no main table: the posting table stores the embedding
             });
 
             // SELECT Key, Value --- same stats
@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 14},
                 {"/Root/Vectors/vector_idx/indexImplPostingTable", 100},
-                {"/Root/Vectors", 100}
+                {"/Root/Vectors", 10} // lookup only the ranked rows
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
                 {"/Root/Vectors/vector_idx/indexImplPostingTable", 31},
-                {"/Root/Vectors", 31}
+                // no main table: the posting table stores the embedding
             });
         }
 
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
                 {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 6}, // 2 + 4 with default levelTop=10 and levels=2, clusters=2
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 10}, // all rows for Prefix=7 with large levelTop
-                {"/Root/Vectors", 10} // same as posting
+                // no main table: the posting table stores the embedding
             });
         }
     }

@@ -41,6 +41,12 @@ public:
     void OnAccessorsFetched(std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>&& accessors) override {
         THashSet<TEntryKey> disprovedKeys;
 
+        // Group candidates by channel once: blobs then check only their channel's slice.
+        THashMap<ui32, TVector<TEntryKey>> candidatesByChannel;
+        for (const auto& key : *Candidates) {
+            candidatesByChannel[key.Channel].push_back(key);
+        }
+
         for (const auto& accessor : accessors) {
             if (!accessor) {
                 continue;
@@ -54,8 +60,12 @@ public:
                 if (logoBlobId.TabletID() != OurTabletId) {
                     continue;
                 }
-                for (const auto& key : *Candidates) {
-                    if (logoBlobId.Channel() != key.Channel || disprovedKeys.contains(key)) {
+                const auto* channelCandidates = candidatesByChannel.FindPtr(logoBlobId.Channel());
+                if (!channelCandidates) {
+                    continue;
+                }
+                for (const auto& key : *channelCandidates) {
+                    if (disprovedKeys.contains(key)) {
                         continue;
                     }
                     const ui32 gen = logoBlobId.Generation();

@@ -422,6 +422,13 @@ private:
                 }
             }
         }
+        if (responseRecord.GetErrorCode() != NPersQueue::NErrorCode::OK) {
+            ReplyErrorAndDie(
+                ctx,
+                static_cast<NPersQueue::NErrorCode::EErrorCode>(responseRecord.GetErrorCode()),
+                responseRecord.GetErrorReason());
+            return;
+        }
         // Nothing left to return: skipped compactified parts on the initial read, or dropped an
         // incomplete tail whose remaining parts are gone. Continue from the next offset instead of
         // repeating the same follow-up.

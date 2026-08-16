@@ -4840,6 +4840,77 @@ Y_UNIT_TEST(ReadProxyEmptyFollowUpDoesNotWipeAssembledMessages) {
         "empty follow-up wiped complete messages assembled on the initial read");
 }
 
+Y_UNIT_TEST(ReadProxyGlueErrorDoesNotStageDirectRead) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
+            CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
+    );
+
+    const TString user = "user1";
+    const TString sessionId = "session-glue-error";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    bool corrupted = false;
+    bool staged = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
+            staged = true;
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
+        if (!event || ev->Recipient == tc.Edge) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (!event->Record.HasPartitionResponse() ||
+            !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+            event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        auto* readResult = event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        for (auto& res : *readResult->MutableResult()) {
+            if (res.GetPartNo() > 0) {
+                res.SetSeqNo(res.GetSeqNo() + 1'000);
+                corrupted = true;
+                break;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 0, 10, 20_MB, 0, false, {}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.DirectReadId = 1;
+    readSettings.Pipe = pipe;
+    BeginCmdRead(readSettings, tc);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_C(corrupted, "observer failed to break SeqNo of a multipart tail");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::READ_NOT_DONE),
+        result->Record.DebugString());
+    UNIT_ASSERT_C(
+        !result->Record.GetPartitionResponse().HasCmdPrepareReadResult(),
+        result->Record.DebugString());
+    UNIT_ASSERT_C(!staged, "glue error staged TEvStageDirectReadData into the direct-read cache");
+}
+
 Y_UNIT_TEST(IncompleteProxyResponse) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

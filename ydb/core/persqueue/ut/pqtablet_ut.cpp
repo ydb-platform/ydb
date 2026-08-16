@@ -2623,6 +2623,15 @@ Y_UNIT_TEST_F(ProposeTx_Immediate_WriteId_Unknown_Original, TPQTabletFixture)
     AssertTabletIsAlive(txId + 1);
 }
 
+Y_UNIT_TEST_F(Ignore_MLPConsumerStatus_Without_ReadBalancer, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvMLPConsumerStatus("user", 0, true));
+
+    AssertTabletIsAlive();
+}
+
 Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

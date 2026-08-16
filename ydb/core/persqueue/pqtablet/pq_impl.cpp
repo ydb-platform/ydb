@@ -6142,6 +6142,9 @@ void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
         {"ev", record.ShortDebugString()});
+    if (!ReadBalancerActorId) {
+        return;
+    }
     Forward(ev, ReadBalancerActorId);
 }
 

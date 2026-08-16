@@ -547,7 +547,11 @@ private:
         // vacuum is done and only the HasBlobsForGroups gate remains.
         bool VacuumCompleted = false;
         // The completion gate scans the GC queues; cap its cadence instead of
-        // paying the scans on every periodic wakeup tick.
+        // paying the scans on every periodic wakeup tick. Default-initialized to the
+        // epoch so the first check fires immediately. The effective interval is
+        // max(MoveDataGateCheckCadence, PeriodicWakeupActivationPeriod) — the cadence
+        // is a lower bound; wakeup granularity is acceptable for an hours-scale
+        // decommission operation.
         TInstant LastGateCheckAt;
     };
 

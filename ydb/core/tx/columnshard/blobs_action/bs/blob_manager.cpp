@@ -510,7 +510,10 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
     // BlobsToKeep: TBlobsByGenStep — TLogoBlobID entries; resolve group via TabletInfo.
     if (BlobsToKeep.AnyOf([&](const TLogoBlobID& blob) {
-            return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
+            const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
+            // GroupFor returns Max<ui32>() when the generation predates every history
+            // entry; never treat that sentinel as a real group match.
+            return groupId != Max<ui32>() && groups.contains(groupId);
         })) {
         return true;
     }

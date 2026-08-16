@@ -280,6 +280,13 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     if (SweepInFlight) {
         return false;
     }
+    // Full candidate evaluation scans the GC queues (IsDrained); background activity
+    // enqueues run every few seconds, so cap the evaluation cadence for this rare
+    // maintenance operation instead of scanning per enqueue.
+    if (LastNominateAt && ctx.Now() - LastNominateAt < NominateCadence) {
+        return false;
+    }
+    LastNominateAt = ctx.Now();
 
     TVector<TEntryKey> batch;
     for (ui32 ch = 2; ch < static_cast<ui32>(TabletInfo->Channels.size()); ++ch) {
@@ -302,10 +309,12 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
             if (disprovedIt != DisprovedAt.end() && ctx.Now() - disprovedIt->second < DisprovedRetryCooldown) {
                 continue;
             }
-            if (!IsDrained(key)) {
+            // Cheap history walk first; the queue scans in IsDrained run only for
+            // entries that already passed every in-memory gate.
+            if (!SeenGroupsCheckPasses(key)) {
                 continue;
             }
-            if (!SeenGroupsCheckPasses(key)) {
+            if (!IsDrained(key)) {
                 continue;
             }
             batch.push_back(key);

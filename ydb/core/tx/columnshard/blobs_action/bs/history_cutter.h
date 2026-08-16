@@ -75,10 +75,12 @@ public:
 
     // Returns current sweep candidates (non-empty while sweep in flight).
     std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
-        return SweepCandidates ? SweepCandidates : std::make_shared<const TVector<TEntryKey>>();
+        static const auto empty = std::make_shared<const TVector<TEntryKey>>();
+        return SweepCandidates ? SweepCandidates : empty;
     }
 
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
+    static constexpr TDuration NominateCadence = TDuration::Minutes(1);
 
 protected:
     // Enters the sweeping state directly (unit tests subclass to reach this; TryNominate
@@ -174,6 +176,8 @@ private:
     // suppressed for DisprovedRetryCooldown to avoid a perpetual nominate/sweep cycle
     // (tier-1 counters start empty at boot and cannot veto for boot-loaded portions).
     THashMap<TEntryKey, TInstant> DisprovedAt;
+    // Last full candidate evaluation; see NominateCadence in TryNominate.
+    TInstant LastNominateAt;
     TVector<TEntryKey> SweepSurvivors;
 
     // Cursor over the engine's in-memory portion snapshot (snapshotted once per sweep).

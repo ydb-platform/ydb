@@ -153,7 +153,9 @@ private:
         responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
+        const auto* appData = AppData(ctx);
+        const bool skipObsoleteTimestamps = appData->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp();
+        ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*appData)
                                    ? (responseRecord.HasPartitionResponse()
                                         ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
                                         : readResult.GetReadFromTimestampMs())
@@ -164,7 +166,7 @@ private:
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readResult.GetBlobsFromCache());
-            if (AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+            if (skipObsoleteTimestamps) {
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
             }
         }
@@ -246,12 +248,16 @@ private:
                         break;
                     }
                 }
-                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && skipObsoleteTimestamps) {
                     LastSkipOffset = currentReadResult.GetOffset();
                     continue;
                 }
                 // Create new message for first part;
-                partResp->AddResult()->CopyFrom(currentReadResult);
+                auto* added = partResp->AddResult();
+                added->CopyFrom(currentReadResult);
+                if (added->GetTotalSize() > added->GetData().size()) {
+                    added->MutableData()->reserve(added->GetTotalSize());
+                }
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {
                     // This is error, Must have some data at this point;
@@ -276,7 +282,11 @@ private:
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }
-                (*rr->MutableData()) += currentReadResult.GetData();
+                auto* data = rr->MutableData();
+                if (rr->GetTotalSize() > data->size()) {
+                    data->reserve(rr->GetTotalSize());
+                }
+                *data += currentReadResult.GetData();
                 rr->SetPartitionKey(currentReadResult.GetPartitionKey());
                 rr->SetExplicitHash(currentReadResult.GetExplicitHash());
                 rr->SetPartNo(currentReadResult.GetPartNo());

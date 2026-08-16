@@ -822,7 +822,8 @@ message ResetOffsetRequest {
     }
 
     message FromWrittenAt {
-        // First blob-key with Timestamp >= written_at. If none, the end offset is used.
+        // Offset of the first message with write timestamp >= written_at.
+        // If none, the partition end offset is used.
         google.protobuf.Timestamp written_at = 1;
     }
 

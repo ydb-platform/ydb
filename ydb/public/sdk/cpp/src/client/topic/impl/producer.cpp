@@ -84,6 +84,22 @@ bool TProducer::TPartitionInfo::IsSplitted() const {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TMessageInfo
 
+TProducer::TMessageInfo::TMessageInfo(TWriteMessage&& message)
+    : Key(message.GetKey().value_or(""))
+    , Data(message.Data)
+    , Codec(std::move(message.Codec))
+    , OriginalSize(message.OriginalSize)
+    , SeqNo(std::move(message.SeqNo_))
+    , CreateTimestamp(std::move(message.CreateTimestamp_))
+    , Tx(std::move(message.Tx_))
+    , DeferredPublication(std::move(message.DeferredPublication_))
+    , HasKey(message.GetKey().has_value())
+{
+    for (const auto& [key, value] : message.MessageMeta_) {
+        MessageMeta.Fields.emplace_back(key, value);
+    }
+}
+
 TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition)
     : Key(key)
     , Data(message.Data)
@@ -93,12 +109,22 @@ TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string&
     , CreateTimestamp(message.CreateTimestamp_)
     , Tx(message.Tx_)
     , DeferredPublication(std::move(message.DeferredPublication_))
+    , HasKey(true)
     , Partition(partition)
 {
     for (const auto& [key, value] : message.MessageMeta_) {
         MessageMeta.Fields.emplace_back(key, value);
     }
 
+    if (!choosePartitionKey.empty()) {
+        MessageMeta.Fields.emplace_back(PARTITION_KEY_META_KEY, choosePartitionKey);
+    }
+}
+
+void TProducer::TMessageInfo::AssignPartition(const std::string& key, const std::string& choosePartitionKey, std::uint32_t partition) {
+    Key = key;
+    HasKey = true;
+    Partition = partition;
     if (!choosePartitionKey.empty()) {
         MessageMeta.Fields.emplace_back(PARTITION_KEY_META_KEY, choosePartitionKey);
     }
@@ -117,6 +143,7 @@ TWriteMessage TProducer::TMessageInfo::BuildMessage() const {
     message.DeferredPublication(DeferredPublication);
     return message;
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TWriteSessionWrapper
 
@@ -635,13 +662,6 @@ std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEve
     return std::nullopt;
 }
 
-void TProducer::TEventsWorker::HandleNewMessage() {
-    std::lock_guard lock(Lock);
-    if (!Producer->MessagesWorker->IsMemoryUsageOK()) {
-        Producer->Metrics.IncBufferFull();
-    }
-}
-
 bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
     if (!Producer->Closed.load()) {
         return false;
@@ -1098,7 +1118,7 @@ bool TProducer::TMessagesWorker::LazyInit() {
         return true;
     }
     
-    if (Producer->SeqNoStrategy == ESeqNoStrategy::WithSeqNo) {
+    if (Producer->SeqNoStrategy.load(std::memory_order_acquire) == ESeqNoStrategy::WithSeqNo) {
         MoveTo(EState::Ready);
         return true;
     }
@@ -1276,8 +1296,7 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
         }
     }
 
-    Y_ABORT_UNLESS(it->Data.size() <= MemoryUsage, "MemoryUsage is less than the size of the message");
-    MemoryUsage -= it->Data.size();
+    Producer->ReleaseReservedMemory(it->Data.size());
 
     if (it->FlushPromise.Initialized()) {
         Producer->FlushPromises.push_back(std::make_pair(it->FlushPromise, TFlushResult{
@@ -1289,21 +1308,17 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
     InFlightMessages.pop_front();
 }
 
-bool TProducer::TMessagesWorker::IsMemoryUsageOK() const {
-    return MemoryUsage <= Producer->Settings.MaxMemoryUsage_ / 2;
-}
-
-bool TProducer::TMessagesWorker::CanAcceptNewMessage() const {
-    return IsMemoryUsageOK();
-}
-
 void TProducer::TMessagesWorker::AddMessage(
     const std::string& key,
     const std::string& choosePartitionKey,
     TWriteMessage&& message,
     std::uint32_t partition) {
-    MemoryUsage += message.Data.size();
     PushInFlightMessage(partition, TMessageInfo(key, choosePartitionKey, std::move(message), partition));
+}
+
+void TProducer::TMessagesWorker::AddMessage(TMessageInfo&& message) {
+    Y_ABORT_UNLESS(message.Partition != TMessageInfo::UNKNOWN_PARTITION_ID, "Partition is not assigned");
+    PushInFlightMessage(message.Partition, std::move(message));
 }
 
 std::optional<TContinuationToken> TProducer::TMessagesWorker::GetContinuationToken(std::uint32_t partition) {
@@ -1986,6 +2001,136 @@ void TProducer::NextEpoch() {
     }
 }
 
+bool TProducer::TryReserveMemory(std::uint64_t size) {
+    const auto limit = Settings.MaxMemoryUsage_ / 2;
+    auto current = ReservedMemory.load(std::memory_order_relaxed);
+    for (;;) {
+        if (current > limit || size > std::numeric_limits<std::uint64_t>::max() - current) {
+            Metrics.IncBufferFull();
+            return false;
+        }
+
+        if (ReservedMemory.compare_exchange_weak(
+                current,
+                current + size,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed)) {
+            return true;
+        }
+    }
+}
+
+void TProducer::ReserveMemory(std::uint64_t size) {
+    const auto previous = ReservedMemory.fetch_add(size, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(size <= std::numeric_limits<std::uint64_t>::max() - previous, "ReservedMemory overflow");
+}
+
+void TProducer::ReleaseReservedMemory(std::uint64_t size) {
+    const auto previous = ReservedMemory.fetch_sub(size, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(size <= previous, "ReservedMemory is less than the released message size");
+}
+
+std::optional<TWriteResult> TProducer::ReserveMemoryForWrite(std::uint64_t size, bool checkMemory) {
+    if (checkMemory) {
+        if (!TryReserveMemory(size)) {
+            return TWriteResult{
+                .Status = EWriteStatus::Timeout,
+            };
+        }
+    } else {
+        ReserveMemory(size);
+    }
+
+    return std::nullopt;
+}
+
+void TProducer::ValidateSeqNoStrategy(const std::optional<uint64_t>& seqNo) {
+    const auto expectedStrategy = seqNo.has_value()
+        ? ESeqNoStrategy::WithSeqNo
+        : ESeqNoStrategy::WithoutSeqNo;
+
+    auto strategy = SeqNoStrategy.load(std::memory_order_acquire);
+    for (;;) {
+        if (strategy == expectedStrategy) {
+            return;
+        }
+
+        if (strategy != ESeqNoStrategy::NotInitialized) {
+            ythrow TContractViolation("Can not mix messages with and without seqNo");
+        }
+
+        if (SeqNoStrategy.compare_exchange_weak(
+                strategy,
+                expectedStrategy,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+TWriteResult TProducer::WriteToExplicitPartition(
+        TWriteMessage&& message,
+        std::uint32_t partition,
+        std::uint64_t memoryUsage,
+        bool checkMemory) {
+    {
+        std::lock_guard lock(GlobalLock);
+        auto partitionIt = Partitions.find(partition);
+        if (partitionIt == Partitions.end()) {
+            return TWriteResult{
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "Unknown partition",
+            };
+        }
+        if (!partitionIt->second.Children_.empty()) {
+            return TWriteResult{
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "Partition was split",
+            };
+        }
+
+        if (auto error = ReserveMemoryForWrite(memoryUsage, checkMemory)) {
+            return *error;
+        }
+
+        Metrics.IncIncomingMessages();
+        MessagesWorker->AddMessage(std::string{}, std::string{}, std::move(message), partition);
+        RunUserEventLoop();
+    }
+
+    RunMainWorker(-1);
+
+    return TWriteResult{
+        .Status = EWriteStatus::Queued,
+    };
+}
+
+void TProducer::DrainClientMessages() {
+    std::vector<TMessageInfo> clientMessages;
+    ClientMessages.DequeueAll(&clientMessages);
+
+    for (auto& message : clientMessages) {
+        std::uint32_t chosenPartition;
+        std::string key;
+        std::string choosePartitionKey;
+        if (!message.HasKey) {
+            key = Settings.ProducerIdPrefix_;
+            const auto partitionChoice = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
+            chosenPartition = partitionChoice.first;
+            choosePartitionKey = partitionChoice.second;
+        } else {
+            const auto partitionChoice = PartitionChooser->ChoosePartition(message.Key);
+            chosenPartition = partitionChoice.first;
+            choosePartitionKey = partitionChoice.second;
+            key = message.Key;
+        }
+
+        message.AssignPartition(key, choosePartitionKey, chosenPartition);
+        MessagesWorker->AddMessage(std::move(message));
+    }
+}
+
 void TProducer::RunMainWorker(std::int64_t owner) {
     // This function is both "request to run" and the runner itself.
     // We must handle two properties:
@@ -2030,6 +2175,7 @@ void TProducer::RunMainWorker(std::int64_t owner) {
             eventsPromise = EventsWorker->DoWork();
             RunUserEventLoop();
             needRerun = RunSplittedPartitionWorkers();
+            DrainClientMessages();
             if (!Done.load()) {
                 SessionsWorker->DoWork();
                 MessagesWorker->DoWork();
@@ -2048,7 +2194,7 @@ void TProducer::RunMainWorker(std::int64_t owner) {
 
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
-        if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
+        if (isClosed && (Done.load() || (MessagesWorker->IsQueueEmpty() && ClientMessages.IsEmpty()) || closeTimeout == TDuration::Zero())) {
             // Use the canonical wake path: rotate under EventsWorker's Lock and fire outside.
             auto closeWakeup = EventsWorker->WakeAndRotate();
             closeWakeup.TrySetValue();
@@ -2089,75 +2235,45 @@ void TProducer::RunMainWorker(std::int64_t owner) {
 }
 
 TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory) {
-    {
-        std::lock_guard lock(GlobalLock);
-        if (Closed.load()) {
-            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
-            return TWriteResult{
-                .Status = EWriteStatus::Error,
-                .ErrorMessage = "producer is closed",
-                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
-            };
+    const auto makeClosedResult = [this]() {
+        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        return TWriteResult{
+            .Status = EWriteStatus::Error,
+            .ErrorMessage = "producer is closed",
+            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+        };
+    };
+
+    if (Closed.load()) {
+        return makeClosedResult();
+    }
+
+    ValidateSeqNoStrategy(message.SeqNo_);
+
+    const auto memoryUsage = message.Data.size();
+    const auto partition = message.GetPartition();
+
+    if (!partition.has_value()) {
+        if (auto error = ReserveMemoryForWrite(memoryUsage, checkMemory)) {
+            return *error;
         }
 
-        if (checkMemory && !MessagesWorker->CanAcceptNewMessage()) {
-            return TWriteResult{
-                .Status = EWriteStatus::Timeout,
-            };
+        try {
+            ClientMessages.Enqueue(TMessageInfo(std::move(message)));
+        } catch (...) {
+            ReleaseReservedMemory(memoryUsage);
+            throw;
         }
 
         Metrics.IncIncomingMessages();
+        RunMainWorker(-1);
 
-        if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
-            || (!message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithSeqNo)) {
-            ythrow TContractViolation("Can not mix messages with and without seqNo");
-        }
-
-        if (SeqNoStrategy == ESeqNoStrategy::NotInitialized) {
-            SeqNoStrategy = message.SeqNo_.has_value() ? ESeqNoStrategy::WithSeqNo : ESeqNoStrategy::WithoutSeqNo;
-        }
-
-        std::uint32_t chosenPartition;
-        std::string key;
-        std::string choosePartitionKey;
-        if (message.GetPartition().has_value()) {
-            auto partitionIt = Partitions.find(message.GetPartition().value());
-            if (partitionIt == Partitions.end()) {
-                return TWriteResult{
-                    .Status = EWriteStatus::Error,
-                    .ErrorMessage = "Unknown partition",
-                };
-            }
-            if (!partitionIt->second.Children_.empty()) {
-                return TWriteResult{
-                    .Status = EWriteStatus::Error,
-                    .ErrorMessage = "Partition was split",
-                };
-            }
-
-            chosenPartition = message.GetPartition().value();
-        } else if (!message.GetKey().has_value()) {
-            key = Settings.ProducerIdPrefix_;
-            const auto partitionChoice = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
-            chosenPartition = partitionChoice.first;
-            choosePartitionKey = partitionChoice.second;
-        } else {
-            const auto partitionChoice = PartitionChooser->ChoosePartition(*message.GetKey());
-            chosenPartition = partitionChoice.first;
-            choosePartitionKey = partitionChoice.second;
-            key = *message.GetKey();
-        }
-
-        MessagesWorker->AddMessage(key, choosePartitionKey, std::move(message), chosenPartition);
-        EventsWorker->HandleNewMessage();
-        RunUserEventLoop();
+        return TWriteResult{
+            .Status = EWriteStatus::Queued,
+        };
     }
 
-    RunMainWorker(-1);
-
-    return TWriteResult{
-        .Status = EWriteStatus::Queued,
-    };
+    return WriteToExplicitPartition(std::move(message), *partition, memoryUsage, checkMemory);
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
@@ -2196,7 +2312,10 @@ TWriteStats TProducer::GetWriteStats() {
 }
 
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
+    RunMainWorker(-1);
+
     std::unique_lock lock(GlobalLock);
+    DrainClientMessages();
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return NThreading::MakeFuture(TFlushResult{

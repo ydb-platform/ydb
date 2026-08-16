@@ -6,9 +6,11 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 
 #include <library/cpp/threading/future/future.h>
+#include <util/thread/lfqueue.h>
 
 #include <atomic>
 #include <functional>
+#include <limits>
 #include <memory>
 
 namespace NYdb::inline Dev::NTopic {
@@ -46,6 +48,10 @@ private:
     };
 
     struct TMessageInfo {
+        static constexpr std::uint32_t UNKNOWN_PARTITION_ID = std::numeric_limits<std::uint32_t>::max();
+
+        TMessageInfo() = default;
+        TMessageInfo(TWriteMessage&& message);
         TMessageInfo(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
 
         std::string Key;
@@ -57,10 +63,12 @@ private:
         TMessageMeta MessageMeta;
         std::optional<std::reference_wrapper<TTransactionBase>> Tx;
         std::optional<TDeferredPublication> DeferredPublication;
-        std::uint32_t Partition;
+        bool HasKey = false;
+        std::uint32_t Partition = UNKNOWN_PARTITION_ID;
         bool Sent = false;
         NThreading::TPromise<TFlushResult> FlushPromise;
 
+        void AssignPartition(const std::string& key, const std::string& choosePartitionKey, std::uint32_t partition);
         TWriteMessage BuildMessage() const;
     };
 
@@ -161,12 +169,11 @@ private:
         void DoWork();
 
         void AddMessage(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
+        void AddMessage(TMessageInfo&& message);
         void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
         void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
-        bool CanAcceptNewMessage() const;
-        bool IsMemoryUsageOK() const;
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
@@ -198,8 +205,7 @@ private:
         std::unordered_map<std::uint32_t, std::list<MessageIter>> PendingMessagesIndex;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> MessagesToResendIndex;
         std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
-        
-        std::uint64_t MemoryUsage = 0;
+
         std::uint64_t CurrentSeqNo = 0;
         EState State = EState::Init;
 
@@ -271,7 +277,6 @@ private:
         NThreading::TPromise<void> WakeAndRotate();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
-        void HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, const std::vector<EEventType>& eventTypes = {});
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});
@@ -389,7 +394,19 @@ private:
 
     void NextEpoch();
 
+    bool TryReserveMemory(std::uint64_t size);
+    void ReserveMemory(std::uint64_t size);
+    void ReleaseReservedMemory(std::uint64_t size);
+    std::optional<TWriteResult> ReserveMemoryForWrite(std::uint64_t size, bool checkMemory);
+    void ValidateSeqNoStrategy(const std::optional<uint64_t>& seqNo);
+    void DrainClientMessages();
+
     TWriteResult WriteInternal(TWriteMessage&& message, bool checkMemory);
+    TWriteResult WriteToExplicitPartition(
+        TWriteMessage&& message,
+        std::uint32_t partition,
+        std::uint64_t memoryUsage,
+        bool checkMemory);
 
     bool IsFederation(const std::string& endpoint);
 
@@ -443,7 +460,9 @@ private:
     std::map<std::string, std::uint32_t> PartitionsIndex;
 
     TProducerSettings Settings;
-    ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
+    std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
+    std::atomic<std::uint64_t> ReservedMemory = 0;
+    TLockFreeQueue<TMessageInfo> ClientMessages;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;

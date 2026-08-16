@@ -28,11 +28,11 @@ using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutt
 //
 class TCutHistorySweepCallback: public NOlap::NDataAccessorControl::IAccessorCallback {
 public:
-    TCutHistorySweepCallback(
-        const TActorId& tabletActorId, ui64 ourTabletId, TVector<TEntryKey>&& candidates, THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted)
+    TCutHistorySweepCallback(const TActorId& tabletActorId, ui64 ourTabletId, const std::shared_ptr<const TVector<TEntryKey>>& candidates,
+        THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted)
         : TabletActorId(tabletActorId)
         , OurTabletId(ourTabletId)
-        , Candidates(std::move(candidates))
+        , Candidates(candidates)
         , NextGenMap(std::move(nextGenMap))
         , Exhausted(exhausted)
     {
@@ -51,7 +51,7 @@ public:
                 if (lid.TabletID() != OurTabletId) {
                     continue;
                 }
-                for (const auto& key : Candidates) {
+                for (const auto& key : *Candidates) {
                     if (lid.Channel() != key.Channel) {
                         continue;
                     }
@@ -78,7 +78,7 @@ public:
 private:
     TActorId TabletActorId;
     ui64 OurTabletId;
-    TVector<TEntryKey> Candidates;
+    std::shared_ptr<const TVector<TEntryKey>> Candidates;
     THashMap<TEntryKey, ui32> NextGenMap;
     bool Exhausted;
 };
@@ -106,14 +106,14 @@ void TColumnShard::SetupCutHistory() {
     }
     cutter->SetLauncherActorId(LauncherID());
     CutHistoryCutter = cutter;
-    // Boot feed with empty map is correct and safe:
-    //   • Old live portions are already in the engine at boot → tier-2 sweep will see them and
-    //     disprove any candidate whose channel/generation range they touch.
-    //   • Portions mid-delete have blobs in BlobsToDelete/Delayed → IsDrained returns false,
-    //     blocking nomination until regular GC completes.
-    //   • Fully-GCed historical ranges have no blobs anywhere → the barrier request is vacuous
-    //     and succeeds immediately (or returns ALREADY, treated as success).
-    // Counter state is rebuilt on-the-fly by OnPortionAdded hooks as the engine loads.
+    // Boot feed starts with EMPTY counters, and that is safe by direction of drift:
+    //   • OnPortionAdded hooks fire only for portions written after boot (compaction/TTL
+    //     output via TChangesWithAppend); boot-loaded portions are NOT counted. Undercount
+    //     can cause a spurious nomination, which the tier-2 sweep then disproves — wasted
+    //     work (bounded by DisprovedRetryCooldown), never an unsafe cut.
+    //   • Removal of an uncounted portion drives the counter to zero/poison — poisoning
+    //     excludes the channel (fail-safe liveness loss, not a safety loss).
+    //   • The authoritative check before any barrier is the tier-2 sweep + final re-check.
     cutter->OnBootComplete({});
 }
 
@@ -176,15 +176,15 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // Build nextGenMap for the callback.
-    const auto& candidates = CutHistoryCutter->GetSweepCandidates();
+    // Build nextGenMap for the callback; the candidates vector is shared across all
+    // batches of this sweep instead of being copied per batch.
+    const auto candidates = CutHistoryCutter->GetSweepCandidates();
     THashMap<TEntryKey, ui32> nextGenMap;
-    for (const auto& key : candidates) {
-        nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGenerationPublic(key));
+    for (const auto& key : *candidates) {
+        nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGenerationForSweep(key));
     }
 
-    auto callback =
-        std::make_shared<TCutHistorySweepCallback>(SelfId(), TabletID(), TVector<TEntryKey>(candidates), std::move(nextGenMap), isLast);
+    auto callback = std::make_shared<TCutHistorySweepCallback>(SelfId(), TabletID(), candidates, std::move(nextGenMap), isLast);
 
     ctx.Send(SelfId(), new TEvPrivate::TEvAskTabletDataAccessors(std::move(portionsMap), callback));
 }

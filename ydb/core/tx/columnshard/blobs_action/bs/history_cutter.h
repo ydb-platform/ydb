@@ -11,6 +11,7 @@
 #include <util/generic/vector.h>
 
 #include <optional>
+#include <unordered_set>
 
 namespace NKikimr::NOlap {
 class TPortionDataAccessor;
@@ -73,10 +74,30 @@ public:
     bool TryNominate(const TActorContext& ctx);
 
     // Returns current sweep candidates (non-empty while sweep in flight).
-    const TVector<TEntryKey>& GetSweepCandidates() const {
-        return SweepCandidates;
+    std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
+        return SweepCandidates ? SweepCandidates : std::make_shared<const TVector<TEntryKey>>();
     }
 
+    static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
+
+protected:
+    // Enters the sweeping state directly (unit tests subclass to reach this; TryNominate
+    // needs a live actor context to send the sweep event, which unit tests do not have).
+    void StartSweepForTest(TVector<TEntryKey>&& candidates) {
+        SweepInFlight = true;
+        SweepSurvivors = candidates;
+        for (const auto& key : SweepSurvivors) {
+            CutState[key] = ECutState::Verifying;
+        }
+        SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(candidates));
+    }
+
+    ECutState GetCutStateForTest(const TEntryKey& key) const {
+        const auto it = CutState.find(key);
+        return it == CutState.end() ? ECutState::None : it->second;
+    }
+
+public:
     // Sets the snapshot of all engine portion IDs that tier-2 will scan.
     // Called by TColumnShard::Handle(TEvStartCutHistorySweep) before the first accessor request.
     void SetPortionSnapshot(TVector<std::pair<TInternalPathId, ui64>>&& ids);
@@ -104,14 +125,19 @@ public:
     }
 
     // Public accessor used by Handle(TEvStartCutHistorySweep) to build nextGenMap for the callback.
-    ui32 GetNextFromGenerationPublic(const TEntryKey& key) const {
+    ui32 GetNextFromGenerationForSweep(const TEntryKey& key) const {
         return GetNextFromGeneration(key);
     }
 
     // Pure function: returns true if no earlier entry in `hist` (all entries before the one
     // with fromGeneration == key.FromGeneration) uses the same GroupID as that entry.
     // Testable without an actor context or THistoryCutterWrapper instance.
-    static bool SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration);
+    // Entries whose FromGeneration is in cutFromGenerations are already barriered and
+    // cut — they are transparent for the same-group safety walk (otherwise a cut entry
+    // still visible in the boot-time TTabletStorageInfo would block a later same-group
+    // entry until the next restart).
+    static bool SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration,
+        const std::unordered_set<ui32>& cutFromGenerations = {});
 
 private:
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
@@ -142,7 +168,12 @@ private:
     bool SweepInFlight = false;
 
     // Tier-2 sweep state (all in-memory; reset on restart/completion).
-    TVector<TEntryKey> SweepCandidates;
+    // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
+    std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
+    // Sweep-disproved entries: re-nomination is pointless until state changes, so it is
+    // suppressed for DisprovedRetryCooldown to avoid a perpetual nominate/sweep cycle
+    // (tier-1 counters start empty at boot and cannot veto for boot-loaded portions).
+    THashMap<TEntryKey, TInstant> DisprovedAt;
     TVector<TEntryKey> SweepSurvivors;
 
     // Cursor over the engine's in-memory portion snapshot (snapshotted once per sweep).

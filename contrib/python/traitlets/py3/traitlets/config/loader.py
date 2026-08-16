@@ -77,11 +77,6 @@ class ArgumentParser(argparse.ArgumentParser):
 # -----------------------------------------------------------------------------
 
 
-def execfile(fname: str, glob: dict[str, Any]) -> None:
-    with open(fname, "rb") as f:
-        exec(compile(f.read(), fname, "exec"), glob, glob)  # noqa: S102
-
-
 class LazyConfigValue(HasTraits):
     """Proxy object for exposing methods on configurable containers
 
@@ -250,10 +245,6 @@ class Config(dict):  # type:ignore[type-arg]
             if _is_section_key(key) and isinstance(obj, dict) and not isinstance(obj, Config):
                 setattr(self, key, Config(obj))
 
-    def _merge(self, other: t.Any) -> None:
-        """deprecated alias, use Config.merge()"""
-        self.merge(other)
-
     def merge(self, other: t.Any) -> None:
         """merge another config object into this one"""
         to_update = {}
@@ -420,7 +411,7 @@ class DeferredConfigString(str, DeferredConfig):
         return f"{self.__class__.__name__}({self._super_repr()})"
 
 
-class DeferredConfigList(t.List[t.Any], DeferredConfig):
+class DeferredConfigList(list[t.Any], DeferredConfig):
     """Config value for loading config from a list of strings
 
     Interpretation is deferred until it is loaded into the trait.
@@ -699,7 +690,7 @@ class CommandLineConfigLoader(ConfigLoader):
             for sec, c in cfg.items():
                 self.config[sec].update(c)
         else:
-            raise TypeError("Invalid flag: %r" % cfg)
+            raise TypeError(f"Invalid flag: {cfg!r}")
 
 
 # match --Class.trait keys for argparse
@@ -791,7 +782,7 @@ class _KVArgParser(argparse.ArgumentParser):
 
 
 # type aliases
-SubcommandsDict = t.Dict[str, t.Any]
+SubcommandsDict = dict[str, t.Any]
 
 
 class ArgParseConfigLoader(CommandLineConfigLoader):
@@ -832,11 +823,6 @@ class ArgParseConfigLoader(CommandLineConfigLoader):
             Dict of flags to full traitlets names for CLI parsing
         log
             Passed to `ConfigLoader`
-
-        Returns
-        -------
-        config : Config
-            The resulting Config object.
         """
         classes = classes or []
         super(CommandLineConfigLoader, self).__init__(log=log)

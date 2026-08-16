@@ -688,6 +688,15 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     for (const auto groupId : record.GetGroups()) {
         MoveDataState.TargetGroups.emplace(groupId);
     }
+    if (MoveDataState.TargetGroups.empty()) {
+        // Nothing to rewrite — behave like the base executor: run the vacuum leg only
+        // and let the completion gate reply once it finishes.
+        LOG_S_INFO("TColumnShard::Handle TEvMoveData: empty group list, vacuum-only at tablet " << TabletID());
+        MoveDataState.Active = true;
+        MoveDataState.VacuumCompleted = false;
+        Executor()->StartMoveDataVacuumFromOwner();
+        return;
+    }
     MoveDataState.Active = true;
     MoveDataState.VacuumCompleted = false;
 

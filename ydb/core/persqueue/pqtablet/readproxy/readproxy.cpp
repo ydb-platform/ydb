@@ -205,11 +205,17 @@ private:
         InitialRequest = true;
     }
 
-    // Follow-up came back empty or with an error. Keep complete messages from the first portion
-    // instead of CopyFrom-ing the follow-up over them. Returns true if this call consumed the event.
+    // Follow-up came back empty. Keep complete messages from the first portion instead of
+    // CopyFrom-ing the empty record over them. Real errors (INITIALIZING, OVERLOAD, ...) must
+    // still reach the client — do not turn a failed follow-up into a successful CmdRead.
     bool FinishWithAssembledOnFailedFollowUp(const TActorContext& ctx, const NKikimrClient::TResponse& record)
     {
         if (InitialRequest) {
+            return false;
+        }
+        if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK
+            || record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+        {
             return false;
         }
         const bool isDirectRead = DirectReadKey.ReadId != 0;

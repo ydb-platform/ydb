@@ -4840,6 +4840,212 @@ Y_UNIT_TEST(ReadProxyEmptyFollowUpDoesNotWipeAssembledMessages) {
         "empty follow-up wiped complete messages assembled on the initial read");
 }
 
+// A failed follow-up (INITIALIZING / tablet restart) must not be rewritten into a successful
+// CmdRead just because complete messages were already glued. The client has to see the error
+// so it can retry; returning OK would also stage a fake direct-read prepare.
+Y_UNIT_TEST(ReadProxyFailedFollowUpDoesNotReturnAssembledOk) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+
+    const TString user = "user1";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    constexpr ui32 kFollowUpLoopThreshold = 8;
+    ui32 followUpReads = 0;
+    bool firstReadAnswer = true;
+    bool madeIncompleteTail = false;
+    bool failedFollowUp = false;
+    bool gotClientResponse = false;
+
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* read = ev->CastAsLocal<TEvPQ::TEvRead>()) {
+            if (read->PartNo > 0) {
+                ++followUpReads;
+            }
+        } else if (auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (ev->Recipient == tc.Edge) {
+                gotClientResponse = true;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (!event->Record.HasPartitionResponse() ||
+                !event->Record.GetPartitionResponse().HasCmdReadResult())
+            {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            if (firstReadAnswer) {
+                firstReadAnswer = false;
+                NKikimrClient::TCmdReadResult kept;
+                for (const auto& res : readResult.GetResult()) {
+                    if (res.GetPartNo() > 0) {
+                        continue;
+                    }
+                    kept.AddResult()->CopyFrom(res);
+                }
+                readResult.MutableResult()->CopyFrom(kept.GetResult());
+                if (readResult.ResultSize() > 0) {
+                    const auto& last = readResult.GetResult(readResult.ResultSize() - 1);
+                    madeIncompleteTail = last.HasTotalParts() && last.GetPartNo() + 1 < last.GetTotalParts();
+                }
+            } else {
+                event->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+                event->Record.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                event->Record.SetErrorReason("tablet will be restarted right now");
+                failedFollowUp = true;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings("", 0, 0, 10, 20_MB, 1, false, {0});
+    readSettings.ReadToBlobEnd = false;
+    readSettings.User = user;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return followUpReads >= kFollowUpLoopThreshold || gotClientResponse;
+    };
+    try {
+        tc.Runtime->DispatchEvents(options);
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+    }
+
+    UNIT_ASSERT_C(madeIncompleteTail,
+        "observer failed to leave an incomplete last multipart message in the first CmdReadResult");
+    UNIT_ASSERT_C(failedFollowUp, "observer failed to turn the follow-up into INITIALIZING");
+    UNIT_ASSERT_VALUES_EQUAL_C(followUpReads, 1,
+        "expected a single follow-up read, got " << followUpReads);
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::INITIALIZING),
+        result->Record.DebugString());
+}
+
+Y_UNIT_TEST(ReadProxyFailedFollowUpDoesNotStageDirectRead) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10'000);
+    tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
+            CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
+    );
+
+    const TString user = "user1";
+    const TString sessionId = "session-failed-follow-up";
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(64, 'a'));
+    data.emplace_back(2, TString(2_MB, 'b'));
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    constexpr ui32 kFollowUpLoopThreshold = 8;
+    ui32 followUpReads = 0;
+    bool firstReadAnswer = true;
+    bool madeIncompleteTail = false;
+    bool failedFollowUp = false;
+    bool staged = false;
+    bool gotClientResponse = false;
+
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
+            staged = true;
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (auto* read = ev->CastAsLocal<TEvPQ::TEvRead>()) {
+            if (read->PartNo > 0) {
+                ++followUpReads;
+            }
+        } else if (auto* event = ev->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (ev->Recipient == tc.Edge) {
+                gotClientResponse = true;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (!event->Record.HasPartitionResponse() ||
+                !event->Record.GetPartitionResponse().HasCmdReadResult() ||
+                event->Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+            {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            if (firstReadAnswer) {
+                firstReadAnswer = false;
+                NKikimrClient::TCmdReadResult kept;
+                for (const auto& res : readResult.GetResult()) {
+                    if (res.GetPartNo() > 0) {
+                        continue;
+                    }
+                    kept.AddResult()->CopyFrom(res);
+                }
+                readResult.MutableResult()->CopyFrom(kept.GetResult());
+                if (readResult.ResultSize() > 0) {
+                    const auto& last = readResult.GetResult(readResult.ResultSize() - 1);
+                    madeIncompleteTail = last.HasTotalParts() && last.GetPartNo() + 1 < last.GetTotalParts();
+                }
+            } else {
+                event->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+                event->Record.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                event->Record.SetErrorReason("tablet will be restarted right now");
+                failedFollowUp = true;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 0, 10, 20_MB, 0, false, {}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.DirectReadId = 1;
+    readSettings.Pipe = pipe;
+    readSettings.ReadToBlobEnd = false;
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return followUpReads >= kFollowUpLoopThreshold || gotClientResponse;
+    };
+    try {
+        tc.Runtime->DispatchEvents(options);
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+    }
+
+    UNIT_ASSERT_C(madeIncompleteTail,
+        "observer failed to leave an incomplete last multipart message in the first CmdReadResult");
+    UNIT_ASSERT_C(failedFollowUp, "observer failed to turn the follow-up into INITIALIZING");
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+        NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::INITIALIZING),
+        result->Record.DebugString());
+    UNIT_ASSERT_C(
+        !result->Record.GetPartitionResponse().HasCmdPrepareReadResult(),
+        result->Record.DebugString());
+    UNIT_ASSERT_C(!staged, "failed follow-up staged TEvStageDirectReadData into the direct-read cache");
+}
+
 Y_UNIT_TEST(ReadProxyGlueErrorDoesNotStageDirectRead) {
     TTestContext tc;
     TFinalizer finalizer(tc);

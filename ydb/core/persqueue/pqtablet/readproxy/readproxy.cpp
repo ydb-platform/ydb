@@ -232,17 +232,7 @@ private:
             ContinueFromSkippedOffset();
             return true;
         }
-        NKikimrClient::TPersQueuePartitionResponse partitionResponse;
-        if (record.HasPartitionResponse()) {
-            partitionResponse.CopyFrom(record.GetPartitionResponse());
-        } else {
-            partitionResponse.CopyFrom(responseRecord.GetPartitionResponse());
-        }
-        const NKikimrClient::TCmdReadResult* readResult =
-            record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult()
-                ? &record.GetPartitionResponse().GetCmdReadResult()
-                : partResp;
-        TryProcessBatchOrSendResponse(ctx, isDirectRead, *readResult, partitionResponse);
+        TryProcessBatchOrSendResponse(ctx, isDirectRead, *partResp, responseRecord.GetPartitionResponse());
         return true;
     }
 
@@ -255,7 +245,8 @@ private:
             || !record.GetPartitionResponse().HasCmdReadResult()
             || record.GetStatus() != NMsgBusProxy::MSTATUS_OK
             || record.GetErrorCode() != NPersQueue::NErrorCode::OK
-            || (record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0 && !isDirectRead)
+            || (record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0
+                && (!isDirectRead || !InitialRequest))
         ) {
             if (FinishWithAssembledOnFailedFollowUp(ctx, record)) {
                 return;

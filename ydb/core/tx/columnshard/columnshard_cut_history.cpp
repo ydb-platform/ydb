@@ -191,9 +191,9 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // Build nextGenMap for the callback; the candidates vector is shared across all
-    // batches of this sweep instead of being copied per batch.
-    const auto candidates = CutHistoryCutter->GetSweepCandidates();
+    // Build nextGenMap for the callback over the entries still alive in this sweep:
+    // earlier batches' disprovals shrink the set, so later batches skip them.
+    const auto candidates = CutHistoryCutter->GetActiveSweepCandidates();
     THashMap<TEntryKey, ui32> nextGenMap;
     for (const auto& key : *candidates) {
         nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGenerationForSweep(key));

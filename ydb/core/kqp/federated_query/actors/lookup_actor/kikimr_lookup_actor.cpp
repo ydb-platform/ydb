@@ -241,7 +241,6 @@ namespace {
     public:
 
         void Bootstrap() {
-            auto path = LookupSource.GetPath();
 #define COMMON_LOG \
             { "actorId", SelfId() }, \
             { "path", LookupSource.GetPath() }

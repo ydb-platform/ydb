@@ -17,7 +17,7 @@ if __name__ == "__main__":
     client = InstrumentedYdbClient(args.endpoint, args.database, True)
     client.wait_connection()
     try:
-        with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk) as runner:
+        with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk, args.endpoint) as runner:
             runner.run()
     finally:
         client.close()

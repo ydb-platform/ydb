@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -1020,6 +1021,52 @@ std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
 
 bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
+}
+
+bool TViewerPipeClient::AreDatabaseNodesKnown() const {
+    return (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) ||
+        (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk());
+}
+
+bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
+    if (!StrictDatabaseOnlyRequest) {
+        StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
+    }
+    return *StrictDatabaseOnlyRequest;
+}
+
+TString TViewerPipeClient::GetUserSID() const {
+    return NACLib::TUserToken(GetRequest().GetUserTokenObject()).GetUserSID();
+}
+
+bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds) {
+    if (nodeIds.empty()) {
+        return false;
+    }
+    // We can't validate the scope of the requested nodes without the database node list, and this
+    // is an access check, so an unresolved database denies the request instead of letting it through.
+    const bool databaseNodesKnown = AreDatabaseNodesKnown();
+    std::unordered_set<TNodeId> databaseNodes;
+    if (databaseNodesKnown) {
+        const auto nodes = GetDatabaseNodes();
+        databaseNodes.insert(nodes.begin(), nodes.end());
+    }
+    for (const auto& nodeId : nodeIds) {
+        if (!databaseNodes.count(nodeId)) {
+            YDB_LOG_INFO("Access denied: requested node is outside the database",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database},
+                {"outOfDatabaseNode", nodeId},
+                {"databaseNodeCount", databaseNodes.size()},
+                {"databaseNodesKnown", databaseNodesKnown});
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
+                "Access denied");
+            return true;
+        }
+    }
+    return false;
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {

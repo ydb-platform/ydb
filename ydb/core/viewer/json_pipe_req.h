@@ -1,5 +1,6 @@
 #pragma once
 #include "viewer.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -16,6 +17,9 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+
+#include <span>
+#include <unordered_set>
 
 namespace NKikimr::NViewer {
 
@@ -47,6 +51,7 @@ protected:
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
+    std::optional<bool> StrictDatabaseOnlyRequest; // lazily calculated by IsStrictDatabaseOnlyRequest()
     bool UseCache = false;
     bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
@@ -338,8 +343,24 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
+
+    // Returns real database nodes only when the database (or the shared database for serverless)
+    // endpoints lookup has succeeded, otherwise it returns 0 - a sentinel for the current node.
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+    bool AreDatabaseNodesKnown() const;
+
+    // True for a token whose highest access level is EAccessLevel::Database: such a user is allowed
+    // to see the information about its own database only, never about the cluster.
+    bool IsStrictDatabaseOnlyRequest();
+
+    // The SID of the user who sent the request, for logging of the denied requests.
+    TString GetUserSID() const;
+
+    // Denies the request unless every given node belongs to the requested database. If the database
+    // nodes are unknown, the request is denied too. Returns true if the response has been already sent.
+    bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);
+
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);

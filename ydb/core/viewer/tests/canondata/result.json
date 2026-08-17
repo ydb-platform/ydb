@@ -1334,6 +1334,20 @@
         ],
         "TotalGroups": 5
     },
+    "test.TestViewer.test_storage_groups_pdisk_fields_hidden_for_database_user": {
+        "database": [
+            {
+                "HasPDisk": false,
+                "PDiskId": null
+            }
+        ],
+        "root": [
+            {
+                "HasPDisk": true,
+                "PDiskId": "1-1"
+            }
+        ]
+    },
     "test.TestViewer.test_storage_stats": {
         "Paths": [
             {

@@ -55,10 +55,10 @@ def _assert_viewer_query_post(base_url, token, status=200, database=DATABASE):
     assert response.status_code == status, response.text
 
 
-def _build_endpoint_path(endpoint, with_database_cgi, extra_params=None):
+def _build_endpoint_path(endpoint, with_database_cgi, extra_params=None, database=DATABASE):
     params = dict(extra_params or {})
     if with_database_cgi:
-        params = {'database': DATABASE, **params}
+        params = {'database': database, **params}
     if not params:
         return endpoint
     separator = '&' if '?' in endpoint else '?'
@@ -274,28 +274,97 @@ def test_topic_data_access_controls(mon_base_url_with_extra_sids_control, topic_
                 _assert_status(mon_base_url_with_extra_sids_control, _build_topic_path(ep, with_database_cgi=False), token, 200)
 
 
+def test_viewer_tenantinfo_show_all_databases_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+):
+    for ep in ['/viewer/tenantinfo', '/viewer/json/tenantinfo']:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'show_all_databases': 'true'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 403)
+        # Scope-param validation must not block users above database level.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, token, 200)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+        allowed_path_false = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'show_all_databases': 'false'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path_false, 'database@builtin', 200)
+
+
 # database@builtin is a strict database-only token and must be rejected when path is out of database scope.
-def test_viewer_describe_out_of_scope_path(mon_base_url_with_extra_sids_control):
+def test_viewer_describe_out_of_scope_path(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+):
     for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path': '/Other'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': '/Other'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, forbidden_path, 'database@builtin', 400)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'root@builtin', 200)
 
 
-# Only CGI params that bypass regular path validation (e.g. path_id, schemeshard_id) are forbidden.
-def test_viewer_describe_strict_database_token_extra_params(mon_base_url_with_extra_sids_control):
+# path_id/schemeshard_id params require monitoring+ level access; strict database and viewer tokens get 4xx.
+def test_viewer_describe_path_id_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_describe_ids,
+):
     for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'merge': 'true'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
+        # path_id alone is accepted for monitoring+ access level,
+        # as well as both params together: path_id and schemeshard_id
+        for extra_params in (
+            {'path_id': str(tenant_describe_ids['path_id'])},
+            {
+                'path_id': str(tenant_describe_ids['path_id']),
+                'schemeshard_id': str(tenant_describe_ids['schemeshard_id']),
+            },
+        ):
+            path = _build_endpoint_path(
+                ep,
+                with_database_cgi=True,
+                extra_params=extra_params,
+                database=tenant_database,
+            )
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'viewer@builtin', 403)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
+            _assert_status(mon_base_url_with_extra_sids_control, path, 'monitoring@builtin', 200)
+
+        # schemeshard_id alone without path_id: handler gives 403 for strict database users and rejects other with 400
+        path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'schemeshard_id': str(tenant_describe_ids['schemeshard_id'])},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'viewer@builtin', 403)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
-
-
-# path_id CGI param bypasses regular path validation, so handler validation rejects it as a bad request.
-def test_viewer_describe_strict_database_token_forbidden_params(mon_base_url_with_extra_sids_control):
-    for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path_id': '1'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-        # path_id is rejected only for some access levels
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
 
 
 # Path outside database scope gives endpoint validation error (400), not role-denied (403).
@@ -305,10 +374,117 @@ def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
 
 
-# schemeshard_id CGI param bypasses regular path validation, so handler validation rejects it as a bad request.
-def test_viewer_describe_schemeshard_id_forbidden(mon_base_url_with_extra_sids_control):
-    for ep in ['/viewer/describe', '/viewer/json/describe']:
-        path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'schemeshard_id': '1'})
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
-        # An administrator also gets 400, but from handler validation
-        _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
+def test_storage_groups_scope_params_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    tenant_storage_ids,
+    cluster_storage_ids,
+    unknown_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    base = mon_base_url_with_extra_sids_control
+
+    allowed_cases = (
+        {'group_id': str(min(tenant_storage_ids['group_ids']))},
+        # both the nodes of the database itself and the nodes holding its storage are in scope
+        {'node_id': str(tenant_nodelist_ids[0])},
+        {'node_id': str(min(tenant_storage_ids['node_ids']))},
+        {'pdisk_id': str(min(tenant_storage_ids['pdisk_ids']))},
+    )
+
+    foreign_group_ids = cluster_storage_ids['group_ids'] - tenant_storage_ids['group_ids']
+    foreign_pdisk_ids = cluster_storage_ids['pdisk_ids'] - tenant_storage_ids['pdisk_ids']
+    assert foreign_group_ids, 'the cluster must have a storage group outside the tenant database'
+    forbidden_cases = (
+        {'group_id': str(min(foreign_group_ids))},
+        {'node_id': str(unknown_node_id)},
+        # a pdisk which exists but holds nothing of the database may be absent in a small cluster,
+        # then an id of a pdisk that doesn't exist at all is checked instead
+        {'pdisk_id': str(min(foreign_pdisk_ids) if foreign_pdisk_ids else 999999)},
+    )
+
+    for extra_params in allowed_cases:
+        path = _build_endpoint_path(
+            '/storage/groups',
+            with_database_cgi=True,
+            extra_params=extra_params,
+            database=tenant_database,
+        )
+        _assert_status(base, path, 'database@builtin', 200)
+
+    for extra_params in forbidden_cases:
+        path = _build_endpoint_path(
+            '/storage/groups',
+            with_database_cgi=True,
+            extra_params=extra_params,
+            database=tenant_database,
+        )
+        _assert_status(base, path, 'database@builtin', 403)
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base, path, token, 200)
+
+
+def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    tenant_node_id = tenant_nodelist_ids[0]
+    endpoints = [
+        '/viewer/sysinfo',
+        '/viewer/tabletinfo',
+    ]
+    for ep in endpoints:
+        foreign_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, foreign_path, 'database@builtin', 403)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(tenant_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+
+        # Scope-param validation must not block tokens above strict database level.
+        # Foreign node_id is filtered out by database scope which results with OK (200) empty response, not 4xx.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(mon_base_url_with_extra_sids_control, foreign_path, token, 200)
+
+
+# /viewer/tabletinfo with the "path" param asks SchemeShard first and builds the whiteboard request
+# only after the describe response, so the node_id scope check has its own code path there.
+def test_viewer_tabletinfo_path_with_node_id_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    base = mon_base_url_with_extra_sids_control
+    for ep in ['/viewer/tabletinfo', '/viewer/json/tabletinfo']:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(base, forbidden_path, 'database@builtin', 403)
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base, forbidden_path, token, 200)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(tenant_nodelist_ids[0])},
+            database=tenant_database,
+        )
+        _assert_status(base, allowed_path, 'database@builtin', 200)

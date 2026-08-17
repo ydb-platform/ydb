@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/blobs_manager.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -57,7 +58,7 @@ class THistoryCutterWrapper {
 public:
     THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen,
         const std::weak_ptr<NOlap::TBlobManager>& manager, const std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
-        const TActorId& tabletActorId);
+        const TActorId& tabletActorId, const NColumnShard::THistoryCutterCounters& signals);
 
     void SetLauncherActorId(const TActorId& id) {
         LauncherActorId = id;
@@ -175,6 +176,22 @@ private:
 
     void IncrementCounter(const TEntryKey& key);
     void DecrementCounter(const TEntryKey& key);
+
+    // Publishes the level sensors as deltas (see OnLevelsDelta). Call after any
+    // change to PoisonedChannels or DisprovedAt; an omitted sweepCandidates
+    // leaves that level unchanged.
+    void PublishLevels(std::optional<ui64> sweepCandidates = {});
+
+    struct TPublishedLevels {
+        ui64 SweepCandidates = 0;
+        ui64 ChannelsPoisoned = 0;
+        ui64 EntriesDisproved = 0;
+    };
+
+    TPublishedLevels Published;
+
+    // Named Signals because `Counters` below is the per-entry portion refcount map.
+    const NColumnShard::THistoryCutterCounters Signals;
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 CurrentGen;

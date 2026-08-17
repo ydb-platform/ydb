@@ -104,8 +104,9 @@ private:
 
 THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui32 currentGen,
     const std::weak_ptr<NOlap::TBlobManager>& manager, const std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
-    const TActorId& tabletActorId)
-    : TabletInfo(tabletInfo)
+    const TActorId& tabletActorId, const NColumnShard::THistoryCutterCounters& signals)
+    : Signals(signals)
+    , TabletInfo(tabletInfo)
     , CurrentGen(currentGen)
     , Manager(manager)
     , SharedBlobs(sharedBlobs)
@@ -212,6 +213,17 @@ bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& ou
     return false;
 }
 
+void THistoryCutterWrapper::PublishLevels(const std::optional<ui64> sweepCandidates) {
+    const ui64 candidates = sweepCandidates.value_or(Published.SweepCandidates);
+    const ui64 poisoned = PoisonedChannels.size();
+    const ui64 disproved = DisprovedAt.size();
+    Signals.OnLevelsDelta((i64)candidates - (i64)Published.SweepCandidates, (i64)poisoned - (i64)Published.ChannelsPoisoned,
+        (i64)disproved - (i64)Published.EntriesDisproved);
+    Published.SweepCandidates = candidates;
+    Published.ChannelsPoisoned = poisoned;
+    Published.EntriesDisproved = disproved;
+}
+
 void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
     ++Counters[key];
 }
@@ -222,6 +234,7 @@ void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
         if (PoisonedChannels.insert(key.Channel).second) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(
                 "from_generation", key.FromGeneration)("reason", "counter_underflow");
+            PublishLevels();
         }
         return;
     }
@@ -275,6 +288,7 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     SweepSurvivors.clear();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
+    PublishLevels(0);
 
     if (!IsEnabled()) {
         return;
@@ -371,6 +385,8 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         CutState[key] = ECutState::Verifying;
     }
     SweepInFlight = true;
+    Signals.OnNomination();
+    PublishLevels(batch.size());
     SweepSurvivors = batch;
     SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(batch));
     SweepPortionIds.clear();
@@ -408,6 +424,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
     // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
+        PublishLevels();
         EraseIf(SweepSurvivors, [&](const TEntryKey& key) {
             return disproved.contains(key);
         });
@@ -421,6 +438,8 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
     // Cursor exhausted: re-check each survivor and send hard barrier if still safe.
     SweepInFlight = false;
+    Signals.OnSweepCompleted();
+    PublishLevels(0);
     SweepCandidates.reset();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
@@ -464,6 +483,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         }
 
         DisprovedAt.erase(key);
+        PublishLevels();
         CutState[key] = ECutState::SentBarrier;
         ctx.Register(new TCutHistoryBarrierActor(
             TabletActorId, LauncherActorId, TabletInfo->TabletID, CurrentGen, key.Channel, *groupId, key.FromGeneration, nextFromGen));
@@ -485,6 +505,7 @@ void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok) {
     if (it == CutState.end()) {
         return;
     }
+    Signals.OnBarrierResult(ok);
     if (ok) {
         it->second = ECutState::Cut;
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);

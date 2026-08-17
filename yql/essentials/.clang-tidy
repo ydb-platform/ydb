@@ -355,7 +355,7 @@ Checks: >
   -performance-for-range-copy,
   -performance-implicit-conversion-in-loop,
   performance-inefficient-algorithm,
-  -performance-inefficient-string-concatenation,
+  performance-inefficient-string-concatenation,
   -performance-inefficient-vector-operation,
   performance-move-const-arg,
   -performance-move-constructor-init,

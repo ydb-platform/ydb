@@ -2,8 +2,8 @@ name: Codecov C++ (SDK / CLI / workload)
 
 # pull_request_target: required for fork → upstream PRs so repo secrets (CODECOV_TOKEN, AWS, …)
 # are available. Workflow YAML is always taken from the base branch (main).
-# Product code is checked out from refs/pull/<n>/merge; coverage actions/scripts are then
-# overlaid from the PR base SHA so an untrusted PR tree cannot replace secret-bearing helpers.
+# Product code is checked out at the event's exact merge commit; coverage actions/scripts
+# are then overlaid from the PR base SHA so an untrusted PR tree cannot replace helpers.
 on:
   pull_request_target:
     branches: [main]
@@ -39,9 +39,17 @@ on:
         default: all
 
 concurrency:
+  # Irrelevant label events must neither run the privileged job nor cancel an
+  # in-progress coverage run for the same PR.
   group: >-
     ${{
-      startsWith(github.event_name, 'pull_request') && format('codecov-pr-{0}', github.event.pull_request.number)
+      startsWith(github.event_name, 'pull_request')
+      && format('codecov-pr-{0}{1}', github.event.pull_request.number,
+          github.event.action == 'labeled'
+          && !contains(
+            fromJSON('["coverage/sdk","coverage/cli","coverage/workload","coverage/all"]'),
+            github.event.label.name)
+          && format('-ignore-{0}', github.run_id) || '')
       || github.event_name == 'workflow_dispatch' && 'codecov-manual'
       || 'codecov-main'
     }}
@@ -56,9 +64,14 @@ jobs:
   detect:
     name: Detect suites
     # Upstream only; PRs only when targeting main (stable-* etc. skip the whole job).
+    # Only coverage/* labels are relevant; filter all other label events before
+    # the collaborator check and before accessing any repository secrets.
     if: >-
       github.repository == 'ydb-platform/ydb' &&
-      (!startsWith(github.event_name, 'pull_request') || github.base_ref == 'main')
+      (!startsWith(github.event_name, 'pull_request') || github.base_ref == 'main') &&
+      (github.event.action != 'labeled' || contains(
+        fromJSON('["coverage/sdk","coverage/cli","coverage/workload","coverage/all"]'),
+        github.event.label.name))
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.decide.outputs.matrix || '[]' }}
@@ -67,54 +80,14 @@ jobs:
       # Head SHA for Codecov/S3 meta; PR number for S3 prefix (empty on push/manual).
       commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}
       pr_number: ${{ github.event.pull_request.number || '' }}
+      checkout_sha: ${{ steps.merge.outputs.commit_sha || github.sha }}
     steps:
-      # pull_request_target runs with secrets; only collaborators may trigger (fork PRs included).
-      - name: Collaborator check
-        if: startsWith(github.event_name, 'pull_request')
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const sender = context.payload.sender.login;
-            try {
-              await github.rest.repos.checkCollaborator({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: sender,
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) throw error;
-              core.setFailed(
-                `Only repository collaborators can trigger Codecov (sender: @${sender}).`
-              );
-            }
-
-      # PR product tree (merge ref). push / workflow_dispatch: the event commit.
+      # Detection never needs PR code: changed PR files come from the GitHub API.
+      # The default pull_request_target checkout is the trusted base tree.
       - uses: actions/checkout@v5
         with:
-          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
           fetch-depth: 0
-
-      # Trusted marketplace action + inline copy (not a local composite): helpers must
-      # come from base, not from the PR tree that was just checked out.
-      - name: Checkout trusted coverage CI helpers from base
-        if: startsWith(github.event_name, 'pull_request')
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          sparse-checkout: |
-            .github/actions/run_clang_codecov
-            .github/actions/setup_ci_ydb_service_account_key_file_credentials
-            .github/scripts/tests/codecov_suites.py
-            .github/scripts/tests/detect_codecov_matrix.py
-            .github/scripts/tests/export_coverage_lcov.py
-            .github/scripts/tests/generate_coverage_landing.py
-            .github/scripts/tests/overlay_trusted_codecov_ci.sh
-          sparse-checkout-cone-mode: false
-          path: _trusted_coverage_ci
-
-      - name: Overlay trusted coverage CI helpers
-        if: startsWith(github.event_name, 'pull_request')
-        run: bash _trusted_coverage_ci/.github/scripts/tests/overlay_trusted_codecov_ci.sh
+          persist-credentials: false
 
       - name: Strip coverage labels on sync/open/reopen
         if: >-
@@ -193,13 +166,16 @@ jobs:
 
       - name: Decide matrix
         id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          LABEL_NAME: ${{ github.event.label.name }}
         run: |
           set -euo pipefail
-          EVENT="${{ github.event_name }}"
-          if { [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; } && [ "${{ github.event.action }}" = "labeled" ]; then
-            LAB="${{ github.event.label.name }}"
+          if { [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; } && [ "$EVENT_ACTION" = "labeled" ]; then
+            LAB="$LABEL_NAME"
             case "$LAB" in
-              coverage/*) ;;
+              coverage/sdk|coverage/cli|coverage/workload|coverage/all) ;;
               *)
                 echo "matrix=[]" >> "$GITHUB_OUTPUT"
                 echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -215,24 +191,45 @@ jobs:
             --changed-files-file "${{ steps.inputs.outputs.changed_files_file }}" \
             --labels "$LABELS"
 
-  coverage:
-    name: Coverage (${{ matrix.suite }})
-    needs: detect
-    if: needs.detect.outputs.should_run == 'true'
-    runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
-    timeout-minutes: 480
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ${{ fromJson(needs.detect.outputs.matrix) }}
-    steps:
-      - name: Verify PR is mergeable
-        if: startsWith(github.event_name, 'pull_request')
+      # pull_request_target runs with secrets and later executes PR code. Check
+      # authorization only when at least one coverage suite will actually run.
+      - name: Collaborator check
+        if: >-
+          startsWith(github.event_name, 'pull_request') &&
+          steps.decide.outputs.should_run == 'true'
+        uses: actions/github-script@v8
+        with:
+          # The restricted workflow GITHUB_TOKEN returns 404 for this endpoint;
+          # use the repository PAT consistently with the other collaborator gates.
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const sender = context.payload.sender.login;
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: sender,
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) throw error;
+              core.setFailed(
+                `Only repository collaborators can trigger Codecov (sender: @${sender}).`
+              );
+            }
+
+      - name: Resolve PR merge commit
+        id: merge
+        if: >-
+          success() &&
+          startsWith(github.event_name, 'pull_request') &&
+          steps.decide.outputs.should_run == 'true'
         uses: actions/github-script@v8
         with:
           script: |
             let pr = context.payload.pull_request;
-            if (pr.mergeable == null || !pr.merge_commit_sha) {
+            const eventHeadSha = pr.head.sha;
+            const eventBaseSha = pr.base.sha;
+            if (!pr.merge_commit_sha) {
               const { data } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -240,16 +237,40 @@ jobs:
               });
               pr = data;
             }
-            if (!pr.mergeable || !pr.merge_commit_sha) {
+            if (pr.head.sha !== eventHeadSha || pr.base.sha !== eventBaseSha) {
+              core.setFailed(
+                'The PR or its base branch was updated after this workflow started. Please use the latest run.'
+              );
+              return;
+            }
+            if (pr.mergeable === false || !pr.merge_commit_sha) {
               core.setFailed(
                 'Unable to merge PR into the base branch. Please rebase or resolve conflicts and re-request coverage.'
               );
+              return;
             }
+            core.setOutput('commit_sha', pr.merge_commit_sha);
 
+  coverage:
+    name: Coverage (${{ matrix.suite }})
+    needs: detect
+    if: >-
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.should_run == 'true'
+    runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
+    timeout-minutes: 480
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.detect.outputs.matrix) }}
+    steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
+          ref: ${{ needs.detect.outputs.checkout_sha }}
           fetch-depth: 0
+          # The detect job has already passed the collaborator gate.
+          allow-unsafe-pr-checkout: true
+          persist-credentials: false
 
       - name: Checkout trusted coverage CI helpers from base
         if: startsWith(github.event_name, 'pull_request')
@@ -266,6 +287,7 @@ jobs:
             .github/scripts/tests/overlay_trusted_codecov_ci.sh
           sparse-checkout-cone-mode: false
           path: _trusted_coverage_ci
+          persist-credentials: false
 
       - name: Overlay trusted coverage CI helpers
         if: startsWith(github.event_name, 'pull_request')

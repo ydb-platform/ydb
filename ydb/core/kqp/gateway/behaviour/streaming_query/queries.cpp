@@ -2139,6 +2139,7 @@ public:
         hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, HandleRemove);
         hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleRemove);
         hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleRemove);
+        hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, HandleRemove);
     )
 
     void HandleRemove(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
@@ -2162,6 +2163,14 @@ public:
 
     void HandleRemove(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
         if (HandleResult(ev, "Update streaming query state (remove query)")) {
+            return;
+        }
+
+        RemoveQuery();
+    }
+
+    void HandleRemove(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints (recovery path)")) {
             return;
         }
 
@@ -2260,6 +2269,16 @@ private:
             YDB_LOG_DEBUG("[StreamingQueries] Start TCleanupStreamingQueryStateTableActor (remove query)",
                 {"logPrefix", LogPrefix()},
                 {"cleanupActorId", cleanupActorId});
+            return;
+        }
+
+        if (State.HasCheckpointId() && !CheckpointDeletionRequested) {
+            CheckpointDeletionRequested = true;
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest (recovery path)",
+                {"logPrefix", LogPrefix()},
+                {"graphId", State.GetCheckpointId()});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(State.GetCheckpointId()));
             return;
         }
 
@@ -2387,6 +2406,7 @@ private:
     const TSettings Settings;
     NKikimrKqp::TStreamingQueryState State;
     bool ExistsInSS = false;
+    bool CheckpointDeletionRequested = false;
 
     // Current settings from scheme shard
     TSchemeInfo SchemeInfo;

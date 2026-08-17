@@ -210,6 +210,7 @@ class KikimrConfigGenerator(object):
             enable_topic_cloud_events=False,
             shutdown_config=None,
             replication_config=None,
+            existing_grpc_tls_data=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -246,13 +247,19 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
+        self.__grpc_tls_data_needs_write = existing_grpc_tls_data is None
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
-            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
-            self.__grpc_tls_ca = cert_pem
-            self.__grpc_tls_key = key_pem
-            self.__grpc_tls_cert = cert_pem
+            if existing_grpc_tls_data is None:
+                cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
+                self.__grpc_tls_ca = cert_pem
+                self.__grpc_tls_key = key_pem
+                self.__grpc_tls_cert = cert_pem
+            else:
+                if grpc_tls_data_path is None:
+                    raise ValueError('existing_grpc_tls_data requires grpc_tls_data_path')
+                self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = existing_grpc_tls_data
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
@@ -876,7 +883,7 @@ class KikimrConfigGenerator(object):
             monitoring_config.pop('client_certificate_required', None)
 
     def write_tls_data(self):
-        if self.__grpc_ssl_enable:
+        if self.__grpc_ssl_enable and self.__grpc_tls_data_needs_write:
             for fpath, data in (
                 (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
                 (self.grpc_tls_key_path, self.grpc_tls_key)

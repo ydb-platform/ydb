@@ -1,3 +1,4 @@
+from ydb.tests.library.harness import tls_tools
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -64,3 +65,60 @@ def test_kikimr_config_generator_nbs_disabled():
 
     # Check that NBS config is not present when disabled
     assert "nbs_config" not in yaml_config
+
+
+def test_kikimr_config_generator_uses_existing_grpc_tls_data(tmp_path, monkeypatch):
+    tls_data_path = tmp_path / 'tls'
+    tls_data_path.mkdir()
+    tls_data = (b'existing-ca', b'existing-cert', b'existing-key')
+    for filename, data in zip(('ca.pem', 'cert.pem', 'key.pem'), tls_data):
+        (tls_data_path / filename).write_bytes(data)
+
+    def fail_on_generation(hostname):
+        raise AssertionError('TLS data must not be generated')
+
+    monkeypatch.setattr(tls_tools, 'generate_selfsigned_cert', fail_on_generation)
+
+    cfg_gen = KikimrConfigGenerator(
+        grpc_ssl_enable=True,
+        grpc_tls_data_path=str(tls_data_path),
+        existing_grpc_tls_data=tls_data,
+    )
+
+    original_open = open
+
+    def fail_on_write(path, mode='r', *args, **kwargs):
+        if 'w' in mode:
+            raise AssertionError('TLS data must not be overwritten')
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr('builtins.open', fail_on_write)
+    cfg_gen.write_tls_data()
+
+    assert cfg_gen.grpc_tls_ca == tls_data[0]
+    assert cfg_gen.grpc_tls_cert == tls_data[1]
+    assert cfg_gen.grpc_tls_key == tls_data[2]
+    for filename, data in zip(('ca.pem', 'cert.pem', 'key.pem'), tls_data):
+        assert (tls_data_path / filename).read_bytes() == data
+
+
+def test_kikimr_config_generator_writes_generated_grpc_tls_data(tmp_path, monkeypatch):
+    tls_data_path = tmp_path / 'tls'
+    tls_data_path.mkdir()
+    generated_cert = b'generated-cert'
+    generated_key = b'generated-key'
+    monkeypatch.setattr(
+        tls_tools,
+        'generate_selfsigned_cert',
+        lambda hostname: (generated_cert, generated_key),
+    )
+
+    cfg_gen = KikimrConfigGenerator(
+        grpc_ssl_enable=True,
+        grpc_tls_data_path=str(tls_data_path),
+    )
+    cfg_gen.write_tls_data()
+
+    assert (tls_data_path / 'ca.pem').read_bytes() == generated_cert
+    assert (tls_data_path / 'cert.pem').read_bytes() == generated_cert
+    assert (tls_data_path / 'key.pem').read_bytes() == generated_key

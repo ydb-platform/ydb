@@ -285,9 +285,14 @@ TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) co
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
     auto replyToActor = ReplyTo(dst, replyTo);
+    // IsInternal means "compaction / internal consumer reply" (same as TEvRead::IsInternal:
+    // !!ReplyTo). Pass the original replyTo override here — not a destination already resolved
+    // via ReplyTo(), which is always non-empty (SelfId / TabletActorId) and would mark every
+    // external error as internal. Timestamp reads use dst==0 and empty replyTo; compaction
+    // sets replyTo to SelfId().
     ReplyPersQueueError(
         replyToActor, ctx, TabletId, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, !!replyTo
     );
 }
 
@@ -1028,7 +1033,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
-    CreateCompacter();
     InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);
@@ -2206,7 +2210,21 @@ void TPartition::OnReadComplete(TReadInfo& info,
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
     if (cookie == ERequestCookie::ReadBlobsForCompaction) {
-        BlobsForCompactionWereRead(ev->Get()->GetBlobs());
+        const auto* response = ev->Get();
+        if (HasError(*response)) {
+            AbortBlobsCompaction(TStringBuilder()
+                << "blob read failed: " << response->Error.ErrorStr, ctx);
+            return;
+        }
+        for (const auto& blob : response->GetBlobs()) {
+            if (blob.Empty()) {
+                AbortBlobsCompaction(TStringBuilder()
+                    << "empty blob in compaction read response"
+                    << " key=" << blob.Key.ToString(), ctx);
+                return;
+            }
+        }
+        BlobsForCompactionWereRead(response->GetBlobs());
         return;
     }
     auto it = ReadInfo.find(cookie);
@@ -2278,6 +2296,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
             // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
             // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
+        return;
     }
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
@@ -4061,12 +4080,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 SendReadingFinished(user);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
-            auto ui = UsersInfoStorage->GetIfExists(user);
-            if (ui && ui->LabeledCounters) {
-                ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+            // Consumer may already have been removed by an earlier write cycle
+            // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
+            if (auto* ui = UsersInfoStorage->GetIfExists(user)) {
+                if (ui->LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+                }
+                UsersInfoStorage->Remove(user, ctx);
             }
-
-            UsersInfoStorage->Remove(user, ctx);
 
             // Finish all ongoing reads
             std::unordered_set<ui64> readCookies;
@@ -4713,7 +4734,8 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
     Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyError(dst,
                                         errorCode,
-                                        error).Release());
+                                        error,
+                                        internal).Release());
 }
 
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,

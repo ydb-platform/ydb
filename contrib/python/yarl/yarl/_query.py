@@ -2,37 +2,39 @@
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, SupportsInt, Union
+from typing import TYPE_CHECKING, Any, SupportsInt, Union, cast
 
 from multidict import istr
 
 from ._quoters import QUERY_PART_QUOTER, QUERY_QUOTER
 
-SimpleQuery = Union[str, int, float]
+SimpleQuery = Union[str, SupportsInt, float]
 QueryVariable = Union[SimpleQuery, Sequence[SimpleQuery]]
 Query = Union[
     None, str, Mapping[str, QueryVariable], Sequence[tuple[str, QueryVariable]]
 ]
 
 
-def query_var(v: QueryVariable) -> str:
-    """Convert a query variable to a string."""
+def query_var(v: SimpleQuery) -> str:
+    """Convert a query variable to a string.
+
+    Note: Objects implementing the ``__int__`` data model method (typed as
+    ``SupportsInt``; e.g. ``uuid.UUID``) are converted via ``int()`` first.
+    Callers should convert such values to ``str`` explicitly if the string
+    representation is desired.
+    """
     cls = type(v)
     if cls is int:  # Fast path for non-subclassed int
         return str(v)
-    if issubclass(cls, str):
-        if TYPE_CHECKING:
-            assert isinstance(v, str)
+    if isinstance(v, str):
         return v
-    if cls is float or issubclass(cls, float):
-        if TYPE_CHECKING:
-            assert isinstance(v, float)
+    if isinstance(v, float):
         if math.isinf(v):
             raise ValueError("float('inf') is not supported")
         if math.isnan(v):
             raise ValueError("float('nan') is not supported")
         return str(float(v))
-    if cls is not bool and isinstance(cls, SupportsInt):
+    if cls is not bool and isinstance(v, SupportsInt):
         return str(int(v))
     raise TypeError(
         "Invalid variable type: value "
@@ -42,7 +44,7 @@ def query_var(v: QueryVariable) -> str:
 
 
 def get_str_query_from_sequence_iterable(
-    items: Iterable[tuple[Union[str, istr], QueryVariable]],
+    items: Iterable[tuple[str | istr, QueryVariable]],
 ) -> str:
     """Return a query string from a sequence of (key, value) pairs.
 
@@ -62,7 +64,7 @@ def get_str_query_from_sequence_iterable(
 
 
 def get_str_query_from_iterable(
-    items: Iterable[tuple[Union[str, istr], SimpleQuery]]
+    items: Iterable[tuple[str | istr, SimpleQuery]],
 ) -> str:
     """Return a query string from an iterable.
 
@@ -80,9 +82,14 @@ def get_str_query_from_iterable(
     return "&".join(pairs)
 
 
-def get_str_query(*args: Any, **kwargs: Any) -> Union[str, None]:
+def get_str_query(*args: Any, **kwargs: Any) -> str | None:
     """Return a query string from supported args."""
-    query: Union[str, Mapping[str, QueryVariable], None]
+    query: (
+        str
+        | Mapping[str, QueryVariable]
+        | Sequence[tuple[str | istr, SimpleQuery]]
+        | None
+    )
     if kwargs:
         if args:
             msg = "Either kwargs or single query parameter must be present"
@@ -111,6 +118,8 @@ def get_str_query(*args: Any, **kwargs: Any) -> Union[str, None]:
         # already; only mappings like builtin `dict` which can't have the
         # same key pointing to multiple values are allowed to use
         # `_query_seq_pairs`.
+        if TYPE_CHECKING:
+            query = cast(Sequence[tuple[Union[str, istr], SimpleQuery]], query)
         return get_str_query_from_iterable(query)
     raise TypeError(
         "Invalid query type: only str, mapping or "

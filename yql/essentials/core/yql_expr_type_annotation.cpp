@@ -4696,6 +4696,24 @@ bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
+bool EnsureAvailable(
+    TPositionHandle p,
+    const TFeature& f,
+    TExprContext& exprCtx,
+    const TTypeAnnotationContext& typeCtx)
+{
+    if (auto x = EnsureIsAvailableOn(typeCtx.LangVer, typeCtx.BackportMode, f); !x) {
+        exprCtx.AddError(TIssue(exprCtx.GetPosition(p), x.error()));
+        return false;
+    }
+
+    return true;
+}
+
+bool IsAvailable(const TFeature& f, const TTypeAnnotationContext& typeCtx) {
+    return IsAvailableOn(typeCtx.LangVer, typeCtx.BackportMode, f);
+}
+
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx) {
     switch (sequenceKind) {
         case ETypeAnnotationKind::Optional: return ctx.MakeType<TOptionalExprType>(&itemType);
@@ -6548,7 +6566,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 }
 
 bool IsSystemMember(const TStringBuf& memberName) {
-    return memberName.StartsWith(TStringBuf("_yql_"));
+    return memberName.StartsWith(SystemMemberPrefix);
 }
 
 template<bool Deduplicte, ui8 OrListsOfAtomsDepth>

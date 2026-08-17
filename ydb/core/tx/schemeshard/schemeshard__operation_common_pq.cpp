@@ -446,7 +446,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         databaseId = it->second;
     }
     TString monitoringProjectId;
-    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+    if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
         monitoringProjectId = it->second;
     }
 

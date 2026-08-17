@@ -3,7 +3,6 @@
 #include "flush_request.h"
 #include "partition_direct_service.h"
 #include "read_request_executor.h"
-#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -25,6 +25,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NThreading;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+NProto::TError MakeVChunkDestroyedError()
+{
+    return MakeError(E_REJECTED, "VChunk destroyed");
+}
+
+NProto::TError MakeVChunkStoppedError()
+{
+    return MakeError(E_REJECTED, "VChunk stopped");
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -160,8 +176,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
                     std::move(request),
                     std::move(span));
             } else {
-                promise.SetValue(
-                    TReadBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                promise.SetValue(TReadBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -217,8 +233,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(std::move(bundle));
             } else {
-                bundle->SendFinalReply(
-                    TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                bundle->SendFinalReply(TWriteBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -314,6 +330,9 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
+    sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
+    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
 }
 
@@ -340,7 +359,7 @@ void TVChunk::OnWriteBlocksResponse(
         "%s OnWriteBlocksResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str(),
-        FormatError(response.Error).c_str());
+        FormatError(response.Error).Quote().c_str());
 
     --InflightWritesCount;
 
@@ -437,17 +456,17 @@ void TVChunk::DoStop()
 
     Stopped = true;
 
+    if (Copiers.empty()) {
+        OnStopped();
+        return;
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s DoStop copiers: %zu",
         LogTitle.GetWithTime().c_str(),
         Copiers.size());
-
-    if (Copiers.empty()) {
-        OnStopped();
-        return;
-    }
 
     TVector<TFuture<TDDiskDataCopier::EResult>> copierStops;
     for (const auto& [_, copier]: Copiers) {
@@ -480,8 +499,8 @@ void TVChunk::DoReadBlocksLocal(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        promise.SetValue(TReadBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        promise.SetValue(
+            TReadBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 
@@ -529,7 +548,7 @@ void TVChunk::DoReadBlocksLocal(
                         std::move(span));
                 } else {
                     promise.SetValue(TReadBlocksLocalResponse{
-                        .Error = MakeError(E_CANCELLED)});
+                        .Error = MakeVChunkDestroyedError()});
                 }
             });
         return;
@@ -585,8 +604,8 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        bundle->SendFinalReply(TWriteBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        bundle->SendFinalReply(
+            TWriteBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 
@@ -958,74 +977,67 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
     VChunkConfig = std::move(newConfig);
     BlocksDirtyMap->UpdateConfig(VChunkConfig);
 
-    // Remove unnecessary copiers
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
     {
-        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
-        const bool needCopier = watermark != std::nullopt;
-        const auto* copier = Copiers.FindPtr(hostIndex);
-        if (needCopier || !copier) {
-            continue;
-        }
-
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Copier %s stopping",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str());
-
-        (*copier)->Stop().Subscribe(
-            [weakSelf = weak_from_this(), hostIndex]   //
-            (const TFuture<TDDiskDataCopier::EResult>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->OnCopierStopped(hostIndex, f.GetValue());
-                }
-            });
-        Copiers.erase(hostIndex);
-    }
-
-    // Add new copiers
-    for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
-         ++hostIndex)
-    {
-        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
-        const bool needCopier = watermark != std::nullopt;
+        const bool needCopier =
+            BlocksDirtyMap->GetFreshRange(hostIndex) != std::nullopt &&
+            VChunkConfig.GetDisabledHosts().Get(hostIndex) == false;
         const auto* copier = Copiers.FindPtr(hostIndex);
 
-        if (!needCopier || copier) {
-            continue;
+        if (needCopier && !copier) {
+            // Add new copier
+
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s started",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
+
+            auto newCopier = Copiers[hostIndex] =
+                std::make_shared<TDDiskDataCopier>(
+                    ActorSystem,
+                    TraceService,
+                    PartitionDirectService,
+                    DiskDescription,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    BlocksDirtyMap,
+                    hostIndex);
+
+            newCopier->Start().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopyComplete(hostIndex, f.GetValue());
+                    }
+                });
         }
+        if (!needCopier && copier) {
+            // Remove unnecessary copier
 
-        BlocksDirtyMap->SetReadWatermark(hostIndex, *watermark);
-        auto newCopier = Copiers[hostIndex] =
-            std::make_shared<TDDiskDataCopier>(
-                ActorSystem,
-                TraceService,
-                PartitionDirectService,
-                DiskDescription,
-                VChunkConfig,
-                DirectBlockGroup,
-                BlocksDirtyMap,
-                hostIndex);
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s stopping",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
 
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Copier %s started",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str());
+            (*copier)->Stop().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopierStopped(hostIndex, f.GetValue());
+                    }
+                });
+            Copiers.erase(hostIndex);
 
-        newCopier->Start().Subscribe(
-            [weakSelf = weak_from_this(), hostIndex]   //
-            (const TFuture<TDDiskDataCopier::EResult>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->OnCopyComplete(hostIndex, f.GetValue());
-                }
-            });
+            // Just in case, clear the locks of the deleted copier.
+            BlocksDirtyMap->ClearRangeSyncs(hostIndex);
+        }
     }
 }
 
@@ -1045,7 +1057,8 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             break;
         }
         case EHostState::Offline: {
-            const TString message = newConfig.EvacuateHost(hostIndex);
+            newConfig.DisableHost(hostIndex);
+            const TString message = newConfig.PromoteHostIfNeeded();
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

@@ -255,6 +255,9 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
@@ -283,6 +286,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         TControlWrapper EnableChunkKeeper;
 
@@ -315,6 +320,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
         TControlWrapper MaxPutTimeoutSeconds;
+        TControlWrapper EnableChecksumCalcAndValidationOnDsProxy;
 
         TControlWrapper EnableDeepScrubbing;
 

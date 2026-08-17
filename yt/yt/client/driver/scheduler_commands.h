@@ -33,8 +33,8 @@ public:
                 !operationId && !command->OperationAlias.has_value())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
-                    << TErrorAttribute("operation_id", command->OperationId)
-                    << TErrorAttribute("operation_alias", command->OperationAlias);
+                    .With("operation_id", command->OperationId)
+                    .With("operation_alias", command->OperationAlias);
             }
 
             if (command->OperationId) {

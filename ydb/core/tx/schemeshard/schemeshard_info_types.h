@@ -11,6 +11,7 @@
 
 #include <util/generic/yexception.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -2754,6 +2755,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    ETablesMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    void SetTablesMetricsLevel(ETablesMetricsLevel level) {
+        TablesMetricsLevel = level;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2799,6 +2808,8 @@ private:
     ui64 SecurityStateVersion = 0;
 
     TMaybeAuditSettings AuditSettings;
+
+    ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;

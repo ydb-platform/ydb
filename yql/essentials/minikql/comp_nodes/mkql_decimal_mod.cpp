@@ -5,26 +5,25 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TDecimalModWrapper: public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder<NYql::NDecimal::TInt128> {
-    typedef TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TDecimalModWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        const auto& left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -38,13 +37,13 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -104,17 +103,17 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 template <bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalModIntegralWrapper: public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
-    typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>;
     using NYql::NDecimal::TDecimalRemainder<TRight>::Divider_;
     using NYql::NDecimal::TDecimalRemainder<TRight>::Bound_;
 
@@ -122,14 +121,14 @@ public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        auto left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -143,14 +142,14 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto divider = NDecimal::GenConstant(Divider_, context);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -219,12 +218,12 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 } // namespace
@@ -232,7 +231,8 @@ private:
 IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
 
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(callable.GetInput(0), isOptionalLeft));
     const auto rightType = UnpackOptionalData(callable.GetInput(1), isOptionalRight);
@@ -262,5 +262,4 @@ IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFact
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

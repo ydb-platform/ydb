@@ -40,7 +40,8 @@ clouds or client devices, choosing the best available instruction set at
 runtime. Alternatively, developers may choose to target a single instruction set
 without any runtime overhead. In both cases, the application code is the same
 except for swapping `HWY_STATIC_DISPATCH` with `HWY_DYNAMIC_DISPATCH` plus one
-line of code.
+line of code. See also @kfjahnke's
+[introduction to dispatching](https://github.com/kfjahnke/zimt/blob/multi_isa/examples/multi_isa_example/multi_simd_isa.md).
 
 **Suitable for a variety of domains**: Highway provides an extensive set of
 operations, used for image processing (floating-point), compression, video
@@ -77,24 +78,33 @@ found via sourcegraph.com. Most are GitHub repositories. If you would like to
 add your project or link to it directly, feel free to raise an issue or contact
 us via the below email.
 
+*   Audio: [Zimtohrli perceptual metric](https://github.com/google/zimtohrli)
 *   Browsers: Chromium (+Vivaldi), Firefox (+floorp / foxhound / librewolf /
     Waterfox)
-*   Cryptography: google/distributed_point_functions
+*   Computational biology: [RNA analysis](https://github.com/bnprks/BPCells)
+*   Computer graphics: [Sparse voxel renderer](https://github.com/rools/voxl)
+*   Cryptography: google/distributed_point_functions, google/shell-encryption
 *   Data structures: bkille/BitLib
 *   Image codecs: eustas/2im,
     [Grok JPEG 2000](https://github.com/GrokImageCompression/grok),
-    [JPEG XL](https://github.com/libjxl/libjxl), OpenHTJ2K,
-    [JPEGenc](https://github.com/osamu620/JPEGenc)
+    [JPEG XL](https://github.com/libjxl/libjxl),
+    [JPEGenc](https://github.com/osamu620/JPEGenc),
+    [Jpegli](https://github.com/google/jpegli), OpenHTJ2K
 *   Image processing: cloudinary/ssimulacra2, m-ab-s/media-autobuild_suite,
     [libvips](https://github.com/libvips/libvips)
-*   Image viewers: AlienCowEatCake/ImageViewer, mirillis/jpegxl-wic,
+*   Image viewers: AlienCowEatCake/ImageViewer, diffractor/diffractor,
+    mirillis/jpegxl-wic,
     [Lux panorama/image viewer](https://bitbucket.org/kfj/pv/)
 *   Information retrieval:
-    [iresearch database index](https://github.com/iresearch-toolkit/iresearch/blob/e7638e7a4b99136ca41f82be6edccf01351a7223/core/utils/simd_utils.hpp),
-    michaeljclark/zvec
+    [iresearch database index](https://github.com/iresearch-toolkit/iresearch),
+    michaeljclark/zvec,
+    [nebula interactive analytics / OLAP](https://github.com/varchar-io/nebula),
+    [ScaNN Scalable Nearest Neighbors](https://github.com/google-research/google-research/tree/7a269cb2ce0ae1db591fe11b62cbc0be7d72532a/scann),
+    [vectorlite vector search](https://github.com/1yefuwang1/vectorlite/)
 *   Machine learning: [gemma.cpp](https://github.com/google/gemma.cpp),
     Tensorflow, Numpy, zpye/SimpleInfer
-*   Voxels: rools/voxl
+*   Robotics:
+    [MIT Model-Based Design and Verification](https://github.com/RobotLocomotion/drake)
 
 Other
 
@@ -107,10 +117,27 @@ Other
 
 If you'd like to get Highway, in addition to cloning from this GitHub repository
 or using it as a Git submodule, you can also find it in the following package
-managers or repositories: alpinelinux, conan-io, conda-forge, DragonFlyBSD,
-freebsd, ghostbsd, microsoft/vcpkg, MidnightBSD, MSYS2, NetBSD, openSUSE,
-opnsense, Xilinx/Vitis_Libraries. See also the list at
-https://repology.org/project/highway-simd-library/versions .
+managers or repositories:
+
+*   alpinelinux
+*   conan-io
+*   conda-forge
+*   DragonFlyBSD,
+*   fd00/yacp
+*   freebsd
+*   getsolus/packages
+*   ghostbsd
+*   microsoft/vcpkg
+*   MidnightBSD
+*   MSYS2
+*   NetBSD
+*   openSUSE
+*   opnsense
+*   Xilinx/Vitis_Libraries
+*   xmake-io/xmake-repo
+
+See also the list at https://repology.org/project/highway-simd-library/versions
+.
 
 ## Current status
 
@@ -313,6 +340,10 @@ target-specific vector types.
     You can prevent this by calling the following before any invocation of
     `HWY_DYNAMIC_*`: `hwy::GetChosenTarget().Update(hwy::SupportedTargets());`.
 
+See also a separate
+[introduction to dynamic dispatch](https://github.com/kfjahnke/zimt/blob/multi_isa/examples/multi_isa_example/multi_simd_isa.md)
+by @kfjahnke.
+
 When using dynamic dispatch, `foreach_target.h` is included from translation
 units (.cc files), not headers. Headers containing vector code shared between
 several translation units require a special include guard, for example the
@@ -343,15 +374,15 @@ generally sufficient.
 For MSVC, we recommend compiling with `/Gv` to allow non-inlined functions to
 pass vector arguments in registers. If intending to use the AVX2 target together
 with half-width vectors (e.g. for `PromoteTo`), it is also important to compile
-with `/arch:AVX2`. This seems to be the only way to reliably generate VEX-encoded
-SSE instructions on MSVC. Sometimes MSVC generates VEX-encoded SSE instructions,
-if they are mixed with AVX, but not always, see 
+with `/arch:AVX2`. This seems to be the only way to reliably generate
+VEX-encoded SSE instructions on MSVC. Sometimes MSVC generates VEX-encoded SSE
+instructions, if they are mixed with AVX, but not always, see
 [DevCom-10618264](https://developercommunity.visualstudio.com/t/10618264).
-Otherwise, mixing VEX-encoded AVX2 instructions and non-VEX SSE may cause severe 
-performance degradation. Unfortunately, with `/arch:AVX2` option, the
-resulting binary will then require AVX2. Note that no such flag is needed for
-clang and GCC because they support target-specific attributes, which we use to
-ensure proper VEX code generation for AVX2 targets.
+Otherwise, mixing VEX-encoded AVX2 instructions and non-VEX SSE may cause severe
+performance degradation. Unfortunately, with `/arch:AVX2` option, the resulting
+binary will then require AVX2. Note that no such flag is needed for clang and
+GCC because they support target-specific attributes, which we use to ensure
+proper VEX code generation for AVX2 targets.
 
 ## Strip-mining loops
 

@@ -883,18 +883,11 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
     }
 
     if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-        const auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
         if (slot.GetDomainName()) {
             return slot.GetDomainName();
         }
 
-        if (slot.GetTenantName()) {
-            return ToString(ExtractDomain(slot.GetTenantName()));
-        }
-    }
-
-    if (cf.TenantName.GetOrElse("")) {
-        return ToString(ExtractDomain(*cf.TenantName));
     }
 
     return "";

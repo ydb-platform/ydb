@@ -33,6 +33,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/generic/size_literals.h>
 #include <util/string/printf.h>
+#include <util/system/sanitizers.h>
 
 #include <fmt/format.h>
 
@@ -5389,6 +5390,193 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describeLevelTable.IsSuccess(), describeLevelTable.GetIssues().ToString());
             auto describePostingTable = session.DescribeTable("/Root/TestTable/RenamedIndex/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
+        // Rebuild without changing the column set (columns omitted entirely) must still work.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Embedding");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                    WITH (levels = 10, clusters = 10);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "Invalid clusters^levels: 10^10 should be less than 1073741824");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexOverrideForbiddenSettingsSql) {
+        // metric/vector_type/vector_dimension must not be overridable on REBUILD INDEX.
+        // These are rejected already at the KQP exec layer before reaching schemeshard.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        // Each of distance / vector_type / vector_dimension must be rejected.
+        for (const TString& forbidden : {
+                TString("distance=manhattan"),
+                TString("vector_type=uint8"),
+                TString("vector_dimension=4")})
+        {
+            auto status = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                    WITH ()" << forbidden << R"(, levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS,
+                "override of '" << forbidden << "' must be rejected");
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "Can't override parameters distance, similarity, vector_type or vector_dimension");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildNonExistentIndexSql) {
+        // Rebuilding an index that does not exist must fail with a clear message.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX missing_idx
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "not found");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildNonVectorIndexSql) {
+        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // plain secondary index must be rejected at the KQP exec layer.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX secondary_idx GLOBAL ON (Data)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX secondary_idx;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "only supported for vector_kmeans_tree");
         }
     }
 
@@ -15915,6 +16103,17 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(TenThousandColumns) {
         using namespace NArrow;
 
+        // Under sanitizers (tsan/asan/msan) the BulkUpsert of a wide (9901-column)
+        // x 10000-row batch cannot complete within the 5-minute RPC timeout due to
+        // the 5-15x instrumentation overhead (see GitHub issue #48623). Keep the
+        // full column count (the test validates wide-schema behavior) but reduce
+        // the row count so the BulkUpsert fits within the timeout. See
+        // NSan::PlainOrUnderSanitizer.
+        const ui64 numColumns = 9900;
+        const ui64 numRows = NSan::PlainOrUnderSanitizer<ui64>(10000, 100);
+        const ui64 alterColumnsFrom = 9900;
+        const ui64 alterColumnsTo = 9999;
+
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
@@ -15923,7 +16122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
 
-        for (ui64 i = 0; i < 9900; ++i) {
+        for (ui64 i = 0; i < numColumns; ++i) {
             schema.emplace_back(TTestHelper::TColumnSchema().SetName("column" + ToString(i)).SetType(NScheme::NTypeIds::Int32).SetNullable(true));
         }
 
@@ -15936,19 +16135,19 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui64 i = 1; i < schema.size(); ++i) {
             dataBuilders.push_back(std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>(schema[i].GetName()));
         }
-        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(10000);
+        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(numRows);
         testHelper.BulkUpsert(testTable, batch);
 
-        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", TStringBuilder() << "[[" << numRows << "u]]");
 
-        for (ui64 i = 9900; i < 9999; ++i) {
+        for (ui64 i = alterColumnsFrom; i < alterColumnsTo; ++i) {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << i << " Uint64;";
             Cerr << alterQuery << Endl;
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", TStringBuilder() << "[[" << numRows << "u]]");
     }
 
     Y_UNIT_TEST(NullKeySchema) {

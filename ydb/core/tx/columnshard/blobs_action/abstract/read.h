@@ -177,6 +177,7 @@ private:
     bool Started = false;
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
+    YDB_ACCESSOR(bool, CacheAfterRead, true);
 
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
@@ -274,7 +275,7 @@ public:
     void AddRange(const TBlobRange& range, const std::optional<TString>& result = {});
 
     void Start(const THashSet<TBlobRange>& rangesInProgress);
-    void OnReadResult(const TBlobRange& range, const TString& data);
+    void OnReadResult(const TBlobRange& range, const TString& data, const bool fromCache);
     void OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus);
 
     bool HasFails() const {

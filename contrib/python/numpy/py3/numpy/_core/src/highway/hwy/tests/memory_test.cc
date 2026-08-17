@@ -19,9 +19,15 @@
 // detected. Must come before Highway headers.
 #include "hwy/base.h"
 #include "hwy/tests/test_util.h"
-#if defined(_WIN32) || defined(_WIN64)
+#if HWY_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif  // NOMINMAX
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif  // WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#endif
+#endif  // HWY_OS_WIN
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "tests/memory_test.cc"
@@ -33,6 +39,7 @@
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
+namespace {
 
 struct TestLoadStore {
   template <class T, class D>
@@ -326,7 +333,6 @@ HWY_NOINLINE void TestAllCache() {
   Pause();
 }
 
-namespace detail {
 template <int kNo, class T, HWY_IF_NOT_FLOAT_NOR_SPECIAL(T)>
 HWY_INLINE T GenerateOtherValue(size_t val) {
   const T conv_val = static_cast<T>(val);
@@ -347,8 +353,6 @@ HWY_INLINE T GenerateOtherValue(size_t val) {
   return F16FromF32(GenerateOtherValue<kNo, float>(val));
 }
 
-}  // namespace detail
-
 struct TestLoadN {
   template <class T, class D>
   HWY_NOINLINE void operator()(T /*unused*/, D d) {
@@ -365,7 +369,7 @@ struct TestLoadN {
     HWY_ASSERT(load_buf && expected);
 
     for (size_t i = 0; i < load_buf_len; i++) {
-      load_buf[i] = detail::GenerateOtherValue<0, T>(i + 1);
+      load_buf[i] = GenerateOtherValue<0, T>(i + 1);
     }
 
     ZeroBytes(expected.get(), N * sizeof(T));
@@ -401,7 +405,7 @@ struct TestLoadN {
       HWY_ASSERT_VEC_EQ(d, Load(d, expected.get()), actual_2);
     }
 
-    load_buf[0] = detail::GenerateOtherValue<0, T>(0);
+    load_buf[0] = GenerateOtherValue<0, T>(0);
     CopyBytes(load_buf.get(), expected.get(), N * sizeof(T));
     HWY_ASSERT_VEC_EQ(d, Load(d, expected.get()), LoadN(d, load_buf.get(), N));
   }
@@ -428,7 +432,7 @@ struct TestLoadNOr {
     HWY_ASSERT(load_buf && expected);
 
     for (size_t i = 0; i < load_buf_len; i++) {
-      load_buf[i] = detail::GenerateOtherValue<kNo, T>(i + 1);
+      load_buf[i] = GenerateOtherValue<kNo, T>(i + 1);
     }
     const Vec<D> no = Set(d, ConvertScalarTo<T>(kNo));
 
@@ -468,7 +472,7 @@ struct TestLoadNOr {
       HWY_ASSERT_VEC_EQ(d, Load(d, expected.get()), actual_2);
     }
 
-    load_buf[0] = detail::GenerateOtherValue<kNo, T>(kNo);
+    load_buf[0] = GenerateOtherValue<kNo, T>(kNo);
     CopyBytes(load_buf.get(), expected.get(), N * sizeof(T));
     HWY_ASSERT_VEC_EQ(d, Load(d, expected.get()),
                       LoadNOr(no, d, load_buf.get(), N));
@@ -561,14 +565,15 @@ HWY_NOINLINE void TestAllStoreN() {
   ForAllTypesAndSpecial(ForPartialVectors<TestStoreN>());
 }
 
+}  // namespace
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE
 }  // namespace hwy
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(HwyMemoryTest);
 HWY_EXPORT_AND_TEST_P(HwyMemoryTest, TestAllLoadStore);
 HWY_EXPORT_AND_TEST_P(HwyMemoryTest, TestAllSafeCopyN);
@@ -581,6 +586,7 @@ HWY_EXPORT_AND_TEST_P(HwyMemoryTest, TestAllLoadN);
 HWY_EXPORT_AND_TEST_P(HwyMemoryTest, TestAllLoadNOr);
 HWY_EXPORT_AND_TEST_P(HwyMemoryTest, TestAllStoreN);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
-#endif
+HWY_TEST_MAIN();
+#endif  // HWY_ONCE

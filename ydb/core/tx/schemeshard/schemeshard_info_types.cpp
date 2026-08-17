@@ -14,6 +14,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -3477,7 +3478,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
-    Items.swap(items);
+    if (result.Success) {
+        Items.swap(items);
+    }
 
     return result;
 }

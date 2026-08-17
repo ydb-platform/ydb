@@ -5,6 +5,11 @@
 
 /******************** Private Definitions *********************/
 
+// This is initialized during module initialization and thereafter immutable.
+// We don't include it in the global data struct because the definitions in
+// this file are shared by the _simd, _umath_tests, and
+// _multiarray_umath modules
+
 // Hold all CPU features boolean values
 static unsigned char npy__cpu_have[NPY_CPU_FEATURE_MAX];
 
@@ -119,7 +124,8 @@ static struct {
                 {NPY_CPU_FEATURE_ASIMDHP, "ASIMDHP"},
                 {NPY_CPU_FEATURE_ASIMDDP, "ASIMDDP"},
                 {NPY_CPU_FEATURE_ASIMDFHM, "ASIMDFHM"},
-                {NPY_CPU_FEATURE_SVE, "SVE"}};
+                {NPY_CPU_FEATURE_SVE, "SVE"},
+                {NPY_CPU_FEATURE_RVV, "RVV"}};
 
 
 NPY_VISIBILITY_HIDDEN PyObject *
@@ -325,7 +331,6 @@ npy__cpu_check_env(int disable, const char *env) {
         ) < 0) {
             return -1;
         }
-        return 0;
     }
 
     #define NOTSUPP_BODY \
@@ -469,6 +474,8 @@ npy__cpu_init_features(void)
     // third call to the cpuid to get extended AVX2 & AVX512 feature bits
     npy__cpu_cpuid(reg, 7);
     npy__cpu_have[NPY_CPU_FEATURE_AVX2]   = (reg[1] & (1 << 5))  != 0;
+    npy__cpu_have[NPY_CPU_FEATURE_AVX2]   = npy__cpu_have[NPY_CPU_FEATURE_AVX2] &&
+                                            npy__cpu_have[NPY_CPU_FEATURE_FMA3];
     if (!npy__cpu_have[NPY_CPU_FEATURE_AVX2])
         return;
     // detect AVX2 & FMA3
@@ -636,7 +643,7 @@ static void
 npy__cpu_init_features(void)
 {
     memset(npy__cpu_have, 0, sizeof(npy__cpu_have[0]) * NPY_CPU_FEATURE_MAX);
-    
+
     unsigned int hwcap = getauxval(AT_HWCAP);
     if ((hwcap & HWCAP_S390_VX) == 0) {
         return;
@@ -648,7 +655,7 @@ npy__cpu_init_features(void)
        npy__cpu_have[NPY_CPU_FEATURE_VXE2] = 1;
        return;
     }
-    
+
     npy__cpu_have[NPY_CPU_FEATURE_VXE] = (hwcap & HWCAP_S390_VXE) != 0;
 
     npy__cpu_have[NPY_CPU_FEATURE_VX]  = 1;
@@ -742,34 +749,33 @@ npy__cpu_init_features_linux(void)
     #endif
     }
 #ifdef __arm__
+    npy__cpu_have[NPY_CPU_FEATURE_NEON]       = (hwcap & NPY__HWCAP_NEON)   != 0;
+    if (npy__cpu_have[NPY_CPU_FEATURE_NEON]) {
+        npy__cpu_have[NPY_CPU_FEATURE_NEON_FP16]  = (hwcap & NPY__HWCAP_HALF) != 0;
+        npy__cpu_have[NPY_CPU_FEATURE_NEON_VFPV4] = (hwcap & NPY__HWCAP_VFPv4) != 0;
+    }
     // Detect Arm8 (aarch32 state)
     if ((hwcap2 & NPY__HWCAP2_AES)  || (hwcap2 & NPY__HWCAP2_SHA1)  ||
         (hwcap2 & NPY__HWCAP2_SHA2) || (hwcap2 & NPY__HWCAP2_PMULL) ||
         (hwcap2 & NPY__HWCAP2_CRC32))
     {
-        hwcap = hwcap2;
-#else
-    if (1)
-    {
-        if (!(hwcap & (NPY__HWCAP_FP | NPY__HWCAP_ASIMD))) {
-            // Is this could happen? maybe disabled by kernel
-            // BTW this will break the baseline of AARCH64
-            return 1;
-        }
-#endif
-        npy__cpu_have[NPY_CPU_FEATURE_FPHP]       = (hwcap & NPY__HWCAP_FPHP)     != 0;
-        npy__cpu_have[NPY_CPU_FEATURE_ASIMDHP]    = (hwcap & NPY__HWCAP_ASIMDHP)  != 0;
-        npy__cpu_have[NPY_CPU_FEATURE_ASIMDDP]    = (hwcap & NPY__HWCAP_ASIMDDP)  != 0;
-        npy__cpu_have[NPY_CPU_FEATURE_ASIMDFHM]   = (hwcap & NPY__HWCAP_ASIMDFHM) != 0;
-        npy__cpu_have[NPY_CPU_FEATURE_SVE]        = (hwcap & NPY__HWCAP_SVE)      != 0;
-        npy__cpu_init_features_arm8();
-    } else {
-        npy__cpu_have[NPY_CPU_FEATURE_NEON]       = (hwcap & NPY__HWCAP_NEON)   != 0;
-        if (npy__cpu_have[NPY_CPU_FEATURE_NEON]) {
-            npy__cpu_have[NPY_CPU_FEATURE_NEON_FP16]  = (hwcap & NPY__HWCAP_HALF) != 0;
-            npy__cpu_have[NPY_CPU_FEATURE_NEON_VFPV4] = (hwcap & NPY__HWCAP_VFPv4) != 0;
-        }
+        npy__cpu_have[NPY_CPU_FEATURE_ASIMD] = npy__cpu_have[NPY_CPU_FEATURE_NEON];
     }
+#else
+    if (!(hwcap & (NPY__HWCAP_FP | NPY__HWCAP_ASIMD))) {
+        // Is this could happen? maybe disabled by kernel
+        // BTW this will break the baseline of AARCH64
+        return 1;
+    }
+    npy__cpu_init_features_arm8();
+#endif
+    npy__cpu_have[NPY_CPU_FEATURE_FPHP]       = (hwcap & NPY__HWCAP_FPHP)     != 0;
+    npy__cpu_have[NPY_CPU_FEATURE_ASIMDHP]    = (hwcap & NPY__HWCAP_ASIMDHP)  != 0;
+    npy__cpu_have[NPY_CPU_FEATURE_ASIMDDP]    = (hwcap & NPY__HWCAP_ASIMDDP)  != 0;
+    npy__cpu_have[NPY_CPU_FEATURE_ASIMDFHM]   = (hwcap & NPY__HWCAP_ASIMDFHM) != 0;
+#ifndef __arm__
+    npy__cpu_have[NPY_CPU_FEATURE_SVE]        = (hwcap & NPY__HWCAP_SVE)      != 0;
+#endif
     return 1;
 }
 #endif
@@ -813,6 +819,28 @@ npy__cpu_init_features(void)
 #endif
 }
 
+/************** RISC-V 64 ***************/
+
+#elif defined(__riscv) && __riscv_xlen == 64
+
+#include <sys/auxv.h>
+
+#ifndef HWCAP_RVV
+    // https://github.com/torvalds/linux/blob/v6.8/arch/riscv/include/uapi/asm/hwcap.h#L24
+    #define COMPAT_HWCAP_ISA_V	(1 << ('V' - 'A'))
+#endif
+
+static void
+npy__cpu_init_features(void)
+{
+    memset(npy__cpu_have, 0, sizeof(npy__cpu_have[0]) * NPY_CPU_FEATURE_MAX);
+
+    unsigned int hwcap = getauxval(AT_HWCAP);
+    if (hwcap & COMPAT_HWCAP_ISA_V) {
+        npy__cpu_have[NPY_CPU_FEATURE_RVV]  = 1;
+    }
+}
+
 /*********** Unsupported ARCH ***********/
 #else
 static void
@@ -820,7 +848,7 @@ npy__cpu_init_features(void)
 {
     /*
      * just in case if the compiler doesn't respect ANSI
-     * but for knowing platforms it still nessecery, because @npy__cpu_init_features
+     * but for knowing platforms it still necessary, because @npy__cpu_init_features
      * may called multiple of times and we need to clear the disabled features by
      * ENV Var or maybe in the future we can support other methods like
      * global variables, go back to @npy__cpu_try_disable_env for more understanding

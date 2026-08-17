@@ -213,7 +213,7 @@ message TFeatureFlags {
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = true];
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
-    optional bool EnableAddUniqueIndex = 187 [default = false];
+    optional bool EnableAddUniqueIndex = 187 [default = true];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     reserved 189; // RequireDbPrefixInSecretName
     optional bool EnableSystemNamesProtection = 190 [default = false];
@@ -315,8 +315,8 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
-    optional bool EnableTopicMessagesBatching = 274 [default = false];
-    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
+    optional bool EnableTopicMessagesBatching = 274 [default = false, (RequireRestart) = true];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
@@ -360,4 +360,7 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
+    optional bool EnableTxIdInStats = 310 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
+    optional bool EnableCsFlowControl = 312 [default = false];
 }

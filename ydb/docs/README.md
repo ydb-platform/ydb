@@ -25,9 +25,10 @@ YDB provides an AI-powered documentation writing skill that helps developers cre
    - Limitations and constraints
    - Links to PR/Issue where it was implemented
 
-2. **Run `ruler apply`** to generate agent configurations:
+2. **From `ydb/docs`, run `ruler apply`** to generate agent configurations:
 
 ```bash
+cd ydb/docs
 npm install -g @intellectronica/ruler
 ruler apply
 ```
@@ -96,6 +97,10 @@ Builds the documentation and starts a local HTTP server to preview the results.
 - Russian: http://localhost:8888/ru
 
 Press `Ctrl+C` to stop the server.
+
+## LLM indexes (`llms.txt`)
+
+Diplodoc generates per-locale indexes (`/docs/{en|ru}/llms.txt` and `llms-full.txt`). The hub [`llms.txt`](./llms.txt) links agents to those indexes for the **default stable** (no `?version=`; currently `v26.1`), the **`main` trunk**, and each **stable** (`?version=vX.Y`). Keep the stable list in the hub up to date when new release lines appear.
 
 ## File Structure
 

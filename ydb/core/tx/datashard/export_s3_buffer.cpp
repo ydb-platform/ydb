@@ -267,17 +267,18 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
-    size_t outputSize = Buffer.Size();
+    size_t readyOutputBytes = Buffer.Size();
     if (Compression) {
-        outputSize = Compression->GetReadyOutputBytes();
+        readyOutputBytes = Compression->GetReadyOutputBytes();
     }
     // Some formats (e.g. Parquet) keep encoded output inside the format itself
     // until a flush, so it is not yet reflected in Buffer/Compression.
-    outputSize += DataFormat->GetReadyOutputBytes();
-    if (outputSize < MinBytes) {
+    readyOutputBytes += DataFormat->GetReadyOutputBytes();
+    if (readyOutputBytes < MinBytes) {
         return false;
     }
-    return Rows >= RowsLimit || outputSize >= MaxBytes;
+    const size_t memoryBytes = Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
+    return Rows >= RowsLimit || memoryBytes >= MaxBytes;
 }
 
 TString TS3Buffer::GetError() const {
@@ -314,8 +315,13 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     }
 
     if (Encryption) {
-        TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
-        Buffer = std::move(encryptedBlock);
+        try {
+            TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+            Buffer = std::move(encryptedBlock);
+        } catch (const std::exception& ex) {
+            ErrorString = ex.what();
+            return Nothing();
+        }
     }
 
     return std::exchange(Buffer, TBuffer());
@@ -445,12 +451,12 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     case EDataFormat::Parquet:
         {
             bufferSettings.WithoutCompression();
-            
+
             auto maybeSettings = ParquetExportSettingsFromTask(Task);
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
             settings
                 .WithColumns(Columns);
-            
+
             switch (CodecFromTask(Task)) {
             case ECompressionCodec::None:
                 break;

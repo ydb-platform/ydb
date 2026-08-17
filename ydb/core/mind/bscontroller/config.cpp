@@ -3,7 +3,9 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
@@ -336,8 +338,7 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
-                bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
             // when bridged non-proxy groups get updated, we update parent group too
@@ -405,7 +406,8 @@ namespace NKikimr::NBsController {
             std::vector<TGroupId> disintegrated;
             std::vector<TGroupId> degraded;
 
-            if (!suppressDisintegratedGroupsChecking) {
+            // Check Disintegrated by ExpectedStatus
+            if (!parameters.SuppressDisintegratedGroupsChecking) {
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
                     if (base && overlay->second) {
                         const TGroupInfo::TGroupStatus& prev = base->second->Status;
@@ -420,7 +422,7 @@ namespace NKikimr::NBsController {
             }
 
             // check that group modification would not degrade failure model
-            if (!suppressFailModelChecking) {
+            if (!parameters.SuppressFailModelChecking) {
                 THashSet<TGroupId> groupsToCheck;
                 for (auto&& [base, overlay] : state.VSlots.Diff()) {
                     if (base && base->second->Group) {
@@ -444,19 +446,22 @@ namespace NKikimr::NBsController {
                     }
                     if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
-                        auto& topology = *group->Topology;
+                        TBlobStorageGroupInfo::TTopology& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
-                        bool alreadySeenReplicatingWithPhantomsOnly = false;
+
+                        // A single non-Ready VDisk that is REPLICATING with only phantoms remaining may be ignored by
+                        // the degraded check when AllowDegradedWithSinglePhantomsOnly is set. The full failure set must
+                        // still pass the disintegrated check.
+                        TBlobStorageGroupInfo::TGroupVDisks allowedNonReady(&topology);
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
-                            // Allow exactly one VDisk that is REPLICATING with only phantoms remaining to be treated as nearly ready
-                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
-                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
+                            if (!slot->IsReady) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
-                            }
-                            if (replicatingWithPhantomsOnly) {
-                                alreadySeenReplicatingWithPhantomsOnly = true;
+
+                                if (parameters.AllowDegradedWithSinglePhantomsOnly &&
+                                        slot->IsReplicatingWithPhantomsOnly() && !allowedNonReady) {
+                                    allowedNonReady |= {&topology, slot->GetShortVDiskId()};
+                                }
                             }
                         }
                         // check the failure model
@@ -464,9 +469,12 @@ namespace NKikimr::NBsController {
                         if (!checker.CheckFailModelForGroup(failed)) {
                             disintegrated.push_back(groupId);
                             errors = true;
-                        } else if (!suppressDegradedGroupsChecking && checker.IsDegraded(failed)) {
-                            degraded.push_back(groupId);
-                            errors = true;
+                        } else {
+                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip = failed - allowedNonReady;
+                            if (!parameters.SuppressDegradedGroupsChecking && checker.IsDegraded(failedWithSkip)) {
+                                degraded.push_back(groupId);
+                                errors = true;
+                            }
                         }
                     } else {
                         Y_ABORT_UNLESS(group); // group must exist
@@ -531,12 +539,13 @@ namespace NKikimr::NBsController {
             }
 
             TString error;
-            const bool suppressFailModelChecking = flags.SuppressFailModelChecking;
-            const bool suppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking;
-            const bool suppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking;
+            const TValidateConfigUpdatesParameters parameters{
+                .SuppressFailModelChecking = flags.SuppressFailModelChecking,
+                .SuppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking,
+                .SuppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking,
+            };
 
-            if (!ValidateConfigUpdates(*state, suppressFailModelChecking, suppressDegradedGroupsChecking,
-                    suppressDisintegratedGroupsChecking, &error, response)) {
+            if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
             }

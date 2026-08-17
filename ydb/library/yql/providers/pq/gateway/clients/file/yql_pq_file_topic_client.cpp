@@ -361,21 +361,6 @@ public:
         , AllowSkipDatabasePrefix(settings.SkipDatabasePrefix)
     {}
 
-    TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
-    }
-
-    TAsyncStatus AlterTopic(const TString& path, const TAlterTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
-    }
-
-    TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
-    }
-
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
         Y_UNUSED(settings);
         Ydb::Topic::DescribeTopicResult describeTopicResult;

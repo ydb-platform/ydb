@@ -274,6 +274,17 @@ class TPushFilterIntoJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Push out simple join filter than can go on the left or right side of the join
+ */
+class TPushSimpleJoinFilterRule : public IRule {
+  public:
+    TPushSimpleJoinFilterRule() : IRule("Push simple join filter", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Peephole predicate.
  */
 class TPeepholePredicate : public ISimplifiedRule {

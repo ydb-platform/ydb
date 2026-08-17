@@ -770,6 +770,32 @@ class UnauthorizedSSOTokenError(SSOError):
     )
 
 
+class LoginError(BotoCoreError):
+    fmt = (
+        "An unspecified error happened when resolving AWS credentials or "
+        "refreshing a login session profile."
+    )
+
+
+class LoginRefreshRequired(LoginError):
+    fmt = "Your session has expired or credentials have changed. Please reauthenticate using 'aws login'."
+
+
+class LoginInsufficientPermissions(LoginError):
+    fmt = (
+        "Unable to create or refresh login credentials due to insufficient "
+        "permissions. You may be missing permission for the 'signin:CreateOAuth2Token' action."
+    )
+
+
+class LoginTokenLoadError(LoginError):
+    fmt = "Error loading login session token: {error_msg}"
+
+
+class LoginAuthorizationCodeError(LoginError):
+    fmt = "Error loading or redeeming a login authorization code: {error_msg} "
+
+
 class CapacityNotAvailableError(BotoCoreError):
     fmt = 'Insufficient request capacity available.'
 

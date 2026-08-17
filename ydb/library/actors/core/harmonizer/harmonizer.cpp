@@ -194,7 +194,6 @@ void THarmonizer::ProcessNeedyState() {
             continue;
         }
         float fullThreadCount = pool.GetFullThreadCount();
-        float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
         float foreignElapsed = CpuConsumption.PoolForeignConsumption[needyPoolIdx].Elapsed;
         float extraForeignElapsed = std::max(0.0f, foreignElapsed - std::max(0, SharedInfo.ForeignThreadsAllowed[needyPoolIdx] - 1));
@@ -207,15 +206,6 @@ void THarmonizer::ProcessNeedyState() {
             SetForeignThreadSlotsForCurrentFullThreadCount(needyPoolIdx);
             ProcessingBudget -= 1.0;
             LWPROBE_WITH_DEBUG(HarmonizeOperation, needyPoolIdx, pool.Pool->GetName(), "increase by needs", fullThreadCount + 1, pool.DefaultFullThreadCount, pool.MaxFullThreadCount);
-        }
-        if (pool.MaxLocalQueueSize) {
-            bool needToExpandLocalQueue = ProcessingBudget < 1.0 || threadCount >= pool.MaxFullThreadCount;
-            needToExpandLocalQueue &= (bool)pool.BasicPool;
-            needToExpandLocalQueue &= (pool.MaxFullThreadCount > 1);
-            needToExpandLocalQueue &= (pool.LocalQueueSize < pool.MaxLocalQueueSize);
-            if (needToExpandLocalQueue) {
-                pool.BasicPool->SetLocalQueueSize(++pool.LocalQueueSize);
-            }
         }
     }
 }
@@ -299,10 +289,6 @@ void THarmonizer::ProcessHoggishState() {
             pool.SetFullThreadCount(fullThreadCount - 1);
             SetForeignThreadSlotsForCurrentFullThreadCount(hoggishPoolIdx);
             LWPROBE_WITH_DEBUG(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease by hoggish", fullThreadCount - 1, pool.DefaultFullThreadCount, pool.MaxFullThreadCount);
-        }
-        if (pool.BasicPool && pool.LocalQueueSize > pool.MinLocalQueueSize) {
-            pool.LocalQueueSize = std::min<ui16>(pool.MinLocalQueueSize, pool.LocalQueueSize / 2);
-            pool.BasicPool->SetLocalQueueSize(pool.LocalQueueSize);
         }
         HARMONIZER_DEBUG_PRINT("poolIdx", hoggishPoolIdx, "threadCount", fullThreadCount, "pool.MinFullThreadCount", pool.MinFullThreadCount, "freeCpu", freeCpu);
     }
@@ -491,9 +477,6 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     if (poolInfo.BasicPool) {
         poolInfo.WaitingStats.reset(new TWaitingStats<ui64>());
         poolInfo.MovingWaitingStats.reset(new TWaitingStats<double>());
-        poolInfo.MinLocalQueueSize = poolInfo.BasicPool->GetMinLocalQueueSize();
-        poolInfo.MaxLocalQueueSize = poolInfo.BasicPool->GetMaxLocalQueueSize();
-        poolInfo.LocalQueueSize = poolInfo.MinLocalQueueSize;
         poolInfo.IsSharedOnly = poolInfo.BasicPool->IsSharedOnly();
     }
     PriorityOrder.clear();

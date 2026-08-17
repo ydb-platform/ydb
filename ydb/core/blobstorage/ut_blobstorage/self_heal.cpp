@@ -3,6 +3,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/compiler.h>
 
+#include <numeric>
+
 Y_UNIT_TEST_SUITE(SelfHeal) {
     void ChangeDiskStatus(TEnvironmentSetup& env, TPDiskId pdiskId, NKikimrBlobStorage::EDriveStatus status,
             NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus) {
@@ -340,7 +342,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             .NodeCount = erasure.BlobSubgroupSize() + 1,
             .Erasure = erasure,
             .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
-                auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
+                auto* bscSettings = conf.BlobStorageConfig->MutableBscSettings();
                 auto* selfHealSettings = bscSettings->MutableSelfHealSettings();
 
                 selfHealSettings->SetPreferLessOccupiedRack(true);
@@ -400,7 +402,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     }
 
     auto MakeCatchDiskStatuses = [](ui32 groupId, const THashSet<ui32>& phantomOnlyDomains,
-                                    const THashSet<ui32>& faultyDomains) {
+                                    const THashSet<ui32>& faultyDomains,
+                                    const THashSet<ui32>& readyFaultyDomains = {}) {
         return [=](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
                 auto* vdiskStatuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
@@ -424,6 +427,10 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
                         // this VDisk is REPLICATING with only phantom blobs remaining
                         status.SetOnlyPhantomsRemain(true);
                         status.SetStatus(NKikimrBlobStorage::EVDiskStatus::REPLICATING);
+                    } else if (readyFaultyDomains.contains(domain)) {
+                        // this VDisk remains available even though its PDisk is marked FAULTY
+                        status.SetOnlyPhantomsRemain(false);
+                        status.SetStatus(NKikimrBlobStorage::EVDiskStatus::READY);
                     } else if (faultyDomains.contains(domain)) {
                         // this VDisk's PDisk is FAULTY, so it doesn't report its status
                         return false;
@@ -461,6 +468,32 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (0, 1, 0) to be moved");
     }
 
+    Y_UNIT_TEST(SelfHealDoesNotMoveReadyFaultyDiskWithPhantomsOnly) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        const ui32 groupId = env.GetGroups().at(0);
+        const TPDiskId originalPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+
+        ChangeDiskStatus(env, originalPDiskId, NKikimrBlobStorage::EDriveStatus::FAULTY,
+            NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
+
+        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0},
+            /*faultyDomains=*/{}, /*readyFaultyDomains=*/{1});
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        const TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+        UNIT_ASSERT_C(newPDiskId == originalPDiskId, "Expected ready VDisk (0, 1, 0) not to be moved");
+    }
+
     Y_UNIT_TEST(SelfHealWithTwoFailedDisksAndOnePhantomOnly) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
         TEnvironmentSetup env({
@@ -490,5 +523,295 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         UNIT_ASSERT_C(newPDiskId1 == originalPDiskId1, "Expected VDisk (0, 1, 0) not to be moved");
         UNIT_ASSERT_C(newPDiskId2 == originalPDiskId2, "Expected VDisk (0, 2, 0) not to be moved");
+    }
+
+    struct TVDiskState {
+        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::READY;
+        bool OnlyPhantomsRemain = false;
+
+        bool IsReady() const {
+            return Status == NKikimrBlobStorage::EVDiskStatus::READY;
+        }
+
+        bool IsOperational() const {
+            return Status >= NKikimrBlobStorage::EVDiskStatus::REPLICATING;
+        }
+
+        bool IsReplicatingWithPhantomsOnly() const {
+            return Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
+        }
+    };
+
+    using TVDiskKey = std::tuple<ui32, ui32, ui32, ui32>;
+    using TVDiskStates = std::map<TVDiskKey, TVDiskState>;
+
+    TVDiskKey MakeVDiskKey(ui32 groupId, ui32 ring, ui32 domain, ui32 vdisk) {
+        return {groupId, ring, domain, vdisk};
+    }
+
+    TVDiskKey MakeVDiskKey(const NKikimrBlobStorage::TBaseConfig::TVSlot& slot) {
+        return MakeVDiskKey(slot.GetGroupId(), slot.GetFailRealmIdx(), slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+    }
+
+    NKikimrBlobStorage::TConfigResponse InvokeConfigRequest(TEnvironmentSetup& env,
+            const NKikimrBlobStorage::TConfigRequest& request, bool selfHeal) {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.MutableRequest()->CopyFrom(request);
+        ev->SelfHeal = selfHeal;
+        env.Runtime->SendToPipe(env.TabletId, sender, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(sender);
+        return response->Get()->Record.GetResponse();
+    }
+
+    void ReportVDiskStates(TEnvironmentSetup& env, const NKikimrBlobStorage::TBaseConfig& base,
+            const TVDiskStates& states) {
+        std::map<std::pair<ui32, ui32>, ui64> pdiskGuids;
+        for (const auto& pdisk : base.GetPDisk()) {
+            pdiskGuids.emplace(std::make_pair(pdisk.GetNodeId(), pdisk.GetPDiskId()), pdisk.GetGuid());
+        }
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>();
+        ev->Record.SetNodeID(env.Settings.ControllerNodeId);
+        for (const auto& slot : base.GetVSlot()) {
+            const TVDiskState& state = states.at(MakeVDiskKey(slot));
+            const auto& vslotId = slot.GetVSlotId();
+            auto *item = ev->Record.AddVDiskStatus();
+            item->SetNodeId(vslotId.GetNodeId());
+            item->SetPDiskId(vslotId.GetPDiskId());
+            item->SetVSlotId(vslotId.GetVSlotId());
+            item->SetPDiskGuid(pdiskGuids.at(std::make_pair(vslotId.GetNodeId(), vslotId.GetPDiskId())));
+            item->SetStatus(state.Status);
+            item->SetOnlyPhantomsRemain(state.OnlyPhantomsRemain);
+            auto *vdiskId = item->MutableVDiskId();
+            vdiskId->SetGroupID(slot.GetGroupId());
+            vdiskId->SetGroupGeneration(slot.GetGroupGeneration());
+            vdiskId->SetRing(slot.GetFailRealmIdx());
+            vdiskId->SetDomain(slot.GetFailDomainIdx());
+            vdiskId->SetVDisk(slot.GetVDiskIdx());
+        }
+        env.Runtime->SendToPipe(env.TabletId, sender, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+    }
+
+    enum class EExpectedResult {
+        Success,
+        Degraded,
+        Disintegrated,
+        FitDegraded,
+        FitDisintegrated,
+    };
+
+    EExpectedResult EvaluateReassign(const TBlobStorageGroupInfo::TTopology& topology,
+            const TVector<TVDiskState>& states, ui32 targetOrderNumber, bool selfHeal) {
+        const TBlobStorageGroupInfo::IQuorumChecker& checker = topology.GetQuorumChecker();
+        TBlobStorageGroupInfo::TGroupVDisks nonOperational(&topology);
+        for (ui32 orderNumber = 0; orderNumber < states.size(); ++orderNumber) {
+            if (!states[orderNumber].IsOperational()) {
+                nonOperational |= {&topology, topology.GetVDiskId(orderNumber)};
+            }
+        }
+        if (!checker.CheckFailModelForGroup(nonOperational)) {
+            return EExpectedResult::FitDisintegrated;
+        } else if (checker.IsDegraded(nonOperational)) {
+            return EExpectedResult::FitDegraded;
+        }
+
+        TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+        for (ui32 orderNumber = 0; orderNumber < states.size(); ++orderNumber) {
+            if (!states[orderNumber].IsReady()) {
+                failed |= {&topology, topology.GetVDiskId(orderNumber)};
+            }
+        }
+        failed |= {&topology, topology.GetVDiskId(targetOrderNumber)};
+
+        if (!checker.CheckFailModelForGroup(failed)) {
+            return EExpectedResult::Disintegrated;
+        }
+
+        if (selfHeal) {
+            for (ui32 orderNumber = 0; orderNumber < states.size(); ++orderNumber) {
+                if (orderNumber != targetOrderNumber && states[orderNumber].IsReplicatingWithPhantomsOnly()) {
+                    failed = failed - TBlobStorageGroupInfo::TGroupVDisks(&topology, topology.GetVDiskId(orderNumber));
+                    break;
+                }
+            }
+        }
+        return checker.IsDegraded(failed) ? EExpectedResult::Degraded : EExpectedResult::Success;
+    }
+
+    void AssertReassignResult(const NKikimrBlobStorage::TConfigResponse& response, EExpectedResult expected,
+            ui32 groupId, const TString& context) {
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetSuccess(), expected == EExpectedResult::Success,
+            context << " Response# " << response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDegradedSize(), expected == EExpectedResult::Degraded ? 1 : 0,
+            context << " Response# " << response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDisintegratedSize(),
+            expected == EExpectedResult::Disintegrated ? 1 : 0, context << " Response# " << response.DebugString());
+        if (expected == EExpectedResult::Degraded) {
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetGroupsGetDegraded(0), groupId, context);
+        } else if (expected == EExpectedResult::Disintegrated) {
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetGroupsGetDisintegrated(0), groupId, context);
+        } else if (expected == EExpectedResult::FitDegraded || expected == EExpectedResult::FitDisintegrated) {
+            UNIT_ASSERT_VALUES_EQUAL_C(response.StatusSize(), 1, context << " Response# " << response.DebugString());
+            const auto failReason = expected == EExpectedResult::FitDegraded
+                ? NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded
+                : NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData;
+            UNIT_ASSERT_VALUES_EQUAL_C(static_cast<ui32>(response.GetStatus(0).GetFailReason()),
+                static_cast<ui32>(failReason),
+                context << " Response# " << response.DebugString());
+        }
+    }
+
+    Y_UNIT_TEST(RandomizedVDiskStates) {
+        constexpr ui32 numGroups = 64;
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TBlobStorageGroupInfo::TTopology topology(erasure, 1, erasure.BlobSubgroupSize(), 1, true);
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 4,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(4, numGroups);
+        env.Sim(TDuration::Minutes(1));
+        env.UpdateSettings(true, true, false);
+
+        const NKikimrBlobStorage::TBaseConfig base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), numGroups);
+
+        struct TTestCase {
+            const NKikimrBlobStorage::TBaseConfig::TGroup *Group = nullptr;
+            TVector<const NKikimrBlobStorage::TBaseConfig::TVSlot*> SlotsByOrderNumber;
+            TVector<TVDiskState> States;
+            ui32 TargetOrderNumber = 0;
+        };
+
+        TVDiskStates states;
+        TVector<TTestCase> testCases;
+        testCases.reserve(numGroups);
+        for (const auto& group : base.GetGroup()) {
+            TTestCase& testCase = testCases.emplace_back();
+            testCase.Group = &group;
+            testCase.SlotsByOrderNumber.resize(topology.GetTotalVDisksNum());
+            testCase.States.resize(topology.GetTotalVDisksNum());
+
+            for (const auto& slot : base.GetVSlot()) {
+                if (slot.GetGroupId() == group.GetGroupId()) {
+                    const TVDiskIdShort vdiskId(slot.GetFailRealmIdx(), slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+                    testCase.SlotsByOrderNumber[topology.GetOrderNumber(vdiskId)] = &slot;
+                }
+            }
+
+            TVector<ui32> orderNumbers(topology.GetTotalVDisksNum());
+            std::iota(orderNumbers.begin(), orderNumbers.end(), 0);
+            for (ui32 i = 0; i + 1 < orderNumbers.size(); ++i) {
+                std::swap(orderNumbers[i], orderNumbers[i + RandomNumber<ui32>(orderNumbers.size() - i)]);
+            }
+            testCase.TargetOrderNumber = orderNumbers[0];
+
+            // Keep every important validation outcome covered for every seed while randomizing VDisk positions.
+            // Every fifth case adds a fully randomized mix of the same readiness/operational state classes.
+            switch (testCases.size() % 5) {
+                case 0: // SelfHeal succeeds only because it may ignore the phantoms-only VDisk
+                    testCase.States[orderNumbers[0]].Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    testCase.States[orderNumbers[1]] = {NKikimrBlobStorage::EVDiskStatus::REPLICATING, true};
+                    break;
+
+                case 1: // evicting a third VDisk disintegrates the group, even for SelfHeal
+                    testCase.States[orderNumbers[1]].Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    testCase.States[orderNumbers[2]] = {NKikimrBlobStorage::EVDiskStatus::REPLICATING, true};
+                    break;
+
+                case 2: // non-operational VDisks trigger the earlier group fitter check
+                    testCase.States[orderNumbers[0]].Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    testCase.States[orderNumbers[1]].Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    break;
+
+                case 3: // a healthy group accepts an ordinary reassign
+                    break;
+
+                case 4: {
+                    const ui32 numNonReady = 1 + RandomNumber<ui32>(4);
+                    for (ui32 i = 0; i < numNonReady; ++i) {
+                        switch (RandomNumber<ui32>(3)) {
+                            case 0:
+                                testCase.States[orderNumbers[i]].Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                                break;
+                            case 1:
+                                testCase.States[orderNumbers[i]].Status = NKikimrBlobStorage::EVDiskStatus::REPLICATING;
+                                break;
+                            case 2:
+                                testCase.States[orderNumbers[i]] = {
+                                    NKikimrBlobStorage::EVDiskStatus::REPLICATING, true};
+                                break;
+                        }
+                    }
+                    testCase.TargetOrderNumber = RandomNumber<ui32>(orderNumbers.size());
+                    break;
+                }
+            }
+
+            for (ui32 orderNumber = 0; orderNumber < testCase.States.size(); ++orderNumber) {
+                UNIT_ASSERT(testCase.SlotsByOrderNumber[orderNumber]);
+                states.emplace(MakeVDiskKey(*testCase.SlotsByOrderNumber[orderNumber]), testCase.States[orderNumber]);
+            }
+        }
+
+        env.Runtime->FilterFunction = [&states](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
+                auto *statuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
+                for (auto& status : *statuses) {
+                    const auto& vdiskId = status.GetVDiskId();
+                    const auto it = states.find(MakeVDiskKey(vdiskId.GetGroupID(), vdiskId.GetRing(),
+                        vdiskId.GetDomain(), vdiskId.GetVDisk()));
+                    if (it != states.end()) {
+                        status.SetStatus(it->second.Status);
+                        status.SetOnlyPhantomsRemain(it->second.OnlyPhantomsRemain);
+                    }
+                }
+            }
+            return true;
+        };
+        ReportVDiskStates(env, base, states);
+
+        ui32 selfHealSuccesses = 0;
+        ui32 disintegratedRejections = 0;
+        for (ui32 index = 0; index < testCases.size(); ++index) {
+            const TTestCase& testCase = testCases[index];
+            const auto *target = testCase.SlotsByOrderNumber[testCase.TargetOrderNumber];
+
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupReserve(true);
+            request.SetAllowUnusableDisks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(testCase.Group->GetGroupId());
+            reassign->SetGroupGeneration(testCase.Group->GetGroupGeneration());
+            reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+            reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+            reassign->SetVDiskIdx(target->GetVDiskIdx());
+
+            const TString context = TStringBuilder() << "Case# " << index << " GroupId# "
+                << testCase.Group->GetGroupId() << " TargetOrderNumber# " << testCase.TargetOrderNumber;
+            const EExpectedResult regularExpected = EvaluateReassign(topology, testCase.States,
+                testCase.TargetOrderNumber, false);
+            NKikimrBlobStorage::TConfigResponse response = InvokeConfigRequest(env, request, false);
+            AssertReassignResult(response, regularExpected, testCase.Group->GetGroupId(), context + " SelfHeal# false");
+
+            if (regularExpected != EExpectedResult::Success) {
+                const EExpectedResult selfHealExpected = EvaluateReassign(topology, testCase.States,
+                    testCase.TargetOrderNumber, true);
+                response = InvokeConfigRequest(env, request, true);
+                AssertReassignResult(response, selfHealExpected, testCase.Group->GetGroupId(),
+                    context + " SelfHeal# true");
+                selfHealSuccesses += selfHealExpected == EExpectedResult::Success;
+                disintegratedRejections += selfHealExpected == EExpectedResult::Disintegrated;
+            }
+        }
+
+        UNIT_ASSERT_C(selfHealSuccesses, "Randomized test did not cover a SelfHeal-only successful reassign");
+        UNIT_ASSERT_C(disintegratedRejections,
+            "Randomized test did not cover fail-model rejection with IgnoreDisintegratedGroupsChecks=true");
     }
 }

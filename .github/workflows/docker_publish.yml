@@ -30,6 +30,11 @@ on:
         required: true
         default: trunk
         description: "docker image tag"
+
+permissions:
+  contents: read
+  packages: write  # push to ghcr.io
+
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
@@ -39,6 +44,7 @@ jobs:
         with:
           ref: ${{ inputs.dockerfile_branch || 'main' }}
           path: main
+          persist-credentials: false
           sparse-checkout: |
             .github
 
@@ -47,6 +53,7 @@ jobs:
         with:
           ref: ${{ inputs.ydbd_git_ref || 'main' }}
           path: ydbd
+          persist-credentials: false
 
       - name: get revision for ydbd
         shell: bash
@@ -60,12 +67,14 @@ jobs:
         with:
           ref: ${{ inputs.cli_git_ref || 'main' }}
           path: cli
+          persist-credentials: false
 
       - name: Checkout repository for build local_ydb binary
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.local_ydb_git_ref || 'main' }}
           path: local_ydb
+          persist-credentials: false
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v4

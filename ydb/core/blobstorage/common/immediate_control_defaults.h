@@ -16,6 +16,7 @@ constexpr TDuration DefaultMaxPutTimeout = TDuration::Seconds(60);
 
 constexpr bool DefaultEnableStorageRetroTraceGeneration = false;
 constexpr bool DefaultEnableStorageRetroTraceCollectionSlowRequests = false;
+constexpr bool DefaultEnableChecksumCalcAndValidationOnDsProxy = false;
 
 extern TControlWrapper SlowDiskThresholdDefaultControl;
 extern TControlWrapper PredictedDelayMultiplierDefaultControl;
@@ -24,5 +25,6 @@ extern TControlWrapper LongRequestThresholdDefaultControl;
 extern TControlWrapper MaxPutTimeoutDefaultControl;
 extern TControlWrapper EnableStorageRetroTraceGenerationDefaultControl;
 extern TControlWrapper EnableStorageRetroTraceCollectionSlowRequestsDefaultControl;
+extern TControlWrapper EnableChecksumCalcAndValidationOnDsProxyDefaultControl;
 
 }

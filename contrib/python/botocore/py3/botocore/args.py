@@ -170,8 +170,22 @@ class ClientArgsCreator:
             proxies_config=new_config.proxies_config,
         )
 
+        # Emit event to allow service-specific or customer customization of serializer kwargs
+        event_name = f'creating-serializer.{service_name}'
+        serializer_kwargs = {
+            'timestamp_precision': botocore.serialize.TIMESTAMP_PRECISION_DEFAULT
+        }
+        event_emitter.emit(
+            event_name,
+            protocol_name=protocol,
+            service_model=service_model,
+            serializer_kwargs=serializer_kwargs,
+        )
+
         serializer = botocore.serialize.create_serializer(
-            protocol, parameter_validation
+            protocol,
+            parameter_validation,
+            timestamp_precision=serializer_kwargs['timestamp_precision'],
         )
         response_parser = botocore.parsers.create_parser(protocol)
 
@@ -303,6 +317,7 @@ class ClientArgsCreator:
                     client_config.response_checksum_validation
                 ),
                 account_id_endpoint_mode=client_config.account_id_endpoint_mode,
+                auth_scheme_preference=client_config.auth_scheme_preference,
             )
         self._compute_retry_config(config_kwargs)
         self._compute_connect_timeout(config_kwargs)
@@ -312,6 +327,10 @@ class ClientArgsCreator:
         self._compute_checksum_config(config_kwargs)
         self._compute_account_id_endpoint_mode_config(config_kwargs)
         self._compute_inject_host_prefix(client_config, config_kwargs)
+        self._compute_auth_scheme_preference_config(
+            client_config, config_kwargs
+        )
+        self._compute_signature_version_config(client_config, config_kwargs)
         s3_config = self.compute_s3_config(client_config)
 
         is_s3_service = self._is_s3_service(service_name)
@@ -507,7 +526,7 @@ class ClientArgsCreator:
             'sts_regional_endpoints'
         )
         if not sts_regional_endpoints_config:
-            sts_regional_endpoints_config = 'legacy'
+            sts_regional_endpoints_config = 'regional'
         if (
             sts_regional_endpoints_config
             not in VALID_REGIONAL_ENDPOINTS_CONFIG
@@ -834,7 +853,8 @@ class ClientArgsCreator:
         ):
             logger.warning(
                 'The configured value for user_agent_appid exceeds the '
-                f'maximum length of {USERAGENT_APPID_MAXLEN} characters.'
+                'maximum length of %d characters.',
+                USERAGENT_APPID_MAXLEN,
             )
         config_kwargs['user_agent_appid'] = user_agent_appid
 
@@ -924,3 +944,55 @@ class ClientArgsCreator:
             )
 
         config_kwargs[config_key] = account_id_endpoint_mode
+
+    def _compute_auth_scheme_preference_config(
+        self, client_config, config_kwargs
+    ):
+        config_key = 'auth_scheme_preference'
+        set_in_config_object = False
+
+        if client_config and client_config.auth_scheme_preference:
+            value = client_config.auth_scheme_preference
+            set_in_config_object = True
+        else:
+            value = self._config_store.get_config_variable(config_key)
+
+        if value is None:
+            config_kwargs[config_key] = None
+            return
+
+        if not isinstance(value, str):
+            raise botocore.exceptions.InvalidConfigError(
+                error_msg=(
+                    f"{config_key} must be a comma-delimited string. "
+                    f"Received {type(value)} instead: {value}."
+                )
+            )
+
+        value = ','.join(
+            item.replace(' ', '').replace('\t', '')
+            for item in value.split(',')
+            if item.strip()
+        )
+
+        if set_in_config_object:
+            value = ClientConfigString(value)
+
+        config_kwargs[config_key] = value
+
+    def _compute_signature_version_config(self, client_config, config_kwargs):
+        if client_config and client_config.signature_version:
+            value = client_config.signature_version
+            if isinstance(value, str):
+                config_kwargs['signature_version'] = ClientConfigString(value)
+
+
+class ConfigObjectWrapper:
+    """Base class to mark values set via in-code Config object."""
+
+    pass
+
+
+class ClientConfigString(str, ConfigObjectWrapper):
+    def __new__(cls, value=None):
+        return super().__new__(cls, value)

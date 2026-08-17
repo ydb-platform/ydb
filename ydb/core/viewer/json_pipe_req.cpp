@@ -167,20 +167,21 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+
     auto request = GetRequest();
     NWilson::TTraceId traceId;
     TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
     }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+        ui8 verbosity = viewerTraceMaxVerbosity;
         if (traceVerbosity) {
-            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
-            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
         }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
@@ -208,6 +209,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
     }
+    if (!Event->Get()->Database.empty()) {
+        Database = Event->Get()->Database;
+    }
     InitConfig(Params);
     SetupTracing(handlerName);
 }
@@ -223,6 +227,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     }
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
+    }
+    if (!HttpEvent->Get()->Database.empty()) {
+        Database = HttpEvent->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);
@@ -1021,9 +1028,11 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
     MaxRequestsInFlight = FromStringWithDefault(params.Get("max_requests_in_flight"), MaxRequestsInFlight);
-    Database = params.Get("database");
     if (!Database) {
-        Database = params.Get("tenant");
+        Database = params.Get("database");
+        if (!Database) {
+            Database = params.Get("tenant");
+        }
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

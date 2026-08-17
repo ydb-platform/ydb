@@ -2,6 +2,7 @@
 
 #include <yql/essentials/utils/json/from.h>
 #include <yql/essentials/utils/json/to.h>
+#include <yql/essentials/utils/meta/reflection.h>
 
 #include <util/generic/string.h>
 
@@ -41,6 +42,12 @@ struct TJsonRpcResponse {
 };
 
 } // namespace NLsp::NJsonRpc
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NLsp::NJsonRpc::TJsonRpcError, (Code)(Message)(Data));
+
+} // namespace NYql::NReflection
 
 namespace NYql::NJson {
 

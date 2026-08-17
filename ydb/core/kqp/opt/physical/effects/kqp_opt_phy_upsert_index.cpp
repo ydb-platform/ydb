@@ -1096,7 +1096,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
                         indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
-                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                    const auto& postingTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder()
+                        << mainTableNode.Path().Value() << "/" << indexDesc->Name << "/"
+                        << NKikimr::NTableIndex::NKMeans::PostingTable);
+                    indexTableColumns = BuildVectorIndexPostingColumns(table, postingTable, indexDesc);
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain:

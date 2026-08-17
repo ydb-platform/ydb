@@ -2611,17 +2611,8 @@ Y_UNIT_TEST_F(ProposeTx_Immediate_WriteId_Unknown_Original, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
-    const ui32 partitionId = 0;
     const ui64 txId = 2;
     const TWriteId writeId(0, 3);
-
-    SyncGetOwnership({.Partition=partitionId,
-                     .WriteId=writeId,
-                     .NeedSupportivePartition=true,
-                     .Owner=DEFAULT_OWNER,
-                     .Cookie=4},
-                     {.Cookie=4,
-                     .Status=NMsgBusProxy::MSTATUS_OK});
 
     SendProposeTransactionRequest({.TxId=txId,
                                   .TxOps={{.Partition=999, .Path="/topic"}},

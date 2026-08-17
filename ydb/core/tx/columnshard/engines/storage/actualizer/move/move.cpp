@@ -182,12 +182,14 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     return requests;
 }
 
-ui64 TMoveDataActualizer::GetMoveDataPortionsCount() const {
-    ui64 total = PendingPortionIds.size() + InFlightPortionIds.size();
+TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
+    TMoveDataQueueSizes result;
+    result.Pending = PendingPortionIds.size();
+    result.InFlight = InFlightPortionIds.size();
     for (auto& [addr, portions] : PortionsToMove) {
-        total += portions.size();
+        result.ConfirmedToMove += portions.size();
     }
-    return total;
+    return result;
 }
 
 void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {

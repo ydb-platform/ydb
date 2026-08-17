@@ -277,8 +277,8 @@ public:
         ActualizationIndex->StopMoveData();
     }
 
-    ui64 GetMoveDataPortionsCount() const {
-        return ActualizationIndex->GetMoveDataPortionsCount();
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        return ActualizationIndex->GetMoveDataQueueSizes();
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {

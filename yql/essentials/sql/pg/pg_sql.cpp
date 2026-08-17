@@ -40,8 +40,9 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
+#include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
-#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/utils/log/log_level.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/string/builder.h>
@@ -51,6 +52,8 @@ extern "C" {
 #include <util/generic/scope.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
+
+#include <ranges>
 
 constexpr auto PREPARED_PARAM_PREFIX = "$p";
 constexpr auto AUTO_PARAM_PREFIX = "a";
@@ -361,6 +364,7 @@ public:
                TMaybe<ui32> sqlProcArgsCount)
         : AstParseResults_(astParseResults)
         , Settings_(settings)
+        , WarningPolicy_(settings.IsReplay)
         , DqEngineEnabled_(Settings_.DqDefaultAuto->Allow())
         , BlockEngineEnabled_(Settings_.BlockDefaultAuto->Allow())
         , StmtParseInfo_(stmtParseInfo)
@@ -556,10 +560,10 @@ public:
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
                     "timezone",                            // mediawiki
-                    NULL,
+                    nullptr,
                 };
 
-                for (int i = 0; skip_statements[i] != NULL; i++) {
+                for (int i = 0; skip_statements[i] != nullptr; i++) {
                     const char* skip_name = skip_statements[i];
                     if (stricmp(node_name, skip_name) == 0) {
                         return true;
@@ -839,7 +843,7 @@ public:
         }
         config.name = (char*)StrVal(name);
         config.args = list_make1((void*)arg1);
-        return ParseVariableSetStmt(&config, true);
+        return ParseVariableSetStmt(&config, /*isSetConfig=*/true);
     }
 
     using TTraverseSelectStack = TStack<std::pair<const SelectStmt*, bool>>;
@@ -946,7 +950,7 @@ public:
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, true);
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, /*useProjectionRefs=*/true);
                 if (!sort) {
                     return nullptr;
                 }
@@ -963,7 +967,7 @@ public:
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
-                if (linitial(x->distinctClause) == NULL) {
+                if (linitial(x->distinctClause) == nullptr) {
                     hasDistinctAll = true;
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {
@@ -1216,7 +1220,9 @@ public:
                 }
 
                 if (ListLength(x->lockingClause) > 0) {
-                    AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+                    if (!AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored")) {
+                        return nullptr;
+                    }
                 }
             }
 
@@ -1315,7 +1321,7 @@ public:
                 setItemOptions.push_back(QL(QA("group_by"), groupBy));
             }
 
-            if (windowItems.size()) {
+            if (!windowItems.empty()) {
                 auto window = QVL(windowItems.data(), windowItems.size());
                 setItemOptions.push_back(QL(QA("window"), window));
             }
@@ -1350,7 +1356,9 @@ public:
         }
 
         if (ListLength(value->lockingClause) > 0) {
-            AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+            if (!AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored")) {
+                return nullptr;
+            }
         }
 
         TAstNode* limit = nullptr;
@@ -1528,7 +1536,7 @@ public:
                     }
                 } else if (NodeTag(r->val) == T_FuncCall) {
                     auto func = CAST_NODE(FuncCall, r->val);
-                    if (!ExtractFuncName(func, name, nullptr)) {
+                    if (!ExtractFuncName(func, name, /*schemaName=*/nullptr)) {
                         return nullptr;
                     }
                 }
@@ -1849,7 +1857,7 @@ private:
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
-        Y_ENSURE(0 < ctx.PrimaryKey.size());
+        Y_ENSURE(!ctx.PrimaryKey.empty());
 
         return true;
     }
@@ -1874,7 +1882,7 @@ private:
             uniq.push_back(QA(nodeName));
         }
 
-        Y_ENSURE(0 < uniq.size());
+        Y_ENSURE(!uniq.empty());
         ctx.UniqConstr.emplace_back(std::move(uniq));
 
         return true;
@@ -1957,7 +1965,7 @@ private:
             return false;
         }
 
-        ctx.ColumnOrder.push_back(node->colname);
+        ctx.ColumnOrder.emplace_back(node->colname);
         return true;
     }
 
@@ -2123,7 +2131,7 @@ public:
                 break;
         }
 
-        auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
 
         if (!sink || !key) {
             return nullptr;
@@ -2358,7 +2366,7 @@ public:
                 return nullptr;
             }
             auto rawStr = values[0];
-            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+            if (rawStr != "pg_catalog" && rawStr != "public" && !rawStr.empty() && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
@@ -2508,6 +2516,57 @@ public:
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
+            }
+        } else if (name == "warning") {
+            if (auto x = EnsureIsAvailableOn(Settings_.LangVer, Settings_.BackportMode, NYql::NFeature::PgPragmaWarning); !x) {
+                AddError(TString::Join("VariableSetStmt, ", x.error()));
+                return nullptr;
+            }
+
+            if (ListLength(value->args) != 2) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 2 args for Warning pragma, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto actionArg = ListNodeNth(value->args, 0);
+            auto patternArg = ListNodeNth(value->args, 1);
+
+            TString action;
+            TString codePattern;
+
+            if (NodeTag(actionArg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, actionArg)->val) == T_String)) {
+                action = StrVal(CAST_NODE(A_Const, actionArg)->val);
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for Warning action");
+                return nullptr;
+            }
+
+            if (NodeTag(patternArg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, patternArg)->val) == T_String)) {
+                codePattern = StrVal(CAST_NODE(A_Const, patternArg)->val);
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for Warning pattern");
+                return nullptr;
+            }
+
+            TWarningRule rule;
+            TString parseError;
+            auto parseResult = TWarningRule::ParseFrom(codePattern, action, rule, parseError);
+            switch (parseResult) {
+                case TWarningRule::EParseResult::PARSE_OK:
+                    break;
+                case TWarningRule::EParseResult::PARSE_PATTERN_FAIL:
+                case TWarningRule::EParseResult::PARSE_ACTION_FAIL:
+                    AddError(parseError);
+                    return nullptr;
+            }
+
+            WarningPolicy_.AddRule(rule);
+            if (rule.GetPattern() == "*" && rule.GetAction() == EWarningAction::ERROR) {
+                // Keep 'unused symbol' warning as warning unless explicitly set to error
+                TWarningRule defaultRule;
+                TString defaultParseError;
+                TWarningRule::ParseFrom(ToString(static_cast<int>(TIssuesIds::YQL_UNUSED_SYMBOL)), "default", defaultRule, defaultParseError);
+                WarningPolicy_.AddRule(defaultRule);
             }
         } else {
             AddError(TStringBuilder() << "VariableSetStmt, not supported name: " << value->name);
@@ -2748,7 +2807,7 @@ public:
             return nullptr;
         }
 
-        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
         if (!sink || !key) {
             return nullptr;
         }
@@ -2952,7 +3011,7 @@ public:
 
         options.push_back(QL(QA("mode"), QA(mode)));
 
-        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
         if (!sink || !key) {
             return nullptr;
         }
@@ -3093,14 +3152,14 @@ public:
     }
 
     TString ResolveCluster(const TStringBuf schemaname, TString name) {
-        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = name})) {
             return "pg_catalog";
         }
 
         if (schemaname == "public") {
             return Settings_.DefaultCluster;
         }
-        if (schemaname == "" && Settings_.GUCSettings) {
+        if (schemaname.empty() && Settings_.GUCSettings) {
             auto search_path = Settings_.GUCSettings->Get("search_path");
             if (!search_path || *search_path == "public" || search_path->empty()) {
                 return Settings_.DefaultCluster;
@@ -3133,7 +3192,7 @@ public:
         bool noPrefix = (lowerCluster == "pg_catalog" || lowerCluster == "information_schema");
         TString tableName = noPrefix ? to_lower(TString(relname)) : TablePathPrefix_ + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                              L(A("String"), QAX(std::move(tableName)))));
+                              L(A("String"), QAX(tableName))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -3152,14 +3211,14 @@ public:
         const auto cluster = ResolveCluster(schemaname, TString(relname));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
         const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
         bool noPrefix = (objectType == "pgIndex");
         TString name = noPrefix ? TString(objectName) : TablePathPrefix_ + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QAX(std::move(name))),
+                              L(A("String"), QAX(name)),
                               L(A("String"), QA(objectType))));
     }
 
@@ -3177,9 +3236,9 @@ public:
         }
 
         const auto cluster = ResolveCluster(schemaname, TString(objectName));
-        const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
+        const auto sinkOrSource = BuildClusterSinkOrSourceExpression(/*isSink=*/true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TReadWriteKeyExprs ParseWriteRangeVar(const RangeVar* value,
@@ -3199,9 +3258,9 @@ public:
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
-            for (auto rit = State_.CTE.rbegin(); rit != State_.CTE.rend(); ++rit) {
-                auto cteIt = rit->find(value->relname);
-                if (cteIt != rit->end()) {
+            for (auto& rit : std::ranges::reverse_view(State_.CTE)) {
+                auto cteIt = rit.find(value->relname);
+                if (cteIt != rit.end()) {
                     view = &cteIt->second;
                     break;
                 }
@@ -3229,7 +3288,7 @@ public:
         }
 
         if (view) {
-            return TFromDesc{view->Source, alias, colnames.empty() ? view->ColNames : colnames, false};
+            return TFromDesc{.Source = view->Source, .Alias = alias, .ColNames = colnames.empty() ? view->ColNames : colnames, .InjectRead = false};
         }
 
         TString schemaname = value->schemaname;
@@ -3243,7 +3302,9 @@ public:
                     isBinding = true;
                     break;
                 case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
-                    AddWarning(TIssuesIds::YQL_DEPRECATED_BINDINGS, "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon");
+                    if (!AddWarning(TIssuesIds::YQL_DEPRECATED_BINDINGS, "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon")) {
+                        return {};
+                    }
                     [[fallthrough]];
                 case NSQLTranslation::EBindingsMode::DROP:
                     schemaname = Settings_.DefaultCluster;
@@ -3255,7 +3316,7 @@ public:
                 if (!s) {
                     return {};
                 }
-                return TFromDesc{s, alias, colnames, true};
+                return TFromDesc{.Source = s, .Alias = alias, .ColNames = colnames, .InjectRead = true};
             }
         }
 
@@ -3282,10 +3343,10 @@ public:
                                                             L(A("Void")),
                                                             QL());
         return TFromDesc{
-            readExpr,
-            alias,
-            colnames,
-            /* injectRead */ true,
+            .Source = readExpr,
+            .Alias = alias,
+            .ColNames = colnames,
+            .InjectRead = true,
         };
     }
 
@@ -3393,12 +3454,12 @@ public:
         }
 
         bool injectRead = false;
-        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, true, injectRead);
+        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, /*rangeFunction=*/true, injectRead);
         if (!func) {
             return {};
         }
 
-        return TFromDesc{func, alias, colnames, injectRead};
+        return TFromDesc{.Source = func, .Alias = alias, .ColNames = colnames, .InjectRead = injectRead};
     }
 
     TMaybe<TFromDesc> ParseRangeSubselect(const RangeSubselect* value) {
@@ -3428,7 +3489,7 @@ public:
             return {};
         }
 
-        return TFromDesc{ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), alias, colnames, false};
+        return TFromDesc{.Source = ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), .Alias = alias, .ColNames = colnames, .InjectRead = false};
     }
 
     TAstNode* ParseNullTestExpr(const NullTest* value, const TExprSettings& settings) {
@@ -3472,7 +3533,7 @@ public:
         }
 
         TCaseBranch result;
-        result.Pred = VL(&preds[0], preds.size());
+        result.Pred = VL(preds.data(), preds.size());
         result.Value = L(A("If"), left.Pred, left.Value, right.Value);
         return result;
     }
@@ -3659,6 +3720,33 @@ public:
         return result;
     }
 
+    bool ExtractCollationName(const CollateClause* value, TString& name) {
+        auto len = ListLength(value->collname);
+        if (len == 0) {
+            AddError("CollateClause: missing collation name");
+            return false;
+        }
+
+        auto x = ListNodeNth(value->collname, len - 1);
+        if (NodeTag(x) != T_String) {
+            NodeNotImplemented(value, x);
+            return false;
+        }
+
+        name = StrVal(x);
+        return true;
+    }
+
+    TAstNode* ParseCollateClause(const CollateClause* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
+        // Collation propagation through arbitrary expressions (COALESCE, CASE, plain
+        // projections, ...) is not implemented - only ParseFuncCall picks up an explicit
+        // COLLATE that directly wraps one of its arguments (see there). Elsewhere COLLATE
+        // only affects collation-sensitive semantics (comparison, case mapping), not the
+        // expression's runtime value, so we just parse through to the wrapped expression.
+        return ParseExpr(value->arg, settings);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
             case T_A_Const: {
@@ -3676,6 +3764,9 @@ public:
             case T_TypeCast: {
                 return ParseTypeCast(CAST_NODE(TypeCast, node), settings);
             }
+            case T_CollateClause: {
+                return ParseCollateClause(CAST_NODE(CollateClause, node), settings);
+            }
             case T_BoolExpr: {
                 return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
             }
@@ -3684,7 +3775,7 @@ public:
             }
             case T_FuncCall: {
                 bool injectRead;
-                return ParseFuncCall(CAST_NODE(FuncCall, node), settings, false, injectRead);
+                return ParseFuncCall(CAST_NODE(FuncCall, node), settings, /*rangeFunction=*/false, injectRead);
             }
             case T_A_ArrayExpr: {
                 return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
@@ -3958,7 +4049,7 @@ public:
     }
 
     TAstNode* ParseTableRangeFunction(const TString& name, const TString& schema, List* args) {
-        auto source = BuildClusterSinkOrSourceExpression(false, schema);
+        auto source = BuildClusterSinkOrSourceExpression(/*isSink=*/false, schema);
         if (!source) {
             return nullptr;
         }
@@ -4127,7 +4218,9 @@ public:
         }
 
         if (name == "shobj_description" || name == "obj_description") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL")) {
+                return nullptr;
+            }
             return L(A("Null"));
         }
 
@@ -4137,12 +4230,16 @@ public:
 
         // for zabbix https://github.com/ydb-platform/ydb/issues/2904
         if (name == "pg_try_advisory_lock" || name == "pg_try_advisory_lock_shared" || name == "pg_advisory_unlock" || name == "pg_try_advisory_xact_lock" || name == "pg_try_advisory_xact_lock_shared") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock")) {
+                return nullptr;
+            }
             return L(A("PgConst"), QA("true"), L(A("PgType"), QA("bool")));
         }
 
         if (name == "pg_advisory_lock" || name == "pg_advisory_lock_shared" || name == "pg_advisory_unlock_all" || name == "pg_advisory_xact_lock" || name == "pg_advisory_xact_lock_shared") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock")) {
+                return nullptr;
+            }
             return L(A("Null"));
         }
 
@@ -4193,6 +4290,32 @@ public:
 
         if (rangeFunction) {
             callSettings.push_back(QL(QA("range")));
+        }
+
+        if (!value->agg_star) {
+            TMaybe<TString> collation;
+            for (int i = 0; i < ListLength(value->args); ++i) {
+                auto x = ListNodeNth(value->args, i);
+                if (NodeTag(x) != T_CollateClause) {
+                    continue;
+                }
+
+                TString collationName;
+                if (!ExtractCollationName(CAST_NODE(CollateClause, x), collationName)) {
+                    return nullptr;
+                }
+
+                if (collation && *collation != collationName) {
+                    AddError(TStringBuilder() << "FuncCall: conflicting explicit collations: " << *collation << " and " << collationName);
+                    return nullptr;
+                }
+
+                collation = collationName;
+            }
+
+            if (collation) {
+                callSettings.push_back(QL(QA("collation"), QAX(*collation)));
+            }
         }
 
         args.push_back(QVL(callSettings.data(), callSettings.size()));
@@ -4435,7 +4558,7 @@ public:
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), true, false);
+            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), /*allowAggregates=*/true, /*useProjectionRefs=*/false);
             if (!sort) {
                 return nullptr;
             }
@@ -4766,7 +4889,7 @@ public:
         }
 
         if (isStar) {
-            if (fields.size() == 0) {
+            if (fields.empty()) {
                 return L(A("PgStar"));
             } else {
                 return L(A("PgQualifiedStar"), QAX(fields[0]));
@@ -4839,7 +4962,9 @@ public:
             auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
             if (subselect->withClause && subselect->withClause->recursive) {
                 if (State_.ApplicationName && State_.ApplicationName->StartsWith("pgAdmin")) {
-                    AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                    if (!AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false")) {
+                        return nullptr;
+                    }
                     return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
                 }
             }
@@ -5145,13 +5270,34 @@ public:
         return VL(nodes_vec.data(), nodes_vec.size());
     }
 
+public:
+    TWarningRules GetWarningRules() const {
+        return WarningPolicy_.GetRules();
+    }
+
+    void ClearWarningRules() {
+        WarningPolicy_.Clear();
+    }
+
 private:
     void AddError(const TString& value) {
         AstParseResults_[StatementId_].Issues.AddIssue(TIssue(State_.Positions.back(), value));
     }
 
-    void AddWarning(int code, const TString& value) {
-        AstParseResults_[StatementId_].Issues.AddIssue(TIssue(State_.Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
+    [[nodiscard]] bool AddWarning(int code, const TString& value) {
+        auto action = WarningPolicy_.GetAction(code);
+        if (action == NYql::EWarningAction::DISABLE) {
+            return true;
+        }
+
+        auto severity = ESeverity::TSeverityIds_ESeverityId_S_WARNING;
+        if (action == NYql::EWarningAction::ERROR) {
+            severity = ESeverity::TSeverityIds_ESeverityId_S_ERROR;
+        }
+
+        AstParseResults_[StatementId_].Issues.AddIssue(
+            TIssue(State_.Positions.back(), value).SetCode(code, severity));
+        return severity != ESeverity::TSeverityIds_ESeverityId_S_ERROR;
     }
 
     struct TLState {
@@ -5221,7 +5367,7 @@ private:
         QuerySize_ = query.size();
         RowStarts_.push_back(0);
         TPosition position(0, 1);
-        TTextWalker walker(position, true);
+        TTextWalker walker(position, /*utf8Aware=*/true);
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.size(); ++i) {
             walker.Advance(query[i]);
@@ -5248,6 +5394,7 @@ private:
 private:
     TVector<TAstParseResult>& AstParseResults_;
     NSQLTranslation::TTranslationSettings Settings_;
+    NYql::TWarningPolicy WarningPolicy_;
     bool DqEngineEnabled_ = false;
     bool DqEngineForce_ = false;
     bool BlockEngineEnabled_ = false;
@@ -5271,30 +5418,38 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::KikimrProviderName, "insert_abort"},
     {NYql::YtProviderName, "append"}};
 
-NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
-    TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
+    TConverter converter(results, settings, query, &stmtParseInfos, /*perStatementResult=*/false, Nothing());
     parseResult.Visit(converter);
     if (stmtParseInfo) {
         Y_ENSURE(!stmtParseInfos.empty());
         *stmtParseInfo = stmtParseInfos.back();
+    }
+    if (warningRules) {
+        *warningRules = converter.GetWarningRules();
+        converter.ClearWarningRules();
     }
     Y_ENSURE(!results.empty());
     results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
 }
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo, NYql::TWarningRules* warningRules) {
     NYql::TPGParseResult parseResult;
     NYql::PGParse(query, parseResult);
-    return PGToYql(parseResult, query, settings, stmtParseInfo);
+    return PGToYql(parseResult, query, settings, stmtParseInfo, warningRules);
 }
 
-TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, stmtParseInfo, true, Nothing());
+    TConverter converter(results, settings, query, stmtParseInfo, /*perStatementResult=*/true, Nothing());
     NYql::PGParse(query, converter);
+    if (warningRules) {
+        *warningRules = converter.GetWarningRules();
+        converter.ClearWarningRules();
+    }
     for (auto& res : results) {
         res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
@@ -6031,7 +6186,7 @@ public:
             }
         }
 
-        Builder_.InsertValues(NPg::TTableInfoKey{"pg_catalog", tableName}, colNames, data);
+        Builder_.InsertValues(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = tableName}, colNames, data);
         return true;
     }
 
@@ -6247,7 +6402,7 @@ public:
     [[nodiscard]]
     bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
         NYql::NPg::TProcDesc desc;
-        if (!ParseCreateFunctionStmtImpl(value, 0, nullptr, desc)) {
+        if (!ParseCreateFunctionStmtImpl(value, 0, /*builder=*/nullptr, desc)) {
             return false;
         }
 
@@ -6292,7 +6447,7 @@ public:
         TVector<NYql::TAstParseResult> results(1);
         results[0].Pool = std::make_unique<TMemoryPool>(4096);
         TVector<TStmtParseInfo> stmtParseInfos(1);
-        TConverter converter(results, Settings_, "", &stmtParseInfos, false, proc.ArgTypes.size());
+        TConverter converter(results, Settings_, "", &stmtParseInfos, /*perStatementResult=*/false, proc.ArgTypes.size());
         converter.PrepareStatements();
         TAstNode* root = nullptr;
         switch (NodeTag(stmt)) {
@@ -6325,7 +6480,7 @@ public:
         auto program = converter.L(converter.L(converter.A("return"), root));
         TExprNode::TPtr graph;
         Ctx_.IssueManager.Reset();
-        if (!CompileExpr(*program, graph, Ctx_, nullptr, nullptr, false, Max<ui32>(), 1)) {
+        if (!CompileExpr(*program, graph, Ctx_, /*resolver=*/nullptr, /*urlListerManager=*/nullptr, /*hasAnnotations=*/false, Max<ui32>(), 1)) {
             Cerr << "Can't compile  SQL for function: " << proc.Name << ", " << Ctx_.IssueManager.GetIssues().ToString();
             return;
         }
@@ -6383,8 +6538,7 @@ public:
 
     NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
                                     NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
-        Y_UNUSED(warningRules);
-        return PGToYql(query, settings, stmtParseInfo);
+        return PGToYql(query, settings, stmtParseInfo, warningRules);
     }
 
     google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
@@ -6408,8 +6562,7 @@ public:
 
     TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
                                                  NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
-        Y_UNUSED(warningRules);
-        return PGToYqlStatements(query, settings, stmtParseInfo);
+        return PGToYqlStatements(query, settings, stmtParseInfo, warningRules);
     }
 };
 

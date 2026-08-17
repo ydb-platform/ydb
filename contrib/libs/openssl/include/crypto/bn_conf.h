@@ -1,7 +1,8 @@
-#include <contrib/libs/openssl/redef.h>
 #pragma once
 
-#if defined(__ANDROID__) && defined(__arm__)
+#if defined(__wasm__) && !defined(__wasm64__)
+#   include "bn_conf-wasm32.h"
+#elif defined(__ANDROID__) && defined(__arm__)
 #   include "bn_conf-android-arm.h"
 #elif defined(__ANDROID__) && defined(__aarch64__)
 #   include "bn_conf-android-arm64.h"

@@ -24,7 +24,7 @@ using namespace NThreading;
 // waits all futures and returns either the one with exception,
 // or void future.
 TFuture<void> WaitAllAndCheck(const std::vector<TFuture<void>>& futures) {
-    auto result = WaitAll(futures).Apply([allFutures = std::move(futures)](const auto&) {
+    auto result = WaitAll(futures).Apply([allFutures = futures](const auto&) {
         // return any with error
         for (const auto& future: allFutures) {
             if (future.HasException()) {
@@ -674,7 +674,7 @@ private:
 
 void TPCCChecker::CheckSync() {
     auto connectionConfigCopy = ConnectionConfig;
-    TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
+    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
     TQueryClient queryClient(driver);
 
     // Each member starts multiple async checks. To evenly load the cluster we

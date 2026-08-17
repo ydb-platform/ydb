@@ -2,9 +2,10 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -18,11 +19,13 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     contrib/libs/fmt
     library/cpp/streams/zstd
     ydb/core/testlib/pg
     ydb/core/util
     ydb/core/wrappers/ut_helpers
+    ydb/library/aws_init
     ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export
@@ -34,6 +37,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
+    ydb/library/testlib/parquet_helpers
 )
 
 YQL_LAST_ABI_VERSION()

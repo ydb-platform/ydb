@@ -14,8 +14,9 @@ TPoisonPillHelper::TPoisonPillHelper(IPoisonPillHelperOwner* owner)
 
 TPoisonPillHelper::~TPoisonPillHelper() = default;
 
-void TPoisonPillHelper::TakeOwnership(const TActorContext& ctx,
-                                      NActors::TActorId actor)
+void TPoisonPillHelper::TakeOwnership(
+    const TActorContext& ctx,
+    NActors::TActorId actor)
 {
     if (actor == TActorId()) {
         return;
@@ -26,8 +27,9 @@ void TPoisonPillHelper::TakeOwnership(const TActorContext& ctx,
     }
 }
 
-void TPoisonPillHelper::ReleaseOwnership(const NActors::TActorContext& ctx,
-                                         NActors::TActorId actor)
+void TPoisonPillHelper::ReleaseOwnership(
+    const NActors::TActorContext& ctx,
+    NActors::TActorId actor)
 {
     OwnedActors.erase(actor);
     ReplyAndDie(ctx);

@@ -9,7 +9,7 @@
 namespace NYql::NDq {
 
 NNodes::TExprBase DqPeepholeRewriteCrossJoin(const NNodes::TExprBase& node, TExprContext& ctx);
-NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx);
+NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithMapCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteBlockHashJoin(const NNodes::TExprBase& node, TExprContext& ctx);
@@ -17,7 +17,7 @@ NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExp
 NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeDropUnusedInputs(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks);
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks);
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo);
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo);
 
 } // namespace NYql::NDq

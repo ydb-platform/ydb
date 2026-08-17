@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/resource_pools
     yql/essentials/ast
     yql/essentials/sql/pg_dummy
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     library/cpp/testing/gmock_in_unittest
 )
 
@@ -19,11 +19,12 @@ YQL_LAST_ABI_VERSION()
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

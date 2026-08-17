@@ -17,6 +17,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateYdbRead
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ::NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

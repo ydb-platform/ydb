@@ -740,10 +740,17 @@ void TQueueCounters::InsertCounters() {
         if (!parent.SqsCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
             QueueCounters.SqsCounters->ResetCounters();
             parent.SqsCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.SqsCounters);
+        } else {
+            parent.SqsCounters->GetSubgroup(QUEUE_LABEL, QueueName)->GetNamedCounter("sensor", "RequestTimeouts", true);
         }
-        if (parent.YmqCounters && !parent.YmqCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
-            QueueCounters.YmqCounters->ResetCounters();
-            parent.YmqCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.YmqCounters);
+        if (parent.YmqCounters) {
+            if (!parent.YmqCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
+                QueueCounters.YmqCounters->ResetCounters();
+                parent.YmqCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.YmqCounters);
+            } else if (!AggregatedCounters) {
+                parent.YmqCounters->GetSubgroup(QUEUE_LABEL, QueueName)->GetExpiringNamedCounter(
+                    DEFAULT_YMQ_COUNTER_NAME, QUEUE_CNTR_PREFIX + "request_timeouts_count_per_second", true);
+            }
         }
     };
 

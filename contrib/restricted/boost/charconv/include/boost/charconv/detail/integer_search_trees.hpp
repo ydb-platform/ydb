@@ -24,7 +24,7 @@ BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(T x) noexcept
 
     while (x)
     {
-        x /= 10;
+        x /= static_cast<T>(10);
         ++digits;
     }
 

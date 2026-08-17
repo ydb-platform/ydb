@@ -10,7 +10,10 @@
 #include "stream_log_writer.h"
 #include "system_log_event_provider.h"
 
-#include <yt/yt/core/concurrency/profiling_helpers.h>
+#include <library/cpp/yt/logging/private.h>
+#include <library/cpp/yt/logging/tagged_payload.h>
+
+#include <yt/yt/core/concurrency/helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/scheduler_thread.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
@@ -24,7 +27,6 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/pattern_formatter.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -43,12 +45,14 @@
 #include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/variant.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
@@ -80,7 +84,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 static constexpr auto DiskProfilingPeriod = TDuration::Minutes(5);
 static constexpr auto AnchorProfilingPeriod = TDuration::Seconds(15);
@@ -153,7 +157,7 @@ public:
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
                 CreateDefaultSystemLogEventProvider(/*systemMessagesEnabled*/ true, /*systemMessageFamily*/ ELogFamily::PlainText),
-                TString(StderrSystemWriterName),
+                std::string(StderrSystemWriterName),
                 New<TStderrLogWriterConfig>())
         })
         , DiskProfilingExecutor_(New<TPeriodicExecutor>(
@@ -188,8 +192,8 @@ public:
             /*threadCount*/ 1,
             /*threadNamePrefix*/ "LogCompress"))
     {
-        RegisterWriterFactory(TString(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
-        RegisterWriterFactory(TString(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
+        RegisterWriterFactory(std::string(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
+        RegisterWriterFactory(std::string(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
     }
 
     bool IsInitialized() const
@@ -199,19 +203,19 @@ public:
 
     void Initialize()
     {
-        [[likely]] if (InitializationFinished_.Test()) {
+        if (InitializationFinished_.Test()) [[likely]] {
             // Don't bother doing syscalls on a hot path.
             return;
         }
 
         // Sync is done via event so there is no need for stronger memory orders.
         // Case of recursive call is alright, because there sync is done via sequenced-before ordering.
-        [[likely]] if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) {
+        if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) [[likely]] {
             NThreading::TThreadId initializerThreadId = NThreading::InvalidThreadId;
             while (initializerThreadId == NThreading::InvalidThreadId) {
                 initializerThreadId = InitializerThreadId_.load(std::memory_order::relaxed);
             }
-            if (GetCurrentThreadId() == initializerThreadId) {
+            if (GetSystemThreadId() == initializerThreadId) {
                 // Recursive call -- bail out.
                 return;
             }
@@ -219,7 +223,7 @@ public:
             InitializationFinished_.Wait();
             return;
         }
-        InitializerThreadId_.store(GetCurrentThreadId(), std::memory_order::relaxed);
+        InitializerThreadId_.store(GetSystemThreadId(), std::memory_order::relaxed);
 
         // NB: Cannot place this logic inside ctor since it may boot up Compression threads unexpected
         // and these will try to access TLogManager instance causing a deadlock.
@@ -269,7 +273,7 @@ public:
         DequeueExecutor_->ScheduleOutOfBand();
 
         if (sync) {
-            future.Get().ThrowOnError();
+            future.BlockingGet().ThrowOnError();
         }
 
         DefaultConfigured_.store(false);
@@ -301,7 +305,7 @@ public:
 
         auto config = Config_.Acquire();
 
-        if (LoggingThread_->GetThreadId() == GetCurrentThreadId()) {
+        if (LoggingThread_->GetThreadId() == GetSystemThreadId()) {
             FlushWriters();
         } else {
             // Wait for all previously enqueued messages to be flushed
@@ -378,7 +382,7 @@ public:
         DoUpdateAnchor(config, anchor);
     }
 
-    TLoggingAnchor* RegisterDynamicAnchor(TString anchorMessage)
+    TLoggingAnchor* RegisterDynamicAnchor(std::string anchorMessage)
     {
         auto guard = Guard(SpinLock_);
         if (auto it = AnchorMap_.find(anchorMessage)) {
@@ -394,13 +398,13 @@ public:
         return rawAnchor;
     }
 
-    void RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
+    void RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory)
     {
         auto guard = Guard(SpinLock_);
         EmplaceOrCrash(TypeNameToWriterFactory_, typeName, factory);
     }
 
-    void UnregisterWriterFactory(const TString& typeName)
+    void UnregisterWriterFactory(const std::string& typeName)
     {
         auto guard = Guard(SpinLock_);
         EraseOrCrash(TypeNameToWriterFactory_, typeName);
@@ -414,9 +418,9 @@ public:
                 Sleep(TDuration::Max());
             }
 
-            // Limit message length.
-            TRawFormatter<1024> truncatedMessage;
-            truncatedMessage.AppendString(event.MessageRef.ToStringBuf());
+            // Render the event, bounding its length.
+            TRawFormatter<1024> renderedEvent;
+            FormatTaggedPayload(&renderedEvent, std::get<TTaggedLogEventPayload>(event.Payload));
 
             // NB(coteeq): It's safe to save event.SourceFile since it was
             // generated by __LOCATION__ macro.
@@ -430,7 +434,7 @@ public:
             // down in crash handler.
             ::NYT::NDetail::AssertTrapImpl(
                 "YT_LOG_FATAL",
-                truncatedMessage.GetBuffer(),
+                renderedEvent.GetBuffer(),
                 /*description*/ {},
                 /*file*/ sourceFile,
                 /*line*/ sourceLine,
@@ -463,8 +467,8 @@ public:
         if (Suspended_.load(std::memory_order::relaxed)) {
             if (backlogEvents < lowBacklogWatermark) {
                 Suspended_.store(false, std::memory_order::relaxed);
-                YT_LOG_INFO("Backlog size has dropped below low watermark, logging resumed (LowBacklogWatermark: %v)",
-                    lowBacklogWatermark);
+                YT_TLOG_INFO("Backlog size has dropped below low watermark, logging resumed")
+                    .With("LowBacklogWatermark", lowBacklogWatermark);
             }
         } else {
             if (backlogEvents >= lowBacklogWatermark && !ScheduledOutOfBand_.exchange(true)) {
@@ -473,8 +477,8 @@ public:
 
             if (backlogEvents >= highBacklogWatermark) {
                 Suspended_.store(true, std::memory_order::relaxed);
-                YT_LOG_WARNING("Backlog size has exceeded high watermark, logging suspended (HighBacklogWatermark: %v)",
-                    highBacklogWatermark);
+                YT_TLOG_WARNING("Backlog size has exceeded high watermark, logging suspended")
+                    .With("HighBacklogWatermark", highBacklogWatermark);
             }
         }
 
@@ -510,6 +514,7 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max())
     {
+        DequeueExecutor_->ScheduleOutOfBand();
         auto enqueuedEvents = EnqueuedEvents_.load();
         while (enqueuedEvents > FlushedEvents_.load() && TInstant::Now() < deadline) {
             SchedYield();
@@ -600,7 +605,7 @@ private:
             return it->second;
         }
 
-        THashSet<TString> writerNames;
+        THashSet<std::string> writerNames;
         for (const auto& rule : config->Rules) {
             if (rule->IsApplicable(event.Category->Name, event.Level, event.Family)) {
                 writerNames.insert(rule->Writers.begin(), rule->Writers.end());
@@ -621,7 +626,8 @@ private:
             try {
                 NotificationHandle_ = std::make_unique<TInotifyHandle>();
             } catch (const std::exception& ex) {
-                YT_LOG_ERROR(ex, "Error creating inotify handle, watching disabled");
+                YT_TLOG_ERROR("Error creating inotify handle, watching disabled")
+                    .With(TError(ex));
                 NotificationHandleCreationFailed_ = true;
             }
         }
@@ -647,8 +653,9 @@ private:
             } catch (const std::exception& ex) {
                 // Watch can fail to initialize if the writer is disabled
                 // e.g. due to the lack of space.
-                YT_LOG_ERROR(ex, "Error creating inotify watch (Path: %v)",
-                    writer->GetFileName());
+                YT_TLOG_ERROR("Error creating inotify watch")
+                    .With("Path", writer->GetFileName())
+                    .With(TError(ex));
                 return nullptr;
             }
         }
@@ -699,18 +706,22 @@ private:
 
         switch (writerConfig->Format) {
             case ELogFormat::PlainText:
-                return std::make_unique<TPlainTextLogFormatter>(
-                    writerConfig->EnableSourceLocation);
+                return std::make_unique<TPlainTextLogFormatter>(TPlainTextLogFormatterOptions{
+                    .EnableSourceLocation = writerConfig->EnableSourceLocation,
+                });
 
             case ELogFormat::Json: [[fallthrough]];
             case ELogFormat::Yson:
-                return std::make_unique<TStructuredLogFormatter>(
-                    writerConfig->Format,
-                    writerConfig->CommonFields,
-                    writerConfig->EnableSourceLocation,
-                    writerConfig->EnableSystemFields,
-                    writerConfig->EnableHostField,
-                    writerConfig->JsonFormat);
+                return std::make_unique<TStructuredLogFormatter>(TStructuredLogFormatterOptions{
+                    .Format = writerConfig->Format,
+                    .CommonFields = writerConfig->CommonFields,
+                    .EnableSourceLocation = writerConfig->EnableSourceLocation,
+                    .EnableSystemFields = writerConfig->EnableSystemFields,
+                    .EnableHostField = writerConfig->EnableHostField,
+                    .EnableNativeTags = writerConfig->EnableNativeTags,
+                    .JsonFormat = writerConfig->JsonFormat,
+                    .YsonFormat = writerConfig->YsonFormat,
+                });
 
             default:
                 YT_ABORT();
@@ -726,7 +737,7 @@ private:
             return;
         }
 
-        THashMap<TString, ILogWriterFactoryPtr> typeNameToWriterFactory;
+        THashMap<std::string, ILogWriterFactoryPtr> typeNameToWriterFactory;
         {
             auto guard = Guard(SpinLock_);
             for (const auto& [name, writerConfig] : config->Writers) {
@@ -812,7 +823,9 @@ private:
 
         if (event.Anchor) {
             event.Anchor->MessageCounter.Current += 1;
-            event.Anchor->ByteCounter.Current += std::ssize(event.MessageRef);
+            event.Anchor->ByteCounter.Current += std::visit(
+                [] (const auto& payload) { return std::ssize(payload.Underlying()); },
+                event.Payload);
         }
 
         for (const auto& writer : GetWriters(config, event)) {
@@ -921,7 +934,7 @@ private:
             // TODO(prime@): optimize sensor count
             auto counter = Profiler
                 .WithSparse()
-                .WithTag("category", TString{event.Category->Name})
+                .WithTag("category", std::string{event.Category->Name})
                 .WithTag("level", FormatEnum(event.Level))
                 .Counter("/written_events");
 
@@ -970,7 +983,8 @@ private:
                 MinLogStorageFreeSpace_.Update(minLogStorageFreeSpace);
             }
         } catch (const std::exception& ex) {
-            YT_LOG_WARNING(ex, "Failed to get log storage disk statistics");
+            YT_TLOG_WARNING("Failed to get log storage disk statistics")
+                .With(TError(ex));
         }
     }
 
@@ -1078,7 +1092,7 @@ private:
             TCpuInstant GetInstant() const
             {
                 auto* front = Front();
-                if (Y_LIKELY(front)) {
+                if (front) [[likely]] {
                     return GetEventInstant(*front);
                 } else {
                     return std::numeric_limits<TCpuInstant>::max();
@@ -1273,11 +1287,11 @@ private:
         anchor->CurrentVersion.store(GetVersion());
     }
 
-    static TString BuildAnchorMessage(::TSourceLocation sourceLocation, TStringBuf message)
+    static std::string BuildAnchorMessage(::TSourceLocation sourceLocation, TStringBuf message)
     {
         if (message) {
             auto index = message.find_first_of('(');
-            return Strip(TString(message.substr(0, index)));
+            return Strip(std::string(message.substr(0, index)));
         } else {
             return Format("%v:%v",
                 sourceLocation.File,
@@ -1299,9 +1313,9 @@ private:
     TAtomicIntrusivePtr<TLogManagerConfig> Config_;
 
     // Protects the section of members below.
-    NThreading::TForkAwareSpinLock SpinLock_;
-    THashMap<TString, std::unique_ptr<TLoggingCategory>> NameToCategory_;
-    THashMap<TString, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
+    THashMap<std::string, std::unique_ptr<TLoggingCategory>> NameToCategory_;
+    THashMap<std::string, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
 
     // Incrementing version forces loggers to update their own default configuration (default level etc.).
     std::atomic<int> Version_ = 0;
@@ -1333,7 +1347,7 @@ private:
     std::deque<TLoggerQueueItem> TimeOrderedBuffer_;
     TExpiringSet<TRequestId> SuppressedRequestIdSet_;
 
-    using TEventProfilingKey = std::pair<TString, ELogLevel>;
+    using TEventProfilingKey = std::pair<std::string, ELogLevel>;
     THashMap<TEventProfilingKey, TCounter> WrittenEventsCounters_;
 
     const TProfiler Profiler{"/logging"};
@@ -1349,7 +1363,7 @@ private:
     std::atomic<ui64> SuppressedEvents_ = 0;
     std::atomic<ui64> DroppedEvents_ = 0;
 
-    THashMap<TString, ILogWriterPtr> NameToWriter_;
+    THashMap<std::string, ILogWriterPtr> NameToWriter_;
     THashMap<TLogWriterCacheKey, std::vector<ILogWriterPtr>> KeyToCachedWriter_;
 
     const std::vector<ILogWriterPtr> SystemWriters_;
@@ -1376,7 +1390,7 @@ private:
     THashMap<int, IFileLogWriterPtr> NotificationWatchWDToWriter_;
     THashSet<IFileLogWriterPtr> WritersWithFailedNotificationWatches_;
 
-    THashMap<TString, TLoggingAnchor*> AnchorMap_;
+    THashMap<std::string, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
 
@@ -1414,7 +1428,7 @@ TLogManager* TLogManager::Get()
 
 void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
@@ -1422,7 +1436,7 @@ void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
 
 bool TLogManager::IsDefaultConfigured()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->IsDefaultConfigured();
@@ -1430,7 +1444,7 @@ bool TLogManager::IsDefaultConfigured()
 
 void TLogManager::ConfigureFromEnv()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->ConfigureFromEnv();
@@ -1438,7 +1452,7 @@ void TLogManager::ConfigureFromEnv()
 
 bool TLogManager::IsConfiguredFromEnv()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->IsConfiguredFromEnv();
@@ -1446,7 +1460,7 @@ bool TLogManager::IsConfiguredFromEnv()
 
 void TLogManager::Shutdown()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Shutdown();
@@ -1454,7 +1468,7 @@ void TLogManager::Shutdown()
 
 int TLogManager::GetVersion() const
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return 0;
     }
     return Impl_->GetVersion();
@@ -1462,7 +1476,7 @@ int TLogManager::GetVersion() const
 
 bool TLogManager::GetAbortOnAlert() const
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return false;
     }
     return Impl_->GetAbortOnAlert();
@@ -1470,7 +1484,7 @@ bool TLogManager::GetAbortOnAlert() const
 
 const TLoggingCategory* TLogManager::GetCategory(TStringBuf categoryName)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return nullptr;
     }
     return Impl_->GetCategory(categoryName);
@@ -1478,7 +1492,7 @@ const TLoggingCategory* TLogManager::GetCategory(TStringBuf categoryName)
 
 void TLogManager::UpdateCategory(TLoggingCategory* category)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UpdateCategory(category);
@@ -1486,7 +1500,7 @@ void TLogManager::UpdateCategory(TLoggingCategory* category)
 
 void TLogManager::UpdateAnchor(TLoggingAnchor* anchor)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UpdateAnchor(anchor);
@@ -1494,31 +1508,31 @@ void TLogManager::UpdateAnchor(TLoggingAnchor* anchor)
 
 void TLogManager::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf anchorMessage)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->RegisterStaticAnchor(anchor, sourceLocation, anchorMessage);
 }
 
-TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
+TLoggingAnchor* TLogManager::RegisterDynamicAnchor(std::string anchorMessage)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return nullptr;
     }
     return Impl_->RegisterDynamicAnchor(std::move(anchorMessage));
 }
 
-void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
+void TLogManager::RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->RegisterWriterFactory(typeName, factory);
 }
 
-void TLogManager::UnregisterWriterFactory(const TString& typeName)
+void TLogManager::UnregisterWriterFactory(const std::string& typeName)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->UnregisterWriterFactory(typeName);
@@ -1526,7 +1540,7 @@ void TLogManager::UnregisterWriterFactory(const TString& typeName)
 
 void TLogManager::Enqueue(TLogEvent&& event)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         Cerr << NYT::Format("Trying to log event during logger initialization -- skipping") << Endl;
         return;
     }
@@ -1535,7 +1549,7 @@ void TLogManager::Enqueue(TLogEvent&& event)
 
 void TLogManager::Reopen()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Reopen();
@@ -1543,7 +1557,7 @@ void TLogManager::Reopen()
 
 void TLogManager::EnableReopenOnSighup()
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->EnableReopenOnSighup();
@@ -1551,7 +1565,7 @@ void TLogManager::EnableReopenOnSighup()
 
 void TLogManager::SuppressRequest(TRequestId requestId)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->SuppressRequest(requestId);
@@ -1559,7 +1573,7 @@ void TLogManager::SuppressRequest(TRequestId requestId)
 
 void TLogManager::Synchronize(TInstant deadline)
 {
-    [[unlikely]] if (!Impl_->IsInitialized()) {
+    if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
     }
     Impl_->Synchronize(deadline);
@@ -1585,14 +1599,26 @@ TFiberMinLogLevelGuard::~TFiberMinLogLevelGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
-    : OldMessageTag_(std::move(GetThreadMessageTag()))
+TFiberMessageTagGuard::TFiberMessageTagGuard(TLoggingTagList messageTags)
+    : TFiberMessageTagGuard(std::move(messageTags), EMode::Prepend)
+{ }
+
+TFiberMessageTagGuard::TFiberMessageTagGuard(TLoggingTagList messageTags, EMode mode)
+    : OldMessageTags_(GetThreadMessageTags())
 {
-    SetThreadMessageTag(std::move(messageTag));
+    SetThreadMessageTags([&] {
+        switch (mode) {
+            case EMode::Replace:
+                return std::move(messageTags);
+            case EMode::Prepend:
+                messageTags.Add(OldMessageTags_);
+                return std::move(messageTags);
+        }
+    } ());
 }
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept
-    : OldMessageTag_(std::move(other.OldMessageTag_))
+    : OldMessageTags_(std::move(other.OldMessageTags_))
     , Active_(other.Active_)
 {
     other.Active_ = false;
@@ -1601,7 +1627,7 @@ TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noex
 TFiberMessageTagGuard::~TFiberMessageTagGuard()
 {
     if (Active_) {
-        SetThreadMessageTag(std::move(OldMessageTag_));
+        SetThreadMessageTags(std::move(OldMessageTags_));
     }
 }
 

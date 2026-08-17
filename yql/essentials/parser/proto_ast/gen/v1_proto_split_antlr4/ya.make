@@ -68,6 +68,9 @@ RUN_PYTHON3(
     SQLv1Antlr4Parser.pb.data.cc
     SQLv1Antlr4Parser.pb.classes.h
     SQLv1Antlr4Parser.pb.main.h
+    OUTPUT_INCLUDES
+    SQLv1Antlr4Parser.pb.h
+    SQLv1Antlr4Parser.pb.cc
     CWD ${antlr_output}
 )
 

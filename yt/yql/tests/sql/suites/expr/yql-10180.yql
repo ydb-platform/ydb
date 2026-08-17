@@ -1,4 +1,3 @@
-/* syntax version 1 */
 USE plato;
 
 $logs_path = "//logs/antirobot-daemon-log2/1d";

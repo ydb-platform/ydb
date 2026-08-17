@@ -26,7 +26,7 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         return NArrow::TStatusValidator::GetValid(Array->GetScalar(index));
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         return std::make_shared<TTrivialArray>(Array->Slice(offset, count));
     }
@@ -38,7 +38,6 @@ protected:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
 
 public:
-
     virtual void Reallocate() override;
 
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
@@ -53,7 +52,8 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
@@ -66,39 +66,40 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
-        , Array(BuildArrayFromScalar(scalar)) {
+        , Array(BuildArrayFromScalar(scalar))
+    {
     }
 
-    template <class TArrowDataType = arrow::StringType>
-    class TPlainBuilder {
+    class TPlainBuilderBase {
     private:
         std::unique_ptr<arrow::ArrayBuilder> Builder;
         std::optional<ui32> LastRecordIndex;
 
-    public:
-        TPlainBuilder(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
-            Builder = NArrow::MakeBuilder(arrow::TypeTraits<TArrowDataType>::type_singleton(), reserveItems, reserveSize);
+    protected:
+        arrow::ArrayBuilder& GetBuilder() {
+            return *Builder;
         }
 
-        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+        template <class TAppender>
+        void AddAt(const ui32 recordIndex, const TAppender& append) {
             if (LastRecordIndex) {
                 AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
             }
+            append(*Builder);
             LastRecordIndex = recordIndex;
-            AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+        }
+
+    public:
+        TPlainBuilderBase(std::unique_ptr<arrow::ArrayBuilder> builder)
+            : Builder(std::move(builder)) {
+            AFL_VERIFY(!!Builder);
         }
 
         void AddNull(const ui32 recordIndex) {
-            if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
-                TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex));
-            } else {
-                TStatusValidator::Validate(Builder->AppendNulls(recordIndex + 1));
-            }
-            LastRecordIndex = recordIndex;
+            AddAt(recordIndex, [](arrow::ArrayBuilder& builder) { TStatusValidator::Validate(builder.AppendNull()); });
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
@@ -109,6 +110,23 @@ public:
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount));
             }
             return std::make_shared<TTrivialArray>(NArrow::FinishBuilder(std::move(Builder)));
+        }
+    };
+
+    template <class TArrowDataType = arrow::StringType>
+    class TPlainBuilder: public TPlainBuilderBase {
+    public:
+        TPlainBuilder(const ui32 reserveItems = 0, const ui32 reserveSize = 0)
+            : TPlainBuilderBase(NArrow::MakeBuilder(arrow::TypeTraits<TArrowDataType>::type_singleton(), reserveItems, reserveSize)) {
+        }
+
+        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            AddValue(recordIndex, arrow::util::string_view(value.data(), value.size()));
+        }
+
+        template <class TValue>
+        void AddValue(const ui32 recordIndex, const TValue& value) {
+            AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append<TArrowDataType>(builder, value)); });
         }
     };
 
@@ -152,12 +170,13 @@ protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         return std::make_shared<TTrivialChunkedArray>(Array->Slice(offset, count));
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
 
 public:
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 };
 

@@ -18,7 +18,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_paths.h>
@@ -383,6 +383,7 @@ public:
                     .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                     .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                     .LangVer(State_->Types->LangVer)
+                    .RuntimeSettings(State_->Types->RuntimeSettings)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());
@@ -1257,8 +1258,9 @@ private:
                 YQL_ENSURE(!walkFoldersInstanceIt.IsEnd());
                 auto& walkFoldersImpl = walkFoldersInstanceIt->second;
 
-                Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(),
-                    "Called RewriteWalkFoldersOnAsyncChanges, but impl future is not ready");
+                if (!walkFoldersImpl.GetAnyOpFuture().IsReady()) {
+                    return readNode.Ptr();
+                }
 
                 auto nextState = parsedKey.GetWalkFolderImplArgs()->UserStateExpr;
                 walkFoldersStatus = walkFoldersImpl.GetNextStateExpr(ctx, std::move(parsedKey.GetWalkFolderImplArgs().GetRef()), nextState);

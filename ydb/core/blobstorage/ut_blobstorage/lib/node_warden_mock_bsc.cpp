@@ -2,6 +2,8 @@
 #include "node_warden_mock_state.h"
 #include "node_warden_mock_vdisk.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 void TNodeWardenMockActor::SendRegisterNode() {
     Y_ABORT_UNLESS(PipeId);
 
@@ -79,7 +81,9 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
 
     const auto& services = record.GetServiceSet();
 
-    STLOG(PRI_INFO, BS_NODE, NWM10, "TEvControllerNodeServiceSetUpdate", (Record, record));
+    YDB_LOG_INFO("TEvControllerNodeServiceSetUpdate",
+        {"marker", "NWM10"},
+        {"record", record});
 
     for (const auto& group : services.GetGroups()) {
         auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr); // TODO(alexvru): group encryption?
@@ -97,8 +101,13 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
         pdiskIds.erase(pdiskId);
 
-        STLOG(PRI_DEBUG, BS_NODE, NWM04, "PDisk", (Comprehensive, record.GetComprehensive()), (PDiskId, pdiskId),
-            (EntityStatus, pdisk.GetEntityStatus()), (Path, pdisk.GetPath()), (PDiskGuid, pdisk.GetPDiskGuid()));
+        YDB_LOG_DEBUG("PDisk",
+            {"marker", "NWM04"},
+            {"comprehensive", record.GetComprehensive()},
+            {"PDiskId", pdiskId},
+            {"entityStatus", pdisk.GetEntityStatus()},
+            {"path", pdisk.GetPath()},
+            {"PDiskGuid", pdisk.GetPDiskGuid()});
 
         switch (pdisk.GetEntityStatus()) {
             case NKikimrBlobStorage::EEntityStatus::INITIAL:
@@ -135,9 +144,15 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
 
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
 
-        STLOG(PRI_DEBUG, BS_NODE, NWM05, "VDisk", (Comprehensive, record.GetComprehensive()), (VSlotId, vslotId),
-            (EntityStatus, vdisk.GetEntityStatus()), (VDiskId, vdiskId), (DoDestroy, vdisk.GetDoDestroy()),
-            (DoWipe, vdisk.GetDoWipe()), (DonorMode, vdisk.HasDonorMode()));
+        YDB_LOG_DEBUG("VDisk",
+            {"marker", "NWM05"},
+            {"comprehensive", record.GetComprehensive()},
+            {"VSlotId", vslotId},
+            {"entityStatus", vdisk.GetEntityStatus()},
+            {"VDiskId", vdiskId},
+            {"doDestroy", vdisk.GetDoDestroy()},
+            {"doWipe", vdisk.GetDoWipe()},
+            {"donorMode", vdisk.HasDonorMode()});
 
         TVDiskState *vdiskp = GetVDisk(vslotId);
 

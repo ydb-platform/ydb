@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/string.h>
@@ -19,6 +20,67 @@
 #include <optional>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+struct TAssociativeContainerKeyHelper
+{
+    static std::string Serialize(const T& value)
+    {
+        return ToString(value);
+    }
+
+    static T Deserialize(TStringBuf key)
+    {
+        return FromString<T>(key);
+    }
+};
+
+template <class T>
+    requires(TEnumTraits<T>::IsEnum)
+struct TAssociativeContainerKeyHelper<T>
+{
+    static std::string Serialize(const T& value)
+    {
+        return FormatEnum(value);
+    }
+
+    static T Deserialize(TStringBuf key)
+    {
+        return ParseEnum<T>(key);
+    }
+};
+
+template <>
+struct TAssociativeContainerKeyHelper<TGuid>
+{
+    static std::string Serialize(TGuid value)
+    {
+        return ToString(value);
+    }
+
+    static TGuid Deserialize(TStringBuf key)
+    {
+        return TGuid::FromString(key);
+    }
+};
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TAssociativeContainerKeyHelper<TStrongTypedef<T, TTag, Options>>
+{
+    using TValue = TStrongTypedef<T, TTag, Options>;
+
+    static std::string Serialize(const TValue& value)
+    {
+        return TAssociativeContainerKeyHelper<T>::Serialize(value.Underlying());
+    }
+
+    static TValue Deserialize(TStringBuf key)
+    {
+        return TValue(TAssociativeContainerKeyHelper<T>::Deserialize(key));
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -92,58 +154,12 @@ void SerializeSet(const T& items, NYson::IYsonConsumer* consumer)
     consumer->OnEndList();
 }
 
-template <class T, bool IsEnum = TEnumTraits<T>::IsEnum>
-struct TMapKeyHelper;
-
-template <class T>
-struct TMapKeyHelper<T, true>
-{
-    static void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(FormatEnum(value));
-    }
-
-    static void Deserialize(T& value, const std::string& key)
-    {
-        value = ParseEnum<T>(key);
-    }
-};
-
-template <class T>
-struct TMapKeyHelper<T, false>
-{
-    static void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(ToString(value));
-    }
-
-    static void Deserialize(T& value, const std::string& key)
-    {
-        value = FromString<T>(key);
-    }
-};
-
-template <>
-struct TMapKeyHelper<TGuid, false>
-{
-    static void Serialize(TGuid value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(ToString(value));
-    }
-
-    static void Deserialize(TGuid& value, const std::string& key)
-    {
-        value = TGuid::FromString(key);
-    }
-};
-
-
 template <class T>
 void SerializeMap(const T& items, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
     for (auto it : GetSortedIterators(items)) {
-        TMapKeyHelper<typename T::key_type>::Serialize(it->first, consumer);
+        consumer->OnKeyedItem(TAssociativeContainerKeyHelper<typename T::key_type>::Serialize(it->first));
         Serialize(it->second, consumer);
     }
     consumer->OnEndMap();
@@ -197,8 +213,7 @@ void DeserializeMap(T& value, INodePtr node)
         value.reserve(mapNode->GetChildCount());
     }
     for (const auto& [serializedKey, serializedItem] : mapNode->GetChildren()) {
-        typename T::key_type key;
-        TMapKeyHelper<typename T::key_type>::Deserialize(key, serializedKey);
+        auto key = TAssociativeContainerKeyHelper<typename T::key_type>::Deserialize(serializedKey);
         typename T::mapped_type item;
         Deserialize(item, serializedItem);
         value.emplace(std::move(key), std::move(item));
@@ -503,7 +518,7 @@ void Serialize(
     const T& message,
     NYson::IYsonConsumer* consumer)
 {
-    consumer->OnStringScalar(message.SerializeAsStringOrThrow());
+    consumer->OnStringScalar(SerializeProtoToString(message));
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>
@@ -546,7 +561,7 @@ void Deserialize(T& value, INodePtr node)
             case ENodeType::List:
                 value = T();
                 for (const auto& item : node->AsList()->GetChildren()) {
-                    value |= ParseEnum<T>(item->GetValue<TString>());
+                    value |= ParseEnum<T>(item->GetValue<std::string>());
                 }
                 break;
             case ENodeType::String:
@@ -559,7 +574,7 @@ void Deserialize(T& value, INodePtr node)
     } else {
         switch (node->GetType()) {
             case ENodeType::String: {
-                value = ParseEnum<T>(node->GetValue<TString>());
+                value = ParseEnum<T>(node->GetValue<std::string>());
                 break;
             }
             case ENodeType::Int64: {
@@ -730,9 +745,12 @@ void Deserialize(
     T& message,
     const INodePtr& node)
 {
-    TString string;
+    std::string string;
     Deserialize(string, node);
-    message.ParseFromStringOrThrow(string);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            .With("protobuf_type", message.GetTypeName());
+    }
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

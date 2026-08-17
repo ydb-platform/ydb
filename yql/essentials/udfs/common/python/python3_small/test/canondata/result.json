@@ -56,6 +56,11 @@
             "uri": "file://test.test_LinearDynamicFail2_/extracted"
         }
     ],
+    "test.test[LinearDynamicFail3]": [
+        {
+            "uri": "file://test.test_LinearDynamicFail3_/extracted"
+        }
+    ],
     "test.test[LinearDynamic]": [
         {
             "uri": "file://test.test_LinearDynamic_/results.txt"

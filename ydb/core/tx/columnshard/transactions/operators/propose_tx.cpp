@@ -1,20 +1,25 @@
 #include "propose_tx.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
     ctx.Send(GetTxInfo().Source, BuildProposeResultEvent(owner).release());
 }
 
-std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {
+std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(
+    const TColumnShard& owner) const {
     const auto& txInfo = GetTxInfo();
     std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult =
         std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
             GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
     if (IsFail()) {
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
-            "tx_id", txInfo.TxId);
+        YDB_LOG_ERROR("",
+            {"message", GetProposeStartInfoVerified().GetStatusMessage()},
+            {"tabletId", owner.TabletID()},
+            {"txId", txInfo.TxId});
     } else {
         evResult->Record.SetMinStep(txInfo.MinStep);
         evResult->Record.SetMaxStep(txInfo.MaxStep);
@@ -22,10 +27,12 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
-            "tx_id", txInfo.TxId);
+        YDB_LOG_DEBUG("",
+            {"message", GetProposeStartInfoVerified().GetStatusMessage()},
+            {"tabletId", owner.TabletID()},
+            {"txId", txInfo.TxId});
     }
     return evResult;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

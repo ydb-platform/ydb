@@ -116,7 +116,7 @@ public:
 
                                                     bool ok = true;
                                                     GroupQueues->DisksByOrderNumber[vdisk.OrderNumber]->Queues.ForEachQueue([&](auto& q) {
-                                                        if (!q.IsConnected) {
+                                                        if (!q.IsConnected.load(std::memory_order_relaxed)) {
                                                             ok = false;
                                                         }
                                                     });
@@ -182,7 +182,7 @@ public:
                                             TABLED() { str << Info->GetActorId(num).NodeId(); }
                                             TABLED() {
                                                 fdom.VDisks[vdisk].Queues.ForEachQueue([&](auto& q) {
-                                                    str << (q.IsConnected ? '+' : '0');
+                                                    str << (q.IsConnected.load(std::memory_order_relaxed) ? '+' : '0');
                                                 });
                                             }
                                         }
@@ -211,6 +211,28 @@ public:
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
                                 str << "<button type=\"submit\" formaction=\"/get_blob\" class=\"btn btn-default\">Query</button>";
+                            }
+                        }
+                    }
+                }
+            }
+
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << "Blob check integrity service";
+                }
+                DIV_CLASS("panel-body") {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("control-group") {
+                            LABEL_CLASS_FOR("control-label", "inputBlobCheck") { str << "Blob ID"; }
+                            DIV_CLASS("controls") {
+                                str << "<input id=\"inputBlobCheck\" name=\"blob\" type=\"text\"/>";
+                            }
+                        }
+                        str << "<input type=\"hidden\" name=\"groupId\" value=\"" << GroupId << "\">";
+                        DIV_CLASS("control-group") {
+                            DIV_CLASS("controls") {
+                                str << "<button type=\"submit\" formaction=\"/check_integrity\" class=\"btn btn-default\">Query</button>";
                             }
                         }
                     }
@@ -494,4 +516,3 @@ IActor* CreateBlobStorageGroupProxyMon(TIntrusivePtr<TBlobStorageGroupProxyMon> 
 }
 
 } // NKikimr
-

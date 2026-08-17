@@ -8,6 +8,8 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -84,8 +86,8 @@ void TTableCommand::Config(TConfig& config) {
     // TODO: Session options?
 }
 
-NTable::TSession TTableCommand::GetSession(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+NTable::TSession TTableCommand::GetSession(const TDriver& driver) {
+    NTable::TTableClient client(driver);
     NTable::TCreateSessionResult result = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
@@ -156,6 +158,7 @@ void TCommandCreateTable::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "New table path");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 
     config.Opts->AddLongOption('c', "Column",
         TStringBuilder() << "[At least one] Column(s)." << Endl << "Allowed types : " << GetAllTypesString())
@@ -173,7 +176,8 @@ void TCommandCreateTable::Config(TConfig& config) {
     config.Opts->AddLongOption("partitioning-policy", "Partitioning policy preset name")
         .RequiredArgument("NAME").StoreResult(&PartitioningPolicy);
     config.Opts->AddLongOption("auto-partitioning", "Auto-partitioning policy. [Disabled, AutoSplit, AutoSplitMerge]")
-        .RequiredArgument("[String]").StoreResult(&AutoPartitioning);
+        .RequiredArgument("[String]").StoreResult(&AutoPartitioning)
+        .ChoicesWithCompletion({{"Disabled", "Disabled"}, {"AutoSplit", "Auto split"}, {"AutoSplitMerge", "Auto split and merge"}});
     config.Opts->AddLongOption("uniform-partitions", "Enable uniform sharding using given shards number."
         "The first components of primary key must have Uint32/Uint64 type.")
         .RequiredArgument("[Uint64]").StoreResult(&UniformPartitions);
@@ -206,6 +210,7 @@ void TCommandCreateTable::Validate(TConfig& config) {
 }
 
 int TCommandCreateTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NTable::TTableBuilder builder;
     for (const TString& column : Columns) {
         TVector<TString> parts = StringSplitter(column).Split(':');
@@ -302,7 +307,7 @@ int TCommandCreateTable::Run(TConfig& config) {
     }
 
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CreateTable(
+        GetSession(driver).CreateTable(
             Path,
             builder.Build(),
             std::move(tableSettings)
@@ -320,6 +325,7 @@ void TCommandDropTable::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "table to drop path");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandDropTable::ExtractParams(TConfig& config) {
@@ -328,8 +334,9 @@ void TCommandDropTable::ExtractParams(TConfig& config) {
 }
 
 int TCommandDropTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).DropTable(
+        GetSession(driver).DropTable(
             Path,
             FillSettings(NTable::TDropTableSettings())
         ).GetValueSync()
@@ -364,14 +371,16 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     AddExamplesOption(config);
 
     config.Opts->AddLongOption('t', "type", "Query type [data, scheme, scan, generic]")
-        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
+        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType)
+        .ChoicesWithCompletion({{"data", "Data query"}, {"scheme", "Scheme query"}, {"scan", "Scan query"}, {"generic", "Generic query"}});
     config.Opts->AddLongOption("stats", "Collect statistics mode (for data & scan & generic queries) [none, basic, full]")
-        .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+        .RequiredArgument("[String]").StoreResult(&CollectStatsMode)
+        .ChoicesWithCompletion({{"none", "None"}, {"basic", "Basic"}, {"full", "Full"}});
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
     // Transaction modes description with color highlighting
-    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "no-tx"};
+    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "read-committed-rw", "no-tx"};
     TStringStream txDescription;
     txDescription << "Transaction mode (for generic & data queries). Available options: ";
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
@@ -389,8 +398,13 @@ void TCommandExecuteQuery::Config(TConfig& config) {
                   << "\" means the CLI does not explicitly set the transaction mode and YDB determines the behavior automatically."
                   << "\nDefault: " << colors.CyanColor() << "\"serializable-rw\"" << colors.OldColor() << ".";
     
+    TVector<NLastGetopt::NComp::TChoice> txChoices;
+    for (const auto& mode : txModes) {
+        txChoices.emplace_back(mode);
+    }
     config.Opts->AddLongOption("tx-mode", txDescription.Str())
-        .RequiredArgument("[String]").StoreResult(&TxMode);
+        .RequiredArgument("[String]").StoreResult(&TxMode)
+        .Completer(NLastGetopt::NComp::Choice(std::move(txChoices)));
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
@@ -483,7 +497,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
         }
     }
 
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NTable::TTableClient client(driver);
     NTable::TAsyncDataQueryResult asyncResult;
 
@@ -594,8 +608,9 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).ExecuteSchemeQuery(
+        GetSession(driver).ExecuteSchemeQuery(
             Query,
             FillSettings(NTable::TExecSchemeQuerySettings())
         ).GetValueSync()
@@ -665,6 +680,8 @@ namespace {
             txSettings = NQuery::TTxSettings::SnapshotRO();
         } else if (TxMode == "snapshot-rw") {
             txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else if (TxMode == "read-committed-rw") {
+            txSettings = NQuery::TTxSettings::ReadCommittedRW();
         } else if (!TxMode.empty()) {
             throw TMisuseException() << "Unknown transaction mode.";
         }
@@ -754,7 +771,7 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TClient client(driver);
     std::optional<TDuration> optTimeout;
     if (OperationTimeout) {
@@ -938,7 +955,8 @@ void TCommandExplain::Config(TConfig& config) {
         .StoreTrue(&PrintAst);
 
     config.Opts->AddLongOption('t', "type", "Query type [data, scan, generic]")
-        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
+        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType)
+        .ChoicesWithCompletion({{"data", "Data query"}, {"scan", "Scan query"}, {"generic", "Generic query"}});
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
         .StoreTrue(&Analyze);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
@@ -979,7 +997,8 @@ int TCommandExplain::Run(TConfig& config) {
     }
 
     if (QueryType == "scan") {
-        NTable::TTableClient client(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        NTable::TTableClient client(driver);
         NTable::TStreamExecScanQuerySettings settings;
         settings.ClientTimeout(timeout.value_or(TDuration()));
 
@@ -1022,15 +1041,17 @@ int TCommandExplain::Run(TConfig& config) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
     } else if (QueryType == "generic") {
-        TExplainGenericQuery runner(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        TExplainGenericQuery runner(driver);
         const auto& result = runner.Explain(Query, timeout, Analyze);
         planJson = result.PlanJson;
         ast = result.Ast;
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
+        auto driver = CreateDriver(config);
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
-        auto result = GetSession(config).ExecuteDataQuery(
+        auto result = GetSession(driver).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             FillSettings(settings)
@@ -1042,12 +1063,13 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
+        auto driver = CreateDriver(config);
         NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings()));
         if (CollectFullDiagnostics) {
             settings.WithCollectFullDiagnostics(true);
         }
 
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
+        NTable::TExplainQueryResult result = GetSession(driver).ExplainDataQuery(
             Query,
             settings
         ).GetValueSync();
@@ -1132,6 +1154,7 @@ void TCommandReadTable::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandReadTable::Parse(TConfig& config) {
@@ -1180,7 +1203,8 @@ namespace {
 } // anonymous namespace
 
 int TCommandReadTable::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     NTable::TReadTableSettings readTableSettings;
     if (RowLimit) {
@@ -1279,6 +1303,7 @@ void TCommandIndexAddGlobal::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandIndexAddGlobal::Parse(TConfig& config) {
@@ -1292,7 +1317,8 @@ void TCommandIndexAddGlobal::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexAddGlobal::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
     auto columns = StringSplitter(Columns).Split(',').ToList<std::string>();
     std::vector<std::string> dataColumns;
     if (DataColumns) {
@@ -1330,6 +1356,7 @@ void TCommandIndexDrop::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandIndexDrop::ExtractParams(TConfig& config) {
@@ -1338,7 +1365,8 @@ void TCommandIndexDrop::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexDrop::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AppendDropIndexes({IndexName});
@@ -1368,6 +1396,7 @@ void TCommandIndexRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandIndexRename::ExtractParams(TConfig& config) {
@@ -1376,7 +1405,8 @@ void TCommandIndexRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexRename::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AppendRenameIndexes({IndexName, NewIndexName, Replace});
@@ -1403,6 +1433,7 @@ void TCommandAttributeAdd::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandAttributeAdd::ExtractParams(TConfig& config) {
@@ -1411,7 +1442,8 @@ void TCommandAttributeAdd::ExtractParams(TConfig& config) {
 }
 
 int TCommandAttributeAdd::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AlterAttributes(Attributes);
@@ -1436,6 +1468,7 @@ void TCommandAttributeDrop::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandAttributeDrop::ExtractParams(TConfig& config) {
@@ -1444,7 +1477,8 @@ void TCommandAttributeDrop::ExtractParams(TConfig& config) {
 }
 
 int TCommandAttributeDrop::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings();
     auto alterAttrs = settings.BeginAlterAttributes();
@@ -1498,6 +1532,7 @@ void TCommandTtlSet::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandTtlSet::ExtractParams(TConfig& config) {
@@ -1506,7 +1541,8 @@ void TCommandTtlSet::ExtractParams(TConfig& config) {
 }
 
 int TCommandTtlSet::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     TMaybe<NTable::TTtlSettings> ttl;
     if (ColumnUnit) {
@@ -1539,6 +1575,7 @@ void TCommandTtlReset::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
+    SetSchemePathCompletionForTables(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandTtlReset::ExtractParams(TConfig& config) {
@@ -1547,7 +1584,8 @@ void TCommandTtlReset::ExtractParams(TConfig& config) {
 }
 
 int TCommandTtlReset::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .BeginAlterTtlSettings()

@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/credentials
     yql/essentials/providers/common/proto
     library/cpp/svnversion
 )

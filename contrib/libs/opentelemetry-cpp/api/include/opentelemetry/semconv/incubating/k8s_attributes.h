@@ -53,6 +53,15 @@ static constexpr const char *kK8sClusterName = "k8s.cluster.name";
 static constexpr const char *kK8sClusterUid = "k8s.cluster.uid";
 
 /**
+  The type of file system component for ephemeral storage.
+  <p>
+  Eviction decisions based on ephemeral-storage resource limits are made based on the total
+  container usage.
+ */
+static constexpr const char *kK8sContainerEphemeralStorageFsType =
+    "k8s.container.ephemeral_storage.fs_type";
+
+/**
   The name of the Container from Pod specification, must be unique within a Pod. Container runtime
   usually uses different globally unique name (@code container.name @endcode).
  */
@@ -72,16 +81,16 @@ static constexpr const char *kK8sContainerStatusLastTerminatedReason =
 
 /**
   The reason for the container state. Corresponds to the @code reason @endcode field of the: <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#containerstatewaiting-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#containerstatewaiting-v1-core">K8s
   ContainerStateWaiting</a> or <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#containerstateterminated-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#containerstateterminated-v1-core">K8s
   ContainerStateTerminated</a>
  */
 static constexpr const char *kK8sContainerStatusReason = "k8s.container.status.reason";
 
 /**
   The state of the container. <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#containerstate-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#containerstate-v1-core">K8s
   ContainerState</a>
  */
 static constexpr const char *kK8sContainerStatusState = "k8s.container.status.state";
@@ -120,10 +129,10 @@ static constexpr const char *kK8sCronjobUid = "k8s.cronjob.uid";
 
 /**
   The annotation placed on the DaemonSet, the @code <key> @endcode being the annotation name, the
-  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
-  replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
-  k8s.daemonset.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>A
-  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
+  k8s.daemonset.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>An
+  annotation @code data @endcode with empty string value SHOULD be recorded as the @code
   k8s.daemonset.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
@@ -133,7 +142,7 @@ static constexpr const char *kK8sDaemonsetAnnotation = "k8s.daemonset.annotation
   The label placed on the DaemonSet, the @code <key> @endcode being the label name, the value being
   the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app @endcode
   with value @code guestbook @endcode SHOULD be recorded as the @code k8s.daemonset.label.app
-  @endcode attribute with value @code "guestbook" @endcode.</li> <li>A label @code data @endcode
+  @endcode attribute with value @code "guestbook" @endcode.</li> <li>A label @code injected @endcode
   with empty string value SHOULD be recorded as the @code k8s.daemonset.label.injected @endcode
   attribute with value @code "" @endcode.</li>
   </ul>
@@ -152,10 +161,10 @@ static constexpr const char *kK8sDaemonsetUid = "k8s.daemonset.uid";
 
 /**
   The annotation placed on the Deployment, the @code <key> @endcode being the annotation name, the
-  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
-  replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
-  k8s.deployment.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>A
-  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
+  k8s.deployment.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>An
+  annotation @code data @endcode with empty string value SHOULD be recorded as the @code
   k8s.deployment.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
@@ -163,8 +172,8 @@ static constexpr const char *kK8sDeploymentAnnotation = "k8s.deployment.annotati
 
 /**
   The label placed on the Deployment, the @code <key> @endcode being the label name, the value being
-  the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code replicas
-  @endcode with value @code 0 @endcode SHOULD be recorded as the @code k8s.deployment.label.app
+  the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app @endcode
+  with value @code guestbook @endcode SHOULD be recorded as the @code k8s.deployment.label.app
   @endcode attribute with value @code "guestbook" @endcode.</li> <li>A label @code injected @endcode
   with empty string value SHOULD be recorded as the @code k8s.deployment.label.injected @endcode
   attribute with value @code "" @endcode.</li>
@@ -228,11 +237,11 @@ static constexpr const char *kK8sHugepageSize = "k8s.hugepage.size";
 
 /**
   The annotation placed on the Job, the @code <key> @endcode being the annotation name, the value
-  being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
+  being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation @code
   number @endcode with value @code 1 @endcode SHOULD be recorded as the @code
-  k8s.job.annotation.number @endcode attribute with value @code "1" @endcode.</li> <li>A label @code
-  data @endcode with empty string value SHOULD be recorded as the @code k8s.job.annotation.data
-  @endcode attribute with value @code "" @endcode.</li>
+  k8s.job.annotation.number @endcode attribute with value @code "1" @endcode.</li> <li>An annotation
+  @code data @endcode with empty string value SHOULD be recorded as the @code
+  k8s.job.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
 static constexpr const char *kK8sJobAnnotation = "k8s.job.annotation";
@@ -241,9 +250,9 @@ static constexpr const char *kK8sJobAnnotation = "k8s.job.annotation";
   The label placed on the Job, the @code <key> @endcode being the label name, the value being the
   label value, even if the value is empty. <p> Examples: <ul> <li>A label @code jobtype @endcode
   with value @code ci @endcode SHOULD be recorded as the @code k8s.job.label.jobtype @endcode
-  attribute with value @code "ci" @endcode.</li> <li>A label @code data @endcode with empty string
-  value SHOULD be recorded as the @code k8s.job.label.automated @endcode attribute with value @code
-  "" @endcode.</li>
+  attribute with value @code "ci" @endcode.</li> <li>A label @code automated @endcode with empty
+  string value SHOULD be recorded as the @code k8s.job.label.automated @endcode attribute with value
+  @code "" @endcode.</li>
   </ul>
  */
 static constexpr const char *kK8sJobLabel = "k8s.job.label";
@@ -260,10 +269,10 @@ static constexpr const char *kK8sJobUid = "k8s.job.uid";
 
 /**
   The annotation placed on the Namespace, the @code <key> @endcode being the annotation name, the
-  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
-  ttl @endcode with value @code 0 @endcode SHOULD be recorded as the @code
-  k8s.namespace.annotation.ttl @endcode attribute with value @code "0" @endcode.</li> <li>A label
-  @code data @endcode with empty string value SHOULD be recorded as the @code
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code ttl @endcode with value @code 0 @endcode SHOULD be recorded as the @code
+  k8s.namespace.annotation.ttl @endcode attribute with value @code "0" @endcode.</li> <li>An
+  annotation @code data @endcode with empty string value SHOULD be recorded as the @code
   k8s.namespace.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
@@ -291,7 +300,7 @@ static constexpr const char *kK8sNamespaceName = "k8s.namespace.name";
   <p>
   This attribute aligns with the @code phase @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#namespacestatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#namespacestatus-v1-core">K8s
   NamespaceStatus</a>
  */
 static constexpr const char *kK8sNamespacePhase = "k8s.namespace.phase";
@@ -312,7 +321,7 @@ static constexpr const char *kK8sNodeAnnotation = "k8s.node.annotation";
   <p>
   This attribute aligns with the @code status @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#nodecondition-v1-core">NodeCondition</a>
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#nodecondition-v1-core">NodeCondition</a>
  */
 static constexpr const char *kK8sNodeConditionStatus = "k8s.node.condition.status";
 
@@ -320,9 +329,9 @@ static constexpr const char *kK8sNodeConditionStatus = "k8s.node.condition.statu
   The condition type of a K8s Node.
   <p>
   K8s Node conditions as described
-  by <a href="https://v1-32.docs.kubernetes.io/docs/reference/node/node-status/#condition">K8s
+  by <a href="https://kubernetes.io/docs/reference/node/node-status/#condition">K8s
   documentation</a>. <p> This attribute aligns with the @code type @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#nodecondition-v1-core">NodeCondition</a>
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#nodecondition-v1-core">NodeCondition</a>
   <p>
   The set of possible values is not limited to those listed here. Managed Kubernetes environments,
   or custom controllers MAY introduce additional node condition types.
@@ -347,9 +356,116 @@ static constexpr const char *kK8sNodeLabel = "k8s.node.label";
 static constexpr const char *kK8sNodeName = "k8s.node.name";
 
 /**
+  The name of the system container running on the K8s Node.
+ */
+static constexpr const char *kK8sNodeSystemContainerName = "k8s.node.system_container.name";
+
+/**
   The UID of the Node.
  */
 static constexpr const char *kK8sNodeUid = "k8s.node.uid";
+
+/**
+  The annotation placed on the PersistentVolume, the @code <key> @endcode being the annotation name,
+  the value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An
+  annotation @code pv.kubernetes.io/provisioned-by @endcode with value @code kubernetes.io/aws-ebs
+  @endcode SHOULD be recorded as the @code
+  k8s.persistentvolume.annotation.pv.kubernetes.io/provisioned-by @endcode attribute with value
+  @code "kubernetes.io/aws-ebs" @endcode.</li> <li>An annotation @code data @endcode with empty
+  string value SHOULD be recorded as the @code k8s.persistentvolume.annotation.data @endcode
+  attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeAnnotation = "k8s.persistentvolume.annotation";
+
+/**
+  The label placed on the PersistentVolume, the @code <key> @endcode being the label name, the value
+  being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code type
+  @endcode with value @code ssd @endcode SHOULD be recorded as the @code
+  k8s.persistentvolume.label.type @endcode attribute with value @code "ssd" @endcode.</li> <li>A
+  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  k8s.persistentvolume.label.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeLabel = "k8s.persistentvolume.label";
+
+/**
+  The name of the PersistentVolume.
+ */
+static constexpr const char *kK8sPersistentvolumeName = "k8s.persistentvolume.name";
+
+/**
+  The reclaim policy of the PersistentVolume.
+  <p>
+  This attribute aligns with the @code persistentVolumeReclaimPolicy @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-v1/#PersistentVolumeSpec">K8s
+  PersistentVolumeSpec</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeReclaimPolicy =
+    "k8s.persistentvolume.reclaim_policy";
+
+/**
+  The phase of the PersistentVolume.
+  <p>
+  This attribute aligns with the @code phase @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-v1/#PersistentVolumeStatus">K8s
+  PersistentVolumeStatus</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeStatusPhase = "k8s.persistentvolume.status.phase";
+
+/**
+  The UID of the PersistentVolume.
+ */
+static constexpr const char *kK8sPersistentvolumeUid = "k8s.persistentvolume.uid";
+
+/**
+  The annotation placed on the PersistentVolumeClaim, the @code <key> @endcode being the annotation
+  name, the value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An
+  annotation @code volume.beta.kubernetes.io/storage-provisioner @endcode with value @code
+  kubernetes.io/aws-ebs @endcode SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.annotation.volume.beta.kubernetes.io/storage-provisioner @endcode
+  attribute with value @code "kubernetes.io/aws-ebs" @endcode.</li> <li>An annotation @code data
+  @endcode with empty string value SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.annotation.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeclaimAnnotation =
+    "k8s.persistentvolumeclaim.annotation";
+
+/**
+  The label placed on the PersistentVolumeClaim, the @code <key> @endcode being the label name, the
+  value being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app
+  @endcode with value @code my-app @endcode SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.label.app @endcode attribute with value @code "my-app" @endcode.</li>
+    <li>A label @code data @endcode with empty string value SHOULD be recorded as
+  the @code k8s.persistentvolumeclaim.label.data @endcode attribute with value @code ""
+  @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeclaimLabel = "k8s.persistentvolumeclaim.label";
+
+/**
+  The name of the PersistentVolumeClaim.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimName = "k8s.persistentvolumeclaim.name";
+
+/**
+  The phase of the PersistentVolumeClaim.
+  <p>
+  This attribute aligns with the @code phase @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimStatus">K8s
+  PersistentVolumeClaimStatus</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimStatusPhase =
+    "k8s.persistentvolumeclaim.status.phase";
+
+/**
+  The UID of the PersistentVolumeClaim.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimUid = "k8s.persistentvolumeclaim.uid";
 
 /**
   The annotation placed on the Pod, the @code <key> @endcode being the annotation name, the value
@@ -448,10 +564,10 @@ static constexpr const char *kK8sPodUid = "k8s.pod.uid";
 
 /**
   The annotation placed on the ReplicaSet, the @code <key> @endcode being the annotation name, the
-  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
-  replicas @endcode with value @code 0 @endcode SHOULD be recorded as the @code
-  k8s.replicaset.annotation.replicas @endcode attribute with value @code "0" @endcode.</li> <li>A
-  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code replicas @endcode with value @code 0 @endcode SHOULD be recorded as the @code
+  k8s.replicaset.annotation.replicas @endcode attribute with value @code "0" @endcode.</li> <li>An
+  annotation @code data @endcode with empty string value SHOULD be recorded as the @code
   k8s.replicaset.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
@@ -511,11 +627,131 @@ static constexpr const char *kK8sResourcequotaResourceName = "k8s.resourcequota.
 static constexpr const char *kK8sResourcequotaUid = "k8s.resourcequota.uid";
 
 /**
+  The annotation placed on the Service, the @code <key> @endcode being the annotation name, the
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code prometheus.io/scrape @endcode with value @code true @endcode SHOULD be recorded as the @code
+  k8s.service.annotation.prometheus.io/scrape @endcode attribute with value @code "true"
+  @endcode.</li> <li>An annotation @code data @endcode with empty string value SHOULD be recorded as
+  the @code k8s.service.annotation.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceAnnotation = "k8s.service.annotation";
+
+/**
+  The address type of the service endpoint.
+  <p>
+  The network address family or type of the endpoint.
+  This attribute aligns with the @code addressType @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>. It is used to differentiate metrics when a Service is backed by multiple
+  address types (e.g., in dual-stack clusters).
+ */
+static constexpr const char *kK8sServiceEndpointAddressType = "k8s.service.endpoint.address_type";
+
+/**
+  The condition of the service endpoint.
+  <p>
+  The current operational condition of the service endpoint.
+  An endpoint can have multiple conditions set at once (e.g., both @code serving @endcode and @code
+  terminating @endcode during rollout). This attribute aligns with the condition fields in the <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>.
+ */
+static constexpr const char *kK8sServiceEndpointCondition = "k8s.service.endpoint.condition";
+
+/**
+  The zone of the service endpoint.
+  <p>
+  The zone where the endpoint is located, typically corresponding to a failure domain.
+  This attribute aligns with the @code zone @endcode field of endpoints in the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>. It enables zone-aware monitoring of service endpoint distribution and supports
+  features like <a
+  href="https://kubernetes.io/docs/concepts/services-networking/topology-aware-routing/">Topology
+  Aware Routing</a>. <p> If the zone is not populated (e.g., nodes without the @code
+  topology.kubernetes.io/zone @endcode label), the attribute value will be an empty string.
+ */
+static constexpr const char *kK8sServiceEndpointZone = "k8s.service.endpoint.zone";
+
+/**
+  The label placed on the Service, the @code <key> @endcode being the label name, the value being
+  the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app @endcode
+  with value @code my-service @endcode SHOULD be recorded as the @code k8s.service.label.app
+  @endcode attribute with value @code "my-service" @endcode.</li> <li>A label @code data @endcode
+  with empty string value SHOULD be recorded as the @code k8s.service.label.data @endcode attribute
+  with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceLabel = "k8s.service.label";
+
+/**
+  The name of the Service.
+ */
+static constexpr const char *kK8sServiceName = "k8s.service.name";
+
+/**
+  Whether the Service publishes not-ready endpoints.
+  <p>
+  Whether the Service is configured to publish endpoints before the pods are ready.
+  This attribute is typically used to indicate that a Service (such as a headless
+  Service for a StatefulSet) allows peer discovery before pods pass their readiness probes.
+  It aligns with the @code publishNotReadyAddresses @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/#ServiceSpec">K8s
+  ServiceSpec</a>.
+ */
+static constexpr const char *kK8sServicePublishNotReadyAddresses =
+    "k8s.service.publish_not_ready_addresses";
+
+/**
+  The selector key-value pair placed on the Service, the @code <key> @endcode being the selector
+  key, the value being the selector value. <p> These selectors are used to correlate with pod
+  labels. Each selector key-value pair becomes a separate attribute. <p> Examples: <ul> <li>A
+  selector @code app=my-app @endcode SHOULD be recorded as the @code k8s.service.selector.app
+  @endcode attribute with value @code "my-app" @endcode.</li> <li>A selector @code version=v1
+  @endcode SHOULD be recorded as the @code k8s.service.selector.version @endcode attribute with
+  value @code "v1" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceSelector = "k8s.service.selector";
+
+/**
+  The traffic distribution policy for the Service.
+  <p>
+  Specifies how traffic is distributed to endpoints for this Service.
+  This attribute aligns with the @code trafficDistribution @endcode field of the
+  <a href="https://kubernetes.io/docs/reference/networking/virtual-ips/#traffic-distribution">K8s
+  ServiceSpec</a>. Known values include @code PreferSameZone @endcode (prefer endpoints in the same
+  zone as the client) and
+  @code PreferSameNode @endcode (prefer endpoints on the same node, fallback to same zone, then
+  cluster-wide). If this field is not set on the Service, the attribute SHOULD NOT be emitted. When
+  not set, Kubernetes distributes traffic evenly across all endpoints cluster-wide.
+ */
+static constexpr const char *kK8sServiceTrafficDistribution = "k8s.service.traffic_distribution";
+
+/**
+  The type of the Kubernetes Service.
+  <p>
+  This attribute aligns with the @code type @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/#ServiceSpec">K8s
+  ServiceSpec</a>.
+ */
+static constexpr const char *kK8sServiceType = "k8s.service.type";
+
+/**
+  The UID of the Service.
+ */
+static constexpr const char *kK8sServiceUid = "k8s.service.uid";
+
+/**
   The annotation placed on the StatefulSet, the @code <key> @endcode being the annotation name, the
-  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
-  replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
-  k8s.statefulset.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>A
-  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
+  k8s.statefulset.annotation.replicas @endcode attribute with value @code "1" @endcode.</li> <li>An
+  annotation @code data @endcode with empty string value SHOULD be recorded as the @code
   k8s.statefulset.annotation.data @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
@@ -523,11 +759,11 @@ static constexpr const char *kK8sStatefulsetAnnotation = "k8s.statefulset.annota
 
 /**
   The label placed on the StatefulSet, the @code <key> @endcode being the label name, the value
-  being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code replicas
-  @endcode with value @code 0 @endcode SHOULD be recorded as the @code k8s.statefulset.label.app
-  @endcode attribute with value @code "guestbook" @endcode.</li> <li>A label @code injected @endcode
-  with empty string value SHOULD be recorded as the @code k8s.statefulset.label.injected @endcode
-  attribute with value @code "" @endcode.</li>
+  being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app
+  @endcode with value @code guestbook @endcode SHOULD be recorded as the @code
+  k8s.statefulset.label.app @endcode attribute with value @code "guestbook" @endcode.</li> <li>A
+  label @code injected @endcode with empty string value SHOULD be recorded as the @code
+  k8s.statefulset.label.injected @endcode attribute with value @code "" @endcode.</li>
   </ul>
  */
 static constexpr const char *kK8sStatefulsetLabel = "k8s.statefulset.label";
@@ -544,7 +780,7 @@ static constexpr const char *kK8sStatefulsetUid = "k8s.statefulset.uid";
 
 /**
   The name of K8s <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#storageclass-v1-storage-k8s-io">StorageClass</a>
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#storageclass-v1-storage-k8s-io">StorageClass</a>
   object.
  */
 static constexpr const char *kK8sStorageclassName = "k8s.storageclass.name";
@@ -558,6 +794,20 @@ static constexpr const char *kK8sVolumeName = "k8s.volume.name";
   The type of the K8s volume.
  */
 static constexpr const char *kK8sVolumeType = "k8s.volume.type";
+
+namespace K8sContainerEphemeralStorageFsTypeValues
+{
+/**
+  For the container's writable layer usage.
+ */
+static constexpr const char *kRootfs = "rootfs";
+
+/**
+  For the container's log files usage (stdout/stderr).
+ */
+static constexpr const char *kLogs = "logs";
+
+}  // namespace K8sContainerEphemeralStorageFsTypeValues
 
 namespace K8sContainerStatusReasonValues
 {
@@ -683,6 +933,73 @@ static constexpr const char *kNetworkUnavailable = "NetworkUnavailable";
 
 }  // namespace K8sNodeConditionTypeValues
 
+namespace K8sPersistentvolumeReclaimPolicyValues
+{
+/**
+  The volume will be deleted when released from its claim.
+ */
+static constexpr const char *kDelete = "Delete";
+
+/**
+  The volume will be recycled (basic scrub) when released from its claim.
+ */
+static constexpr const char *kRecycle = "Recycle";
+
+/**
+  The volume will be retained when released from its claim.
+ */
+static constexpr const char *kRetain = "Retain";
+
+}  // namespace K8sPersistentvolumeReclaimPolicyValues
+
+namespace K8sPersistentvolumeStatusPhaseValues
+{
+/**
+  The volume is available and not yet bound to a claim.
+ */
+static constexpr const char *kAvailable = "Available";
+
+/**
+  The volume is bound to a claim.
+ */
+static constexpr const char *kBound = "Bound";
+
+/**
+  The volume has failed its automatic reclamation.
+ */
+static constexpr const char *kFailed = "Failed";
+
+/**
+  The volume is being provisioned.
+ */
+static constexpr const char *kPending = "Pending";
+
+/**
+  The claim has been deleted but the volume is not yet available.
+ */
+static constexpr const char *kReleased = "Released";
+
+}  // namespace K8sPersistentvolumeStatusPhaseValues
+
+namespace K8sPersistentvolumeclaimStatusPhaseValues
+{
+/**
+  The claim is bound to a volume.
+ */
+static constexpr const char *kBound = "Bound";
+
+/**
+  The claim has lost its underlying volume (the volume does not exist anymore).
+ */
+static constexpr const char *kLost = "Lost";
+
+/**
+  The claim has not yet been bound to a volume.
+ */
+static constexpr const char *kPending = "Pending";
+
+}  // namespace K8sPersistentvolumeclaimStatusPhaseValues
+
 namespace K8sPodStatusPhaseValues
 {
 /**
@@ -749,43 +1066,100 @@ static constexpr const char *kUnexpectedAdmissionError = "UnexpectedAdmissionErr
 
 }  // namespace K8sPodStatusReasonValues
 
+namespace K8sServiceEndpointAddressTypeValues
+{
+/**
+  IPv4 address type
+ */
+static constexpr const char *kIpv4 = "IPv4";
+
+/**
+  IPv6 address type
+ */
+static constexpr const char *kIpv6 = "IPv6";
+
+/**
+  FQDN address type
+ */
+static constexpr const char *kFqdn = "FQDN";
+
+}  // namespace K8sServiceEndpointAddressTypeValues
+
+namespace K8sServiceEndpointConditionValues
+{
+/**
+  The endpoint is ready to receive new connections.
+ */
+static constexpr const char *kReady = "ready";
+
+/**
+  The endpoint is currently handling traffic.
+ */
+static constexpr const char *kServing = "serving";
+
+/**
+  The endpoint is in the process of shutting down.
+ */
+static constexpr const char *kTerminating = "terminating";
+
+}  // namespace K8sServiceEndpointConditionValues
+
+namespace K8sServiceTypeValues
+{
+/**
+  ClusterIP service type
+ */
+static constexpr const char *kClusterIp = "ClusterIP";
+
+/**
+  NodePort service type
+ */
+static constexpr const char *kNodePort = "NodePort";
+
+/**
+  LoadBalancer service type
+ */
+static constexpr const char *kLoadBalancer = "LoadBalancer";
+
+/**
+  ExternalName service type
+ */
+static constexpr const char *kExternalName = "ExternalName";
+
+}  // namespace K8sServiceTypeValues
+
 namespace K8sVolumeTypeValues
 {
 /**
   A <a
-  href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim">persistentVolumeClaim</a>
+  href="https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim">persistentVolumeClaim</a>
   volume
  */
 static constexpr const char *kPersistentVolumeClaim = "persistentVolumeClaim";
 
 /**
-  A <a
-  href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#configmap">configMap</a>
-  volume
+  A <a href="https://kubernetes.io/docs/concepts/storage/volumes/#configmap">configMap</a> volume
  */
 static constexpr const char *kConfigMap = "configMap";
 
 /**
-  A <a
-  href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#downwardapi">downwardAPI</a>
+  A <a href="https://kubernetes.io/docs/concepts/storage/volumes/#downwardapi">downwardAPI</a>
   volume
  */
 static constexpr const char *kDownwardApi = "downwardAPI";
 
 /**
-  An <a href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#emptydir">emptyDir</a>
-  volume
+  An <a href="https://kubernetes.io/docs/concepts/storage/volumes/#emptydir">emptyDir</a> volume
  */
 static constexpr const char *kEmptyDir = "emptyDir";
 
 /**
-  A <a href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#secret">secret</a>
-  volume
+  A <a href="https://kubernetes.io/docs/concepts/storage/volumes/#secret">secret</a> volume
  */
 static constexpr const char *kSecret = "secret";
 
 /**
-  A <a href="https://v1-30.docs.kubernetes.io/docs/concepts/storage/volumes/#local">local</a> volume
+  A <a href="https://kubernetes.io/docs/concepts/storage/volumes/#local">local</a> volume
  */
 static constexpr const char *kLocal = "local";
 

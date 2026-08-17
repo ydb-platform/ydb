@@ -4,8 +4,16 @@ namespace NKikimr {
 
 namespace NSyncLog {
 
-TPhantomFlagStorageSnapshot::TPhantomFlagStorageSnapshot(const TPhantomFlags& flags)
+TPhantomFlagStorageSnapshot::TPhantomFlagStorageSnapshot(TPhantomFlags&& flags,
+            TPhantomFlagThresholds&& thresholds)
+    : Flags(std::move(flags))
+    , Thresholds(std::move(thresholds))
+{}
+
+TPhantomFlagStorageSnapshot::TPhantomFlagStorageSnapshot(const TPhantomFlags& flags,
+            const TPhantomFlagThresholds& thresholds)
     : Flags(flags)
+    , Thresholds(thresholds)
 {}
 
 } // namespace NSyncLog

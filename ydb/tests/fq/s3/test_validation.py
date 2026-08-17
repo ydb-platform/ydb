@@ -16,7 +16,7 @@ class TestS3(object):
         try:
             client.create_query("simple", "", type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         except FederatedQueryException as e:
-            assert "message: \"text\\\'s length is not in [1; 102400]" in e.args[0]
+            assert "message: \"text\\\'s length is not in [1; 1024000]" in e.args[0]
             return
         assert False
 

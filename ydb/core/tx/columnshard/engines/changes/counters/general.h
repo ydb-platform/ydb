@@ -1,9 +1,9 @@
 #pragma once
-#include <ydb/library/signals/owner.h>
-#include <ydb/core/tx/columnshard/counters/portions.h>
 #include <ydb/core/tx/columnshard/counters/histogram_borders.h>
+#include <ydb/core/tx/columnshard/counters/portions.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
@@ -40,7 +40,9 @@ public:
         , HistogramRepackPortionsBlobBytes("GeneralCompaction", "RepackPortions/Blob/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
         , HistogramBlobsWrittenBytes("GeneralCompaction", "BlobsWritten/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
         , HistogramCompactionDuration("GeneralCompaction", "Compaction/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds)
-        , HistogramTaskGenerationDuration("GeneralCompaction", "TaskGeneration/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds) {
+        , HistogramTaskGenerationDuration(
+              "GeneralCompaction", "TaskGeneration/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds)
+    {
         for (ui32 i = 0; i < 10; ++i) {
             RepackPortionsFromLevel.emplace(
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")));
@@ -93,7 +95,7 @@ public:
         Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions.OnData(portions);
     }
 
-    static void OnCompactionWriteIndexCompleted( const ui64 blobsWritten, const ui64 bytesWritten) {
+    static void OnCompactionWriteIndexCompleted(const ui64 blobsWritten, const ui64 bytesWritten) {
         Singleton<TGeneralCompactionCounters>()->HistogramBlobsWrittenCount->Collect(blobsWritten);
         Singleton<TGeneralCompactionCounters>()->HistogramBlobsWrittenBytes.Collect(bytesWritten);
     }

@@ -200,13 +200,13 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         app.AddHive(hiveTabletId);
     }
 
-    static void SetupRuntime(TTestActorRuntime& runtime) {
+    void SetupRuntime(TTestActorRuntime& runtime) {
         for (ui32 i : xrange(runtime.GetNodeCount())) {
             SetupStateStorage(runtime, i, 0);
         }
 
         TAppPrepare app;
-        AddDomain(runtime, app, "Root", 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
+        AddDomain(runtime, app, "Root", 0, TTestTxConfig::Hive, RootSchemeshardTabletId);
         SetupChannelProfiles(app, 1);
         SetupTabletServices(runtime, &app, true);
     }
@@ -241,7 +241,6 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         BootFakeHive(runtime, tabletId, HiveState);
     }
 
-protected:
     virtual TTestContext::TEventObserver ObserverFunc() {
         return TTestContext::DefaultObserverFunc;
     }
@@ -279,7 +278,7 @@ public:
             AddSysViewsRosterUpdateObserver();
         }
 
-        BootSchemeShard(*Context, TTestTxConfig::SchemeShard);
+        BootSchemeShard(*Context, RootSchemeshardTabletId);
         BootTxAllocator(*Context, TTestTxConfig::TxAllocator);
         BootCoordinator(*Context, TTestTxConfig::Coordinator);
         BootHive(*Context, TTestTxConfig::Hive);
@@ -302,7 +301,7 @@ public:
 
         TActorId sender = Context->AllocateEdgeActor();
         TVector<ui64> tabletIds;
-        tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
+        tabletIds.push_back(RootSchemeshardTabletId);
         for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) {
             tabletIds.push_back(x);
         }
@@ -311,7 +310,7 @@ public:
 
         // make schemeShard visible for ScheduledEventsGuard
         // trigger actor resolving for existed tablet
-        RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, sender);
+        RebootTablet(*Context, RootSchemeshardTabletId, sender);
     }
 
     void TearDown() override {
@@ -321,6 +320,9 @@ public:
         SysViewsRosterUpdateObserver.Remove();
         Context.Reset();
     }
+
+public:
+    ui64 RootSchemeshardTabletId = TTestTxConfig::SchemeShard;
 
 protected:
     THolder<TTestContext> Context;

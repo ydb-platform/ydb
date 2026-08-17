@@ -8,6 +8,7 @@ IF (CLANG)
         -Wno-logical-op-parentheses
         -Wno-bitwise-op-parentheses
         -Wswitch
+        -Wreturn-type
     )
 
     IF (MUSL)

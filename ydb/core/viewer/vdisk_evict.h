@@ -48,6 +48,9 @@ public:
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
+        if (!RequireAdminIfForce(Force)) {
+            return;
+        }
         ui32 groupId = 0;
         ui32 groupGeneration = 0;
         ui32 failRealmIdx = 0;
@@ -76,8 +79,6 @@ public:
             return;
             //return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Parameter 'vdisk_id' is required"), "BadRequest");
         }
-
-        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
 
         Response = RequestBSControllerVDiskEvict(groupId, groupGeneration, failRealmIdx, failDomainIdx, vDiskIdx, Force);
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());

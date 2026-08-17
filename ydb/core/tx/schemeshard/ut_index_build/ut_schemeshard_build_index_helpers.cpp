@@ -1,4 +1,4 @@
-#include "schemeshard_build_index_helpers.h"
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>

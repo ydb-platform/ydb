@@ -3,15 +3,13 @@
 PROGRAM(curl)
 
 LICENSE(
-    BSD-3-Clause AND
     ISC AND
-    Public-Domain AND
     curl
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.16.0)
+VERSION(8.17.0)
 
 PEERDIR(
     contrib/libs/c-ares
@@ -38,14 +36,17 @@ SRCDIR(contrib/libs/curl)
 SRCS(
     lib/curlx/base64.c
     lib/curlx/dynbuf.c
+    lib/curlx/fopen.c
     lib/curlx/multibyte.c
     lib/curlx/nonblock.c
+    lib/curlx/strerr.c
     lib/curlx/strparse.c
     lib/curlx/timediff.c
     lib/curlx/timeval.c
     lib/curlx/version_win32.c
     lib/curlx/wait.c
     lib/curlx/warnless.c
+    lib/curlx/winapi.c
     src/config2setopts.c
     src/slist_wc.c
     src/terminal.c

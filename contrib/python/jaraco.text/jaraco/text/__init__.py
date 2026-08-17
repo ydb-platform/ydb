@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import functools
+import io
 import itertools
+import os
 import re
 import sys
 import textwrap
@@ -13,6 +15,8 @@ from typing import (
     Protocol,
     SupportsIndex,
     TypeVar,
+    Union,
+    cast,
     overload,
 )
 
@@ -25,12 +29,18 @@ else:  # pragma: no cover
     from importlib.abc import Traversable
 
 if TYPE_CHECKING:
-    from _typeshed import FileDescriptorOrPath, SupportsGetItem
-    from typing_extensions import Self, TypeAlias, TypeGuard, Unpack
+    from typing import TypeAlias, TypeGuard
 
-    _T_co = TypeVar("_T_co", covariant=True)
-    # Same as builtins._GetItemIterable from typeshed
-    _GetItemIterable: TypeAlias = SupportsGetItem[int, _T_co]
+    from _typeshed import (
+        FileDescriptorOrPath,
+        SupportsIter,
+        SupportsNext,
+    )
+    from typing_extensions import Self, Unpack
+
+    Openable: TypeAlias = FileDescriptorOrPath
+else:
+    Openable = str | bytes | os.PathLike | int
 
 _T = TypeVar("_T")
 
@@ -202,7 +212,7 @@ class FoldedCase(str):
         return pattern.split(self, int(maxsplit))
 
 
-@ExceptionTrap(UnicodeDecodeError).passes  # type: ignore[no-untyped-call, untyped-decorator, unused-ignore, misc] # jaraco/jaraco.context#15
+@ExceptionTrap(UnicodeDecodeError).passes  # type: ignore[no-untyped-call, untyped-decorator, unused-ignore, misc, arg-type] # jaraco/jaraco.context#15
 def is_decodable(value: _SupportsDecode) -> None:
     r"""
     Return True if the supplied value is decodable (using the default
@@ -480,6 +490,25 @@ def simple_html_strip(s: str) -> str:
     return ''.join(texts)
 
 
+# ECMA-48 escape sequences: a Fe escape (except CSI) or a CSI sequence.
+_ansi_pattern = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def strip_ansi(text: str) -> str:
+    r"""
+    Remove ANSI escape sequences (such as SGR color codes) from `text`.
+
+    >>> strip_ansi('\x1b[1;32m3.24 nsec\x1b[0m \x1b[32mper loop\x1b[0m')
+    '3.24 nsec per loop'
+
+    Text without escape sequences passes through unchanged.
+
+    >>> strip_ansi('plain text')
+    'plain text'
+    """
+    return _ansi_pattern.sub('', text)
+
+
 class SeparatedValues(str):
     """
     A string separated by a separator. Overrides __iter__ for getting
@@ -655,7 +684,7 @@ def drop_comment(line: str) -> str:
     return line.partition(' #')[0]
 
 
-def join_continuation(lines: _GetItemIterable[str]) -> Generator[str]:
+def join_continuation(lines: SupportsIter[SupportsNext[str]]) -> Generator[str]:
     r"""
     Join lines continued by a trailing backslash.
 
@@ -679,7 +708,7 @@ def join_continuation(lines: _GetItemIterable[str]) -> Generator[str]:
     ['foo']
     """
     lines_ = iter(lines)
-    for item in lines_:
+    for item in lines_:  # type: ignore[attr-defined] # A bit of a false positive with iteration dunder fallback
         while item.endswith('\\'):
             try:
                 item = item[:-2].strip() + next(lines_)
@@ -688,9 +717,15 @@ def join_continuation(lines: _GetItemIterable[str]) -> Generator[str]:
         yield item
 
 
+# https://docs.python.org/3/library/io.html#io.TextIOBase.newlines
+NewlineSpec: TypeAlias = str | tuple[str, ...] | None
+
+
+@functools.singledispatch
 def read_newlines(
-    filename: FileDescriptorOrPath, limit: int | None = 1024
-) -> str | tuple[str, ...] | None:
+    filename: Union[Openable, io.TextIOWrapper],  # noqa: UP007 # singledispatch uses the annotation at runtime (python 3.9)
+    limit: int | None = 1024,
+) -> NewlineSpec:
     r"""
     >>> tmp_path = getfixture('tmp_path')
     >>> filename = tmp_path / 'out.txt'
@@ -704,9 +739,21 @@ def read_newlines(
     >>> read_newlines(filename)
     ('\r', '\n', '\r\n')
     """
+    if sys.version_info >= (3, 10):
+        assert isinstance(filename, Openable)
+    else:  # pragma: no cover
+        filename = cast(Openable, filename)
     with open(filename, encoding='utf-8') as fp:
-        fp.read(limit)
-    return fp.newlines
+        return read_newlines(fp, limit=limit)
+
+
+@read_newlines.register
+def _(
+    filename: io.TextIOWrapper,
+    limit: Union[int, None] = 1024,  # noqa: UP007 # singledispatch uses the annotation at runtime (python 3.9)
+) -> NewlineSpec:
+    filename.read(limit)
+    return filename.newlines
 
 
 def lines_from(input: Traversable) -> Generator[str]:

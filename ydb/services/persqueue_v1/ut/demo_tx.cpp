@@ -123,8 +123,7 @@ void TTxFixture::SetUp(NUnitTest::TTestContext&)
 void TTxFixture::CreateTestServer()
 {
     auto settings = PQSettings(0)
-        .SetDomainName("Root")
-        .SetEnableTopicServiceTx(true);
+        .SetDomainName("Root");
 
     Server.ConstructInPlace(settings);
 

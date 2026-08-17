@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(20)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -18,6 +18,7 @@ PEERDIR(
 
 SRCS(
     ut_incremental_restore_reboots.cpp
+    ut_init_recovery_dropped_invariant.cpp
 )
 
 YQL_LAST_ABI_VERSION()

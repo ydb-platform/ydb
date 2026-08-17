@@ -1,5 +1,3 @@
-requirements:
-  - autocommand: null
 exclude:
   - "jaraco/text/Lorem ipsum.txt"
 keep:

@@ -27,8 +27,7 @@ private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource,
         const bool partialUsageByPredicate, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
-    std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2>
-        CacheFetchingScripts;
+    std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
@@ -38,6 +37,7 @@ public:
     const ui64 ReadSequentiallyBufferSize = TGlobalLimits::DefaultReadSequentiallyBufferSize;
 
     ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
+
     ui64 GetRequestedMemoryBytes() const {
         return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();
     }

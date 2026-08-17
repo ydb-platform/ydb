@@ -35,7 +35,9 @@ inline TCreateLimiterCB CreateLimiterCb(TIntrusivePtr<TInFlightLimiterRegistry> 
     return TCreateLimiterCB(limiterRegistry);
 }
 
-template <typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
+template <typename TIn, typename TOut, typename TService,
+    typename TInProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TIn>,
+    typename TOutProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TOut>>
 using TGRpcRequest = NYdbGrpc::TGRpcRequest<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
 
 } // namespace NGRpcService

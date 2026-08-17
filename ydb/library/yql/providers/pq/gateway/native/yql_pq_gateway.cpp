@@ -88,7 +88,7 @@ public:
         }
     }
 
-    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {   
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {
         ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
         for (const auto& cfg : config->GetClusterMapping()) {
             AddCluster(cfg);
@@ -169,7 +169,7 @@ private:
 private:
     const TPqGatewayConfigPtr Config;
     const IMetricsRegistryPtr Metrics;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     const ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const TDriver YdbDriver;
     const TMaybe<TTopicClientSettings> CommonTopicClientSettings;

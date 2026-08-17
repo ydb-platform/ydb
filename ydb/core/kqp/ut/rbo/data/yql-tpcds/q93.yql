@@ -18,16 +18,16 @@ FROM (
             ELSE (ss_quantity * ss_sales_price)
         END AS act_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     LEFT OUTER JOIN
-        `/Root/test/ds/store_returns`
+        `/Root/test/ds/store_returns` as store_returns
     ON
         (
             sr_item_sk == ss_item_sk
             AND sr_ticket_number == ss_ticket_number
         )
     ,
-        `/Root/test/ds/reason`
+        `/Root/test/ds/reason` as reason
     WHERE
         sr_reason_sk == r_reason_sk
         AND r_reason_desc == 'Did not like the warranty'

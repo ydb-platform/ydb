@@ -12,6 +12,7 @@
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/two_level_fair_share_thread_pool.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -28,6 +29,10 @@
 
 #include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/helpers.h>
+
+#include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/threading/count_down_latch.h>
 
@@ -48,7 +53,7 @@ using ::testing::ContainsRegex;
 
 constexpr auto SleepQuantum = TDuration::MilliSeconds(100);
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -150,14 +155,14 @@ TEST_W(TSchedulerTest, SwitchToInvoker1)
 {
     auto invoker = Queue1->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker->GetThreadId();
 
     EXPECT_NE(id0, id1);
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
     }
 }
 
@@ -166,7 +171,7 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
     auto invoker1 = Queue1->GetInvoker();
     auto invoker2 = Queue2->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker1->GetThreadId();
     auto id2 = invoker2->GetThreadId();
 
@@ -176,10 +181,10 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker1);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
 
         SwitchTo(invoker2);
-        EXPECT_EQ(GetCurrentThreadId(), id2);
+        EXPECT_EQ(GetSystemThreadId(), id2);
     }
 }
 
@@ -257,6 +262,83 @@ TEST_W(TSchedulerTest, WaitForCancelableInvoker2)
         })
         .AsyncVia(invoker)
         .Run()).ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsWaitingFiber)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto asyncResult = BIND([=] {
+            started.Set();
+            WaitFor(future)
+                .ThrowOnError();
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+
+    constexpr auto CancelationCode = TErrorCode(42);
+    context->Cancel(TError(CancelationCode, "Canceled by context"));
+
+    auto result = WaitFor(asyncResult);
+    EXPECT_FALSE(result.IsOK());
+    EXPECT_EQ(CancelationCode, result.GetCode());
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsSubsequentWaits)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto firstPromise = NewPromise<void>();
+    auto secondPromise = NewPromise<void>();
+
+    // Once the context cancels the fiber, every subsequent wait -- even on a
+    // future that is never resolved (secondPromise) -- must be canceled at once,
+    // because the whole fiber is canceled, not just the single await. Otherwise
+    // the second WaitFor would hang.
+    auto asyncResult = BIND([=] {
+            started.Set();
+            EXPECT_THROW(WaitFor(firstPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+            EXPECT_THROW(WaitFor(secondPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+    context->Cancel(TError("Canceled by context"));
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, CurrentCancelableContextFollowsFiberAcrossSwitchTo)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+    auto otherInvoker = Queue2->GetInvoker();
+
+    WaitFor(BIND([=] {
+            // Running under the cancelable invoker: the context is current.
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+
+            // Switching to an unrelated invoker must not rebind the current
+            // cancelable context -- it is fiber-local, not invoker-bound.
+            SwitchTo(otherInvoker);
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+        })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
 }
 
 TEST_W(TSchedulerTest, TerminatedCaught)
@@ -377,11 +459,11 @@ TEST_F(TSchedulerTest, CurrentInvokerSync)
 TEST_F(TSchedulerTest, CurrentInvokerInActionQueue)
 {
     auto invoker = Queue1->GetInvoker();
-    BIND([=] {
+    WaitFor(BIND([=] {
         EXPECT_EQ(invoker, GetCurrentInvoker());
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, Intercept)
@@ -389,7 +471,7 @@ TEST_F(TSchedulerTest, Intercept)
     auto invoker = Queue1->GetInvoker();
     int counter1 = 0;
     int counter2 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         TContextSwitchGuard guard(
             [&] {
                 EXPECT_EQ(counter1, 0);
@@ -403,8 +485,8 @@ TEST_F(TSchedulerTest, Intercept)
             });
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 1);
     EXPECT_EQ(counter2, 1);
 }
@@ -416,7 +498,7 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
     int counter2 = 0;
     int counter3 = 0;
     int counter4 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         {
             TContextSwitchGuard guard(
                 [&] { ++counter1; },
@@ -432,8 +514,8 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
         }
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 3);
     EXPECT_EQ(counter2, 3);
     EXPECT_EQ(counter3, 1);
@@ -453,8 +535,8 @@ TEST_F(TSchedulerTest, CurrentInvokerConcurrent)
         EXPECT_EQ(invoker2, GetCurrentInvoker());
     }).AsyncVia(invoker2).Run();
 
-    result1.Get();
-    result2.Get();
+    WaitUntilSet(result1);
+    WaitUntilSet(result2);
 }
 
 TEST_W(TSchedulerTest, WaitForAsyncVia)
@@ -472,11 +554,11 @@ TEST_W(TSchedulerTest, WaitForAsyncVia)
 TEST_F(TSchedulerTest, WaitForInSerializedInvoker1)
 {
     auto invoker = CreateSerializedInvoker(Queue1->GetInvoker());
-    BIND([&] {
+    WaitForFast(BIND([&] {
         for (int i = 0; i < 10; ++i) {
             TDelayedExecutor::WaitForDuration(SleepQuantum);
         }
-    }).AsyncVia(invoker).Run().Get().ThrowOnError();
+    }).AsyncVia(invoker).Run()).ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
@@ -499,7 +581,7 @@ TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
         }
     }).AsyncVia(invoker).Run());
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    WaitForFast(AllSucceeded(futures)).ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, PropagateFiberCancelationToFuture)
@@ -509,6 +591,26 @@ TEST_F(TSchedulerTest, PropagateFiberCancelationToFuture)
 
     auto a = BIND([=] () mutable {
         WaitUntilSet(f1);
+    });
+
+    auto f2 = a.AsyncVia(Queue1->GetInvoker()).Run();
+
+    Sleep(SleepQuantum);
+
+    f2.Cancel(TError("Error"));
+
+    Sleep(SleepQuantum);
+
+    EXPECT_TRUE(p1.IsCanceled());
+}
+
+TEST_F(TSchedulerTest, PropagateFiberCancelationToFutureWithDeadline)
+{
+    auto p1 = NewPromise<void>();
+    auto f1 = p1.ToFuture();
+
+    auto a = BIND([=] () mutable {
+        WaitUntilSet(f1, TWaitOptions{}.WithTimeout(TDuration::Seconds(100)));
     });
 
     auto f2 = a.AsyncVia(Queue1->GetInvoker()).Run();
@@ -545,7 +647,7 @@ TEST_F(TSchedulerTest, FiberUnwindOrder)
     p1.Set();
     Sleep(SleepQuantum);
     EXPECT_TRUE(f2.IsSet());
-    EXPECT_FALSE(f2.Get().IsOK());
+    EXPECT_FALSE(WaitForFast(f2).IsOK());
 }
 
 TEST_F(TSchedulerTest, TestWaitUntilSet)
@@ -560,7 +662,174 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
 
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
-    EXPECT_TRUE(f1.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(f1).IsOK());
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetBlockThreadValue)
+{
+    // Already-set future.
+    auto fSet = MakeFuture(42);
+    WaitUntilSet(fSet.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_EQ(42, fSet.GetOrCrash().ValueOrThrow());
+
+    // Blocks the thread until the future is set from another thread.
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    ASSERT_TRUE(f.IsSet());
+    EXPECT_EQ(7, f.GetOrCrash().ValueOrThrow());
+
+    // Error propagation path: the error is returned, not thrown.
+    auto fErr = MakeFuture<int>(TError("simulated error"));
+    WaitUntilSet(fErr.AsVoid(), {.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_FALSE(fErr.GetOrCrash().IsOK());
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetBlockThreadInFiber)
+{
+    // BlockThread inside a fiber blocks the whole thread instead of yielding.
+    auto id0 = GetSystemThreadId();
+
+    auto p = NewPromise<void>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread});
+    EXPECT_TRUE(f.IsSet());
+    EXPECT_EQ(GetSystemThreadId(), id0);
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetSuspendFiberValue)
+{
+    // Already-set future.
+    auto fSet = MakeFuture(42);
+    WaitUntilSet(fSet.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_EQ(42, fSet.GetOrCrash().ValueOrThrow());
+
+    // Yields the fiber until the future is set from another thread.
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+
+    WaitUntilSet(f.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    ASSERT_TRUE(f.IsSet());
+    EXPECT_EQ(7, f.GetOrCrash().ValueOrThrow());
+
+    // Error propagation path: the error is returned, not thrown.
+    auto fErr = MakeFuture<int>(TError("simulated error"));
+    WaitUntilSet(fErr.AsVoid(), {.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_FALSE(fErr.GetOrCrash().IsOK());
+}
+
+TEST_F(TSchedulerTest, WaitOptionsWithTimeout)
+{
+    auto timeout = TDuration::Seconds(5);
+
+    auto before = GetInstant();
+    auto options = TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(timeout);
+    auto after = GetInstant();
+
+    // Deadline must be |timeout| past a |GetInstant()| taken during the call.
+    ASSERT_TRUE(options.Deadline.has_value());
+    EXPECT_GE(*options.Deadline, before + timeout);
+    EXPECT_LE(*options.Deadline, after + timeout);
+
+    // The other fields pass through untouched.
+    EXPECT_EQ(EWaitForStrategy::BlockThread, options.Strategy);
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetAlwaysYieldFiber)
+{
+    auto invoker = Queue1->GetInvoker();
+    auto id0 = GetSystemThreadId();
+    auto id1 = invoker->GetThreadId();
+    EXPECT_NE(id0, id1);
+
+    auto p = NewPromise<void>();
+    p.Set();
+    auto future = p.ToFuture();
+
+    // AlwaysYieldFiber = false: an already-set future returns without rescheduling.
+    WaitUntilSet(future, TWaitOptions{.ResumingInvoker = invoker, .AlwaysYieldFiber = false});
+    EXPECT_EQ(GetSystemThreadId(), id0);
+
+    // AlwaysYieldFiber = true (default): the fiber is rescheduled onto |invoker| even though set.
+    WaitUntilSet(future, TWaitOptions{.ResumingInvoker = invoker});
+    EXPECT_EQ(GetSystemThreadId(), id1);
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetSuspendFiberOffFiber)
+{
+    // Off a fiber, SuspendFiber degenerates to a blocking wait.
+    auto future = TDelayedExecutor::MakeDelayed(SleepQuantum);
+    WaitUntilSet(future, TWaitOptions{.Strategy = EWaitForStrategy::SuspendFiber});
+    EXPECT_TRUE(future.IsSet());
+}
+
+TEST_F(TSchedulerTest, WaitUntilSetBlockThread)
+{
+    // Already-set future.
+    auto pSet = NewPromise<void>();
+    pSet.Set();
+    auto fSet = pSet.ToFuture();
+    WaitUntilSet(fSet, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(SleepQuantum));
+    EXPECT_TRUE(fSet.IsSet());
+
+    // Times out while the future stays unset (and leaves it untouched).
+    auto p = NewPromise<void>();
+    auto f = p.ToFuture();
+    WaitUntilSet(f, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(SleepQuantum));
+    EXPECT_FALSE(f.IsSet());
+
+    // Wakes once the future is set from another thread before the deadline.
+    auto p2 = NewPromise<void>();
+    auto f2 = p2.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p2.Set();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+    WaitUntilSet(f2, TWaitOptions{.Strategy = EWaitForStrategy::BlockThread}.WithTimeout(TDuration::Seconds(10)));
+    EXPECT_TRUE(f2.IsSet());
+}
+
+TEST_W(TSchedulerTest, WaitUntilSetSuspendFiber)
+{
+    // Already-set future.
+    auto pSet = NewPromise<int>();
+    pSet.Set(1);
+    auto fSet = pSet.ToFuture();
+    WaitUntilSet(fSet.AsVoid(), TWaitOptions{}.WithTimeout(SleepQuantum));
+    EXPECT_TRUE(fSet.IsSet());
+
+    // Times out while the future stays unset (and leaves it untouched).
+    auto p = NewPromise<int>();
+    auto f = p.ToFuture();
+    WaitUntilSet(f.AsVoid(), TWaitOptions{}.WithTimeout(SleepQuantum));
+    EXPECT_FALSE(f.TryGet());
+    EXPECT_FALSE(f.IsSet());
+
+    // Reports the value once the future is set before the deadline.
+    auto p2 = NewPromise<int>();
+    auto f2 = p2.ToFuture();
+    YT_UNUSED_FUTURE(BIND([=] () mutable {
+        Sleep(SleepQuantum);
+        p2.Set(7);
+    }).AsyncVia(Queue1->GetInvoker()).Run());
+    WaitUntilSet(f2.AsVoid(), TWaitOptions{}.WithTimeout(TDuration::Seconds(10)));
+    auto value = f2.TryGet();
+    ASSERT_TRUE(value.has_value());
+    EXPECT_EQ(7, value->ValueOrThrow());
 }
 
 TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
@@ -575,10 +844,10 @@ TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
     EXPECT_FALSE(asyncResult1.IsSet());
     EXPECT_FALSE(asyncResult2.IsSet());
     asyncResult2.Cancel(TError("Error"));
-    EXPECT_TRUE(asyncResult1.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult1).IsOK());
     Sleep(SleepQuantum);
     EXPECT_TRUE(asyncResult2.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult2.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(asyncResult2).GetCode());
 }
 
 TEST_F(TSchedulerTest, CancelCurrentFiber)
@@ -588,9 +857,9 @@ TEST_F(TSchedulerTest, CancelCurrentFiber)
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
         SwitchTo(invoker);
     }).AsyncVia(invoker).Run();
-    asyncResult.Get();
+    WaitUntilSet(asyncResult);
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(asyncResult).GetCode());
 }
 
 TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
@@ -600,28 +869,28 @@ TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
     auto invoker2 = Queue2->GetInvoker();
 
     auto asyncResult = BIND([=] () mutable {
-        BIND([=] {
+        WaitUntilSet(BIND([=] {
             NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-        }).AsyncVia(invoker2).Run().Get();
+        }).AsyncVia(invoker2).Run());
         WaitFor(promise.ToFuture(), invoker2)
             .ThrowOnError();
     }).AsyncVia(invoker1).Run();
 
     promise.Set();
-    asyncResult.Get();
+    WaitUntilSet(asyncResult);
 
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult).IsOK());
 }
 
 TEST_F(TSchedulerTest, JustYield1)
 {
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult = BIND([] {
+    auto asyncResult = WaitForFast(BIND([] {
         for (int i = 0; i < 10; ++i) {
             Yield();
         }
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     EXPECT_TRUE(asyncResult.IsOK());
 }
 
@@ -640,24 +909,24 @@ TEST_F(TSchedulerTest, JustYield2)
     }).AsyncVia(invoker).Run();
 
     // This callback must complete before the first.
-    auto errorOrValue = BIND([&] {
+    auto errorOrValue = WaitForFast(BIND([&] {
         return flag;
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
 
     EXPECT_TRUE(errorOrValue.IsOK());
     EXPECT_FALSE(errorOrValue.Value());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult).IsOK());
 }
 
 TEST_F(TSchedulerTest, CancelInAdjacentCallback)
 {
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult1 = BIND([=] {
+    auto asyncResult1 = WaitForFast(BIND([=] {
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-    }).AsyncVia(invoker).Run().Get();
-    auto asyncResult2 = BIND([=] {
+    }).AsyncVia(invoker).Run());
+    auto asyncResult2 = WaitForFast(BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());
 }
@@ -666,13 +935,13 @@ TEST_F(TSchedulerTest, CancelInAdjacentThread)
 {
     auto closure = TCallback<void(const TError&)>();
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult1 = BIND([=, &closure] {
+    auto asyncResult1 = WaitForFast(BIND([=, &closure] {
         closure = NYT::NConcurrency::GetCurrentFiberCanceler();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     closure.Run(TError("Error")); // *evil laugh*
-    auto asyncResult2 = BIND([=] {
+    auto asyncResult2 = WaitForFast(BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     closure.Reset(); // *evil smile*
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());
@@ -700,15 +969,14 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     .Via(serializedInvoker)
     .Run();
 
-    promise.ToFuture().Get();
+    WaitUntilSet(promise.ToFuture());
 
-    auto result = BIND([&] () -> bool {
+    auto result = WaitFor(BIND([&] () -> bool {
         return flag;
     })
     .AsyncVia(serializedInvoker)
-    .Run()
-    .Get()
-    .ValueOrThrow();
+    .Run())
+        .ValueOrThrow();
 
     EXPECT_TRUE(result);
 }
@@ -735,7 +1003,7 @@ TEST_W(TSchedulerTest, CancelDelayedFuture)
     auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(10));
     future.Cancel(TError("Error"));
     EXPECT_TRUE(future.IsSet());
-    auto error = future.Get();
+    auto error = WaitForFast(future);
     EXPECT_EQ(NYT::EErrorCode::Canceled, error.GetCode());
     EXPECT_EQ(1, std::ssize(error.InnerErrors()));
     EXPECT_EQ(NYT::EErrorCode::Generic, error.InnerErrors()[0].GetCode());
@@ -941,8 +1209,7 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             .AsyncVia(serializedInvoker)
             .Run());
 
-        ASSERT_NO_THROW(testResultFuture
-            .Get()
+        ASSERT_NO_THROW(WaitFor(testResultFuture)
             .ThrowOnError());
     }
 }

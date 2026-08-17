@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/affinity.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/startable.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -24,7 +25,9 @@ struct TStorageOptions
     TString DiskId;
     TString ClientId;
     ui32 BlockSize = 0;
+    ui64 StripeSize = 0;
     ui64 BlocksCount = 0;
+    ui64 VChunkSize = 0;
     ui32 VhostQueuesCount = 0;
     bool UnalignedRequestsDisabled = false;
     bool CreateOverlappedRequestsGuard = true;
@@ -32,6 +35,7 @@ struct TStorageOptions
     bool DiscardEnabled = false;
     ui32 MaxZeroBlocksSubRequestSize = 0;
     ui32 OptimalIoSize = 0;
+    ui32 Generation = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,11 +44,14 @@ struct IServer: public IStartable
 {
     virtual NThreading::TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
+        ITraceServicePtr traceService,
         IStoragePtr storage,
         const TStorageOptions& options) = 0;
 
     virtual NThreading::TFuture<NProto::TError> StopEndpoint(
         const TString& socketPath) = 0;
+
+    virtual void DetachStorage(const TString& socketPath) = 0;
 
     virtual NProto::TError UpdateEndpoint(
         const TString& socketPath,
@@ -64,10 +71,40 @@ struct TServerConfig
 
 IServerPtr CreateServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
     TServerConfig serverConfig,
     TVhostCallbacks callbacks);
+
+////////////////////////////////////////////////////////////////////////////////
+/*
+               | VHost |
+                   |
+                   v
+       | TUnalignedDeviceHandler |
+                   |
+                   v
+       | TAlignedDeviceHandler |
+                   |
+                   v
+    | TSplitRequestsStorageWrapper |
+                   |
+                   v
+| TOverlappedRequestsGuardStorageWrapper |
+                   |
+                   v
+       | TDurableStorageWrapper |
+                   |
+                   v
+           | TStorageGate |
+                   |
+                   v
+         | TFastPathService |
+*/
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NVhost

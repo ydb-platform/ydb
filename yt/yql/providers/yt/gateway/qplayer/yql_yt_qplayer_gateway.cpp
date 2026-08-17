@@ -62,7 +62,7 @@ public:
         , FileStorage_(fileStorage)
         , OperationOptions_(operationOptions)
         , FullCapture_(fullCapture)
-        , TablesData_(tablesData)
+        , TablesData_(QContext_.CanRead() ? tablesData : TYtTablesData::TPtr{})
         , Types_(types)
     {}
 
@@ -243,6 +243,7 @@ public:
                     data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
                     data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
                     data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                    data.Meta->HasRLS = metaNode.HasKey("HasRLS") ? metaNode["HasRLS"].AsBool() : false;
                     data.Meta->SqlView = metaNode["SqlView"].AsString();
                     data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
                     for (const auto& x : metaNode["Attrs"].AsMap()) {
@@ -324,6 +325,7 @@ public:
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
                         ("InferredScheme",data.Meta->InferredScheme)
                         ("IsDynamic",data.Meta->IsDynamic)
+                        ("HasRLS",data.Meta->HasRLS)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
                         ("Attrs",attrsNode) : NYT::TNode();
@@ -1009,10 +1011,6 @@ public:
     }
 
     TString GetClusterServer(const TString& cluster) const final {
-        if (QContext_.CanRead()) {
-            return "replay";
-        }
-
         return Inner_->GetClusterServer(cluster);
     }
 
@@ -1111,6 +1109,7 @@ private:
                     replaces[node.Get()] = ctx.ChangeChild(*node, NNodes::TYtTable::idx_Name, ctx.NewAtom(node->Pos(), *dumpPath, TNodeFlags::Default));
 
                     // Add fake table data to allow YT type annotation
+                    YQL_ENSURE(TablesData_);
                     for (auto epoch : {tableInfo->Epoch, tableInfo->CommitEpoch}) {
                         auto& origTableData = TablesData_->GetTable(tableInfo->Cluster, tableInfo->Name, epoch);
                         TablesData_->GetOrAddTable(tableInfo->Cluster, *dumpPath, epoch) = origTableData;
@@ -1179,6 +1178,9 @@ private:
                     if (tableInfo.Meta->IsDynamic) {
                         throw yexception() << "dynamic table " << req.Table() << " on cluster " << req.Cluster();
                     }
+                    if (tableInfo.Meta->HasRLS) {
+                        throw yexception() << "rls table " << req.Table() << " on cluster " << req.Cluster();
+                    }
 
                     YQL_ENSURE(tableInfo.Stat);
                     tableDataSize += tableInfo.Stat->DataSize;
@@ -1221,6 +1223,10 @@ private:
 
     NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override {
         return Inner_->DownloadTable(std::move(options));
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        return Inner_->UploadFilesToCache(std::move(options));
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

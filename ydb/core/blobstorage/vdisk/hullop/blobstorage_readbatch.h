@@ -83,6 +83,7 @@ namespace NKikimr {
             ui64 Serial;
             NKikimrProto::EReplyStatus Status;
             TRcBuf Content;
+            TLogoBlobID HugeBlobId;
         };
         using TReadQueue = TDeque<TReadItem>;
         TReadQueue ReadQueue;
@@ -118,10 +119,10 @@ namespace NKikimr {
 
         // enqueue read item -- a read from specific chunk at desired position and length; function returns serial
         // number of this request; all results are then reported sequently in ascending order of returned serial
-        ui64 AddReadItem(TDiskPart location, TPayload&& payload) {
+        ui64 AddReadItem(TDiskPart location, TPayload&& payload, TLogoBlobID hugeBlobId) {
             const ui64 serial = NextSerial++;
             ReadQueue.push_back(TReadItem{location.ChunkIdx, location.Offset, location.Size, std::move(payload), serial,
-                NKikimrProto::UNKNOWN, {}});
+                NKikimrProto::UNKNOWN, {}, hugeBlobId});
             return serial;
         }
 
@@ -158,10 +159,13 @@ namespace NKikimr {
             // total number of bytes we are going to read
             ui32 totalBytes = 0;
 
+            // logo blob id for huge blob we are reading
+            TLogoBlobID hugeBlobId;
+
             // current position
             typename TReadQueue::iterator it;
             for (it = Iterator; it != ReadQueue.end(); ++it) {
-                if (it->ChunkIdx == chunkIdx) {
+                if (it->ChunkIdx == chunkIdx && !hugeBlobId) {
                     // try to add this item to range and calculate parameters
                     range.Set(it->Offset, it->Offset + it->Size);
                     const std::pair<ui32, ui32> newEnclosingRange = range.GetEnclosingRange();
@@ -193,6 +197,9 @@ namespace NKikimr {
                         break;
                     }
 
+                    // store huge blob id
+                    hugeBlobId = it->HugeBlobId;
+
                     // move item in place
                     *outIt++ = std::move(*it);
                     enclosingRange = newEnclosingRange;
@@ -209,6 +216,7 @@ namespace NKikimr {
             const ui32 size = enclosingRange.second - enclosingRange.first;
             auto msg = std::make_unique<NPDisk::TEvChunkRead>(owner, ownerRound, chunkIdx, offset, size, priorityClass,
                     reinterpret_cast<void *>(NextRequestCookie));
+            msg->BlobId = hugeBlobId;
             ++NextRequestCookie;
 
             // move stored items to their place and advance Iterator

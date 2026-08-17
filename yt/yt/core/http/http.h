@@ -7,11 +7,10 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/net/public.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/memory/ref.h>
 
@@ -267,6 +266,7 @@ struct IResponseWriter
     virtual i64 GetWriteByteCount() const = 0;
 
     virtual TFuture<void> WriteBody(const TSharedRef& smallBody) = 0;
+    virtual TFuture<void> WriteBody(TRange<TSharedRef> bodyParts) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IResponseWriter)

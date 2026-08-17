@@ -162,9 +162,6 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("slim", &TThis::Slim)
         .DefaultNew();
 
-    registrar.Parameter("versioned_row_digest", &TThis::VersionedRowDigest)
-        .DefaultNew();
-
     registrar.Parameter("testing_options", &TThis::TestingOptions)
         .DefaultNew();
 
@@ -402,6 +399,15 @@ void TInsertRowsFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPushQueueProducerFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Preprocessor([] (TThis* config) {
+        config->EnableNullToYsonEntityConversion = false;
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TChunkReaderOptionsPtr TChunkReaderOptions::GetDefault()
 {
     return LeakyRefCountedSingleton<TChunkReaderOptions>();
@@ -548,21 +554,13 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TVersionedRowDigestConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("enable", &TThis::Enable)
-        .Default(false);
-    registrar.Parameter("t_digest", &TThis::TDigest)
-        .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TMinHashDigestConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("write_count", &TThis::WriteCount)
+    registrar.Parameter("write_timestamp_count", &TThis::WriteTimestampCount)
+        .GreaterThan(0)
         .Default(100);
-    registrar.Parameter("delete_tombstone_count", &TThis::DeleteTombstoneCount)
+    registrar.Parameter("delete_timestamp_count", &TThis::DeleteTimestampCount)
+        .GreaterThan(0)
         .Default(100);
 }
 

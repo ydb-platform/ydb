@@ -31,11 +31,11 @@ public:
   std::string host_;
   std::string scheme_;
   std::string path_;
-  uint16_t port_;
+  uint16_t port_{};
   std::string query_;
-  bool success_;
+  bool success_{true};
 
-  UrlParser(std::string url) : url_(std::move(url)), success_(true)
+  UrlParser(std::string url) : url_(std::move(url))
   {
     if (url_.length() == 0)
     {

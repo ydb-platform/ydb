@@ -100,7 +100,7 @@ void TCube<T>::Remove(TTagIdList tagIds)
     auto it = Projections_.find(tagIds);
     if (it == Projections_.end()) {
         THROW_ERROR_EXCEPTION("Can't remove tags from cube")
-            << TErrorAttribute("tag_ids", tagIds);
+            .With("tag_ids", tagIds);
     }
 
     it->second.UsageCount--;
@@ -124,7 +124,7 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
     auto it = Projections_.find(tagIds);
     if (it == Projections_.end()) {
         THROW_ERROR_EXCEPTION("Can't update tags in cube")
-            << TErrorAttribute("tag_ids", tagIds);
+            .With("tag_ids", tagIds);
     }
 
     if constexpr (std::is_same_v<T, double>) {
@@ -190,7 +190,7 @@ T TCube<T>::Rollup(const TProjection& window, int index) const
 
 template <class T>
 int TCube<T>::ReadSensors(
-    const std::string& name,
+    TStringBuf name,
     const TReadOptions& options,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
@@ -255,7 +255,7 @@ int TCube<T>::ReadSensors(
     auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
-        if (options.Global) {
+        if (options.Global && !options.ExportGlobalsAsMemOnly) {
             consumer->OnLabel(globalHostLabel.first, globalHostLabel.second);
         } else if (options.Host) {
             consumer->OnLabel(hostLabel.first, hostLabel.second);
@@ -263,12 +263,12 @@ int TCube<T>::ReadSensors(
 
         TCompactVector<bool, 8> replacedInstanceTags(options.InstanceTags.size());
 
-        if (options.MarkAggregates && !options.Global) {
+        if (options.MarkAggregates) {
             if (options.EnableSolomonAggregates) {
                 auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
                 consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
-            } else if (summaryPolicy == ESummaryPolicy::Sum) {
-                // By default support only sum aggregate.
+            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
+                // By default support only sum aggregate except global sensors.
                 consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
             }
         }
@@ -362,8 +362,8 @@ int TCube<T>::ReadSensors(
                 for (auto index : indices) {
                     if (index < 0 || static_cast<size_t>(index) >= window->Values.size()) {
                         THROW_ERROR_EXCEPTION("Read index is invalid")
-                            << TErrorAttribute("index", index)
-                            << TErrorAttribute("window_size", window->Values.size());
+                            .With("index", index)
+                            .With("window_size", window->Values.size());
                     }
 
                     value += window->Values[index];
@@ -374,7 +374,7 @@ int TCube<T>::ReadSensors(
         };
 
         auto writeFlags = [&] {
-            consumer->OnMemOnly(options.MemOnly);
+            consumer->OnMemOnly(options.MemOnly || (options.Global && options.ExportGlobalsAsMemOnly));
         };
 
         auto writeSummary = [&, tagIds = tagIds] (auto makeSummary) {

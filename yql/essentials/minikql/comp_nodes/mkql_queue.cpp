@@ -1,13 +1,16 @@
 #include "mkql_queue.h"
-#include "mkql_window_frames_collector_params_deserializer.h"
 
+#include <yql/essentials/minikql/comp_nodes/mkql_window_range_pg_caller.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/core/sql_types/window_frame_bounds.h>
 #include <yql/essentials/minikql/mkql_core_win_frames_collector.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_datetime.h>
 #include <yql/essentials/public/udf/udf_string.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_window_frames_collector_params_deserializer.h>
+
+#include <utility>
 
 namespace NKikimr {
 using namespace NUdf;
@@ -19,35 +22,35 @@ class TQueueResource: public TComputationValue<TQueueResource> {
 public:
     TQueueResource(TMemoryUsageInfo* memInfo, const TStringBuf& tag, TMaybe<ui64> capacity, ui64 initSize)
         : TComputationValue(memInfo)
-        , ResourceTag(tag)
-        , Buffer(capacity, TUnboxedValue(), initSize)
-        , BufferBytes(CurrentMemUsage())
+        , ResourceTag_(tag)
+        , Buffer_(capacity, TUnboxedValue(), initSize)
+        , BufferBytes_(CurrentMemUsage())
     {
     }
 
-    ~TQueueResource() {
-        Buffer.Clear();
+    ~TQueueResource() override {
+        Buffer_.Clear();
     }
 
     void UpdateBufferStats() {
-        BufferBytes = CurrentMemUsage();
+        BufferBytes_ = CurrentMemUsage();
     }
 
     TSafeCircularBuffer<TUnboxedValue>& GetBuffer() {
-        return Buffer;
+        return Buffer_;
     }
 
     const TFrameBoundsIndices& GetFrameBoundsIndices() const {
-        return FrameBoundsIndices;
+        return FrameBoundsIndices_;
     }
 
     TFrameBoundsIndices& GetFrameBoundsIndices() {
-        return FrameBoundsIndices;
+        return FrameBoundsIndices_;
     }
 
 private:
     NUdf::TStringRef GetResourceTag() const override {
-        return NUdf::TStringRef(ResourceTag);
+        return NUdf::TStringRef(ResourceTag_);
     }
 
     void* GetResource() override {
@@ -55,13 +58,13 @@ private:
     }
 
     size_t CurrentMemUsage() const {
-        return Buffer.Capacity() * sizeof(TUnboxedValue);
+        return Buffer_.Capacity() * sizeof(TUnboxedValue);
     }
 
-    const TStringBuf ResourceTag;
-    TSafeCircularBuffer<TUnboxedValue> Buffer;
-    TFrameBoundsIndices FrameBoundsIndices;
-    size_t BufferBytes;
+    const TStringBuf ResourceTag_;
+    TSafeCircularBuffer<TUnboxedValue> Buffer_;
+    TFrameBoundsIndices FrameBoundsIndices_;
+    size_t BufferBytes_;
 };
 
 class TQueueResourceUser {
@@ -73,15 +76,15 @@ public:
     void UpdateBufferStats(const NUdf::TUnboxedValuePod& resource) const;
 
 protected:
-    const TStringBuf Tag;
-    IComputationNode* const Resource;
+    const TStringBuf Tag_;
+    IComputationNode* const Resource_;
 
     TQueueResource& GetResource(const NUdf::TUnboxedValuePod& resource) const;
 };
 
 TQueueResourceUser::TQueueResourceUser(TStringBuf&& tag, IComputationNode* resource)
-    : Tag(tag)
-    , Resource(resource)
+    : Tag_(tag)
+    , Resource_(resource)
 {
 }
 
@@ -103,7 +106,7 @@ void TQueueResourceUser::UpdateBufferStats(const TUnboxedValuePod& resource) con
 
 TQueueResource& TQueueResourceUser::GetResource(const TUnboxedValuePod& resource) const {
     const TStringBuf tag = resource.GetResourceTag();
-    Y_DEBUG_ABORT_UNLESS(tag == Tag, "Expected correct Queue resource");
+    Y_DEBUG_ABORT_UNLESS(tag == Tag_, "Expected correct Queue resource");
     return *static_cast<TQueueResource*>(resource.GetResource());
 }
 
@@ -115,56 +118,56 @@ public:
         TIterator(TMemoryUsageInfo* memInfo, TUnboxedValue queue, size_t begin, size_t end, ui64 generation, TStringBuf tag, IComputationNode* resource)
             : TComputationValue<TIterator>(memInfo)
             , TQueueResourceUser(std::move(tag), resource)
-            , Queue(queue)
-            , Buffer(CheckAndGetBuffer(queue))
-            , Current(begin)
-            , End(end)
-            , Generation(generation)
+            , Queue_(queue)
+            , Buffer_(CheckAndGetBuffer(queue))
+            , Current_(begin)
+            , End_(end)
+            , Generation_(generation)
         {
         }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) override {
-            MKQL_ENSURE(Generation == Buffer.Generation(),
-                        "Queue generation changed while doing QueueRange: expected " << Generation << ", got: " << Buffer.Generation());
-            if (Current >= End) {
+            MKQL_ENSURE(Generation_ == Buffer_.Generation(),
+                        "Queue generation changed while doing QueueRange: expected " << Generation_ << ", got: " << Buffer_.Generation());
+            if (Current_ >= End_) {
                 return false;
             }
 
-            const auto& valRef = Buffer.Get(Current++);
+            const auto& valRef = Buffer_.Get(Current_++);
             value = !valRef ? NUdf::TUnboxedValuePod() : valRef.MakeOptional();
             return true;
         }
 
         bool Skip() override {
-            if (Current >= End) {
+            if (Current_ >= End_) {
                 return false;
             }
-            Current++;
+            Current_++;
             return true;
         }
 
-        const TUnboxedValue Queue;
-        const TSafeCircularBuffer<TUnboxedValue>& Buffer;
-        size_t Current;
-        const size_t End;
-        const ui64 Generation;
+        const TUnboxedValue Queue_;
+        const TSafeCircularBuffer<TUnboxedValue>& Buffer_;
+        size_t Current_;
+        const size_t End_;
+        const ui64 Generation_;
     };
 
     TQueueRange(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TUnboxedValue queue, size_t begin, size_t end, TStringBuf tag, IComputationNode* resource)
         : TComputationValue<TQueueRange<AlwaysExist>>(memInfo)
         , TQueueResourceUser(std::move(tag), resource)
-        , CompCtx(compCtx)
-        , Queue(queue)
-        , Begin(begin)
-        , End(std::min(end, CheckAndGetBuffer(Queue).Size()))
-        , Generation(CheckAndGetBuffer(Queue).Generation())
+        , CompCtx_(compCtx)
+        , Queue_(std::move(queue))
+        , Begin_(begin)
+        , End_(std::min(end, CheckAndGetBuffer(Queue_).Size()))
+        , Generation_(CheckAndGetBuffer(Queue_).Generation())
     {
     }
 
 private:
     ui64 GetListLength() const final {
-        return Begin < End ? (End - Begin) : 0;
+        return Begin_ < End_ ? (End_ - Begin_) : 0;
     }
 
     bool HasListItems() const final {
@@ -176,59 +179,59 @@ private:
     }
 
     NUdf::TUnboxedValue GetListIterator() const final {
-        return CompCtx.HolderFactory.Create<TIterator>(Queue, Begin, End, Generation, Tag, Resource);
+        return CompCtx_.HolderFactory.Create<TIterator>(Queue_, Begin_, End_, Generation_, Tag_, Resource_);
     }
 
-    TComputationContext& CompCtx;
-    const TUnboxedValue Queue;
-    const size_t Begin;
-    const size_t End;
-    const ui64 Generation;
+    TComputationContext& CompCtx_;
+    const TUnboxedValue Queue_;
+    const size_t Begin_;
+    const size_t End_;
+    const ui64 Generation_;
 };
 
 class TQueueCreateWrapper: public TMutableComputationNode<TQueueCreateWrapper> {
-    typedef TMutableComputationNode<TQueueCreateWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TQueueCreateWrapper>;
 
 public:
-    TQueueCreateWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TString& name, TMaybe<ui64> capacity, ui64 initSize)
+    TQueueCreateWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, TString name, TMaybe<ui64> capacity, ui64 initSize)
         : TBaseComputation(mutables)
-        , DependentNodes(std::move(dependentNodes))
-        , Name(name)
-        , Capacity(capacity)
-        , InitSize(initSize)
+        , DependentNodes_(std::move(dependentNodes))
+        , Name_(std::move(name))
+        , Capacity_(capacity)
+        , InitSize_(initSize)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return NUdf::TUnboxedValuePod(new TQueueResource(&ctx.HolderFactory.GetMemInfo(), Name, Capacity, InitSize));
+        return NUdf::TUnboxedValuePod(new TQueueResource(&ctx.HolderFactory.GetMemInfo(), Name_, Capacity_, InitSize_));
     }
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueueCreateWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TQueueCreateWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector DependentNodes;
-    const TString Name;
-    const TMaybe<ui64> Capacity;
-    const ui64 InitSize;
+    const TComputationNodePtrVector DependentNodes_;
+    const TString Name_;
+    const TMaybe<ui64> Capacity_;
+    const ui64 InitSize_;
 };
 
 class TQueuePushWrapper: public TMutableComputationNode<TQueuePushWrapper>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TQueuePushWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TQueuePushWrapper>;
 
 public:
     TQueuePushWrapper(TComputationMutables& mutables, const TResourceType* resourceType, IComputationNode* resource, IComputationNode* value)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Value(value)
+        , Value_(value)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto resource = Resource->GetValue(ctx);
+        auto resource = Resource_->GetValue(ctx);
         auto& buffer = CheckAndGetBuffer(resource);
-        buffer.PushBack(Value->GetValue(ctx));
+        buffer.PushBack(Value_->GetValue(ctx));
         if (buffer.IsUnbounded()) {
             UpdateBufferStats(resource);
         }
@@ -237,15 +240,15 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Value);
+        DependsOn(Resource_);
+        DependsOn(Value_);
     }
 
-    IComputationNode* const Value;
+    IComputationNode* const Value_;
 };
 
 class TQueuePopWrapper: public TMutableComputationNode<TQueuePopWrapper>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TQueuePopWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TQueuePopWrapper>;
 
 public:
     TQueuePopWrapper(TComputationMutables& mutables, const TResourceType* resourceType, IComputationNode* resource)
@@ -255,81 +258,81 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto resource = Resource->GetValue(ctx);
+        auto resource = Resource_->GetValue(ctx);
         CheckAndGetBuffer(resource).PopFront();
         return resource.Release();
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
+        DependsOn(Resource_);
     }
 };
 
 class TQueuePeekWrapper: public TMutableComputationNode<TQueuePeekWrapper>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TQueuePeekWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TQueuePeekWrapper>;
 
 public:
     TQueuePeekWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TResourceType* resourceType, IComputationNode* resource, IComputationNode* index)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Index(index)
-        , DependentNodes(std::move(dependentNodes))
+        , Index_(index)
+        , DependentNodes_(std::move(dependentNodes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto resource = Resource->GetValue(ctx);
-        auto index = Index->GetValue(ctx);
+        auto resource = Resource_->GetValue(ctx);
+        auto index = Index_->GetValue(ctx);
         const auto& valRef = CheckAndGetBuffer(resource).Get(index.Get<ui64>());
         return !valRef ? NUdf::TUnboxedValuePod() : valRef.MakeOptional();
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Index);
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueuePeekWrapper::DependsOn, this, std::placeholders::_1));
+        DependsOn(Resource_);
+        DependsOn(Index_);
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TQueuePeekWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode* const Index;
-    const TComputationNodePtrVector DependentNodes;
+    IComputationNode* const Index_;
+    const TComputationNodePtrVector DependentNodes_;
 };
 
 class TQueueRangeWrapper: public TMutableComputationNode<TQueueRangeWrapper>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TQueueRangeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TQueueRangeWrapper>;
 
 public:
     TQueueRangeWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TResourceType* resourceType, IComputationNode* resource,
                        IComputationNode* begin, IComputationNode* end)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Begin(begin)
-        , End(end)
-        , DependentNodes(std::move(dependentNodes))
+        , Begin_(begin)
+        , End_(end)
+        , DependentNodes_(std::move(dependentNodes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto queue = Resource->GetValue(ctx);
+        auto queue = Resource_->GetValue(ctx);
 
-        auto begin = Begin->GetValue(ctx).Get<ui64>();
-        auto end = End->GetValue(ctx).Get<ui64>();
+        auto begin = Begin_->GetValue(ctx).Get<ui64>();
+        auto end = End_->GetValue(ctx).Get<ui64>();
 
-        return ctx.HolderFactory.Create<TQueueRange</*AlwaysExist=*/false>>(ctx, queue, begin, end, Tag, Resource);
+        return ctx.HolderFactory.Create<TQueueRange</*AlwaysExist=*/false>>(ctx, queue, begin, end, Tag_, Resource_);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Begin);
-        DependsOn(End);
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueueRangeWrapper::DependsOn, this, std::placeholders::_1));
+        DependsOn(Resource_);
+        DependsOn(Begin_);
+        DependsOn(End_);
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TQueueRangeWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode* const Begin;
-    IComputationNode* const End;
-    const TComputationNodePtrVector DependentNodes;
+    IComputationNode* const Begin_;
+    IComputationNode* const End_;
+    const TComputationNodePtrVector DependentNodes_;
 };
 
 class TPreserveStreamValue: public TComputationValue<TPreserveStreamValue>, public TQueueResourceUser {
@@ -339,54 +342,54 @@ public:
     TPreserveStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream, NUdf::TUnboxedValue&& queue, TStringBuf tag, IComputationNode* resource, ui64 outpace)
         : TBase(memInfo)
         , TQueueResourceUser(std::move(tag), resource)
-        , Stream(std::move(stream))
-        , Queue(std::move(queue))
-        , OutpaceGoal(outpace)
-        , Buffer(CheckAndGetBuffer(Queue))
-        , FrontIndex(Buffer.Size())
+        , Stream_(std::move(stream))
+        , Queue_(std::move(queue))
+        , OutpaceGoal_(outpace)
+        , Buffer_(CheckAndGetBuffer(Queue_))
+        , FrontIndex_(Buffer_.Size())
     {
     }
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) override {
-        switch (State) {
+        switch (State_) {
             case EPreserveState::Done:
                 return NUdf::EFetchStatus::Finish;
             case EPreserveState::Feed:
             case EPreserveState::Yield:
                 break;
             default:
-                Y_ABORT_UNLESS(Outpace > 0);
-                Buffer.PopFront();
-                --Outpace;
+                Y_ABORT_UNLESS(Outpace_ > 0);
+                Buffer_.PopFront();
+                --Outpace_;
         }
-        for (NUdf::TUnboxedValue item; State != EPreserveState::Emit && Outpace <= OutpaceGoal;) {
-            switch (Stream.Fetch(item)) {
+        for (NUdf::TUnboxedValue item; State_ != EPreserveState::Emit && Outpace_ <= OutpaceGoal_;) {
+            switch (Stream_.Fetch(item)) {
                 case NUdf::EFetchStatus::Yield:
-                    State = EPreserveState::Yield;
+                    State_ = EPreserveState::Yield;
                     return NUdf::EFetchStatus::Yield;
                 case NUdf::EFetchStatus::Finish:
-                    State = EPreserveState::Emit;
+                    State_ = EPreserveState::Emit;
                     break;
                 case NUdf::EFetchStatus::Ok:
-                    Buffer.PushBack(std::move(item));
-                    if (Buffer.IsUnbounded()) {
-                        UpdateBufferStats(Queue);
+                    Buffer_.PushBack(std::move(item));
+                    if (Buffer_.IsUnbounded()) {
+                        UpdateBufferStats(Queue_);
                     }
-                    ++Outpace;
-                    if (Outpace > OutpaceGoal) {
-                        State = EPreserveState::GoOn;
+                    ++Outpace_;
+                    if (Outpace_ > OutpaceGoal_) {
+                        State_ = EPreserveState::GoOn;
                     } else {
-                        State = EPreserveState::Feed;
+                        State_ = EPreserveState::Feed;
                     }
             }
         }
-        if (!Outpace) {
-            Buffer.Clean();
-            State = EPreserveState::Done;
+        if (!Outpace_) {
+            Buffer_.Clean();
+            State_ = EPreserveState::Done;
             return NUdf::EFetchStatus::Finish;
         }
-        value = Buffer.Get(FrontIndex);
+        value = Buffer_.Get(FrontIndex_);
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -397,75 +400,77 @@ private:
         Emit,
         Done
     };
-    const NUdf::TUnboxedValue Stream;
-    const NUdf::TUnboxedValue Queue;
-    const ui64 OutpaceGoal;
-    TSafeCircularBuffer<TUnboxedValue>& Buffer;
-    const size_t FrontIndex;
+    const NUdf::TUnboxedValue Stream_;
+    const NUdf::TUnboxedValue Queue_;
+    const ui64 OutpaceGoal_;
+    TSafeCircularBuffer<TUnboxedValue>& Buffer_;
+    const size_t FrontIndex_;
 
-    EPreserveState State = EPreserveState::Feed;
-    ui64 Outpace = 0;
+    EPreserveState State_ = EPreserveState::Feed;
+    ui64 Outpace_ = 0;
 };
 
 class TPreserveStreamWrapper: public TMutableComputationNode<TPreserveStreamWrapper>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TPreserveStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TPreserveStreamWrapper>;
 
 public:
     TPreserveStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, const TResourceType* resourceType, IComputationNode* resource, ui64 outpace)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Stream(stream)
-        , Outpace(outpace)
+        , Stream_(stream)
+        , Outpace_(outpace)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TPreserveStreamValue>(Stream->GetValue(ctx), Resource->GetValue(ctx), Tag, Resource, Outpace);
+        return ctx.HolderFactory.Create<TPreserveStreamValue>(Stream_->GetValue(ctx), Resource_->GetValue(ctx), Tag_, Resource_, Outpace_);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Stream);
+        DependsOn(Resource_);
+        DependsOn(Stream_);
     }
 
-    IComputationNode* const Stream;
-    const ui64 Outpace;
+    IComputationNode* const Stream_;
+    const ui64 Outpace_;
 };
 
-template <typename TFactory, ESortOrder SortOrder>
-class TAggregateWindowValue: public TComputationValue<TAggregateWindowValue<TFactory, SortOrder>>, public TQueueResourceUser {
+template <typename TFactory, bool IsRangeSupported>
+class TAggregateWindowValue: public TComputationValue<TAggregateWindowValue<TFactory, IsRangeSupported>>, public TQueueResourceUser {
 public:
-    using TBase = TComputationValue<TAggregateWindowValue<TFactory, SortOrder>>;
+    using TBase = TComputationValue<TAggregateWindowValue<TFactory, IsRangeSupported>>;
 
     TAggregateWindowValue(TMemoryUsageInfo* memInfo,
                           NUdf::TUnboxedValue&& stream,
                           NUdf::TUnboxedValue&& queue,
                           TStringBuf tag,
                           IComputationNode* resource,
-                          const TFactory& factory)
+                          const TFactory& factory,
+                          TComputationContext& ctx)
         : TBase(memInfo)
         , TQueueResourceUser(std::move(tag), resource)
-        , Stream(std::move(stream))
-        , Queue(std::move(queue))
-        , Buffer(TQueueResourceUser::CheckAndGetBuffer(Queue))
-        , AggregatedBounds(factory(Buffer,
-                                   std::bind(&TAggregateWindowValue::ConsumeStream, this, std::placeholders::_1),
-                                   TQueueResourceUser::CheckAndGetFrameBoundsIndices(Queue)))
+        , Stream_(std::move(stream))
+        , Queue_(std::move(queue))
+        , Buffer_(TQueueResourceUser::CheckAndGetBuffer(Queue_))
+        , AggregatedBounds_(factory(Buffer_,
+                                    std::bind(&TAggregateWindowValue::ConsumeStream, this, std::placeholders::_1),
+                                    TQueueResourceUser::CheckAndGetFrameBoundsIndices(Queue_),
+                                    ctx))
     {
     }
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) override {
-        switch (AggregatedBounds.Next()) {
+        switch (AggregatedBounds_.Next()) {
             case EConsumeStatus::Ok:
-                value = AggregatedBounds.GetCurrentElement();
+                value = AggregatedBounds_.GetCurrentElement();
                 return NUdf::EFetchStatus::Ok;
             case EConsumeStatus::Wait:
                 return NUdf::EFetchStatus::Yield;
             case EConsumeStatus::End:
                 if (!Cleaned_) {
-                    AggregatedBounds.Clean();
+                    AggregatedBounds_.Clean();
                     Cleaned_ = true;
                 }
                 return NUdf::EFetchStatus::Finish;
@@ -473,7 +478,7 @@ private:
     }
 
     EConsumeStatus ConsumeStream(TUnboxedValue& value) {
-        switch (Stream.Fetch(value)) {
+        switch (Stream_.Fetch(value)) {
             case EFetchStatus::Ok:
                 return EConsumeStatus::Ok;
             case EFetchStatus::Finish:
@@ -483,63 +488,67 @@ private:
         }
     }
 
-    const NUdf::TUnboxedValue Stream;
-    const NUdf::TUnboxedValue Queue;
-    TSafeCircularBuffer<TUnboxedValue>& Buffer;
+    const NUdf::TUnboxedValue Stream_;
+    const NUdf::TUnboxedValue Queue_;
+    TSafeCircularBuffer<TUnboxedValue>& Buffer_;
     bool Cleaned_ = false;
-    std::invoke_result_t<TFactory, TSafeCircularBuffer<TUnboxedValue>&, std::function<EConsumeStatus(TUnboxedValue&)>, TFrameBoundsIndices&> AggregatedBounds;
+    std::invoke_result_t<TFactory, TSafeCircularBuffer<TUnboxedValue>&, std::function<EConsumeStatus(TUnboxedValue&)>, TFrameBoundsIndices&, TComputationContext&> AggregatedBounds_;
 };
 
-template <typename TFactory, ESortOrder SortOrder>
-class WinFramesCollector: public TMutableComputationNode<WinFramesCollector<TFactory, SortOrder>>, public TQueueResourceUser {
-    typedef TMutableComputationNode<WinFramesCollector> TBaseComputation;
+template <typename TFactory, bool IsRangeSupported>
+class WinFramesCollector: public TMutableComputationNode<WinFramesCollector<TFactory, IsRangeSupported>>, public TQueueResourceUser {
+    using TBaseComputation = TMutableComputationNode<WinFramesCollector>;
 
 public:
     WinFramesCollector(TComputationMutables& mutables,
                        IComputationNode* stream,
                        const TResourceType* resourceType,
                        IComputationNode* resource,
-                       TFactory&& factory)
+                       TFactory&& factory,
+                       const std::vector<IComputationNode*>& dependentNodes)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Stream(stream)
-        , Factory(std::move(factory))
+        , Stream_(stream)
+        , Factory_(std::move(factory))
+        , DependentNodes_(dependentNodes)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TAggregateWindowValue<TFactory, SortOrder>>(Stream->GetValue(ctx), Resource->GetValue(ctx), Tag, Resource, Factory);
+        return ctx.HolderFactory.Create<TAggregateWindowValue<TFactory, IsRangeSupported>>(Stream_->GetValue(ctx), Resource_->GetValue(ctx), Tag_, Resource_, Factory_, ctx);
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Resource);
-        this->DependsOn(Stream);
+        this->DependsOn(Resource_);
+        this->DependsOn(Stream_);
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&WinFramesCollector::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode* const Stream;
-    const TFactory Factory;
+    IComputationNode* const Stream_;
+    const TFactory Factory_;
+    const std::vector<IComputationNode*> DependentNodes_;
 };
 
 template <bool IsRange, bool IsIncremental, bool ReturnSingleElement>
 class TWinFrame: public TMutableComputationNode<TWinFrame<IsRange, IsIncremental, ReturnSingleElement>>, public TQueueResourceUser {
-    typedef TMutableComputationNode<TWinFrame<IsRange, IsIncremental, ReturnSingleElement>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TWinFrame<IsRange, IsIncremental, ReturnSingleElement>>;
 
 public:
     TWinFrame(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TResourceType* resourceType, IComputationNode* resource,
               ui64 handle)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Handle(handle)
-        , DependentNodes(std::move(dependentNodes))
+        , Handle_(handle)
+        , DependentNodes_(std::move(dependentNodes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto queue = Resource->GetValue(ctx);
+        auto queue = Resource_->GetValue(ctx);
 
         auto windows = this->CheckAndGetFrameBoundsIndices(queue);
-        auto frame = this->GetWindowFrame(Handle, windows);
+        auto frame = this->GetWindowFrame(Handle_, windows);
         if constexpr (ReturnSingleElement) {
             if (frame.Size() == 0) {
                 return TUnboxedValuePod();
@@ -549,7 +558,7 @@ public:
             }
             return CheckAndGetBuffer(queue).Get(frame.Min());
         } else {
-            return ctx.HolderFactory.Create<TQueueRange</*AlwaysExist=*/true>>(ctx, queue, frame.Min(), frame.Max(), Tag, Resource);
+            return ctx.HolderFactory.Create<TQueueRange</*AlwaysExist=*/true>>(ctx, queue, frame.Min(), frame.Max(), Tag_, Resource_);
         }
     }
 
@@ -571,12 +580,12 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Resource);
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TWinFrame::DependsOn, this, std::placeholders::_1));
+        this->DependsOn(Resource_);
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TWinFrame::DependsOn, this, std::placeholders::_1));
     }
 
-    const ui64 Handle;
-    const TComputationNodePtrVector DependentNodes;
+    const ui64 Handle_;
+    const TComputationNodePtrVector DependentNodes_;
 };
 
 template <class T, class... Args>
@@ -588,109 +597,52 @@ IComputationNode* MakeNodeWithDeps(TCallable& callable, const TComputationNodeFa
     return new T(ctx.Mutables, std::move(dependentNodes), std::forward<Args>(args)...);
 }
 
-template <ESortOrder SortOrder, typename TStreamType, typename TBoundType, typename StreamScale, typename RangeBoundScale>
 IComputationNode* DispatchWinStreamCollectorBasedOnSortedColumn(const TRuntimeNode& paramsNode,
                                                                 const TComputationNodeFactoryContext& ctx,
                                                                 IComputationNode* stream,
                                                                 TResourceType* resourceType,
                                                                 IComputationNode* resource,
-                                                                ui32 memberIndex,
-                                                                StreamScale streamScale,
-                                                                [[maybe_unused]] RangeBoundScale boundScale) {
-    using TStream = NUdf::TDataType<TStreamType>::TLayout;
-    using TScaledStream = decltype(streamScale(TStream{}));
-    using TComparator = TRangeComparator<TScaledStream>;
-
-    auto bounds = DeserializeBounds<TScaledStream>(paramsNode, SortOrder);
-
-    auto streamElementGetter = [memberIndex, streamScale](const TUnboxedValuePod& pod) -> TMaybe<TScaledStream> {
-        auto structElement = pod.GetElement(memberIndex);
-        if (!structElement) {
-            return {};
-        }
-        return std::invoke(streamScale, structElement.Get<TStream>());
+                                                                const TStructType* streamStructType,
+                                                                ESortOrder sortOrder) {
+    auto memberExtractor = [](const TUnboxedValue& value, ui32 memberIndex) {
+        return value.GetElement(memberIndex);
     };
 
-    auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(streamElementGetter), TComparator, SortOrder>::CreateFactory(
-        bounds, std::move(streamElementGetter));
+    auto nullChecker = [](const TUnboxedValue& value) -> bool {
+        return !static_cast<bool>(value);
+    };
 
-    return new WinFramesCollector<decltype(factory), SortOrder>(ctx.Mutables,
-                                                                stream,
-                                                                resourceType,
-                                                                resource,
-                                                                std::move(factory));
+    auto elementExtractor =
+        []<typename T>(const TUnboxedValue& pod) -> T {
+        return pod.Get<T>();
+    };
+
+    auto nodeExtractor = [ctx](const TRuntimeNode& node) -> IComputationNode* {
+        return LocateNode(ctx.NodeLocator, *node.GetNode());
+    };
+
+    auto [variantBounds, deps] = DeserializeBoundsAsVariant(paramsNode, streamStructType, nodeExtractor, ctx.Mutables.CurValueIndex);
+    TDeserializerContext deserializerContext(memberExtractor, nullChecker, elementExtractor);
+    auto bounds = ConvertBoundsToComparators<TUnboxedValue, TUnboxedValue, TComputationContext>(variantBounds, sortOrder, deserializerContext);
+
+    auto factory = TCoreWinFramesCollector<TUnboxedValue, TComputationContext, /*IsRangeSupported=*/true>::CreateFactory(bounds);
+
+    return new WinFramesCollector<decltype(factory), /*IsRangeSupported=*/true>(ctx.Mutables,
+                                                                                stream,
+                                                                                resourceType,
+                                                                                resource,
+                                                                                std::move(factory),
+                                                                                deps);
 }
 
-template <typename T>
-T NoScale(T elem) {
-    return elem;
-}
-
-template <ESortOrder SortOrder>
 IComputationNode* DispatchWinStreamCollectorBasedOnStreamType(const TRuntimeNode& paramsNode,
                                                               const TComputationNodeFactoryContext& ctx,
                                                               IComputationNode* stream,
                                                               TResourceType* resourceType,
                                                               IComputationNode* resource,
-                                                              TType* sortColumnType,
-                                                              ui32 memberIndex) {
-    bool isOptional;
-    sortColumnType = UnpackOptional(sortColumnType, isOptional);
-
-    MKQL_ENSURE(sortColumnType->IsData(), "Expected data type.");
-    switch (*AS_TYPE(TDataType, sortColumnType)->GetDataSlot()) {
-        case EDataSlot::Int8:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i8, i8>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i8>, NoScale<i8>);
-        case EDataSlot::Uint8:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui8, ui8>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui8>, NoScale<ui8>);
-        case EDataSlot::Int16:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i16, i16>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i16>, NoScale<i16>);
-        case EDataSlot::Uint16:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui16, ui16>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui16>, NoScale<ui16>);
-        case EDataSlot::Int32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i32, i32>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i32>, NoScale<i32>);
-        case EDataSlot::Uint32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui32, ui32>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui32>, NoScale<ui32>);
-        case EDataSlot::Int64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, i64, i64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<i64>, NoScale<i64>);
-        case EDataSlot::Uint64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, ui64, ui64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<ui64>, NoScale<ui64>);
-        case EDataSlot::Double:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, double, double>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<double>, NoScale<double>);
-        case EDataSlot::Float:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, float, float>(paramsNode, ctx, stream, resourceType, resource, memberIndex, NoScale<float>, NoScale<float>);
-        case EDataSlot::Date:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDate, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDate>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Datetime:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDatetime, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDatetime>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Timestamp:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTimestamp, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTimestamp>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Interval:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TInterval, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzDate:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDate, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDate>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzDatetime:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDatetime, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::TzTimestamp:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzTimestamp, NUdf::TInterval>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval>>);
-        case EDataSlot::Date32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDate32, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDate32>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Datetime64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TDatetime64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TDatetime64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Timestamp64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTimestamp64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTimestamp64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::Interval64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TInterval64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzDate32:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDate32, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDate32>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzDatetime64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzDatetime64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        case EDataSlot::TzTimestamp64:
-            return DispatchWinStreamCollectorBasedOnSortedColumn<SortOrder, NUdf::TTzTimestamp64, NUdf::TInterval64>(paramsNode, ctx, stream, resourceType, resource, memberIndex, ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>, ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>);
-        default:
-            MKQL_ENSURE(false, "Unexpected type for window collecting.");
-            return nullptr;
-    }
+                                                              const TStructType* streamStructType,
+                                                              ESortOrder sortOrder) {
+    return DispatchWinStreamCollectorBasedOnSortedColumn(paramsNode, ctx, stream, resourceType, resource, streamStructType, sortOrder);
 }
 
 IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeNode& paramsNode,
@@ -699,43 +651,30 @@ IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeN
                                                                  IComputationNode* stream,
                                                                  TResourceType* resourceType,
                                                                  IComputationNode* resource) {
-    auto sortOrder = DeserializeSortOrder(paramsNode);
-    auto sortColumnName = DeserializeSortColumnName(paramsNode);
-
-    if (!AnyRangeProvided(paramsNode)) {
-        auto bounds = DeserializeBounds<ui64>(paramsNode, ESortOrder::Unimportant);
-        MKQL_ENSURE(bounds.RangeIntervals().empty() && bounds.RangeIncrementals().empty(), "Unexpected bounds.");
-        // TODO(atarasov5): Remove the fake getter in favor of explicitly specifying an void template.
-        auto elementGetter = [](const TUnboxedValue&) -> TMaybe<ui64> {
-            MKQL_ENSURE(0, "Shouldn't be called.");
-            return ui64(0);
-        };
-
-        using TComparator = TRangeComparator<ui64>;
-        auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(elementGetter), TComparator, ESortOrder::Unimportant>::CreateFactory(
-            bounds, std::move(elementGetter));
-        return new WinFramesCollector<decltype(factory), ESortOrder::Unimportant>(ctx.Mutables,
-                                                                                  stream,
-                                                                                  resourceType,
-                                                                                  resource,
-                                                                                  std::move(factory));
-    }
-
     MKQL_ENSURE(streamType->IsStream(), "Expected stream type.");
     auto streamItemType = AS_TYPE(TStreamType, streamType)->GetItemType();
     MKQL_ENSURE(streamItemType->IsStruct(), "Expected stream of struct type.");
     auto structType = AS_TYPE(TStructType, streamItemType);
 
-    auto memberIndex = structType->FindMemberIndex(sortColumnName);
-    MKQL_ENSURE(memberIndex, "Stream struct must have a field named '" << sortColumnName << "' (params.SortedColumn)");
-
-    auto sortColumnType = structType->GetMemberType(*memberIndex);
+    auto sortOrder = DeserializeSortOrder(paramsNode);
+    if (!AnyRangeProvided(paramsNode)) {
+        auto [variantBounds, deps] = DeserializeBoundsAsVariant(paramsNode, structType, TNodeExtractor{}, ctx.Mutables.CurValueIndex);
+        MKQL_ENSURE(deps.empty(), "Unexpected dependent nodes.");
+        auto bounds = ConvertBoundsToComparators<TUnboxedValue, TUnboxedValue, TComputationContext, TNoopDeserializerContext>(variantBounds, ESortOrder::Unimportant, TNoopDeserializerContext{});
+        MKQL_ENSURE(bounds.RangeIntervals().empty() && bounds.RangeIncrementals().empty(), "Unexpected bounds.");
+        auto factory = TCoreWinFramesCollector<TUnboxedValue, TComputationContext, /*IsRangeSupported=*/false>::CreateFactory(bounds);
+        return new WinFramesCollector<decltype(factory), /*IsRangeSupported=*/false>(ctx.Mutables,
+                                                                                     stream,
+                                                                                     resourceType,
+                                                                                     resource,
+                                                                                     std::move(factory),
+                                                                                     deps);
+    }
 
     switch (sortOrder) {
         case ESortOrder::Asc:
-            return DispatchWinStreamCollectorBasedOnStreamType<ESortOrder::Asc>(paramsNode, ctx, stream, resourceType, resource, sortColumnType, *memberIndex);
         case ESortOrder::Desc:
-            return DispatchWinStreamCollectorBasedOnStreamType<ESortOrder::Desc>(paramsNode, ctx, stream, resourceType, resource, sortColumnType, *memberIndex);
+            return DispatchWinStreamCollectorBasedOnStreamType(paramsNode, ctx, stream, resourceType, resource, structType, sortOrder);
         default:
             MKQL_ENSURE(false, "Unexpected sort order");
             return nullptr;
@@ -817,6 +756,11 @@ IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNode
 // ###### Wrappers that are used by CoreWinFramesCollector API #######
 // #############################################################################
 
+template <bool IsRange, bool IsIncremental, bool ReturnSingleElement>
+IComputationNode* MakeWinFrameWithDeps(TCallable& callable, const TComputationNodeFactoryContext& ctx, unsigned reqArgs, TResourceType* resourceType, IComputationNode* resource, ui64 handle) {
+    return MakeNodeWithDeps<TWinFrame<IsRange, IsIncremental, ReturnSingleElement>>(callable, ctx, reqArgs, resourceType, resource, handle);
+}
+
 IComputationNode* WrapWinFramesCollector(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "WinFramesCollector: Expected 3 args");
     auto stream = LocateNode(ctx.NodeLocator, callable, 0);
@@ -848,36 +792,7 @@ IComputationNode* WrapWinFrame(TCallable& callable, const TComputationNodeFactor
     auto isRange = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<bool>();
     bool isSingleElement = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<bool>();
 
-    // Instantiate the correct template specialization based on runtime values
-    if (isRange) {
-        if (IsIncremental) {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/true, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/true, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        } else {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/false, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/false, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        }
-    } else {
-        if (IsIncremental) {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/true, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/true, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        } else {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/false, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/false, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        }
-    }
+    return YQL_RUNTIME_DISPATCH(MakeWinFrameWithDeps, 3, isRange, IsIncremental, isSingleElement, callable, ctx, reqArgs, resourceType, resource, handle);
 }
 
 } // namespace NMiniKQL

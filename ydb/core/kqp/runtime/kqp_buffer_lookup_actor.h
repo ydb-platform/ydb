@@ -48,6 +48,8 @@ public:
 
     // Clear all memory
     virtual void Terminate() = 0;
+
+    virtual void Unlink() = 0;
 };
 
 struct TKqpBufferTableLookupSettings {
@@ -71,6 +73,9 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TTraceId ParentTraceId;
+
+    TString Database;
+    TString PoolId;
 };
 
 std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings);

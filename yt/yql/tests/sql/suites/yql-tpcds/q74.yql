@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_subexpr_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -29,12 +28,12 @@ $year_total = (
         d_year
     UNION ALL
     SELECT
-        c_customer_id customer_id,
-        c_first_name customer_first_name,
-        c_last_name customer_last_name,
+        c_customer_id AS customer_id,
+        c_first_name AS customer_first_name,
+        c_last_name AS customer_last_name,
         d_year AS year,
-        Max(ws_net_paid) year_total,
-        'w' sale_type
+        Max(ws_net_paid) AS year_total,
+        'w' AS sale_type
     FROM
         plato.customer
     ,
@@ -57,13 +56,13 @@ SELECT
     t_s_secyear.customer_first_name,
     t_s_secyear.customer_last_name
 FROM
-    year_total AS t_s_firstyear
+    $year_total AS t_s_firstyear
 ,
-    year_total AS t_s_secyear
+    $year_total AS t_s_secyear
 ,
-    year_total AS t_w_firstyear
+    $year_total AS t_w_firstyear
 ,
-    year_total AS t_w_secyear
+    $year_total AS t_w_secyear
 WHERE
     t_s_secyear.customer_id == t_s_firstyear.customer_id
     AND t_s_firstyear.customer_id == t_w_secyear.customer_id
@@ -91,7 +90,7 @@ WHERE
         ELSE NULL
     END
 ORDER BY
-    2,
-    1,
-    3
+    t_s_secyear.customer_first_name,
+    t_s_secyear.customer_id,
+    t_s_secyear.customer_last_name
 LIMIT 100;

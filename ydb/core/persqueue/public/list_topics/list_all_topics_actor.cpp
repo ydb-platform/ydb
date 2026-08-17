@@ -1,7 +1,9 @@
+#include "list_all_topics_actor.h"
+
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -68,7 +70,7 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
     }
 
     void TListAllTopicsActor::SendResponse() {
-        Y_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
+        AFL_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
 
         for (TString& topic : Topics) {
             topic = TFsPath(topic).RelativePath(DatabasePath).GetPath();
@@ -126,7 +128,7 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
             } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
                 || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
             {
-                Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero");
+                AFL_ENSURE(entry.ListNodeEntry)("reason", "ListNodeEntry is zero");
                 for (const auto& child : entry.ListNodeEntry->Children) {
                     TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
                     switch (child.Kind) {
@@ -161,4 +163,4 @@ NActors::IActor* MakeListAllTopicsActor(
     return new TListAllTopicsActor(respondTo, databasePath, token, recursive, startFrom, limit);
 }
 
-} // namespace
+} // namespace NKikimr::NPQ

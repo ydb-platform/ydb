@@ -20,4 +20,9 @@ namespace NKikimr::NGRpcService {
  */
 bool ValidateFsPath(const TString& path, const TString& pathDescription, TString& error);
 
+/**
+ * Strips trailing slashes from a path, keeping at least the root slash.
+ */
+TString StripTrailingSlashes(const TString& path);
+
 } // namespace NKikimr::NGRpcService

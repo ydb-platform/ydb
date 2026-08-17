@@ -7,6 +7,7 @@ import enum
 import json
 from . import _utilities, _apis
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import typing
 import uuid
 import struct
@@ -61,6 +62,84 @@ def _from_datetime_number(
         # x is float when native_datetime_in_result_sets is True
         return datetime.utcfromtimestamp(typing.cast(float, x))
     return x
+
+
+def _to_datetime(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]) -> None:
+    if isinstance(value, datetime):
+        epoch = _EPOCH_UTC if value.tzinfo else _EPOCH
+        pb.uint32_value = (value - epoch) // timedelta(seconds=1)
+    else:
+        pb.uint32_value = value
+
+
+def _to_datetime64(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]) -> None:
+    if isinstance(value, datetime):
+        epoch = _EPOCH_UTC if value.tzinfo else _EPOCH
+        pb.int64_value = (value - epoch) // timedelta(seconds=1)
+    else:
+        pb.int64_value = value
+
+
+def _tz_name(value: datetime) -> str:
+    tz = value.tzinfo
+    if not isinstance(tz, ZoneInfo):
+        raise ValueError(f"Tz types require a datetime whose tzinfo is a zoneinfo.ZoneInfo, got {tz!r}")
+    return tz.key
+
+
+def _parse_tz(value: str) -> datetime:
+    # ZoneInfo raises ZoneInfoNotFoundError (unknown zone / no tz database) or
+    # ValueError (empty/malformed name) — let it propagate so the caller sees an
+    # explicit error instead of a silently wrong type.
+    wall_clock, _, tz_name = value.partition(",")
+    tz = ZoneInfo(tz_name)
+    if "T" in wall_clock:
+        naive = datetime.fromisoformat(wall_clock)
+    else:
+        parsed_date = date.fromisoformat(wall_clock)
+        naive = datetime(parsed_date.year, parsed_date.month, parsed_date.day)
+    return naive.replace(tzinfo=tz)
+
+
+def _from_tz_date(x: str, table_client_settings: table.TableClientSettings) -> typing.Union[datetime, str]:
+    if table_client_settings is not None and table_client_settings._native_date_in_result_sets:
+        return _parse_tz(x)
+    return x
+
+
+def _to_tz_date(pb: ydb_value_pb2.Value, value: typing.Union[datetime, str]) -> None:
+    if isinstance(value, datetime):
+        pb.text_value = value.strftime("%Y-%m-%d") + "," + _tz_name(value)
+    else:
+        pb.text_value = value
+
+
+def _from_tz_datetime(x: str, table_client_settings: table.TableClientSettings) -> typing.Union[datetime, str]:
+    if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
+        return _parse_tz(x)
+    return x
+
+
+def _to_tz_datetime(pb: ydb_value_pb2.Value, value: typing.Union[datetime, str]) -> None:
+    if isinstance(value, datetime):
+        pb.text_value = value.strftime("%Y-%m-%dT%H:%M:%S") + "," + _tz_name(value)
+    else:
+        pb.text_value = value
+
+
+def _from_tz_timestamp(x: str, table_client_settings: table.TableClientSettings) -> typing.Union[datetime, str]:
+    if table_client_settings is not None and table_client_settings._native_timestamp_in_result_sets:
+        return _parse_tz(x)
+    return x
+
+
+def _to_tz_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, str]) -> None:
+    if isinstance(value, datetime):
+        # isoformat() matches YDB's canonical form: 6-digit microseconds when
+        # non-zero, omitted when zero (YDB strips a trailing ".000000").
+        pb.text_value = value.replace(tzinfo=None).isoformat() + "," + _tz_name(value)
+    else:
+        pb.text_value = value
 
 
 def _from_json(x: typing.Union[str, bytearray, bytes], table_client_settings: table.TableClientSettings) -> typing.Any:
@@ -177,11 +256,13 @@ class PrimitiveType(enum.Enum):
         _apis.primitive_types.DATETIME,
         "uint32_value",
         _from_datetime_number,
+        _to_datetime,
     )
     Datetime64 = (
         _apis.primitive_types.DATETIME64,
         "int64_value",
         _from_datetime_number,
+        _to_datetime64,
     )
     Timestamp = (
         _apis.primitive_types.TIMESTAMP,
@@ -194,6 +275,24 @@ class PrimitiveType(enum.Enum):
         None,
         _from_timestamp64,
         _to_timestamp64,
+    )
+    TzDate = (
+        _apis.primitive_types.TZ_DATE,
+        "text_value",
+        _from_tz_date,
+        _to_tz_date,
+    )
+    TzDatetime = (
+        _apis.primitive_types.TZ_DATETIME,
+        "text_value",
+        _from_tz_datetime,
+        _to_tz_datetime,
+    )
+    TzTimestamp = (
+        _apis.primitive_types.TZ_TIMESTAMP,
+        "text_value",
+        _from_tz_timestamp,
+        _to_tz_timestamp,
     )
     Interval = (
         _apis.primitive_types.INTERVAL,

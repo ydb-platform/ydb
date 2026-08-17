@@ -1,7 +1,13 @@
 #include "constructor.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
+LWTRACE_USING(YDB_CS_SCAN);
 
 void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
     if (!CurrentProgramNodeId) {
@@ -37,8 +43,11 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     NArrow::NSSA::TProcessorContext context(
         source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
+    AFL_VERIFY(!Program);
+    Program = program;
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
+    SetStartCategoryName(step.GetPrevName());
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
@@ -146,6 +155,26 @@ ui32 IDataSource::GetRecordsCount() const {
         AFL_VERIFY(!!GetRecordsCountVirtual());
         return GetRecordsCountVirtual();
     }
+}
+
+void IDataSource::OnStartProcessing() {
+    AFL_VERIFY(!SourceCreatedTimestamp);
+    SourceCreatedTimestamp = TMonotonic::Now();
+    if (!NLWTrace::HasShuttles(DataSourceOrbit) && !NLWTrace::HasShuttles(*GetContext()->GetCommonContext()->GetScanOrbit()) &&
+        !LWPROBE_ENABLED(StartSourceProcessing) && !LWPROBE_ENABLED(ScanStartSource)) {
+        return;
+    }
+    const ui64 portionBlobBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes() : 0;
+    const ui64 portionRawBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalRawBytes() : 0;
+    TString minPk = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().IndexKeyStart().DebugString() : TString{};
+    TString maxPk = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().IndexKeyEnd().DebugString() : TString{};
+    const TString minSnapshot = TStringBuilder() << GetRecordSnapshotMin();
+    const TString maxSnapshot = TStringBuilder() << GetRecordSnapshotMax();
+    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), portionBlobBytes,
+        portionRawBytes, GetReservedMemory(), minPk, maxPk, minSnapshot, maxSnapshot);
+    LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(), GetTxId(),
+        GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(), portionBlobBytes, portionRawBytes, minPk, maxPk, minSnapshot,
+        maxSnapshot);
 }
 
 void IDataSource::StartAsyncSection() {
@@ -269,6 +298,11 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
     DoOnEmptyStageData(sourcePtr);
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
+
+    const TDuration durationMs = GetAndResetWaitDuration();
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), 0,
+        ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished(Empty)", durationMs, GetTotalDuration(), GetTotalBytesRead(),
+        GetTotalExecutionDuration(), GetReservedMemory());
 }
 
 void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -280,6 +314,11 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
     DoBuildStageResult(sourcePtr);
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
+
+    const TDuration durationMs = GetAndResetWaitDuration();
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), 0,
+        ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(),
+        GetTotalExecutionDuration(), GetReservedMemory());
 }
 
 bool IDataSource::AddTxConflict() {

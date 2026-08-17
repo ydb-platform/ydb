@@ -34,7 +34,7 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #endif
 
 #define SETUP_RL_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, rate_limiter, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, rate_limiter, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, RLMODE(Rps), RATELIMITER_CREATE_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, RLMODE(Rps), RATELIMITER_ALTER_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

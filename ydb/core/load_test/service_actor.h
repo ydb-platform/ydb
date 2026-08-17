@@ -36,7 +36,7 @@ namespace NKikimr {
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateDDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskWriteLoad& cmd,
+    NActors::IActor *CreateDDiskLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 

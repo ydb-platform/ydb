@@ -26,7 +26,7 @@ TTempTable::TTempTable(TTempTable::TPrivateConstuctorTag, IClientBasePtr client,
     Client_->Create(Name_, NT_TABLE, options);
 }
 
-TTempTable::TTempTable(TTempTable&& sourceTable)
+TTempTable::TTempTable(TTempTable&& sourceTable) noexcept
     : Client_(sourceTable.Client_)
     , Name_(sourceTable.Name_)
     , Owns_(sourceTable.Owns_)
@@ -34,7 +34,7 @@ TTempTable::TTempTable(TTempTable&& sourceTable)
     sourceTable.Owns_ = false;
 }
 
-TTempTable& TTempTable::operator=(TTempTable&& sourceTable)
+TTempTable& TTempTable::operator=(TTempTable&& sourceTable) // NOLINT Calls RemoveTable() that may throw.
 {
     if (&sourceTable == this) {
         return *this;

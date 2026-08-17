@@ -47,10 +47,31 @@ static constexpr const char *kDbCollectionName = "db.collection.name";
 static constexpr const char *kDbNamespace = "db.namespace";
 
 /**
-  The number of queries included in a batch operation.
+  The number of database operations included in a batch operation.
   <p>
-  Operations are only considered batches when they contain two or more operations, and so @code
-  db.operation.batch.size @endcode SHOULD never be @code 1 @endcode.
+  Except for empty batch requests described below, a batch operation contains two
+  or more database operations explicitly submitted as separate operations in a single
+  client call, protocol message, or database command.
+  <p>
+  Requests to batch APIs that contain only one operation SHOULD be modeled as single
+  operations, not as batch operations.
+  <p>
+  A database call is not a batch operation solely because one operation accepts
+  multiple operands, such as keys, rows, documents, points, or other data elements,
+  including Redis <a href="https://redis.io/docs/latest/commands/mget/">@code MGET @endcode</a> with
+  multiple keys.
+  <p>
+  In batch APIs that execute the same parameterized operation with parameter sets,
+  each parameter set represents one database operation for determining whether the
+  request is a batch operation. Requests with only one parameter set SHOULD be modeled
+  as single operations, not as batch operations.
+  <p>
+  @code db.operation.batch.size @endcode SHOULD be set to the number of operations in the batch.
+  It SHOULD NOT be set for non-batch operations.
+  <p>
+  A request to execute a batch operation with no operations SHOULD also be treated
+  as a batch operation, and @code db.operation.batch.size @endcode SHOULD be set to @code 0
+  @endcode.
  */
 static constexpr const char *kDbOperationBatchSize = "db.operation.batch.size";
 
@@ -85,7 +106,10 @@ static constexpr const char *kDbOperationName = "db.operation.name";
   instrumentation hooks or other means. If it is not available, instrumentations
   that support query parsing SHOULD generate a summary following
   <a href="/docs/db/database-spans.md#generating-a-summary-of-the-query">Generating query
-  summary</a> section.
+  summary</a> section. <p> For batch operations, if the individual operations are known to have the
+  same query summary then that query summary SHOULD be used prepended by @code BATCH  @endcode,
+  otherwise @code db.query.summary @endcode SHOULD be @code BATCH @endcode or some other database
+  system specific term if more applicable.
  */
 static constexpr const char *kDbQuerySummary = "db.query.summary";
 

@@ -92,9 +92,9 @@ inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
 // TBoxedValueAccessor
 //////////////////////////////////////////////////////////////////////////////
 
-inline bool TBoxedValueAccessor::CheckPodSafety(const TUnboxedValuePod& original, const TUnboxedValuePod& current) {
-    bool isEq = std::memcmp(&current, &original, sizeof(TUnboxedValuePod)) == 0;
-    bool isNotComplex = !current.IsBoxed() && !current.IsString();
+inline bool TBoxedValueAccessor::CheckPodSafety(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    bool isEq = std::memcmp(&rhs, &lhs, sizeof(TUnboxedValuePod)) == 0;
+    bool isNotComplex = !rhs.IsBoxed() && !rhs.IsString();
     return isEq || isNotComplex;
 }
 
@@ -324,7 +324,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValuePod& value) noexc
 }
 
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValuePod&& value) noexcept
-    : TUnboxedValuePod(std::move(value))
+    : TUnboxedValuePod(value)
 {
     value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
     Ref();
@@ -361,7 +361,7 @@ Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(TUnboxedValue&& value) no
 }
 
 Y_FORCE_INLINE TUnboxedValuePod TUnboxedValue::Release() noexcept {
-    const TUnboxedValuePod value(std::move(*static_cast<TUnboxedValuePod*>(this)));
+    const TUnboxedValuePod value(*static_cast<TUnboxedValuePod*>(this));
     Raw = TRaw();
     value.ReleaseRef();
     return value;
@@ -565,7 +565,7 @@ inline TUnboxedValue TUnboxedValuePod::GetVariantItem() const {
     if (Raw.GetIndex()) {
         TUnboxedValuePod item(*this);
         item.Raw.Simple.Meta &= 0x3;
-        return std::move(item);
+        return item;
     }
     UDF_VERIFY(IsBoxed(), "Value is not a variant");
     return TBoxedValueAccessor::GetVariantItem(*Raw.Boxed.Value);
@@ -771,8 +771,8 @@ inline bool TUnboxedValuePod::Get<bool>() const {
 }
 
 template <>
-inline bool TUnboxedValuePod::GetOrDefault<bool>(bool def) const {
-    return EMarkers::Empty == Raw.GetMarkers() ? def : bool(Raw.Simple.ui8_);
+inline bool TUnboxedValuePod::GetOrDefault<bool>(bool ifEmpty) const {
+    return EMarkers::Empty == Raw.GetMarkers() ? ifEmpty : bool(Raw.Simple.ui8_);
 }
 
 template <>
@@ -898,6 +898,7 @@ inline bool TUnboxedValuePod::IsSpecial() const {
 inline TStringRef TUnboxedValuePod::AsStringRef() const& {
     switch (Raw.GetMarkers()) {
         case EMarkers::Embedded:
+            Y_DEBUG_ABORT_UNLESS(Raw.Embedded.Size <= TUnboxedValuePod::InternalBufferSize);
             return {Raw.Embedded.Buffer, Raw.Embedded.Size};
         case EMarkers::String:
             return {Raw.String.Value->Data() + (Raw.String.Offset & 0xFFFFFF), Raw.String.Size};

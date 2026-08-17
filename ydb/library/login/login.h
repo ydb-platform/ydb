@@ -6,7 +6,6 @@
 #include <deque>
 #include <util/generic/string.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
-#include <ydb/library/login/cache/lru.h>
 #include <ydb/library/login/hashes_checker/hash_types.h>
 #include <ydb/library/login/protos/login.pb.h>
 #include <ydb/library/login/password_checker/password_checker.h>
@@ -25,9 +24,6 @@ public:
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
-
-    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
-    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
 
     struct TBasicRequest {};
 
@@ -67,7 +63,6 @@ public:
         };
 
         TString User;
-        std::optional<TString> Password;
         std::optional<THashToValidate> HashToValidate;
         std::optional<TString> ExternalAuth;
         TOptions Options;
@@ -138,7 +133,6 @@ public:
         TString User;
         TString Password;
         TString HashedPassword;
-        bool IsHashedPassword = false;
         bool CanLogin = true;
     };
 
@@ -146,7 +140,6 @@ public:
         TString User;
         std::optional<TString> Password;
         std::optional<TString> HashedPassword;
-        bool IsHashedPassword = false;
         std::optional<bool> CanLogin;
     };
 
@@ -210,7 +203,6 @@ public:
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
 
-        TString ArgonHash;
         TString PasswordHashes;
         THashMap<NLoginProto::EHashType::HashType, THashRecord> HashStorage;
 
@@ -222,11 +214,6 @@ public:
         std::chrono::system_clock::time_point LastSuccessfulLogin;
 
         void FillHashStorage();
-    };
-
-    struct TCacheSettings {
-        size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
-        size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
     };
 
     // our current audience (database name)
@@ -251,11 +238,8 @@ public:
 
     // Login
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
-    // The next four methods are used (all together combined) when it's needed to separate hash verification which is quite cpu-intensive
     bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* hashValues);
     void VerifyHashValues(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, const TString& hashValues);
-    static bool VerifyArgonHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
-    void UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying);
     TLoginProvider::TLoginUserResponse LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult);
 
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
@@ -273,15 +257,13 @@ public:
     bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+    const TPasswordComplexity& GetPasswordCheckParameters() const;
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
-    void UpdateCacheSettings(const TCacheSettings& settings);
 
     TLoginProvider();
     TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
     TLoginProvider(const TPasswordComplexity& passwordComplexity,
-        const TAccountLockout::TInitializer& accountLockoutInitializer,
-        const std::function<bool()>& isCacheUsed,
-        const TCacheSettings& cacheSettings);
+        const TAccountLockout::TInitializer& accountLockoutInitializer);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member) const;
@@ -304,7 +286,7 @@ private:
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckHashes(const TString& hashedPassword, TString& error) const;
-    bool CheckPasswordOrArgonHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    bool CheckPassword(const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
     bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;

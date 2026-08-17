@@ -21,7 +21,7 @@ WHERE
     AND d_date_sk == ws_sold_date_sk
     AND ws_ext_discount_amt > (
         SELECT
-            1.3 * Avg(ws_ext_discount_amt)
+            CAST("1.3" as decimal(7,2)) * Avg(ws_ext_discount_amt)
         FROM
             `/Root/test/ds/web_sales`
         ,

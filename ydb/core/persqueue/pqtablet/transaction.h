@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -38,6 +40,8 @@ struct TDistributedTransaction {
     void OnTxDone(const TEvPQ::TEvTxDone& event);
 
     void SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
+
+    bool GetSkipSrcIdInfo() const;
 
     using EDecision = NKikimrTx::TReadSetData::EDecision;
     using EState = NKikimrPQ::TTransaction::EState;

@@ -3,6 +3,7 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
@@ -16,13 +17,14 @@
 namespace NKikimr::NMiniKQL {
 
 class TBlockTrimmerBase: public IBlockTrimmer {
+public:
+    TBlockTrimmerBase() = delete;
+
 protected:
     explicit TBlockTrimmerBase(arrow::MemoryPool* pool)
         : Pool_(pool)
     {
     }
-
-    TBlockTrimmerBase() = delete;
 
     std::shared_ptr<arrow::Buffer> TrimNullBitmap(const std::shared_ptr<arrow::ArrayData>& array) {
         auto& nullBitmapBuffer = array->buffers[0];
@@ -103,7 +105,7 @@ public:
         auto trimmedBuffer = CreateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(dataSize);
         auto trimmedBufferData = reinterpret_cast<NUdf::TUnboxedValue*>(trimmedBuffer->mutable_data());
 
-        for (int64_t i = 0; i < array->length; i++) {
+        for (i64 i = 0; i < array->length; i++) {
             ::new (&trimmedBufferData[i]) NUdf::TUnboxedValue(origData[i]);
         }
 
@@ -155,7 +157,7 @@ public:
         auto trimmedOffsetBufferData = reinterpret_cast<TOffset*>(trimmedOffsetBuffer->mutable_data());
         auto trimmedStringBufferData = reinterpret_cast<char*>(trimmedStringBuffer->mutable_data());
 
-        for (int64_t i = 0; i < array->length + 1; i++) {
+        for (i64 i = 0; i < array->length + 1; i++) {
             trimmedOffsetBufferData[i] = origOffsetData[i] - origOffsetData[0];
         }
         memcpy(trimmedStringBufferData, origStringData, stringDataSize);
@@ -245,10 +247,52 @@ private:
     IBlockTrimmer::TPtr Inner_;
 };
 
+class TVariantBlockTrimmer: public TBlockTrimmerBase {
+public:
+    TVariantBlockTrimmer(std::vector<IBlockTrimmer::TPtr> children, arrow::MemoryPool* pool)
+        : TBlockTrimmerBase(pool)
+        , Children_(std::move(children))
+    {
+    }
+
+    std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
+        const auto childUsage = NYql::NUdf::CalculateDenseUnionChildrenUsage(*array);
+
+        auto trimmedTypeCodes = NYql::NUdf::CopyBuffer(
+            *array->buffers[1], array->offset * sizeof(i8), array->length * sizeof(i8), Pool_);
+
+        auto trimmedValueOffsets = CreateResizableBuffer(array->length * sizeof(i32));
+        auto* dstValueOffsets = reinterpret_cast<i32*>(trimmedValueOffsets->mutable_data());
+
+        NYql::NUdf::AdjustDenseUnionValueOffsets(
+            TArrayRef<const i32>(array->GetValues<i32>(2), array->length),
+            TArrayRef<i32>(dstValueOffsets, array->length),
+            TArrayRef<const i8>(reinterpret_cast<const i8*>(trimmedTypeCodes->mutable_data()), array->length),
+            childUsage);
+
+        TVector<std::shared_ptr<arrow::ArrayData>> trimmedChildren;
+        trimmedChildren.reserve(Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            auto childSlice = DeepSlice(*array->child_data[i], childUsage[i].Offset, childUsage[i].Length);
+            trimmedChildren.push_back(Children_[i]->Trim(childSlice));
+        }
+
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {nullptr, std::move(trimmedTypeCodes), std::move(trimmedValueOffsets)},
+            std::move(trimmedChildren),
+            /*null_count=*/0);
+    }
+
+private:
+    std::vector<IBlockTrimmer::TPtr> Children_;
+};
+
 struct TTrimmerTraits {
     using TResult = IBlockTrimmer;
     template <bool Nullable>
     using TTuple = TTupleBlockTrimmer<Nullable>;
+    using TVariant = TVariantBlockTrimmer;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockTrimmer<T, Nullable>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot>
@@ -296,7 +340,7 @@ struct TTrimmerTraits {
 };
 
 IBlockTrimmer::TPtr MakeBlockTrimmer(const NUdf::ITypeInfoHelper& typeInfoHelper, const NUdf::TType* type, arrow::MemoryPool* pool) {
-    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
+    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, pool);
 }
 
 } // namespace NKikimr::NMiniKQL

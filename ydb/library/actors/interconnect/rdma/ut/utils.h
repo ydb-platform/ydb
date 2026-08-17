@@ -16,7 +16,7 @@ namespace NInterconnect::NRdma {
 namespace NRdmaTest {
 
 inline void GTestSkip() {
-    GTEST_SKIP() << "Skipping all rdma tests for suit, set \""
+    GTEST_SKIP() << "Skipping all rdma tests for suite, set \""
                  << RdmaTestEnvSwitchName << "\" env if it is RDMA compatible";
 }
 
@@ -68,4 +68,3 @@ protected:
         }
     }
 };
-

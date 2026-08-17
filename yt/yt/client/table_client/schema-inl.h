@@ -7,6 +7,8 @@
 #include <library/cpp/yt/misc/cast.h>
 #include <library/cpp/yt/misc/numeric_helpers.h>
 
+#include <bit>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +46,15 @@ inline void TLegacyLockMask::Enrich(int columnCount)
 inline TLegacyLockBitmap TLegacyLockMask::GetBitmap() const
 {
     return Data_;
+}
+
+inline int TLegacyLockMask::GetLockedPrefixLength() const
+{
+    constexpr int BitsPerTypeLog2 = 1;
+    static_assert((1 << BitsPerTypeLog2) == BitsPerType);
+
+    // Ceil-divide the highest set bit count by BitsPerType via a shift; 0 for an empty mask.
+    return (std::bit_width(Data_) + BitsPerType - 1) >> BitsPerTypeLog2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

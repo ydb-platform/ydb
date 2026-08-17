@@ -1,5 +1,7 @@
 #include "tenant_slot_broker_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -138,7 +140,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAssignFreeSlots Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAssignFreeSlots Execute");
 
         // Remember which collocation groups are going to be visited during
         // missing slots processing. Don't revisit them later for split and
@@ -169,7 +171,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAssignFreeSlots Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAssignFreeSlots Complete");
         Self->TxCompleted(this, ctx);
     }
 

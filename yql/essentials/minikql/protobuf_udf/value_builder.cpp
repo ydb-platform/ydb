@@ -7,12 +7,22 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
+#include <utility>
+
 namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
-TProtobufValue::TProtobufValue(const TProtoInfo& info)
-    : Info_(info)
+IProtobufParser::~IProtobufParser()
+{
+}
+
+IProtobufSerialize::~IProtobufSerialize()
+{
+}
+
+TProtobufValue::TProtobufValue(TProtoInfo info)
+    : Info_(std::move(info))
 {
 }
 
@@ -37,8 +47,8 @@ TUnboxedValue TProtobufValue::Run(
     }
 }
 
-TProtobufSerialize::TProtobufSerialize(const TProtoInfo& info)
-    : Info_(info)
+TProtobufSerialize::TProtobufSerialize(TProtoInfo info)
+    : Info_(std::move(info))
 {
 }
 
@@ -64,7 +74,7 @@ TUnboxedValue TProtobufSerialize::Run(
 
 namespace {
 
-static TUnboxedValuePod CreateEnumValue(
+TUnboxedValuePod CreateEnumValue(
     const IValueBuilder* valueBuilder,
     const NProtoBuf::EnumValueDescriptor* desc,
     const EEnumFormat format,
@@ -84,10 +94,10 @@ static TUnboxedValuePod CreateEnumValue(
             return valueBuilder->NewString(desc->full_name()).Release();
     }
 
-    Y_UNREACHABLE();
+    Y_ENSURE(false, "Unreachable");
 }
 
-static TUnboxedValuePod CreateSingleField(
+TUnboxedValuePod CreateSingleField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,
@@ -134,7 +144,7 @@ static TUnboxedValuePod CreateSingleField(
     return TUnboxedValuePod();
 }
 
-static TUnboxedValuePod CreateDefaultValue(
+TUnboxedValuePod CreateDefaultValue(
     const IValueBuilder* valueBuilder,
     const FieldDescriptor* fd,
     const TProtoInfo& info,
@@ -169,7 +179,7 @@ static TUnboxedValuePod CreateDefaultValue(
 #undef DEFAULT_TO_VALUE
 }
 
-static TUnboxedValuePod CreateRepeatedField(
+TUnboxedValuePod CreateRepeatedField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,
@@ -229,7 +239,7 @@ static TUnboxedValuePod CreateRepeatedField(
     return list.Release();
 }
 
-static TUnboxedValuePod CreateMapField(
+TUnboxedValuePod CreateMapField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,

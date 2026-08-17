@@ -9,8 +9,7 @@
 
 #include <arrow/compute/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -53,11 +52,10 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     const TKernel& kernel = ResolveKernel(*ctx.FunctionRegistry.GetBuiltins(), funcName, argsTypes, callableType->GetReturnType());
     if (kernel.IsPolymorphic()) {
         auto arrowKernel = kernel.MakeArrowKernel(argsTypes, callableType->GetReturnType());
-        return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), funcName, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *arrowKernel, arrowKernel, kernel.Family.FunctionOptions);
+        return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), funcName, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *arrowKernel, arrowKernel, kernel.Family.FunctionOptions);
     } else {
-        return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), funcName, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);
+        return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), funcName, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -22,6 +22,11 @@ Any command can be run from the command line with the `--help` option to get hel
 
 Command / subcommand | Brief description
 --- | ---
+| [admin cluster bridge failover](../commands/bridge/failover.md) | Emergency switchover when [pile](../../../concepts/glossary.md#pile) is unavailable |
+| [admin cluster bridge list](../commands/bridge/list.md) | List state of each [pile](../../../concepts/glossary.md#pile) in [bridge mode](../../../concepts/bridge.md) |
+| [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Returning [pile](../../../concepts/glossary.md#pile) to the [cluster](../../../concepts/glossary.md#cluster) after maintenance or recovery |
+| [admin cluster bridge switchover](../commands/bridge/switchover.md) | Planned `PRIMARY` [pile](../../../concepts/glossary.md#pile) change |
+| [admin cluster bridge takedown](../commands/bridge/takedown.md) | Taking [pile](../../../concepts/glossary.md#pile) out of the [cluster](../../../concepts/glossary.md#cluster) for maintenance |
 | [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Getting the current dynamic configuration of the [cluster](../../../concepts/glossary.md#cluster) |
 | [admin cluster config generate](../commands/configuration/cluster/generate.md) | Generating a dynamic configuration from a static startup configuration |
 | [admin cluster config replace](../commands/configuration/cluster/replace.md) | Replacing the [cluster](../../../concepts/glossary.md#cluster) dynamic configuration |
@@ -93,9 +98,6 @@ Command / subcommand | Brief description
 || [tools copy](../tools-copy.md) | Copying [tables](../../../concepts/glossary.md#table) |
 || [tools dump](../export-import/tools-dump.md#schema-objects) | Dumping individual schema objects to the file system |
 || [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
-{% if ydb-cli == "ydb" %}
-|| [tools pg-convert](../../../postgresql/import.md#pg-convert) | Converting a PostgreSQL dump obtained with the pg_dump utility into a format understood by YDB |
-{% endif %}
 || [tools rename](../commands/tools/rename.md) | Renaming row-oriented [tables](../../../concepts/glossary.md#row-oriented-table) |
 || [tools restore](../export-import/tools-restore.md#schema-objects) | Restoring individual schema objects from the file system |
 || [topic create](../topic-create.md) | Creating a [topic](../../../concepts/glossary.md#topic) |
@@ -124,14 +126,14 @@ Command / subcommand | Brief description
 || [workload kv clean](../workload-kv.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Key-Value` workload initialization |
 || workload log init | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Log` workload |
 || workload log import generator | Random data generator in the `Log` workload |
-|| workload log run bulk_upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
+|| workload log run bulk-upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
 || workload log run delete | Deleting random rows from a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
 || workload log run insert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload using `INSERT` |
 || workload log run upsert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload using `UPSERT` |
 || workload log run select | Executing a set of analytical queries for log analysis: record counting, aggregation by levels, services, and components, metadata analysis, and time ranges in the `Log` workload |
 || workload log clean | Deleting [tables](../../../concepts/glossary.md#table) created during the `Log` workload initialization |
 || workload mixed init | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Mixed` workload |
-|| workload mixed run bulk_upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `BULK_UPSERT` in the `Mixed` workload |
+|| workload mixed run bulk-upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `BULK_UPSERT` in the `Mixed` workload |
 || workload mixed run insert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `INSERT` in the `Mixed` workload |
 || workload mixed run upsert | Updating random rows in a [table](../../../concepts/glossary.md#table) near the current time using `UPSERT` in the `Mixed` workload |
 || workload mixed run select | Selecting random rows from a [table](../../../concepts/glossary.md#table) in the `Mixed` workload |
@@ -172,4 +174,11 @@ Command / subcommand | Brief description
 || workload vector run select | Getting top-K vectors in the `Vector` workload |
 || workload vector run upsert | Upserting vector rows into a [table](../../../concepts/glossary.md#table) in the `Vector` workload |
 || workload vector clean | Deleting [tables](../../../concepts/glossary.md#table) created during the `Vector` workload initialization |
+|| [workload fulltext init](../workload-fulltext.md#init) | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Fulltext` workload |
+|| [workload fulltext import files](../workload-fulltext.md#load-files) | Importing fulltext data from files in the `Fulltext` workload |
+|| [workload fulltext import generator](../workload-fulltext.md#load-generator) | Generating synthetic text data using a Markov chain model in the `Fulltext` workload |
+|| [workload fulltext run select](../workload-fulltext.md#run-select) | Running fulltext search queries in the `Fulltext` workload |
+|| [workload fulltext run upsert](../workload-fulltext.md#run-upsert) | Inserting or updating documents in a [table](../../../concepts/glossary.md#table) in the `Fulltext` workload |
+|| [workload fulltext clean](../workload-fulltext.md#cleanup) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Fulltext` workload initialization |
+|| [workload fulltext model](../workload-fulltext.md#model) | Building a Markov chain model from a text dataset for the `Fulltext` workload |
 || [yql](../yql.md) | Executing a YQL script with streaming support (deprecated, use [`ydb sql`](../sql.md)) |

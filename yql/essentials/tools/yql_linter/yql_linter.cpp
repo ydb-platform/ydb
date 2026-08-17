@@ -1,5 +1,6 @@
 #include <yql/essentials/public/fastcheck/linter.h>
 #include <yql/essentials/public/fastcheck/utils.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 #include <yql/essentials/utils/tty.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -22,7 +23,7 @@ int Run(int argc, char** argv) {
     TString clusterModeStr = "Many";
     TString clusterSystem;
     NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
-    TString customUdfFilter;
+    TString customUdf;
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
@@ -39,7 +40,7 @@ int Run(int argc, char** argv) {
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
     opts.AddLongOption("cluster-mode", "cluster mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EClusterMode>()).StoreResult(&clusterModeStr);
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
-    opts.AddLongOption("custom-udf-filter", "JSON file with allowed UDFs").StoreResult(&customUdfFilter);
+    opts.AddLongOption("custom-udf", "JSON file with allowed UDFs").StoreResult(&customUdf);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
@@ -95,12 +96,12 @@ int Run(int argc, char** argv) {
     checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
-    TMaybe<NYql::NFastCheck::TUdfFilter> udfFilter;
-    if (customUdfFilter) {
-        TFileInput filterFile(customUdfFilter);
+    std::unique_ptr<NYql::IUdfMeta> udfMeta;
+    if (customUdf) {
+        TFileInput filterFile(customUdf);
         auto content = filterFile.ReadAll();
-        udfFilter.ConstructInPlace(NYql::NFastCheck::ParseUdfFilter(NJson::ReadJsonFastTree(content)));
-        checkReq.UdfFilter = udfFilter.Get();
+        udfMeta = NYql::NFastCheck::LoadUdfMeta(content);
+        checkReq.UdfMeta = udfMeta.get();
     }
 
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);

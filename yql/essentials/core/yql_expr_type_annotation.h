@@ -7,6 +7,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
@@ -84,6 +85,8 @@ TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& va
 
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
+    bool withTypes = true);
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, bool& isUniversal, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
     bool withTypes = true);
 bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx);
 bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx);
@@ -206,13 +209,21 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
 IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
-    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal
 );
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);
 const TTypeAnnotationNode* MakeCodeResourceType(TExprContext& ctx);
 bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx);
+
+bool EnsureAvailable(
+    TPositionHandle p,
+    const TFeature& f,
+    TExprContext& exprCtx,
+    const TTypeAnnotationContext& typeCtx);
+
+bool IsAvailable(const TFeature& f, const TTypeAnnotationContext& typeCtx);
 
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx);
 
@@ -236,13 +247,13 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOpt
 const TTypeAnnotationNode* JoinDryKeyType(bool outer, const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx);
 const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, bool& hasOptional, TExprContext& ctx);
 // Key type for inner or full join.
-const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 
 template <bool Strict, bool Silent = false> // Strict + DryType before - common type for join key.
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn = false);
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type);
 
@@ -260,50 +271,29 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 
 using NConvertFlags::TConvertFlags;
 
-//FIXME remove deprecated functions
-//#define DEPRECATED [[deprecated]]
-#define DEPRECATED
-
-DEPRECATED
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
+
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
-    TConvertFlags flags = {});
+
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+
 TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
-DEPRECATED
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
-    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
-    bool useTypeDiff = false);
+
 IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx);
-
-#undef DEPRECATED
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 
@@ -341,6 +331,7 @@ bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExp
 bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 
+bool HasAnyError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);
 bool IsNull(const TExprNode& node);
@@ -354,9 +345,14 @@ bool IsFlowOrStream(const TExprNode& node);
 bool IsBoolLike(const TTypeAnnotationNode& type);
 bool IsBoolLike(const TExprNode& node);
 
+bool IsUniversalLiteral(const TExprNode::TPtr& node);
+
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+
+// Members with this prefix are reserved for YQL internal needs and must not be used by user data
+inline constexpr TStringBuf SystemMemberPrefix = "_yql_";
 
 bool IsSystemMember(const TStringBuf& memberName);
 

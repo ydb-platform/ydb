@@ -340,6 +340,8 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     for (auto &col : Columns) {
         if (col.SizeType == EColumnSizeType::Variable) {
             VariableColumns.push_back(col);
+        } else if (col.DataSize == 0) {
+            // singular types (void/null...) no payload bytes to pack/unpack
         } else if (IsPowerOf2(col.DataSize) &&
                    col.DataSize < (1u << FixedPOTColumns_.size())) {
             FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(
@@ -366,13 +368,23 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     std::vector<const TColumnDesc *> fallback_cols;
     std::queue<const TColumnDesc *> next_cols;
 
+    auto packableFixedPrefix = [](const std::vector<TColumnDesc> &columns) {
+        std::vector<TColumnDesc> result;
+        for (const auto &col : columns) {
+            if (col.SizeType != EColumnSizeType::Fixed) {
+                break;
+            }
+            if (col.DataSize != 0) {
+                result.push_back(col);
+            }
+        }
+        return result;
+    };
+    const auto packableKeyColumns = packableFixedPrefix(KeyColumns);
+    const auto packablePayloadColumns = packableFixedPrefix(PayloadColumns);
+
     size_t fixed_cols_left =
-        KeyColumnsFixedNum +
-        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0ul,
-                        [](size_t prev, const auto &col) {
-                            return prev +
-                                   (col.SizeType == EColumnSizeType::Fixed);
-                        });
+        packableKeyColumns.size() + packablePayloadColumns.size();
 
     const auto small_tuple_packing = [&](const std::vector<TColumnDesc>
                                              &columns) {
@@ -392,13 +404,19 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
                     ? col.DataSize
                     : col.DataSize + col.Offset - next_cols.front()->Offset;
 
-            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size;
+            // PackTupleOr/UnpackTupleOr are instantiated for at most
+            // kSIMDMaxCols columns, so a wider group cannot be dispatched.
+            // Stop growing the group there and let the rest of the columns go
+            // through the fallback path.
+            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size &&
+                                    next_cols.size() < kSIMDMaxCols;
             if (col_pushed) {
                 next_cols.push(&col);
                 tuple_size = tuple_size_with_col;
             }
 
             if (!SIMDSmallTuple_.Cols && next_cols.size() > 1 &&
+                next_cols.size() <= kSIMDMaxCols &&
                 tuple_size <= max_simd_tuple_size &&
                 (!col_pushed || !fixed_cols_left)) {
                 SIMDSmallTupleDesc simd_desc;
@@ -520,16 +538,16 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     };
 
     if (max_simd_tuple_size) {
-        small_tuple_packing(KeyColumns);
-        small_tuple_packing(PayloadColumns);
+        small_tuple_packing(packableKeyColumns);
+        small_tuple_packing(packablePayloadColumns);
 
         while (!next_cols.empty()) {
             fallback_cols.push_back(next_cols.front());
             next_cols.pop();
         }
     } else {
-        transpose_packing(KeyColumns, 0);
-        transpose_packing(PayloadColumns, 1);
+        transpose_packing(packableKeyColumns, 0);
+        transpose_packing(packablePayloadColumns, 1);
     }
 
     for (const auto col_desc_p : fallback_cols) {
@@ -1627,6 +1645,8 @@ void TTupleLayout::TupleDeepCopy(
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
             std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
+            MKQL_ENSURE(outOverflowSize <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
             WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
             outOverflowSize += overflowSize;
         }
@@ -1638,19 +1658,22 @@ void TTupleLayout::TupleDeepCopy(
     TTupleData& outTuple, TTupleData& outOverflow) const
 {
     auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
-        int offset = std::ssize(to);
-        int writeSize = std::ssize(range);    
-        to.resize( offset + writeSize);
+        MKQL_ENSURE(to.size() <= std::numeric_limits<ui32>::max(), "tuple buffer exceeds ui32 range");
+        ui32 offset = to.size();
+        ui32 writeSize = range.size();
+        to.resize(offset + writeSize);
         std::memcpy(to.data() + offset, range.data(), writeSize);
     };
-    int initSize = std::ssize(outTuple);
+    ui32 initSize = outTuple.size();
     appendRange(outTuple, {inTuple, TotalRowSize});
     for (const auto& col: VariableColumns) {
         ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
         if (size == 255) { // overflow buffer used
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
-            int outOverflowOffset = std::ssize(outOverflow);
+            MKQL_ENSURE(outOverflow.size() <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
+            ui32 outOverflowOffset = outOverflow.size();
             appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
             WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
         }
@@ -1667,6 +1690,10 @@ void TTupleLayout::Concat(
     if (srcCount == 0) {
         return;
     }
+    MKQL_ENSURE(dstOverflow.size() <= std::numeric_limits<ui32>::max(),
+                "overflow buffer exceeds ui32 offset range");
+    MKQL_ENSURE(dstOverflow.size() + srcOverflowSize <= std::numeric_limits<ui32>::max(),
+                "combined overflow would exceed ui32 offset range");
     ui32 dstOverflowOffset = dstOverflow.size();
     if (srcOverflowSize > 0) {
         dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
@@ -1674,8 +1701,8 @@ void TTupleLayout::Concat(
     }
 
     constexpr ui32 blockRows = 128;
-    dst.resize((dstCount + srcCount) * TotalRowSize);
-    ui8 *dstRow = dst.data() + dstCount * TotalRowSize;
+    dst.resize(static_cast<size_t>(dstCount + srcCount) * TotalRowSize);
+    ui8 *dstRow = dst.data() + static_cast<size_t>(dstCount) * TotalRowSize;
     ui32 blockSize;
     
     for (ui32 rowInd = 0; rowInd < srcCount; rowInd += blockRows, 
@@ -1716,12 +1743,21 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
     flattened.Overflow.reserve(totalOverflowSize);
 
 
-    int tupleSize = TotalRowSize;
+    ui32 tupleSize = TotalRowSize;
     for (const TPackResult& tupleBatch : tuples) {
+        MKQL_ENSURE(flattened.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "dstCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "srcCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.Overflow.size() <= std::numeric_limits<ui32>::max(),
+                    "srcOverflowSize exceeds ui32 range");
+        ui32 dstCount = flattened.PackedTuples.size() / tupleSize;
+        ui32 srcCount = tupleBatch.PackedTuples.size() / tupleSize;
+        ui32 srcOverflowSize = tupleBatch.Overflow.size();
         Concat(flattened.PackedTuples, flattened.Overflow,
-                                std::ssize(flattened.PackedTuples) / tupleSize, tupleBatch.PackedTuples.data(),
-                                tupleBatch.Overflow.data(), tupleBatch.PackedTuples.size() / tupleSize,
-                                tupleBatch.Overflow.size());
+                                dstCount, tupleBatch.PackedTuples.data(),
+                                tupleBatch.Overflow.data(), srcCount,
+                                srcOverflowSize);
     }
     return flattened;
 

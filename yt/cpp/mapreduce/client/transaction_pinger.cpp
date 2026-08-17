@@ -2,30 +2,16 @@
 
 #include "transaction.h"
 
-#include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-#include <yt/cpp/mapreduce/interface/tvm.h>
-
-#include <yt/cpp/mapreduce/common/wait_proxy.h>
-#include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
-#include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
-#include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
-
-#include <yt/yt/core/http/client.h>
-#include <yt/yt/core/http/http.h>
-
-#include <yt/yt/core/https/client.h>
-#include <yt/yt/core/https/config.h>
-
-#include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 #include <library/cpp/yt/assert/assert.h>
@@ -37,85 +23,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-void CheckError(const TString& requestId, NHttp::IResponsePtr response)
-{
-    if (const auto* ytError = response->GetHeaders()->Find("X-YT-Error")) {
-        TYtError error;
-        error.ParseFrom(*ytError);
-
-        TErrorResponse errorResponse(std::move(error), requestId);
-        if (errorResponse.IsOk()) {
-            return;
-        }
-
-        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-            requestId,
-            response->GetStatusCode(),
-            errorResponse.AsStrBuf());
-
-        ythrow errorResponse;
-    }
-}
-
-void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
-{
-    const auto context = tx.GetContext();
-    auto url = TString::Join(context.UseTLS ? "https://" : "http://", context.ServerName, "/api/", context.Config->ApiVersion, "/ping_tx");
-    auto headers = New<NHttp::THeaders>();
-    auto requestId = CreateGuidAsString();
-
-    headers->Add("Host", url);
-    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
-
-    if (const auto& serviceTicketAuth = context.ServiceTicketAuth) {
-        const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
-        headers->Add("X-Ya-Service-Ticket", serviceTicket);
-    } else if (const auto& token = context.Token; !token.empty()) {
-        headers->Add("Authorization", "OAuth " + token);
-    }
-
-    headers->Add("Transfer-Encoding", "chunked");
-    headers->Add("X-YT-Correlation-Id", requestId);
-    headers->Add("X-YT-Header-Format", "<format=text>yson");
-    headers->Add("Content-Encoding", "identity");
-    headers->Add("Accept-Encoding", "identity");
-
-    TNode node;
-    node["transaction_id"] = GetGuidAsString(tx.GetId());
-    auto strParams = NodeToYsonString(node);
-
-    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
-        requestId,
-        context.ServerName,
-        url,
-        strParams
-    );
-
-    auto response = NConcurrency::WaitFor(httpClient->Post(url, TSharedRef::FromString(strParams), headers)).ValueOrThrow();
-    CheckError(requestId, response);
-
-    YT_LOG_DEBUG("RSP %v - received response %v bytes. (%v)",
-            requestId,
-            response->ReadAll().size(),
-            strParams);
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TSharedTransactionPinger
     : public ITransactionPinger
 {
 public:
-    TSharedTransactionPinger(NHttp::IClientPtr httpClient, int poolThreadCount)
-        : PingerPool_(NConcurrency::CreateThreadPool(
-            poolThreadCount, "tx_pinger_pool"))
-        , HttpClient_(std::move(httpClient))
+    TSharedTransactionPinger(int poolThreadCount, IRawClientPtr rawClient)
+        : PingerPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
+        , RawClient_(std::move(rawClient))
     { }
 
     ~TSharedTransactionPinger() override
@@ -138,12 +52,16 @@ public:
         auto periodic = std::make_shared<NConcurrency::TPeriodicExecutorPtr>(nullptr);
         // Have to use weak_ptr in order to break reference cycle
         // This weak_ptr holds pointer to periodic, which will contain this lambda
-        // Also we consider that lifetime of this lambda is no longer than lifetime of pingableTx
-        // because every pingableTx have to call RemoveTransaction before it is destroyed
-        auto pingRoutine = BIND([this, &pingableTx, periodic = std::weak_ptr{periodic}] {
+        // Don't capture pingableTx by reference: an in-flight ping may outlive it and race with its destruction
+        auto pingRoutine = BIND([this, rawClient = RawClient_, transactionId = pingableTx.GetId(), periodic = std::weak_ptr{periodic}] {
             auto strong_ptr = periodic.lock();
-            YT_VERIFY(strong_ptr);
-            DoPingTransaction(pingableTx, *strong_ptr);
+            // NB: RemoveTransaction calls (*periodic)->Stop() fire-and-forget and then drops the last shared_ptr,
+            //     so if this callback was queued but hadn't started yet, lock() returns null.
+            if (!strong_ptr) {
+                // The executor is being torn down — nothing to ping.
+                return;
+            }
+            DoPingTransaction(rawClient, transactionId, *strong_ptr);
         });
         *periodic = New<NConcurrency::TPeriodicExecutor>(PingerPool_->GetInvoker(), pingRoutine, opts);
         (*periodic)->Start();
@@ -177,11 +95,10 @@ public:
     }
 
 private:
-    void DoPingTransaction(const TPingableTransaction& pingableTx,
-                           NConcurrency::TPeriodicExecutorPtr periodic)
+    void DoPingTransaction(const IRawClientPtr& rawClient, const TTransactionId& transactionId, NConcurrency::TPeriodicExecutorPtr periodic)
     {
         try {
-            PingTx(HttpClient_, pingableTx);
+            rawClient->PingTransaction(transactionId);
         } catch (const TErrorResponse& e) {
             /// NB: No logging here, CheckError() already logged TErrorResponse.
             if (e.GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
@@ -191,7 +108,7 @@ private:
             }
         } catch (const std::exception& e) {
             YT_LOG_ERROR("DoPingTransaction has failed (TransactionId: %v, Error: %v)",
-                GetGuidAsString(pingableTx.GetId()),
+                GetGuidAsString(transactionId),
                 e.what());
         }
     }
@@ -202,32 +119,16 @@ private:
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
     NConcurrency::IThreadPoolPtr PingerPool_;
-    NHttp::IClientPtr HttpClient_;
+    IRawClientPtr RawClient_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, bool useTLS)
+ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, IRawClientPtr rawClient)
 {
     YT_LOG_DEBUG("Using async transaction pinger");
-    auto httpPoller = NConcurrency::CreateThreadPoolPoller(
-        config->AsyncHttpClientThreads,
-        "tx_http_client_poller");
-    NHttp::IClientPtr httpClient;
 
-    if (useTLS) {
-        auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
-        httpsClientConfig->MaxIdleConnections = 16;
-        httpClient = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
-    } else {
-        auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
-        httpClientConfig->MaxIdleConnections = 16;
-        httpClient = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
-    }
-
-    return MakeIntrusive<TSharedTransactionPinger>(
-        std::move(httpClient),
-        config->AsyncTxPingerPoolThreads);
+    return MakeIntrusive<TSharedTransactionPinger>(config->AsyncTxPingerPoolThreads, std::move(rawClient));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

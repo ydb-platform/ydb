@@ -1,7 +1,6 @@
 #include "partition_chooser_impl.h"
 
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 namespace NKikimr::NPQ {

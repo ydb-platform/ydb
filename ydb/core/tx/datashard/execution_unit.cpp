@@ -2,6 +2,8 @@
 #include "execution_unit_ctors.h"
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -59,7 +61,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
         return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildKqpDataTxOutRS:
-        return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::BuildWriteOutRS:
         return CreateBuildWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
@@ -69,7 +71,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::PrepareDataTxInRS:
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:
-        return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::PrepareWriteTxInRS:
         return CreatePrepareWriteTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
@@ -83,7 +85,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:
-        return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteCommitWritesTx:
@@ -93,7 +95,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::CompleteWrite:
         return CreateCompleteWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpScanTx:
-        return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::MakeScanSnapshot:
         return CreateMakeScanSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::WaitForStreamClearance:
@@ -124,6 +126,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateDropTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DirectOp:
         return CreateDirectOpUnit(dataShard, pipeline);
+    case EExecutionUnitKind::PrepareIndexValidation:
+        return CreatePrepareIndexValidationUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreatePersistentSnapshot:
         return CreateCreatePersistentSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropPersistentSnapshot:
@@ -156,8 +160,6 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteWrite:
         return CreateExecuteWriteUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreateIncrementalRestoreSrc:
-        return CreateIncrementalRestoreSrcUnit(dataShard, pipeline);
     case EExecutionUnitKind::Truncate:
         return CreateTruncateUnit(dataShard, pipeline);
     default:
@@ -169,6 +171,11 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
+
+     // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
+    auto incOverloaded = [this, writeOp]() {
+        DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
+    };
 
     // Reject operations after receiving EvSplit
     // This is to avoid races when split is in progress
@@ -188,9 +195,10 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to split",
+            {"tabletId", DataShard.TabletID()});
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -206,12 +214,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         // TODO: Return SCHEME_CHANGED if the shard has been split
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
-        } else {        
+        } else {
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -227,8 +236,9 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -241,14 +251,16 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
 
             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::ChangesQueueOverflow, writeOp->GetWriteResult()->Record);
-        } else {                
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to changes queue overflow",
+            {"tabletId", DataShard.TabletID()});
 
+        incOverloaded();
+        DataShard.IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
         op->Abort();
         return true;
     }
@@ -260,13 +272,14 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
-        } else {            
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        // no incOverloaded here as it's treated as BAD_REQUEST, not OVERLOAD
         op->Abort();
         return true;
     }

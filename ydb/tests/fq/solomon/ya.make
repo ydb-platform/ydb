@@ -5,6 +5,9 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 NO_CHECK_IMPORTS()
 
@@ -26,3 +29,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    scalar_write
+)

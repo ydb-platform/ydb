@@ -75,12 +75,16 @@ def dump_chunk_event(data, filename):
 
 
 def extract_jars(dest, archive):
+    if os.path.exists(dest):
+        return
     os.makedirs(dest)
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(dest)
 
 
 def make_bfg_from_cp(class_path, out):
+    if os.path.exists(out):
+        return
     class_path = ' '.join(map(lambda path: ('file:/' + path.lstrip('/')) if os.path.isabs(path) else path, class_path))
     with zipfile.ZipFile(out, 'w') as zf:
         lines = []
@@ -92,6 +96,8 @@ def make_bfg_from_cp(class_path, out):
 
 
 def make_command_file_from_cp(class_path, out):
+    if os.path.exists(out):
+        return
     with open(out, 'w') as cp_file:
         cp_file.write(os.pathsep.join(class_path))
 

@@ -3,7 +3,6 @@ import shutil
 import subprocess
 import sys
 
-
 CGO1_SUFFIX = '.cgo1.go'
 
 

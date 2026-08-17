@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
+
 #include <library/cpp/json/writer/json_value.h>
 
 #include <memory>
@@ -34,6 +36,8 @@ public:
     virtual const TString& GetDescription() const = 0;
 
     virtual TResponse Execute(const NJson::TJsonValue& parameters) = 0;
+
+    virtual void SetAutoAction(TInteractiveConfigurationManager::EToolAutoAction autoAction);
 };
 
 } // namespace NYdb::NConsoleClient::NAi

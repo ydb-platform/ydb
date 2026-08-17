@@ -226,6 +226,9 @@ int ConvertOption(const EOption& option) {
     case EOption::TLS_REQUIRE_CERT: {
         return LDAP_OPT_X_TLS_REQUIRE_CERT;
     }
+    case EOption::TLS_NEWCTX: {
+        return LDAP_OPT_X_TLS_NEWCTX;
+    }
     case EOption::PROTOCOL_VERSION: {
         return LDAP_OPT_PROTOCOL_VERSION;
     }

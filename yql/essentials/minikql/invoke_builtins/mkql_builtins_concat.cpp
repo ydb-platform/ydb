@@ -1,8 +1,7 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE  // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -19,7 +18,7 @@ struct TConcat {
         return EmitFunctionCall<&ConcatStrings>(
             Type::getInt128Ty(ctx.Codegen.GetContext()),
             {left, right},
-            ctx.Codegen,
+            ctx,
             block);
     }
 #endif
@@ -46,5 +45,4 @@ void RegisterConcat(IBuiltinFunctionRegistry& registry) {
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TAggrConcat, TBinaryArgsSameOpt>(registry, aggrName);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(26.0)
+VERSION(26.2)
 
 LICENSE(BSD-2-Clause AND Apache-2.0)
 
@@ -17,6 +17,9 @@ PY_SRCS(
     packaging/_parser.py
     packaging/_structures.py
     packaging/_tokenizer.py
+    packaging/dependency_groups.py
+    packaging/direct_url.py
+    packaging/errors.py
     packaging/licenses/__init__.py
     packaging/licenses/_spdx.py
     packaging/markers.py

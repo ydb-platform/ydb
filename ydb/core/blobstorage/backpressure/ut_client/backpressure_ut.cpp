@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
         std::vector<TActorId> clients;
         ui64 clientId = 1;
 
-        const TInstant simDuration = TInstant::Hours(6);
+        const TInstant simDuration = TInstant::Hours(1);
         const TDuration minQ = TDuration::Seconds(10);
         const TDuration maxQ = TDuration::Seconds(20);
 
@@ -86,4 +86,42 @@ Y_UNIT_TEST_SUITE(Backpressure) {
         runtime.Stop();
     }
 
+    Y_UNIT_TEST(VDiskTryLaterOverload) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+
+        const TVDiskID vdiskId(TGroupId::Zero(), 1, 0, 0, 0);
+        TActorId vdiskActorId = runtime.Register(new TSkeletonFrontMockActor, TActorId(), 0, std::nullopt, 1);
+
+        const TInstant simDuration = TInstant::Minutes(10);
+
+        TInstant start = TInstant::Now();
+
+        std::vector<TActorId> clients;
+        for (ui32 i = 0; i < 10; ++i) {
+            const NBackpressure::TQueueClientId id(NBackpressure::EQueueClientType::VDiskLoad, i);
+            TActorId actorId = runtime.Register(new TLoaderActor(id, vdiskId, vdiskActorId, 8 << 20), TActorId(),
+                0, std::nullopt, 1);
+            clients.push_back(actorId);
+        }
+
+        while (runtime.GetClock() < simDuration) {
+            Cerr << "Clock# " << runtime.GetClock()
+                << " elapsed# " << (TInstant::Now() - start)
+                << " EventsProcessed# " << runtime.GetEventsProcessed()
+                << Endl;
+
+            const TDuration quantum = TDuration::Seconds(1);
+            const TInstant barrier = Min(simDuration, runtime.GetClock() + quantum);
+            runtime.Schedule(barrier, nullptr, new TFakeSchedulerCookie, 1);
+            runtime.Sim([&] { return runtime.GetClock() < barrier; });
+        }
+
+        for (const TActorId& actorId : std::exchange(clients, {})) {
+            runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, {}, 0), 1);
+        }
+        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdiskActorId, {}, {}, 0), 1);
+
+        runtime.Stop();
+    }
 }

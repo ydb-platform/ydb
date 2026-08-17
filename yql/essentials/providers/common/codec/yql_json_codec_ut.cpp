@@ -53,7 +53,7 @@ TString WriteValueToFuncJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL::T
 NUdf::TUnboxedValue ReadJsonStrValue(IInputStream* in, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory)
 {
     NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(in, &json, false)) {
+    if (!NJson::ReadJsonTree(in, &json, /*throwOnError=*/false)) {
         YQL_ENSURE(false, "Error parse json");
     }
     return ReadJsonValue(json, type, holderFactory);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(DeserializeVariant) {
 Y_UNIT_TEST(VariantTuple) {
     TTestContext ctx;
     TStringStream json;
-    json << "[1, {\"A\":true,\"B\":800}]";
+    json << R"([1, {"A":true,"B":800}])";
 
     auto members = std::to_array<TStructMember>({
         TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
@@ -369,7 +369,7 @@ Y_UNIT_TEST(Set) {
 Y_UNIT_TEST(DictOfUtf8) {
     TTestContext ctx;
     TStringStream json;
-    json << "[[\"key_1\",101], [\"key_2\",201]]";
+    json << R"([["key_1",101], ["key_2",201]])";
 
     auto type = TDictType::Create(
         TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),
@@ -617,7 +617,7 @@ Y_UNIT_TEST(float) {
     TStringStream json;
     json << "0.0431";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 0.0431f);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 0.0431F);
 
     TStringStream exceededJson;
     exceededJson << ToString(std::numeric_limits<double>::max());
@@ -632,7 +632,7 @@ Y_UNIT_TEST(FloatFromInt) {
     TStringStream json;
     json << "1766718243";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 1766718243.0f);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 1766718243.0F);
 }
 
 Y_UNIT_TEST(double) {
@@ -648,7 +648,7 @@ Y_UNIT_TEST(DoubleFromInt) {
     TStringStream json;
     json << "-667319001";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), -667319001.0l);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), -667319001.0L);
 }
 
 } // Y_UNIT_TEST_SUITE(DeserializeNumbers)

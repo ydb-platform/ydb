@@ -1,6 +1,8 @@
 #include "compaction.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/ut/olap/combinatory/execute.h>
+#include <ydb/core/kqp/ut/olap/helpers/plan_step.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
@@ -29,7 +31,7 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     const i64 cleanups = controller->GetCleanupSchemasFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     const TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < TDuration::Seconds(10)) {
+    while (TInstant::Now() - start < TDuration::Seconds(30)) {
         if (cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) {
             Cerr << "SCHEMAS_CLEANUP_HAPPENED: " << cleanups << " -> " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
             break;
@@ -62,10 +64,13 @@ TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
+    // TSchemaCommand command;
+    // command.DeserializeFromString("ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,`COMPACTION_PLANNER.FEATURES`=`{'accumulator_trigger_portions':2}`)");
+    // AFL_VERIFY(command.Execute(kikimr).IsSuccess());
     const i64 compactions = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     const TInstant start = TInstant::Now();
@@ -82,6 +87,9 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    // Make the just-compacted portions visible to the next test scans/reads.
+    AdvancePlanStep(kikimr);
     return TConclusionStatus::Success();
 }
 

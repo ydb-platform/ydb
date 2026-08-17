@@ -20,7 +20,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhoAmI(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonWhoAmI(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
@@ -33,7 +33,7 @@ public:
 
     void ReplyAndPassAway() {
         NACLibProto::TUserToken userToken;
-        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
+        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(GetRequest().GetUserTokenObject());
         NJson::TJsonValue json(NJson::JSON_MAP);
         if (userToken.HasUserSID()) {
             json["UserSID"] = userToken.GetUserSID();
@@ -47,16 +47,13 @@ public:
                 }
             }
         }
-        if (userToken.HasOriginalUserToken()) {
-            json["OriginalUserToken"] = userToken.GetOriginalUserToken();
-        }
         if (userToken.HasAuthType()) {
             json["AuthType"] = userToken.GetAuthType();
         }
 
         NACLib::TUserToken token(std::move(userToken));
         json["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
-        bool isAdministrationAllowed = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        bool isAdministrationAllowed = IsAdministrator(AppData(), &token);
         bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
         bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
         bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());

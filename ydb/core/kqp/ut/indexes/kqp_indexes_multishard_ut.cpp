@@ -1784,11 +1784,9 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DataColumnWrite, UseSink) {
+    Y_UNIT_TEST(DataColumnWrite) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2545,6 +2543,12 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             LIMIT 2;
         )");
 
+        {
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            Cerr << "CheckPushTopSort AST: " << explainResult.GetAst() << Endl;
+        }
+
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(
@@ -2552,6 +2556,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                 TTxControl::BeginTx().CommitTx(),
                 execSettings)
             .ExtractValueSync();
+
+        
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/MultiShardIndexedWithDataColumn", {

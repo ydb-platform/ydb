@@ -8,3 +8,6 @@ items:
 - { name: Секреты,                                href: secrets.md }
 - { name: Внешние источники данных,               href: external_data_source.md }
 - { name: Внешние таблицы,                        href: external_table.md }
+- name: Служебные объекты
+  items:
+  - { name: Коллекции резервных копий,             href: backup-collection.md }

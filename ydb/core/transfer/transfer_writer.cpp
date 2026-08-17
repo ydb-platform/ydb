@@ -1,5 +1,4 @@
 #include "events.h"
-#include "logging.h"
 #include "scheme.h"
 #include "table_kind_state.h"
 #include "transfer_writer.h"
@@ -13,10 +12,14 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TRANSFER
+
+using namespace NActors::NStructuredLog;
 using namespace NFq::NRowDispatcher;
 using namespace NKikimr::NReplication::NService;
 
@@ -47,7 +50,9 @@ public:
 
 private:
     void GetTableScheme() {
-        LOG_D("GetTableScheme: worker# " << Worker);
+        YDB_LOG_DEBUG("[TransferWriter] GetTableScheme",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
         Become(&TThis::StateGetTableScheme);
 
         auto request = MakeHolder<TNavigate>();
@@ -68,12 +73,14 @@ private:
     }
 
     void LogCritAndLeave(const TString& error) {
-        LOG_C(error);
+        YDB_LOG_CRIT("[TransferWriter] " << error,
+            {"logPrefix", GetLogPrefix()});
         Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        YDB_LOG_WARN("[TransferWriter] " << error,
+            {"logPrefix", GetLogPrefix()});
         Retry();
     }
 
@@ -110,8 +117,9 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -138,9 +146,9 @@ private:
         DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = CreateColumnTableState(SelfId(), Database, result);
+            TableState = CreateColumnTableState(SelfId(), Database, DirectoryPath.empty() ? "" : DefaultTablePath, result);
         } else {
-            TableState = CreateRowTableState(SelfId(), Database, result);
+            TableState = CreateRowTableState(SelfId(), Database, DirectoryPath.empty() ? "" : DefaultTablePath, result);
         }
 
         CompileTransferLambda();
@@ -148,7 +156,9 @@ private:
 
 private:
     void CompileTransferLambda() {
-        LOG_D("CompileTransferLambda: worker# " << Worker);
+        YDB_LOG_DEBUG("[TransferWriter] CompileTransferLambda",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         NFq::TPurecalcCompileSettings settings = {
             .EnabledLLVM = true,
@@ -176,22 +186,30 @@ private:
         sb << "SELECT * FROM (\n";
         sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << SystemColumns::Root << " FROM Input\n";
         sb << ") FLATTEN BY " << SystemColumns::Root << ";\n";
-        LOG_T("SQL: " << sb);
+        YDB_LOG_TRACE("[TransferWriter] Dump logPrefix, SQL",
+            {"logPrefix", GetLogPrefix()},
+            {"SQL", sb});
         return sb;
     }
 
     void Handle(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
         const auto& result = ev->Get();
 
-        LOG_D("Handle TEvPurecalcCompileResponse"
-            << ": result# " << (result ? result->Issues.ToOneLineString() : "nullptr"));
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvPurecalcCompileResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"result", (result ? result->Issues.ToOneLineString() : "nullptr")});
 
         if (ev->Cookie != InFlightCompilationId) {
-            LOG_D("Outdated compiler response ignored for id " << ev->Cookie << ", current compile id " << InFlightCompilationId);
+            YDB_LOG_DEBUG("[TransferWriter] Outdated compiler response ignored for id current compile id",
+                {"logPrefix", GetLogPrefix()},
+                {"cookie", ev->Cookie},
+                {"inFlightCompilationId", InFlightCompilationId});
             return;
         }
 
         if (!result->ProgramHolder) {
+            Stats.ProcessingErrors++;
+            SendStats(EWorkerOperation::NONE);
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
@@ -233,8 +251,9 @@ private:
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("Handshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("[TransferWriter] Handshake",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         if (ProcessingError) {
             Leave(ProcessingErrorStatus, *ProcessingError);
@@ -251,7 +270,9 @@ private:
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle TEvData record count: " << ev->Get()->Records.size());
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvData record",
+            {"logPrefix", GetLogPrefix()},
+            {"count", ev->Get()->Records.size()});
         ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
@@ -260,6 +281,7 @@ private:
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
+        SendOperationChange(EWorkerOperation::PROCESS);
 
         PollSent = false;
 
@@ -277,6 +299,7 @@ private:
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
                 ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset()
                     << ": " << msg;
+                Stats.WriteErrors++;
             };
 
             try {
@@ -305,6 +328,8 @@ private:
                         tablePath = DefaultTablePath;
                     }
 
+                    Stats.BytesWritten += m->EstimateSize;
+                    Stats.RowsWritten += m->Data.RowCount();
                     if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
                         RequiredFlush = true;
                     }
@@ -322,23 +347,28 @@ private:
             }
         }
 
-        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush)) {
-            if (TableState->Flush()) {
-                LastWriteTime.reset();
-                return Become(&TThis::StateWrite);
+        if (ProcessingError) {
+            SendStats(EWorkerOperation::NONE);
+            return LogCritAndLeave(*ProcessingError);
+        } else {
+            if (TableState->BatchSize() == 0 && LastProcessedOffset) {
+                Send(Worker, new TEvWorker::TEvCommit(LastProcessedOffset.value() + 1));
+            } else if (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush) {
+                if (TableState->Flush()) {
+                    SendStats(EWorkerOperation::WRITE);
+                    LastWriteTime.reset();
+                    return Become(&TThis::StateWrite);
+                }
             }
         }
 
-        if (ProcessingError) {
-            LogCritAndLeave(*ProcessingError);
-        } else {
-            PollSent = true;
-            Send(Worker, new TEvWorker::TEvPoll(true));
-        }
+        PollSent = true;
+        Send(Worker, new TEvWorker::TEvPoll(true));
     }
 
     void TryFlush() {
         if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            SendStats(EWorkerOperation::WRITE);
             LastWriteTime.reset();
             WakeupScheduled = false;
             Become(&TThis::StateWrite);
@@ -361,17 +391,21 @@ private:
     }
 
     void Handle(NTransferPrivate::TEvWriteCompleeted::TPtr& ev) {
-        LOG_D("Handle NTransferPrivate::TEvWriteCompleeted"
-            << ": worker# " << Worker
-            << " status# " << ev->Get()->Status
-            << " issues# " << ev->Get()->Issues.ToOneLineString());
+        YDB_LOG_DEBUG("[TransferWriter] Handle NTransferPrivate::TEvWriteCompleeted",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker},
+            {"status", ev->Get()->Status},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
 
         const auto status = ev->Get()->Status;
         const auto& error = ev->Get()->Issues.ToOneLineString();
 
         if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
+            Stats.WriteErrors++;
         }
+
+        SendStats(EWorkerOperation::NONE);
 
         if (ProcessingError) {
             return LogCritAndLeave(*ProcessingError);
@@ -403,6 +437,7 @@ private:
                 WakeupScheduled = false;
                 break;
             case ETag::RetryFlush:
+                SendStats(EWorkerOperation::WRITE);
                 TableState->Flush();
                 break;
             case ETag::LeaveOnBatchSizeExceed:
@@ -416,11 +451,9 @@ private:
         return PendingRecords && PendingRecords->empty();
     }
 
-    TStringBuf GetLogPrefix() const {
+    TStructuredMessage GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TransferWriter]"
-                << SelfId() << " ";
+            LogPrefix = YDB_LOG_CREATE_MESSAGE({"selfId", SelfId()});
         }
 
         return LogPrefix.GetRef();
@@ -434,7 +467,8 @@ private:
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
-        LOG_I("Leave: " << message);
+        YDB_LOG_INFO("[TransferWriter] Leave " << message,
+            {"logPrefix", GetLogPrefix()});
 
         if (Worker) {
             Send(Worker, new TEvWorker::TEvGone(status, message));
@@ -493,7 +527,9 @@ public:
         , DirectoryPath(directoryPath)
         , Database(database)
         , TargetDirectoryPath(MakeTargetDirectoryPath(database, directoryPath))
-    {}
+    {
+        Stats.StartTime = Now();
+    }
 
 private:
     const TString TransformLambda;
@@ -518,7 +554,7 @@ private:
     mutable bool RequiredFlush = false;
     mutable std::optional<TInstant> LastWriteTime;
 
-    mutable TMaybe<TString> LogPrefix;
+    mutable TMaybe<TStructuredMessage> LogPrefix;
 
     mutable TEvWorker::TEvGone::EStatus ProcessingErrorStatus;
     mutable TMaybe<TString> ProcessingError;
@@ -530,6 +566,58 @@ private:
 
     ui32 Attempt = 0;
     TDuration Delay = MinRetryDelay;
+
+    struct TStatsHolder {
+        EWorkerOperation Operation = EWorkerOperation::NONE;
+        TInstant StartTime;
+        double StartCpuSec = 0.0;
+        ui64 BytesWritten = 0;
+        ui64 RowsWritten = 0;
+        ui64 WriteErrors = 0;
+        ui64 ProcessingErrors = 0;
+
+        void ResetStats(double currentElapsedCpu, EWorkerOperation newState) {
+            StartCpuSec = currentElapsedCpu;
+            StartTime = Now();
+            Operation = newState;
+        }
+
+        void DumpStats(double currentElapsedCpu, EWorkerOperation newState, TTransferWriteStats* dumpTo) {
+            if (Operation == EWorkerOperation::PROCESS) {
+                dumpTo->ProcessingCpu = TDuration::Seconds(currentElapsedCpu - StartCpuSec);
+                dumpTo->ProcessingTime = Now() - StartTime;
+            } else if (Operation == EWorkerOperation::WRITE) {
+                dumpTo->WriteDuration = Now() - StartTime;
+            }
+
+            dumpTo->ProcessingErrors = ProcessingErrors;
+            dumpTo->WriteErrors = WriteErrors;
+            dumpTo->WriteBytes = BytesWritten;
+            dumpTo->WriteRows = RowsWritten;
+            BytesWritten = 0;
+            RowsWritten = 0;
+            WriteErrors = 0;
+            ProcessingErrors = 0;
+
+            ResetStats(currentElapsedCpu, newState);
+        }
+    };
+
+    TStatsHolder Stats;
+
+private:
+    void SendStats(EWorkerOperation newCurrentOperation) {
+        auto* event = TEvWorker::TEvStatus::FromOperation(Stats.Operation);
+        event->DetailedStats->WriterStats = std::make_unique<TTransferWriteStats>();
+        Stats.DumpStats(GetElapsedTicksAsSeconds(),newCurrentOperation, event->DetailedStats->WriterStats.get());
+        Send(Worker, event);
+    }
+
+    void SendOperationChange(EWorkerOperation currentOperation) {
+        Stats.ResetStats(GetElapsedTicksAsSeconds(), currentOperation);
+        auto* event = TEvWorker::TEvStatus::FromOperation(currentOperation);
+        Send(Worker, event);
+    }
 
 }; // TTransferWriter
 

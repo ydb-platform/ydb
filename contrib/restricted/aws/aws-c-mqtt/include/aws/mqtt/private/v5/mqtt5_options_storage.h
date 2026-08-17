@@ -22,7 +22,6 @@
 
 struct aws_client_bootstrap;
 struct aws_mqtt5_client;
-struct aws_mqtt5_client_options;
 struct aws_mqtt5_operation;
 struct aws_string;
 
@@ -102,6 +101,8 @@ struct aws_mqtt5_operation_puback {
     struct aws_allocator *allocator;
 
     struct aws_mqtt5_packet_puback_storage options_storage;
+
+    struct aws_mqtt5_manual_publish_acknowledgement_completion_options completion_options;
 };
 
 struct aws_mqtt5_operation_disconnect {
@@ -182,6 +183,8 @@ struct aws_mqtt5_client_options_storage {
     void *client_termination_handler_user_data;
 
     struct aws_host_resolution_config host_resolution_override;
+
+    struct aws_mqtt_iot_metrics_storage *metrics_storage;
 };
 
 AWS_EXTERN_C_BEGIN
@@ -217,7 +220,8 @@ AWS_MQTT_API uint32_t aws_mqtt5_operation_get_ack_timeout_override(const struct 
 
 AWS_MQTT_API struct aws_mqtt5_operation_connect *aws_mqtt5_operation_connect_new(
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_connect_view *connect_options);
+    const struct aws_mqtt5_packet_connect_view *connect_options,
+    const struct aws_mqtt5_client_options_storage *option_storage);
 
 AWS_MQTT_API int aws_mqtt5_packet_connect_view_validate(const struct aws_mqtt5_packet_connect_view *connect_view);
 
@@ -270,7 +274,8 @@ AWS_MQTT_API void aws_mqtt5_packet_publish_view_log(
 
 AWS_MQTT_API struct aws_mqtt5_operation_puback *aws_mqtt5_operation_puback_new(
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_puback_view *puback_options);
+    const struct aws_mqtt5_packet_puback_view *puback_options,
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options);
 
 AWS_MQTT_API void aws_mqtt5_packet_puback_view_log(
     const struct aws_mqtt5_packet_puback_view *puback_view,

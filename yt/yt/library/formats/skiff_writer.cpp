@@ -73,14 +73,14 @@ public:
         for (size_t tableIndex = 0; tableIndex < tableSchemas.size(); ++tableIndex) {
             const auto& columns = tableSchemas[tableIndex]->Columns();
             for (const auto& column : columns) {
-                Columns_[std::pair<int, TString>(tableIndex, column.Name())] = column;
+                Columns_[std::pair<int, std::string>(tableIndex, column.Name())] = column;
             }
         }
     }
 
     const TColumnSchema* GetColumnSchema(int tableIndex, TStringBuf columnName) const
     {
-        auto it = Columns_.find(std::pair<int, TString>(tableIndex, columnName));
+        auto it = Columns_.find(std::pair<int, std::string>(tableIndex, columnName));
         if (it == Columns_.end()) {
             return nullptr;
         } else {
@@ -90,7 +90,7 @@ public:
 
 private:
     // (TableIndex, ColumnName) -> ColumnSchema
-    THashMap<std::pair<int, TString>, TColumnSchema> Columns_;
+    THashMap<std::pair<int, std::string>, TColumnSchema> Columns_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -326,7 +326,7 @@ private:
     i64 RowIndex_ = Undefined;
 };
 
-TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(TString name) {
+TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(std::string name) {
     return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
         if (value.Type != EValueType::Null) {
             THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
@@ -783,8 +783,8 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for column %Qv",
                         skiffField.Name())
-                        << TErrorAttribute("logical_type", logicalType)
-                        << ex;
+                        .With("logical_type", logicalType)
+                        .With(ex);
                 }
             };
 
@@ -811,12 +811,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else if (denseField.Name() == RangeIndexColumnName) {
                         writerTableDescription.RangeIndexFieldIndex = nextDenseIndex;
                         knownFields[id] = TSkiffEncodingInfo::RangeIndex(nextDenseIndex);
@@ -826,12 +823,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else {
                         if (denseField.Name() == KeySwitchColumnName) {
                             writerTableDescription.KeySwitchFieldIndex = nextDenseIndex;
@@ -842,7 +836,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
                 denseFieldWriterInfos.emplace_back(converter, id);
                 ++nextDenseIndex;
@@ -861,7 +855,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
             }
 
@@ -934,9 +928,13 @@ private:
             if (tableIndex >= TableDescriptionList_.size()) {
                 THROW_ERROR_EXCEPTION("Table #%v is not described by Skiff schema",
                     tableIndex)
-                    << GetRowPositionErrorAttributes();
+                    .With(GetRowPositionErrorAttributes());
             }
-            YT_VERIFY(tableIndex < UnversionedValueToYsonConverter_.size());
+            if (tableIndex >= UnversionedValueToYsonConverter_.size()) {
+                THROW_ERROR_EXCEPTION("Table #%v is not described by any table schema",
+                    tableIndex)
+                    .With(GetRowPositionErrorAttributes());
+            }
             writeContext.UnversionedValueYsonConverter = &UnversionedValueToYsonConverter_[tableIndex];
 
             const auto& knownFields = TableDescriptionList_[tableIndex].KnownFields;
@@ -1152,7 +1150,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             YT_VERIFY(!schemas.empty());
             if (!IsTrivialIntermediateSchema(*schemas[0])) {
                 THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since input table #0 has nontrivial schema")
-                    << TErrorAttribute("schema", *schemas[0]);
+                    .With("schema", *schemas[0]);
             }
             copySchemas[0] = New<TTableSchema>(*config->OverrideIntermediateTableSchema);
         }
@@ -1166,7 +1164,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format").With(ex);
     }
 }
 

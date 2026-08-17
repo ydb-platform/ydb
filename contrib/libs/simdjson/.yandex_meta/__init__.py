@@ -1,6 +1,5 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 simdjson = CMakeNinjaNixProject(
     owners=["g:cpp-contrib"],
     nixattr="simdjson",

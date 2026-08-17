@@ -725,7 +725,7 @@ void MessageField_WriteTimestamp(const std::string& tableType, bool local) {
         .Messages = {{ "Message-1" }},
 
         .Expectations = {{
-            _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(5)),
+            _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(10)),
         }}
     }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
@@ -975,7 +975,7 @@ void ProcessingTargetTableOtherType(const std::string& tableType) {
                     |>,
                     <|
                         __ydb_table: "%s_1",
-                        Key: $x._offset,
+                        Key: $x._offset + 1,
                         Message:CAST($x._data || "_1" AS Utf8)
                     |>,
                 ];

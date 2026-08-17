@@ -49,7 +49,7 @@ FROM
 WHERE
     ctr1.ctr_total_return > (
         SELECT
-            Avg(ctr_total_return) * 1.2
+            Avg(ctr_total_return) * cast("1.2" as decimal(35,2))
         FROM
             $customer_total_return AS ctr2
         WHERE

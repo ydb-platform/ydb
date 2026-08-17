@@ -59,6 +59,12 @@ public:
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
 
+    inline TBlockItem(ui32 index, const TBlockItem* item) {
+        Raw.Variant.Value = item;
+        Raw.Variant.Index = index;
+        Raw.Variant.Meta = static_cast<ui8>(EMarkers::Embedded);
+    }
+
     inline TBlockItem(ui64 low, ui64 high) {
         Raw.Halfs[0] = low;
         Raw.Halfs[1] = high;
@@ -114,6 +120,16 @@ public:
     inline TBlockItem GetElement(ui32 index) const {
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
         return Raw.Tuple.Value[index];
+    }
+
+    inline ui32 GetVariantIndex() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        return Raw.Variant.Index;
+    }
+
+    inline TBlockItem GetVariantItem() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        return *Raw.Variant.Value;
     }
 
     // TUnboxedValuePod stores strings as refcounted TStringValue,
@@ -251,6 +267,13 @@ private:
             // client should know tuple size
             const TBlockItem* Value;
         } Tuple;
+
+        struct {
+            const TBlockItem* Value;
+            ui32 Index;
+            ui8 Reserved[3]; // NOLINT(modernize-avoid-c-arrays)
+            ui8 Meta;        // EMarkers::Embedded
+        } Variant;
 
         explicit operator bool() const {
             return Simple.FullMeta | Simple.Count;

@@ -34,7 +34,7 @@ The core of the storage system is — [column-oriented tables](../../concepts/da
 Data transformation is supported using standard approaches and tools.
 
 - ELT with SQL: Use `INSERT INTO ... SELECT` to build data marts. For managing complex SQL pipelines, integration with [dbt](../../integrations/migration/dbt.md) is available.
-- ETL with Apache Spark: Run ETL jobs on Apache Spark using the [parallel connector](../../integrations/ingestion/spark.md).
+- ETL with Apache Spark: Run ETL jobs on Apache Spark using the [parallel connector](../../integrations/query-engines/spark.md).
 - Orchestration: Automate pipelines with [Apache Airflow](../../integrations/orchestration/airflow.md).
 
 ## Federated Queries {#federated}
@@ -46,4 +46,4 @@ Data transformation is supported using standard approaches and tools.
 You can use industry-standard tools for data analysis:
 
 - BI tools: [Yandex DataLens](../../integrations/visualization/datalens.md), [Apache Superset](../../integrations/visualization/superset.md), [Grafana](../../integrations/visualization/grafana.md).
-- ML tools: Use [Jupyter Notebook](../../integrations/gui/jupyter.md) and [Apache Spark](../../integrations/ingestion/spark.md) for data preparation and machine learning model training.
+- ML tools: Use [Jupyter Notebook](../../integrations/gui/jupyter.md) and [Apache Spark](../../integrations/query-engines/spark.md) for data preparation and machine learning model training.

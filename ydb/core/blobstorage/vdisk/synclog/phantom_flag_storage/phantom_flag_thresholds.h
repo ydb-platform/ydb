@@ -22,10 +22,20 @@ namespace NSyncLog {
 
 class TPhantomFlagThresholds {
 public:
+    struct TThreshold {
+        ui64 TabletId = 0;
+        ui8 Channel = 0;
+        ui32 Generation = 0;
+        ui32 Step = 0;
+        ui8 OrderNumber = 0;
+    };
+
+public:
     TPhantomFlagThresholds(const TBlobStorageGroupType& gtype);
 
     void AddBlob(ui32 orderNumber, const TLogoBlobID& blob);
     void AddBlob(const TLogoBlobID& blob);
+    void AddBlob(ui32 orderNumber, ui64 tabletId, ui8 channel, ui32 generation, ui32 step);
     void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui8 channel, ui32 generation, ui32 step);
     bool IsBehindThresholdOnUnsynced(const TLogoBlobID& blob, const TSyncedMask& syncedMask) const;
     TPhantomFlags Sift(const TPhantomFlags& flags, const TSyncedMask& syncedMask);
@@ -33,6 +43,7 @@ public:
     void Merge(TPhantomFlagThresholds&& other);
     void Clear();
 
+    std::vector<TThreshold> GetList() const;
     TString ToString() const;
 
 private:
@@ -43,12 +54,21 @@ private:
     static TTabletChannel MakeTabletChannel(const TLogoBlobID& blobId);
 
     struct THasher {
-        inline ui64 operator()(const TTabletChannel& x) const;
+        inline ui64 operator()(const TTabletChannel& x) const {
+            return std::hash<ui64>{}((x.first << 8) | x.second);
+        }
     };
 
 private:
     // auxiliary classes
     class TTabletThresholds {
+    public:
+        struct TTabletThreshold {
+            ui32 Generation = 0;
+            ui32 Step = 0;
+            ui8 OrderNumber = 0;
+        };
+
     public:
         TTabletThresholds();
 
@@ -60,6 +80,7 @@ private:
                 const TSyncedMask& syncedMask) const;
         void Merge(TBlobStorageGroupType groupType, TTabletThresholds&& other);
         TString ToString(TBlobStorageGroupType groupType) const;
+        std::vector<TTabletThreshold> GetList() const;
 
     private:
         TStackVec<std::optional<TGenStep>, MaxExpectedDisksInGroup> Thresholds;

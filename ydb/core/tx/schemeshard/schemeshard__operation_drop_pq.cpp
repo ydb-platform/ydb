@@ -191,6 +191,7 @@ public:
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside(context.SS);
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
+        domainInfo->DecPQGroupsInside();
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
         if (domainInfo->CheckDiskSpaceQuotas(context.SS)) {
@@ -358,11 +359,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path.Base()->IsPQGroup() && path.Base()->PlannedToDrop()) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -445,7 +446,10 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
         }
 
+        // Activate main tx state machine
         SetState(NextState());
+        context.OnComplete.ActivateTx(OperationId);
+
         return result;
     }
 

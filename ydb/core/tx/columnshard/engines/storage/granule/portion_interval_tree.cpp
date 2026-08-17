@@ -3,17 +3,19 @@
 namespace NKikimr::NOlap::PortionIntervalTree {
 
 TPositionView::TPositionView(NArrow::TSimpleRow&& simpleRow)
-    : Position(std::move(simpleRow)) {
+    : Position(std::move(simpleRow))
+{
 }
 
 TPositionView::TPositionView(EInfinityType infType)
-    : Position(infType == EInfinityType::Left ? TPositionVariant(std::in_place_index<LeftInf>)
-                                              : TPositionVariant(std::in_place_index<RightInf>)) {
+    : Position(infType == EInfinityType::Left ? TPositionVariant(std::in_place_index<LeftInf>) : TPositionVariant(std::in_place_index<RightInf>))
+{
 }
 
 TPositionView::TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition)
     : Position(keyPosition == EPortionInfoIndexPosition::Start ? TPositionVariant(std::in_place_index<StartPortionInfo>, std::move(portionInfo))
-                                                               : TPositionVariant(std::in_place_index<EndPortionInfo>, std::move(portionInfo))) {
+                                                               : TPositionVariant(std::in_place_index<EndPortionInfo>, std::move(portionInfo)))
+{
 }
 
 TPositionView TPositionView::FromPortionInfoIndexStart(std::shared_ptr<TPortionInfo> portionInfo) {
@@ -70,7 +72,9 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     const auto& lhsSchema = getSchema(Position);
     const auto& rhsSchema = getSchema(rhs.Position);
 
-    return getKeyView(Position).Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? lhsSchema : rhsSchema).GetResult();
+    return getKeyView(Position)
+        .Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? lhsSchema : rhsSchema)
+        .GetResult();
 }
 
 int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rhs) {
@@ -88,4 +92,4 @@ void TPositionViewBorderComparator::ValidateKey(const TPositionView& /*key*/) {
     // Do nothing
 }
 
-} // namespace NKikimr::NOlap::PortionIntervalTree
+}   // namespace NKikimr::NOlap::PortionIntervalTree

@@ -1,28 +1,42 @@
 from __future__ import annotations
 
+import gc
 import inspect
 import sys
 from importlib import import_module
 from inspect import currentframe
-from types import FrameType
+from types import CodeType, FrameType, FunctionType
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     ForwardRef,
-    Union,
     cast,
     final,
     get_args,
     get_origin,
 )
+from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
     from ._memo import TypeCheckMemo
 
+_functions_map: WeakValueDictionary[CodeType, FunctionType] = WeakValueDictionary()
+
 if sys.version_info >= (3, 14):
 
     def evaluate_forwardref(forwardref: ForwardRef, memo: TypeCheckMemo) -> Any:
+        # If the ForwardRef has a module, try that module's namespace first.
+        # This is needed because Python 3.14's ForwardRef.evaluate() requires
+        # all referenced names to be available in the provided globals/locals.
+        if getattr(forwardref, "__forward_module__", None):
+            try:
+                # Not passing globals / locals defaults to those of the caller
+                return forwardref.evaluate(type_params=())
+            except NameError:
+                # Fall back to caller's namespace for backwards compatibility
+                pass
+
         return forwardref.evaluate(
             globals=memo.globals, locals=memo.locals, type_params=()
         )
@@ -35,21 +49,9 @@ elif sys.version_info >= (3, 13):
 else:
 
     def evaluate_forwardref(forwardref: ForwardRef, memo: TypeCheckMemo) -> Any:
-        try:
-            return forwardref._evaluate(
-                memo.globals, memo.locals, recursive_guard=frozenset()
-            )
-        except NameError:
-            if sys.version_info < (3, 10):
-                # Try again, with the type substitutions (list -> List etc.) in place
-                new_globals = memo.globals.copy()
-                new_globals.setdefault("Union", Union)
-
-                return forwardref._evaluate(
-                    new_globals, memo.locals or new_globals, recursive_guard=frozenset()
-                )
-
-            raise
+        return forwardref._evaluate(
+            memo.globals, memo.locals, recursive_guard=frozenset()
+        )
 
 
 def get_type_name(type_: Any) -> str:
@@ -156,6 +158,40 @@ def get_stacklevel() -> int:
         frame = frame.f_back
 
     return level
+
+
+def find_function(frame: FrameType) -> Callable[..., Any]:
+    """
+    Return a function object from the garbage collector that matches the frame's code object.
+
+    This process is unreliable as several function objects could use the same code object.
+    Fortunately the likelihood of this happening with the combination of the function objects
+    having different type annotations is a very rare occurrence.
+
+    :param frame: a frame object
+    :return: a function object if one was found, ``None`` if not
+
+    """
+    func = _functions_map.get(frame.f_code)
+    if func is None:
+        for obj in gc.get_referrers(frame.f_code):
+            if inspect.isfunction(obj):
+                if func is None:
+                    # The first match was found
+                    func = obj
+                else:
+                    # A second match was found
+                    raise LookupError(
+                        "found more than one match when looking for the target function"
+                    )
+
+        # Cache the result for future lookups
+        if func is not None:
+            _functions_map[frame.f_code] = func
+        else:
+            raise LookupError("target function not found")
+
+    return func
 
 
 @final

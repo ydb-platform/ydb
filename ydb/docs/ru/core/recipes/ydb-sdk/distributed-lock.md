@@ -12,6 +12,52 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/coordination/coordination.h>
+
+  void CoordinationExclusiveWork(
+      const NYdb::TDriver& driver,
+      const std::string& nodePath,
+      const std::string& semaphoreName)
+  {
+      using namespace NYdb::NStatusHelpers;
+
+      NYdb::NCoordination::TClient client(driver);
+
+      auto sessionResult = client.StartSession(nodePath).ExtractValueSync();
+      ThrowOnError(sessionResult);
+
+      auto session = sessionResult.ExtractResult();
+
+      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings()
+          .Ephemeral(true)
+          .Exclusive()
+          .Timeout(TDuration::Minutes(5));
+
+      auto acquireResult = session.AcquireSemaphore(semaphoreName, acquireSettings).ExtractValueSync();
+      ThrowOnError(acquireResult);
+
+      if (!acquireResult.GetResult()) {
+          // semaphore was not acquired
+          return;
+      }
+
+      // lock acquired, start processing
+
+      auto releaseStatus = session.ReleaseSemaphore(semaphoreName).ExtractValueSync();
+      ThrowOnError(releaseStatus);
+
+      if (!releaseStatus.GetResult()) {
+          // semaphore was not released
+          return;
+      }
+
+      // lock released, end processing
+  }
+  ```
+
 - Go
 
    ```go
@@ -38,5 +84,173 @@
      // lock released, end processing
    }
    ```
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def coordination_service_workflow(driver: ydb.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+
+        client.create_node(node_path)
+
+        with client.session(node_path) as session:
+            with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    async def coordination_service_workflow(driver: ydb.aio.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+        await client.create_node(node_path)
+        async with client.session(node_path) as session:
+            async with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+    ```
+
+  {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { CoordinationClient } from '@ydbjs/coordination'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  const client = new CoordinationClient(driver)
+
+  await using session = await client.createSession('/local/my-app')
+  await using lock = await session.mutex('job-lock').lock()
+  await doWork(lock.signal)
+
+  // For long lived applications
+
+  for await (let session of client.openSession('/local/my-app')) {
+    let mutex = session.mutex('job-lock')
+
+    try {
+      // Blocks until the lock is acquired.
+      await using lock = await mutex.lock()
+
+      await doWork(lock.signal)
+    } catch {
+      if (session.signal.aborted) continue // session expired, retry
+      throw error
+    }
+
+    break
+  }
+  ```
+
+- Java
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.coordination.CoordinationClient;
+  import tech.ydb.coordination.CoordinationSession;
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.result.ResultSetReader;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+
+  public class DistributedLockExample {
+
+      private static final String NODE_PATH_SUFFIX = "/my-app-lock";
+      private static final String SEMAPHORE_NAME = "job-lock";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               CoordinationClient coordinationClient = CoordinationClient.newClient(transport).build();
+               QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+              String nodePath = transport.getDatabase() + NODE_PATH_SUFFIX;
+              coordinationClient.createNode(nodePath).join().expectSuccess("create node failed");
+
+              try (CoordinationSession session = coordinationClient.createSession(nodePath)) {
+                  session.connect().join().expectSuccess("connect failed");
+
+                  SemaphoreLease lease = session.acquireEphemeralSemaphore(
+                          SEMAPHORE_NAME, true, Duration.ofMinutes(5)
+                  ).join().getValue();
+
+                  try {
+                      // монопольная работа с ресурсом
+                      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                      QueryReader reader = retryCtx.supplyResult(s -> QueryReader.readFrom(
+                              s.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                      )).join().getValue();
+
+                      ResultSetReader rs = reader.getResultSet(0);
+                      if (rs.next()) {
+                          System.out.println("Lock acquired, SELECT 1 = " + rs.getColumn("value").getInt32());
+                      }
+                  } finally {
+                      lease.release().join();
+                  }
+              }
+          }
+      }
+  }
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, NodeConfigBuilder, SessionOptionsBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .client()?;
+      client.wait().await?;
+
+      let mut coordination_client = client.coordination_client();
+      coordination_client
+          .create_node(
+              "/local/my_lock_node".into(),
+              NodeConfigBuilder::default().build()?,
+          )
+          .await?;
+
+      let session = coordination_client
+          .create_session(
+              "/local/my_lock_node".into(),
+              SessionOptionsBuilder::default().build()?,
+          )
+          .await?;
+
+      session.create_semaphore("resource", 1, vec![]).await?;
+      let _lease = session.acquire_semaphore("resource".into(), 1).await?;
+      // критическая секция
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

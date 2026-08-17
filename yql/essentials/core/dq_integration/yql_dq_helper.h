@@ -22,6 +22,8 @@ public:
     virtual TExprNode::TPtr PushLambdaAndCreateCnResult(const TExprNode::TPtr& dcUnionAll, const TExprNode::TPtr& lambda, TPositionHandle pos,
                                                         TExprContext& ctx, IOptimizationContext& optCtx) = 0;
     virtual TExprNode::TPtr CreateDqStageSettings(bool singleTask, TExprContext& ctx, TPositionHandle pos) = 0;
+    virtual bool IsSinglePartitionMode(const TExprNode& stage) = 0;
+    virtual TExprNode::TPtr SetSinglePartitionMode(const TExprNode::TPtr& stage, TExprContext& ctx) = 0;
     virtual TExprNode::TListType RemoveVariadicDqStageSettings(const TExprNode& settings) = 0;
 };
 

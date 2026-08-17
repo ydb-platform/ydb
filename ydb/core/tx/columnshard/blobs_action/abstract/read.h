@@ -1,9 +1,12 @@
 #pragma once
 #include "common.h"
-#include <ydb/core/tx/columnshard/blobs_action/counters/read.h>
-#include <ydb/core/tx/columnshard/blob.h>
+
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/read.h>
+
 #include <ydb/library/conclusion/status.h>
+
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap {
@@ -11,6 +14,7 @@ namespace NKikimr::NOlap {
 class TActionReadBlobs {
 private:
     THashMap<TBlobRange, TString> Blobs;
+
 public:
     TString DebugString() const;
 
@@ -109,6 +113,7 @@ public:
     class TBlobGluePolicy {
     private:
         const ui64 BlobLimitSize = 8LLU << 20;
+
     public:
         TBlobGluePolicy(const ui64 blobLimitSize)
             : BlobLimitSize(blobLimitSize)
@@ -126,28 +131,38 @@ public:
         THashMap<TBlobRange, std::vector<TBlobRange>> result;
         std::optional<TBlobRange> currentRange;
         std::vector<TBlobRange> currentList;
+        auto flushCurrent = [&]() {
+            AFL_VERIFY(currentRange);
+            AFL_VERIFY(currentList.size());
+            for (const auto& sub : currentList) {
+                AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId())("group", currentRange->ToString())("sub", sub.ToString());
+                AFL_VERIFY(currentRange->Offset <= sub.Offset)("group", currentRange->ToString())("sub", sub.ToString());
+                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize())
+                ("group", currentRange->ToString())("sub", sub.ToString());
+            }
+            AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second)("group", currentRange->ToString());
+            currentList.clear();
+        };
         for (auto&& br : ranges) {
             if (!currentRange) {
                 currentRange = br;
-            }
-            else if (!policy.Glue(*currentRange, br)) {
-                result.emplace(*currentRange, std::move(currentList));
+            } else if (!policy.Glue(*currentRange, br)) {
+                flushCurrent();
                 currentRange = br;
-                currentList.clear();
             }
             currentList.emplace_back(br);
         }
         if (currentRange) {
-            result.emplace(*currentRange, std::move(currentList));
+            flushCurrent();
         }
         return result;
     }
-
 };
 
 class IBlobsReadingAction: public ICommonBlobsAction {
 public:
     using TErrorStatus = TConclusionSpecialStatus<NKikimrProto::EReplyStatus, NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ERROR>;
+
 private:
     using TBase = ICommonBlobsAction;
 
@@ -162,11 +177,41 @@ private:
     bool Started = false;
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
+    YDB_ACCESSOR(bool, CacheAfterRead, true);
+
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
+
+    virtual void DoRetryRead(const TBlobRange& range) {
+        Y_UNUSED(range);
+        AFL_VERIFY(false)("error", "DoRetryRead not implemented for this storage");
+    }
+
     void StartReading(std::vector<TBlobRange>&& ranges);
     virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const = 0;
+
 public:
+    void RetryRead(const TBlobRange& range) {
+        DoRetryRead(range);
+    }
+
+    void OnRetryEnqueue(const TBlobRange& range) const {
+        if (Counters) {
+            Counters->OnRetryEnqueue(range.Size);
+        }
+    }
+
+    void OnRetryExecute() const {
+        if (Counters) {
+            Counters->OnRetryExecute();
+        }
+    }
+
+    void OnRetryExhausted() const {
+        if (Counters) {
+            Counters->OnRetryExhausted();
+        }
+    }
 
     const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {
         return Groups;
@@ -210,7 +255,6 @@ public:
     IBlobsReadingAction(const TString& storageId)
         : TBase(storageId)
     {
-
     }
 
     ui64 GetExpectedBlobsSize() const {
@@ -231,7 +275,7 @@ public:
     void AddRange(const TBlobRange& range, const std::optional<TString>& result = {});
 
     void Start(const THashSet<TBlobRange>& rangesInProgress);
-    void OnReadResult(const TBlobRange& range, const TString& data);
+    void OnReadResult(const TBlobRange& range, const TString& data, const bool fromCache);
     void OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus);
 
     bool HasFails() const {
@@ -246,6 +290,7 @@ public:
 class TReadActionsCollection {
 private:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>> Actions;
+
 public:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::const_iterator begin() const {
         return Actions.begin();
@@ -267,6 +312,14 @@ public:
         return Actions.empty();
     }
 
+    std::shared_ptr<IBlobsReadingAction> FindByStorageId(const TString& storageId) const {
+        auto it = Actions.find(storageId);
+        if (it == Actions.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
+
     void Add(const std::shared_ptr<IBlobsReadingAction>& action) {
         if (!action->GetExpectedBlobsCount()) {
             return;
@@ -282,10 +335,10 @@ public:
     TReadActionsCollection() = default;
 
     TReadActionsCollection(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions) {
-        for (auto&& a: actions) {
+        for (auto&& a : actions) {
             Add(a);
         }
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

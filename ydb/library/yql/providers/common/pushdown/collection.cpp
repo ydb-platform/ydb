@@ -219,12 +219,28 @@ private:
         return false;
     }
 
-    bool IsMemberColumn(const TCoMember& member) const {
-        // We allow member access only for top level predicate argument
-        return member.Struct().Raw() == LambdaArg.Raw();
+    bool IsMemberColumn(const TCoMember& member) {
+        // Allow member access for top level predicate argument
+        if (member.Struct().Raw() == LambdaArg.Raw()) {
+            return Settings.IsMemberEnabled(TString(member.Name().Value()));
+        }
+        if (Settings.IsEnabled(EFlag::AnyExpressionExceptMember)) {
+            return true;
+        }
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(member.Struct());
+        }
+        return false;
     }
 
-    bool IsMemberColumn(const TExprBase& node) const {
+    bool IsSupportedNth(const TCoNth& nth) {
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(nth.Tuple());
+        }
+        return false;
+    }
+
+    bool IsMemberColumn(const TExprBase& node) {
         if (const auto member = node.Maybe<TCoMember>()) {
             return IsMemberColumn(member.Cast());
         }
@@ -322,6 +338,15 @@ private:
 
 public:
     bool CheckExpressionNodeForPushdown(const TExprBase& node) {
+        if (auto maybeMember = node.Maybe<TCoMember>()) {
+            return IsMemberColumn(maybeMember.Cast());
+        }
+        if (Settings.IsEnabled(EFlag::AnyExpressionExceptMember)) {
+            return true;
+        }
+        if (auto maybeNth = node.Maybe<TCoNth>()) {
+            return IsSupportedNth(maybeNth.Cast());
+        }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
         }
@@ -333,9 +358,6 @@ public:
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
             return IsSupportedDataType(maybeData.Cast());
-        }
-        if (auto maybeMember = node.Maybe<TCoMember>()) {
-            return IsMemberColumn(maybeMember.Cast());
         }
         if (Settings.IsEnabled(EFlag::JsonQueryOperators) && node.Maybe<TCoJsonQueryBase>()) {
             if (!node.Maybe<TCoJsonValue>()) {
@@ -382,6 +404,7 @@ public:
                 && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
                 && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
+
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {
             return IsSupportedFlatMap(flatMap.Cast());
         }
@@ -396,6 +419,23 @@ public:
         }
         if (auto maybeMax = node.Maybe<TCoMax>()) {
             return MaxCanBePushed(maybeMax.Cast());
+        }
+        if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
+            if (auto apply = node.Maybe<TCoApply>()) {
+                return ApplyCanBePushed(apply.Cast());
+            }
+            if (auto maybeCompare = node.Maybe<TCoCompare>()) {
+                return CompareCanBePushed(maybeCompare.Cast());
+            }
+            if (auto maybeIn = node.Maybe<TCoSqlIn>()) {
+                return SqlInCanBePushed(maybeIn.Cast());
+            }
+            if (auto exists = node.Maybe<TCoExists>()) {
+                return ExistsCanBePushed(exists.Cast());
+            }
+            if (node.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"})) {
+                return IsDistinctCanBePushed(node);
+            }
         }
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());
@@ -535,7 +575,7 @@ private:
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }
@@ -601,7 +641,7 @@ private:
         return IsComparableArguments(left, right, true);
     }
 
-    bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists) const {
+    bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists) {
         if (!Settings.IsEnabled(EFlag::JsonExistsOperator)) {
             return false;
         }
@@ -624,7 +664,7 @@ private:
         return predicateTree.CanBePushed;
     }
 
-    bool ExistsCanBePushed(const TCoExists& exists) const {
+    bool ExistsCanBePushed(const TCoExists& exists) {
         return IsMemberColumn(exists.Optional());
     }
 

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.90.0)
+VERSION(1.91.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/serialization/archive/boost-1.90.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/serialization/archive/boost-1.91.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/array
@@ -30,7 +30,6 @@ PEERDIR(
     contrib/restricted/boost/preprocessor
     contrib/restricted/boost/smart_ptr
     contrib/restricted/boost/spirit
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/type_traits
     contrib/restricted/boost/unordered
     contrib/restricted/boost/utility

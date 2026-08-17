@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_serialization = stdenv.mkDerivation rec {
     pname = "boost_serialization";
-    version = "1.90.0";
+    version = "1.91.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

@@ -135,6 +135,10 @@ public:
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
 
+    TSelectRowVersionResult SelectRowVersionByKeyPrefix(
+            ui32 table, TArrayRef<const TCell> key,
+            const ITransactionObserverPtr& observer = nullptr) const;
+
     TPrechargeResult Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,

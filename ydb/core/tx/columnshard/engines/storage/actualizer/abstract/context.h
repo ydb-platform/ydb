@@ -19,7 +19,8 @@ private:
 
 public:
     TActualizationContext(const TInstant now)
-        : Now(now) {
+        : Now(now)
+    {
     }
 };
 
@@ -31,7 +32,8 @@ private:
 public:
     TActualizationBuildingContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Now(now)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
@@ -46,12 +48,12 @@ private:
     YDB_READONLY_DEF(TInstant, Now);
     YDB_ACCESSOR(bool, PortionExclusiveGuarantee, true);
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& Portions;
+
 public:
     TAddExternalContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Now(now)
         , Portions(portions)
     {
-
     }
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
@@ -62,6 +64,7 @@ public:
 class TExternalTasksContext {
 private:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& Portions;
+
 public:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
@@ -76,7 +79,6 @@ public:
     TExternalTasksContext(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Portions(portions)
     {
-
     }
 };
 
@@ -84,4 +86,4 @@ class TInternalTasksContext {
 public:
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

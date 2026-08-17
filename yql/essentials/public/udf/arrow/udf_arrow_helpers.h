@@ -20,6 +20,8 @@
 #include <arrow/compute/exec_internal.h>
 #include <arrow/util/bitmap_ops.h>
 
+#include <utility>
+
 namespace NYql::NUdf {
 
 using TExec = arrow::Status (*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
@@ -81,12 +83,12 @@ private:
 class TSimpleArrowUdfImpl: public TBoxedValue {
 public:
     TSimpleArrowUdfImpl(const TVector<const TType*> argBlockTypes, const TType* outputType, bool onlyScalars,
-                        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name,
+                        TExec exec, IFunctionTypeInfoBuilder& builder, TString name,
                         arrow::compute::NullHandling::type nullHandling)
         : OnlyScalars_(onlyScalars)
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
-        , Name_(name)
+        , Name_(std::move(name))
         , OutputType_(outputType)
         , NullDatum_(arrow::Datum(std::make_shared<arrow::NullScalar>()))
     {
@@ -108,8 +110,8 @@ public:
 
             auto shape = blockInspector.IsScalar() ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
 
-            inTypes.emplace_back(arrow::compute::InputType(type, shape));
-            ArgsValuesDescr_.emplace_back(arrow::ValueDescr(type, shape));
+            inTypes.emplace_back(type, shape);
+            ArgsValuesDescr_.emplace_back(type, shape);
         }
 
         ReturnArrowTypeHandle_ = TypeInfoHelper_->MakeArrowType(outputType);
@@ -197,12 +199,12 @@ public:
                 auto arr = ARROW_RESULT(arrow::MakeArrayFromScalar(*res.scalar(), 1));
                 ArrowArray a;
                 ARROW_OK(arrow::ExportArray(*arr, &a));
-                return valueBuilder->ImportArrowBlock(&a, 1, true, *ReturnArrowTypeHandle_);
+                return valueBuilder->ImportArrowBlock(&a, 1, /*isScalar=*/true, *ReturnArrowTypeHandle_);
             } else {
                 TVector<ArrowArray> a;
                 if (res.is_array()) {
                     a.resize(1);
-                    ARROW_OK(arrow::ExportArray(*res.make_array(), &a[0]));
+                    ARROW_OK(arrow::ExportArray(*res.make_array(), a.data()));
                 } else {
                     Y_ENSURE(res.is_arraylike());
                     a.resize(res.chunks().size());
@@ -211,7 +213,7 @@ public:
                     }
                 }
 
-                return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
+                return valueBuilder->ImportArrowBlock(a.data(), a.size(), /*isScalar=*/false, *ReturnArrowTypeHandle_);
             }
         } catch (const std::exception& ex) {
             TStringBuilder sb;

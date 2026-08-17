@@ -78,14 +78,16 @@ def from_attrs(
 ) -> SearchStrategy:
     """An internal version of builds(), specialised for Attrs classes."""
     attributes: tuple[Attribute, ...] = attr.fields(target)
-    kwargs = {k: v for k, v in kwargs.items() if v is not infer}
+    new_kwargs: dict[str, SearchStrategy[Any]] = {
+        k: v for k, v in kwargs.items() if v is not infer
+    }
     for name in to_infer:
         attrib = get_attribute_by_alias(attributes, name, target=target)
-        kwargs[name] = from_attrs_attribute(attrib, target)
+        new_kwargs[name] = from_attrs_attribute(attrib, target)
     # We might make this strategy more efficient if we added a layer here that
     # retries drawing if validation fails, for improved composition.
     # The treatment of timezones in datetimes() provides a precedent.
-    return BuildsStrategy(target, args, kwargs)
+    return BuildsStrategy(target, args, new_kwargs)
 
 
 def from_attrs_attribute(
@@ -164,7 +166,7 @@ def types_to_strategy(attrib: Attribute, types: Collection[Any]) -> SearchStrate
         return st.from_type(typ)
     elif types:
         # We have a list of tuples of types, and want to find a type
-        # (or tuple of types) that is a subclass of all of of them.
+        # (or tuple of types) that is a subclass of all of them.
         type_tuples = [k if isinstance(k, tuple) else (k,) for k in types]
         # Flatten the list, filter types that would fail validation, and
         # sort so that ordering is stable between runs and shrinks well.

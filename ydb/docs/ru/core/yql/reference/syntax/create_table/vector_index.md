@@ -1,6 +1,6 @@
 # Векторный индекс
 
-{% if backend_name == 'YDB' %}[Векторный индекс](../../../../concepts/glossary.md#vector-index){% else %}векторный индекс{% endif %} в {% if backend_name == 'YDB' %}[строковых](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строковых{% endif %} таблицах создаётся с помощью того же синтаксиса, что и [вторичные индексы](secondary_index.md), при указании `vector_kmeans_tree` в качестве типа индекса. Подмножество доступного для векторных индексов синтаксиса:
+[Векторный индекс](../../../../dev/vector-indexes.md) в {% if backend_name == 'YDB' %}[строковых](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строковых{% endif %} таблицах создаётся с помощью того же синтаксиса, что и [вторичные индексы](secondary_index.md), при указании `vector_kmeans_tree` в качестве типа индекса. Подмножество доступного для векторных индексов синтаксиса:
 
 ```yql
 CREATE TABLE `<table_name>` (
@@ -28,7 +28,7 @@ CREATE TABLE `<table_name>` (
 
 {% note warning %}
 
-{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
+Создавать векторный индекс рекомендуется после загрузки данных в таблицу, так как индекс, созданный на пустой таблице, будет вырожденным и не будет ускорять поиск. Подробности смотрите в разделе [Обновление векторных индексов](../../../../dev/vector-indexes.md#update).
 
 {% endnote %}
 
@@ -50,7 +50,8 @@ CREATE TABLE user_articles (
         vector_type="float",
         vector_dimension=512,
         clusters=128,
-        levels=2
+        levels=2,
+        overlap_clusters=3
     ),
     PRIMARY KEY (article_id)
 )

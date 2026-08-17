@@ -97,7 +97,7 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
             Consumer_->OnBeginList();
             for (auto timestamp : row.WriteTimestamps()) {
                 Consumer_->OnListItem();
-                Consumer_->OnUint64Scalar(timestamp);
+                Consumer_->OnUint64Scalar(timestamp.Underlying());
             }
             Consumer_->OnEndList();
         }
@@ -106,7 +106,7 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
             Consumer_->OnBeginList();
             for (auto timestamp : row.DeleteTimestamps()) {
                 Consumer_->OnListItem();
-                Consumer_->OnUint64Scalar(timestamp);
+                Consumer_->OnUint64Scalar(timestamp.Underlying());
             }
             Consumer_->OnEndList();
         }
@@ -132,7 +132,7 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
                 Consumer_->OnListItem();
                 Consumer_->OnBeginAttributes();
                 Consumer_->OnKeyedItem("timestamp");
-                Consumer_->OnUint64Scalar(columnBeginIt->Timestamp);
+                Consumer_->OnUint64Scalar(columnBeginIt->Timestamp.Underlying());
                 Consumer_->OnKeyedItem("aggregate");
                 Consumer_->OnBooleanScalar(Any(columnBeginIt->Flags & EValueFlags::Aggregate));
                 Consumer_->OnEndAttributes();
@@ -149,7 +149,7 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
     Consumer_->Flush();
     auto buffer = Buffer_.Flush();
     Result_ = Stream_->Write(buffer);
-    return Result_.IsSet() && Result_.Get().IsOK();
+    return Result_.IsSet() && Result_.GetOrCrash().IsOK();
 }
 
 TFuture<void> TVersionedWriter::GetReadyEvent()

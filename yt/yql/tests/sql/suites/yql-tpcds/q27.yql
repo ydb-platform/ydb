@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Grouping function should have source */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 

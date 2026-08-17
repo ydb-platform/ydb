@@ -21,7 +21,8 @@ namespace NYql::NCommon {
 using namespace NNodes;
 
 namespace {
-constexpr std::array<std::string_view, 8> FormatsForInput = {
+constexpr std::array<std::string_view, 9> FormatsForInput = {
+    "csv"sv,
     "csv_with_names"sv,
     "tsv_with_names"sv,
     "json_list"sv,
@@ -227,6 +228,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoLambda> update;
     TVector<TCoNameValueTuple> other;
     TVector<TCoIndex> indexes;
+    TVector<TCoStatistics> statistics;
     TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
     TVector<TCoNameValueTuple> tableSettings;
@@ -299,6 +301,22 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     index.Name(InferIndexName(*columnList, ctx));
                 }
                 indexes.push_back(index.Done());
+            } else if (name == "statistics") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                auto stat = Build<TCoStatistics>(ctx, node.Pos());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    const auto& statItemName = item.Name().Value();
+                    if (statItemName == "statisticsName") {
+                        stat.Name(item.Value().Cast<TCoAtom>());
+                    } else if (statItemName == "statisticsColumns") {
+                        stat.Columns(item.Value().Cast<TCoAtomList>());
+                    } else if (statItemName == "statisticsTypes") {
+                        stat.Types(item.Value().Cast<TCoAtomList>());
+                    } else {
+                        YQL_ENSURE(false, "unknown statistics item " << statItemName);
+                    }
+                }
+                statistics.push_back(stat.Done());
             } else if (name == "changefeed") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto cf = Build<TCoChangefeed>(ctx, node.Pos());
@@ -356,6 +374,10 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                           .Add(indexes)
                           .Done();
 
+    const auto& stats = Build<TCoStatisticsList>(ctx, node.Pos())
+                            .Add(statistics)
+                            .Done();
+
     const auto& cfs = Build<TCoChangefeedList>(ctx, node.Pos())
                           .Add(changefeeds)
                           .Done();
@@ -384,6 +406,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Filter = filter;
     ret.Update = update;
     ret.Indexes = idx;
+    ret.Statistics = stats;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
     ret.TableSettings = tableProfileSettings;
@@ -1124,10 +1147,10 @@ void GetToken(const TString& string, TString& out, const TTypeAnnotationContext&
 }
 
 void FillSecureParams(
-    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& node,
     const TTypeAnnotationContext& types,
     THashMap<TString, TString>& secureParams) {
-    NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) {
+    NYql::VisitExpr(node, [&secureParams](const TExprNode::TPtr& node) {
         if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) {
             const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value());
             secureParams.insert({secureParamName, TString()});
@@ -1203,7 +1226,7 @@ bool FillUsedFiles(
         const auto& e = NPg::LookupExtension(extensionIndex);
         needFullPgCatalog = true;
         auto alias = TFsPath(e.LibraryPath).GetName();
-        if (!AddPgFile(true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
+        if (!AddPgFile(/*isPath=*/true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
             return false;
         }
     }
@@ -1214,11 +1237,7 @@ bool FillUsedFiles(
     }
 
     TString content = NPg::ExportExtensions(filter);
-    if (!AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx)) {
-        return false;
-    }
-
-    return true;
+    return AddPgFile(/*isPath=*/false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
@@ -1304,7 +1323,7 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
         typeFlags |= TExprAnnotationFlags::Types;
     }
 
-    auto ast = ConvertToAst(expr, ctx, typeFlags, true);
+    auto ast = ConvertToAst(expr, ctx, typeFlags, /*refAtoms=*/true);
     YQL_ENSURE(ast.Root);
     return ast.Root->ToString();
 }
@@ -1611,7 +1630,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         }
     }
 
-    if (totalOnly == false) {
+    if (!totalOnly) {
         for (const auto& [key, value] : statistics) {
             writer.OnKeyedItem(ToString(key));
             WriteStatistics(writer, value);
@@ -1638,7 +1657,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         writer.OnInt64Scalar(std::get<1>(totalEntry));
 
         writer.OnKeyedItem("avg");
-        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0l);
+        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0L);
 
         writer.OnKeyedItem("max");
         writer.OnInt64Scalar(std::get<2>(totalEntry));

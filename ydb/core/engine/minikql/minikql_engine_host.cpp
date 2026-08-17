@@ -7,8 +7,11 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <new>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -309,10 +312,14 @@ public:
 
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
-    void operator delete(void *mem, std::size_t sz) {
-        auto ptr = (TSelectRangeLazyRow*)mem;
-        auto extraSize = ptr->Size() * sizeof(NUdf::TUnboxedValue) + ptr->GetMaskSize() * sizeof(ui64);
-        TBase::FreeWithSize(mem, sz + extraSize);
+    // Destroying delete: reads Size()/GetMaskSize() before running the destructor, since
+    // with -fsanitize-memory-use-after-dtor the destructor poisons the object's storage.
+    void operator delete(TSelectRangeLazyRow* self, std::destroying_delete_t) {
+        const auto fullSize = sizeof(TSelectRangeLazyRow)
+            + self->Size() * sizeof(NUdf::TUnboxedValue)
+            + self->GetMaskSize() * sizeof(ui64);
+        self->~TSelectRangeLazyRow();
+        TBase::FreeWithSize(self, fullSize);
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;
@@ -822,8 +829,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 }
 
 // Updates the single row. Column in commands must be unique.
-void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands, 
-        const TString& userSID) {
+void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
+        TIntrusivePtr<NACLib::TUserContext> userCtx) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -840,12 +847,12 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion, userSID)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion, userCtx)) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId, userSID)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId, userCtx)) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
@@ -857,7 +864,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 }
 
 // Erases the single row.
-void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) {
+void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -870,12 +877,12 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion, userSID)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion, userCtx)) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Erase, key, { }, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId, userSID)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId, userCtx)) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);

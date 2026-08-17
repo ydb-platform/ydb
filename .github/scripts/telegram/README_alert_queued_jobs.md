@@ -1,6 +1,6 @@
-# Alert Queued Jobs
+# CI queue Telegram alerts (`alert_queued_jobs.py`)
 
-`alert_queued_jobs.py` monitors the GitHub Actions queue and sends Telegram alerts when runs are stuck longer than configured thresholds. Used by [alert_queued_jobs.yml](../../workflows/alert_queued_jobs.yml) (every 30 min + manual `workflow_dispatch`).
+`alert_queued_jobs.py` monitors the GitHub Actions queue and sends Telegram alerts when runs are stuck longer than configured thresholds. It runs in the **CI queue Telegram alerts** job of [telegram_scheduled_notifications.yml](../../workflows/telegram_scheduled_notifications.yml) (every 30 min + manual `workflow_dispatch`). That workflow file also contains the **Mute digest to Telegram** job (`send_digest.py`).
 
 **Flow:** Fetch `queued` runs from GitHub API → filter by blacklist → compare wait time to thresholds per workflow type → send 1–2 messages to Telegram (optionally with a call string at the start for a duty bot). Can also send an “all good” message when the queue is empty or no jobs are stuck.
 
@@ -12,7 +12,7 @@
 
 | Type | Name | Description |
 |------|------|-------------|
-| Secret | `TELEGRAM_YDBOT_TOKEN` | Bot token (passed as `TELEGRAM_BOT_TOKEN` in the workflow). |
+| Secret | `YDBOT_TELEGRAM_BOT_TOKEN` | Bot token (passed as `TELEGRAM_BOT_TOKEN` in the workflow). |
 | Variable | `GH_ALERTS_TG_LOGINS` | Call string at the **start** of alert messages so the duty bot reacts (e.g. `"/duty ydb-ci"` or `"@user"`). Empty = no call. |
 | Variable | `GH_ALERTS_RUNS_BLACK_LIST` | Space-separated run IDs to ignore (passed as `--blacklist`). |
 

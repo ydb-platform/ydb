@@ -17,11 +17,6 @@
 #  include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
-namespace common
-{
-class OrderedAttributeMap;
-}  // namespace common
-
 namespace context
 {
 class Context;
@@ -44,7 +39,7 @@ public:
 
   AlignedHistogramBucketExemplarReservoir(
       size_t size,
-      std::shared_ptr<ReservoirCellSelector> reservoir_cell_selector,
+      const std::shared_ptr<ReservoirCellSelector> &reservoir_cell_selector,
       MapAndResetCellType map_and_reset_cell)
       : FixedSizeExemplarReservoir(size + 1, reservoir_cell_selector, map_and_reset_cell)
   {}
@@ -80,11 +75,13 @@ public:
       return static_cast<int>(max_size);
     }
 
-  private:
+  public:
     void reset() override
     {
       // Do nothing
     }
+
+  private:
     std::vector<double> boundaries_;
   };
 };

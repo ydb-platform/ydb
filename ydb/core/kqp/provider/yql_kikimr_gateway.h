@@ -20,6 +20,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -73,12 +74,39 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
-        bool CaseSensitive = true;
+        std::optional<ui32> NgramSize;
+        std::optional<bool> CaseSensitive;
+        std::optional<double> FalsePositiveProbability;
     };
+
+private:
+    // Helper function to extract bloom filter description from NKikimrSchemeOp::TBloomFilter
+    static TLocalBloomFilterDescription ExtractBloomFilterDescription(
+        const NKikimrSchemeOp::TBloomFilter& bloomFilter) {
+        TLocalBloomFilterDescription desc;
+        if (bloomFilter.HasFalsePositiveProbability()) {
+            desc.FalsePositiveProbability = bloomFilter.GetFalsePositiveProbability();
+        }
+        return desc;
+    }
+
+    // Helper function to extract bloom ngram filter description from NKikimrSchemeOp::TBloomNGrammFilter
+    static TLocalBloomNgramFilterDescription ExtractBloomNgramFilterDescription(
+        const NKikimrSchemeOp::TBloomNGrammFilter& bloomNGrammFilter) {
+        TLocalBloomNgramFilterDescription desc;
+        if (bloomNGrammFilter.HasNGrammSize()) {
+            desc.NgramSize = bloomNGrammFilter.GetNGrammSize();
+        }
+        if (bloomNGrammFilter.HasCaseSensitive()) {
+            desc.CaseSensitive = bloomNGrammFilter.GetCaseSensitive();
+        }
+        if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+            desc.FalsePositiveProbability = bloomNGrammFilter.GetFalsePositiveProbability();
+        }
+        return desc;
+    }
+
+public:
 
     enum class EType : ui32 {
         GlobalSync = 0,
@@ -89,6 +117,11 @@ struct TIndexDescription {
         GlobalFulltextRelevance = 5,
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
+        GlobalJson = 8,
+        LocalMinMax = 9,
+        GlobalFulltextCompact = 10,
+        GlobalFulltextCompactRelevance = 11,
+        GlobalJsonCompact = 12,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -144,6 +177,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -154,15 +188,37 @@ struct TIndexDescription {
                 break;
             }
             case EType::GlobalFulltextPlain:
-            case EType::GlobalFulltextRelevance: {
-                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-                *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
-                SpecializedIndexDescription = std::move(fulltextIndexDescription);
+            case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance: {
+                // Keep the whole fulltext index description (not just Settings) so that
+                // UseRowIdAsDocId survives downstream into the query compiler.
+                SpecializedIndexDescription = index.GetFulltextIndexDescription();
                 break;
             }
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled, so that UseRowIdAsDocId survives downstream into the query compiler.
+                if (index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription) {
+                    SpecializedIndexDescription = index.GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                }
+                break;
             case EType::LocalBloomFilter:
+                if (index.HasBloomFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomFilterDescription(index.GetBloomFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                }
+                break;
             case EType::LocalBloomNgramFilter:
-                YQL_ENSURE(false, << "Local bloom index type is not represented by NKikimrSchemeOp::TIndexDescription");
+                if (index.HasBloomNGrammFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomNgramFilterDescription(index.GetBloomNGrammFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                }
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -183,21 +239,41 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                if (message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::kFulltextIndexDescription) {
+                    SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                }
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
                 break;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
                 break;
             case EType::LocalBloomFilter:
-                SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                if (message->HasBloomFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomFilterDescription(message->GetBloomFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                }
                 break;
             case EType::LocalBloomNgramFilter:
-                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                if (message->HasBloomNGrammFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomNgramFilterDescription(message->GetBloomNGrammFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                }
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -218,6 +294,20 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalFulltextPlain;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
                 return TIndexDescription::EType::GlobalFulltextRelevance;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+                return TIndexDescription::EType::GlobalJson;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter:
+                return TIndexDescription::EType::LocalBloomFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter:
+                return TIndexDescription::EType::LocalBloomNgramFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax:
+                return TIndexDescription::EType::LocalMinMax;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
+                return TIndexDescription::EType::GlobalFulltextCompact;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
+                return TIndexDescription::EType::GlobalFulltextCompactRelevance;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
+                return TIndexDescription::EType::GlobalJsonCompact;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -237,10 +327,20 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            case NYql::TIndexDescription::EType::GlobalJson:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
+            case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact;
+            case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance;
+            case NYql::TIndexDescription::EType::GlobalJsonCompact:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact;
             case NYql::TIndexDescription::EType::LocalBloomFilter:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter;
             case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
-                YQL_ENSURE(false, << "Local bloom index type can't be converted to NKikimrSchemeOp::EIndexType");
-                break;
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter;
+            case NYql::TIndexDescription::EType::LocalMinMax:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
@@ -270,14 +370,26 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::LocalMinMax:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                break;
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription)) {
+                    *message->MutableFulltextIndexDescription() = *ft;
+                } else {
+                    Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                }
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
                 *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
             case EType::LocalBloomFilter:
@@ -312,9 +424,14 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalJson:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
                 return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return false;
         }
     }
@@ -327,12 +444,42 @@ struct TIndexDescription {
             case EType::GlobalSyncVectorKMeansTree:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalJson:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return {};
         }
         return {};
+    }
+};
+
+struct TMultiColumnStatisticsDescription {
+    TString Name;
+    TVector<TString> Columns;
+    TVector<TString> Types;
+
+    TMultiColumnStatisticsDescription() = default;
+
+    explicit TMultiColumnStatisticsDescription(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& message)
+        : Name(message.GetName())
+    {
+        for (const auto& column : message.GetColumnNames()) {
+            Columns.push_back(column);
+        }
+        for (const auto type : message.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 };
 
@@ -446,12 +593,31 @@ struct TColumnCompression {
     TMaybe<i64> Level;
 };
 
+struct TColumnEncoding {
+    enum class EEncodingType {
+        UNDEFINED = 0,
+        DICTIONARY,
+        PLAIN
+    } Type = EEncodingType::UNDEFINED;
+};
+
+using TColumnEncodingsList = TVector<TColumnEncoding>;
+
+struct TDefaultExpressionColumnInfo {
+    TString ExprText;
+    NYql::TExprNode::TPtr Expr; // Compiled ExprText
+    TString Context;
+    TVector<TString> Dependencies;
+    bool Stored = false;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
     ui32 Id = 0;
     TString Type;
     bool NotNull = false;
+    bool SetNotNullInProgress = false;
     NKikimr::NScheme::TTypeInfo TypeInfo;
     TString TypeMod;
     TVector<TString> Families;
@@ -461,17 +627,20 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
+    TMaybe<TColumnEncodingsList> Encoding;
+    TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool setNotNullInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
         , NotNull(notNull)
+        , SetNotNullInProgress(setNotNullInProgress)
         , TypeInfo(typeInfo)
         , TypeMod(typeMod)
         , DefaultKind(defaultKind)
@@ -486,6 +655,7 @@ struct TKikimrColumnMetadata {
         , Id(message->GetId())
         , Type(message->GetType())
         , NotNull(message->GetNotNull())
+        , SetNotNullInProgress(message->GetSetNotNullInProgress())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
@@ -507,6 +677,32 @@ struct TKikimrColumnMetadata {
                 Compression->Level = message->GetCompression().GetLevel();
             }
         }
+
+        for (const auto& encoding : message->GetEncoding()) {
+            if (!Encoding) {
+                Encoding = TColumnEncodingsList{};
+            }
+            switch (encoding.GetImplementationCase()) {
+                case NKikimrKqp::TEncoding::kPlain:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    break;
+                case NKikimrKqp::TEncoding::kDictionary:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    break;
+                case NKikimrKqp::TEncoding::IMPLEMENTATION_NOT_SET:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                    break;
+            }
+        }
+
+        if (IsDefaultFromExpression()) {
+            const auto& defaultExpression = message->GetDefaultExpression();
+            DefaultExpression = TDefaultExpressionColumnInfo{};
+            DefaultExpression->ExprText = defaultExpression.GetExprText();
+            DefaultExpression->Context = defaultExpression.GetContext();
+            DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -517,12 +713,21 @@ struct TKikimrColumnMetadata {
         DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
     }
 
+
+    void SetDefaultFromExpression() {
+        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
+    }
+
     bool IsDefaultFromSequence() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
     }
 
     bool IsDefaultFromLiteral() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+    }
+
+    bool IsDefaultFromExpression() const {
+        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
     }
 
     bool IsDefaultKindDefined() const {
@@ -534,6 +739,7 @@ struct TKikimrColumnMetadata {
         message->SetId(Id);
         message->SetType(Type);
         message->SetNotNull(NotNull);
+        message->SetSetNotNullInProgress(SetNotNullInProgress);
         auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         message->SetDefaultFromSequence(DefaultFromSequence);
@@ -541,6 +747,15 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
+        if (DefaultExpression) {
+            auto& defaultExpression = *message->MutableDefaultExpression();
+            defaultExpression.SetExprText(DefaultExpression->ExprText);
+            defaultExpression.SetContext(DefaultExpression->Context);
+            defaultExpression.SetStored(DefaultExpression->Stored);
+            for (const auto& dep : DefaultExpression->Dependencies) {
+                defaultExpression.AddDependencies(dep);
+            }
+        }
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }
@@ -556,14 +771,26 @@ struct TKikimrColumnMetadata {
                 compression->SetLevel(*maybeLevel);
             }
         }
+
+        if (Encoding) {
+            for (const auto& encoding : *Encoding) {
+                auto messageEncoding = message->add_encoding();
+                switch (encoding.Type) {
+                    case TColumnEncoding::EEncodingType::UNDEFINED:
+                        break;
+                    case TColumnEncoding::EEncodingType::DICTIONARY:
+                        messageEncoding->MutableDictionary();
+                        break;
+                    case TColumnEncoding::EEncodingType::PLAIN:
+                        messageEncoding->MutablePlain();
+                        break;
+                }
+            }
+        }
     }
 
     bool IsSameScheme(const TKikimrColumnMetadata& other) const {
         return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
-    }
-
-    void SetNotNull() {
-        NotNull = true;
     }
 };
 
@@ -621,6 +848,7 @@ struct TExternalSource {
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
     TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
+    ui64 WriteOperations = 0;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -672,6 +900,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
 
+    TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
+
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
@@ -721,14 +951,17 @@ struct TKikimrTableMetadata : public TThrRefBase {
         auto it = message->GetSecondaryGlobalIndexMetadata().begin();
         ImplTables.reserve(indexesCount);
         for(int i = 0; i < indexesCount; ++i) {
-            decltype(ImplTables)::value_type* implTable = nullptr;
+            // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+            // tables. Keep a null slot for them so that ImplTables stays index-aligned with
+            // Indexes (ImplTables.size() == Indexes.size()).
+            decltype(ImplTables)::value_type* implTable = &ImplTables.emplace_back(nullptr);
             for (const auto& _ : Indexes[i].GetImplTables()) {
                 YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-                if (implTable) {
+                if (*implTable) {
                     (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                     implTable = &(*implTable)->Next;
                 } else {
-                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                    *implTable = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                 }
             }
         }
@@ -738,6 +971,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         for(auto& [_, name]: orderMap) {
             ColumnOrder.emplace_back(name);
         }
+
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {
@@ -799,18 +1033,21 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
 
         for(auto implTable: ImplTables) {
-            YQL_ENSURE(implTable);
-            do {
+            // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+            // table, so their slot is null. FromMessage reconstructs the null slot from the
+            // (empty) GetImplTables() of the corresponding index, so we simply skip it here.
+            while (implTable) {
                 implTable->ToMessage(message->AddSecondaryGlobalIndexMetadata());
                 implTable = implTable->Next;
-            } while (implTable);
+            }
         }
+
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {
@@ -818,9 +1055,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         YQL_ENSURE(Indexes.size() == ImplTables.size(), "index metadata has not been loaded yet");
         for (size_t i = 0; i < Indexes.size(); i++) {
             if (Indexes[i].Name == indexName) {
-                auto implTable = ImplTables[i];
-                YQL_ENSURE(implTable, "unexpected empty metadata for index " << indexName);
-                return {std::move(implTable), &Indexes[i]};
+                // Local indexes (bloom filter, bloom-ngram, min-max) have no impl table — their slot is null.
+                return {ImplTables[i], &Indexes[i]};
             }
         }
         return {nullptr, nullptr};
@@ -949,6 +1185,13 @@ struct TAlterTopicSettings {
     bool MissingOk;
 };
 
+struct TCreateTopicSettings {
+    Ydb::Topic::CreateTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool ExistingOk;
+};
+
 struct TSequenceSettings {
     TMaybe<i64> MinValue;
     TMaybe<i64> MaxValue;
@@ -1018,6 +1261,16 @@ struct TReplicationSettingsBase {
         EFailoverMode FailoverMode;
     };
 
+    struct TMetricsSettings {
+        enum class EMetricsLevel {
+            Default = 0,
+            Database = 1,
+            Object = 2,
+            Detailed = 3,
+        };
+        EMetricsLevel Level;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
@@ -1026,6 +1279,7 @@ struct TReplicationSettingsBase {
     TMaybe<TIamCredentials> IamCredentials;
     TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
+    TMaybe<TMetricsSettings> MetricsSettings;
     bool StatePaused = false;
     bool StateStandBy = false;
 
@@ -1191,7 +1445,11 @@ struct TBackupSettings {
 struct TSecretSettings {
     TString Name;
     TString Value;
-    bool InheritPermissions = false;
+    TString ValueParamName; // when set, the value is taken from parameter at execution
+    std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
+    bool ReplaceIfExists = false; // CREATE OR REPLACE
+    bool ExistingOk = false; // CREATE IF NOT EXISTS
+    bool MissingOk = false; // ALTER/DROP IF EXISTS
 };
 
 struct TKikimrListPathItem {
@@ -1361,8 +1619,6 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
-
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) = 0;
@@ -1382,9 +1638,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
 
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 

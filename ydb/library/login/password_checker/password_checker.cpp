@@ -140,4 +140,8 @@ void TPasswordChecker::Update(const TPasswordComplexity& passwordComplexity) {
     PasswordComplexity = passwordComplexity;
 }
 
+const TPasswordComplexity& TPasswordChecker::GetPasswordComplexity() const {
+    return PasswordComplexity;
+}
+
 } // NLogin

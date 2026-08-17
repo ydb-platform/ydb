@@ -36,12 +36,9 @@ TFixture::TTableRecord::TTableRecord(const std::string& key, const std::string& 
 void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
-    settings.SetEnableTopicServiceTx(true);
-    settings.SetEnableTopicSplitMerge(true);
-    settings.SetEnableOltpSink(GetEnableOltpSink());
-    settings.SetEnableOlapSink(GetEnableOlapSink());
     settings.SetEnableHtapTx(GetEnableHtapTx());
     settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
+    AugmentServerSettings(settings);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -56,6 +53,14 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
     TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableSettings);
     QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, querySettings);
+}
+
+void TFixture::AugmentServerSettings(NKikimr::Tests::TServerSettings&)
+{
+}
+
+void TFixture::AugmentWriteSessionSettings(NTopic::TWriteSessionSettings&)
+{
 }
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
@@ -395,6 +400,7 @@ auto TFixture::CreateTopicWriteSession(const std::string& topicPath,
     options.MessageGroupId(messageGroupId);
     options.PartitionId(partitionId);
     options.Codec(ECodec::RAW);
+    AugmentWriteSessionSettings(options);
     return client.CreateWriteSession(options);
 }
 
@@ -961,6 +967,41 @@ void TFixture::TestWriteToTopic10()
     }
 }
 
+void TFixture::TestEmptySourceIdParallelTx()
+{
+    CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+    NTopic::TTopicClient client(GetDriver());
+
+    auto createTxAndWrite = [this, &client](const TString& message, const TString& label) {
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        NTopic::TWriteSessionSettings settings;
+        settings.Path(GetTopicUtPath("topic_A"));
+        settings.ProducerId("");
+        settings.MessageGroupId("");
+        settings.Codec(ECodec::RAW);
+        auto ws = client.CreateSimpleBlockingWriteSession(settings);
+        auto msg = NTopic::TWriteMessage(message);
+        UNIT_ASSERT_C(ws->Write(std::move(msg), tx.get()), label << " write failed");
+        UNIT_ASSERT_C(ws->Close(), label << " close write session failed");
+
+        return std::make_pair(std::move(session), std::move(tx));
+    };
+
+    auto [session1, tx1] = createTxAndWrite("message #1", "tx1");
+    auto [session2, tx2] = createTxAndWrite("message #2", "tx2");
+
+    session1->CommitTx(*tx1, EStatus::SUCCESS);
+    session2->CommitTx(*tx2, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+}
+
 void TFixture::TestWriteToTopic11()
 {
     for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {
@@ -1088,16 +1129,6 @@ auto TFixture::GetAvgWriteBytes(const std::string& topicName,
     return result;
 }
 
-bool TFixture::GetEnableOltpSink() const
-{
-    return false;
-}
-
-bool TFixture::GetEnableOlapSink() const
-{
-    return false;
-}
-
 bool TFixture::GetEnableHtapTx() const
 {
     return false;
@@ -1143,7 +1174,7 @@ void TFixture::SendLongTxLockStatus(const NActors::TActorId& actorId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
     auto event =
-        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.KeyId, writeId.NodeId,
+        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.GetKeyId(), writeId.GetNodeId(),
                                                                                    status);
     auto& runtime = Setup->GetRuntime();
     runtime.SendToPipe(tabletId, actorId, event.release());
@@ -2103,16 +2134,6 @@ void TFixtureSinks::CreateColumnTable(const std::string& tablePath)
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-bool TFixtureSinks::GetEnableOltpSink() const
-{
-    return true;
-}
-
-bool TFixtureSinks::GetEnableOlapSink() const
-{
-    return true;
-}
-
 bool TFixtureSinks::GetEnableHtapTx() const
 {
     return true;
@@ -2462,6 +2483,143 @@ void TFixture::TestWriteAndReadMessages(size_t count, size_t size, bool restart)
 
     auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, count);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), count);
+}
+
+void TFixture::TestTxWriteMidCommitReconnectAssertsParentOffsets()
+{
+    CreateTopic("topic_A");
+
+    constexpr size_t seedCount = 5;
+    constexpr size_t txCount = 8;
+    constexpr size_t commitK = 3; // mid of the tx-written range [S, S+txCount)
+    constexpr ui64 parentKeyOffset = seedCount;
+    static_assert(commitK > 0 && commitK < txCount);
+
+    for (size_t i = 0; i < seedCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "seed #" + std::to_string(i));
+    }
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    auto tableSession = CreateSession();
+    auto tx = tableSession->BeginTx();
+    for (size_t i = 0; i < txCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "tx #" + std::to_string(i), tx.get());
+    }
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    tableSession->CommitTx(*tx, EStatus::SUCCESS);
+
+    const ui64 resumeOffset = parentKeyOffset + commitK;
+    auto commitStatus = Setup->Commit(Setup->GetTopicPath("topic_A"), TEST_CONSUMER, 0, resumeOffset);
+    UNIT_ASSERT_C(commitStatus.IsSuccess(), commitStatus.GetIssues().ToString());
+
+    auto readSession = CreateTopicReadSession("topic_A", TEST_CONSUMER, /*partitionId=*/0);
+    {
+        auto start = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(readSession);
+        UNIT_ASSERT_VALUES_EQUAL(start.GetCommittedOffset(), resumeOffset);
+        start.Confirm();
+    }
+
+    std::vector<std::pair<ui64, std::string>> received;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (received.size() < txCount - commitK && TInstant::Now() < deadline) {
+        UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(5)),
+            "Read session event timeout; session may have died on FillBatchedData ENSURE");
+        for (auto& event : readSession->GetEvents()) {
+            if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Read session closed unexpectedly: " << closed->DebugString());
+            }
+            if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                for (auto& m : data->GetMessages()) {
+                    received.emplace_back(m.GetOffset(), m.GetData());
+                    m.Commit();
+                }
+            }
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(received.size(), txCount - commitK);
+    for (size_t i = 0; i < received.size(); ++i) {
+        const ui64 expectedOffset = parentKeyOffset + commitK + i;
+        UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(received[i].second, "tx #" + std::to_string(commitK + i));
+    }
+
+    UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
+}
+
+void TFixture::TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets()
+{
+    CreateTopic("topic_A");
+
+    constexpr size_t seedCount = 5;
+    constexpr size_t txCount = 8;
+    constexpr ui64 parentKeyOffset = seedCount;
+
+    for (size_t i = 0; i < seedCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "seed #" + std::to_string(i));
+    }
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    auto seedCommit = Setup->Commit(Setup->GetTopicPath("topic_A"), TEST_CONSUMER, 0, parentKeyOffset);
+    UNIT_ASSERT_C(seedCommit.IsSuccess(), seedCommit.GetIssues().ToString());
+
+    auto tableSession = CreateSession();
+    auto tx = tableSession->BeginTx();
+    // SDK rejects MaxMemoryUsageBytes < 1_MB; use ~200KB payloads so 1_MB still splits across GetEvents.
+    const std::string payload(200 * 1024, 'p');
+    for (size_t i = 0; i < txCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, payload + std::to_string(i), tx.get());
+    }
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    tableSession->CommitTx(*tx, EStatus::SUCCESS);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    NTopic::TReadSessionSettings readSettings;
+    readSettings.ConsumerName(TEST_CONSUMER);
+    readSettings.MaxMemoryUsageBytes(1_MB);
+    readSettings.AppendTopics(
+        NTopic::TTopicReadSettings()
+            .Path(Setup->GetTopicPath("topic_A"))
+            .AppendPartitionIds(0));
+
+    NTopic::TTopicClient client(GetDriver());
+    auto readSession = client.CreateReadSession(readSettings);
+    {
+        auto start = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(readSession);
+        UNIT_ASSERT_VALUES_EQUAL(start.GetCommittedOffset(), parentKeyOffset);
+        start.Confirm();
+    }
+
+    std::vector<ui64> offsets;
+    size_t dataEventBatches = 0;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+    while (offsets.size() < txCount && TInstant::Now() < deadline) {
+        UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(10)),
+            "Read session event timeout; session may have died on FillBatchedData ENSURE");
+        for (auto& event : readSession->GetEvents()) {
+            if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Read session closed unexpectedly: " << closed->DebugString());
+            }
+            if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                ++dataEventBatches;
+                for (auto& m : data->GetMessages()) {
+                    offsets.push_back(m.GetOffset());
+                    m.Commit();
+                }
+            }
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(offsets.size(), txCount);
+    // ~200KB × 8 with MaxMemoryUsageBytes=1MB should split across GetEvents.
+    UNIT_ASSERT_C(dataEventBatches >= 2,
+        "expected MaxMemoryUsageBytes to split delivery across multiple data batches, got "
+            << dataEventBatches);
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(offsets[i], parentKeyOffset + i);
+    }
+    UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
 }
 
 }

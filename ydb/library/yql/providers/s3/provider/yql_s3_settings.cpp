@@ -50,21 +50,22 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         }
     }
     S3ReadActorFactoryConfig = NDq::CreateReadActorFactoryConfig(config);
-    FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 2_GB;
+    FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 100_GB;
+    S3ReadActorFactoryConfig.FileSizeLimit = FileSizeLimit;
     BlockFileSizeLimit = config.HasBlockFileSizeLimit() ? config.GetBlockFileSizeLimit() : 50_GB;
-    MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 7000;
+    MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 50000;
     MaxDiscoveryFilesPerQuery = config.HasMaxDiscoveryFilesPerQuery()
                                     ? config.GetMaxDiscoveryFilesPerQuery()
-                                    : 9000;
+                                    : 50000;
     MaxDirectoriesAndFilesPerQuery = config.HasMaxDirectoriesAndFilesPerQuery()
                                          ? config.GetMaxDirectoriesAndFilesPerQuery()
-                                         : 9000;
+                                         : 50000;
     MinDesiredDirectoriesOfFilesPerQuery =
         config.HasMinDesiredDirectoriesOfFilesPerQuery()
             ? config.GetMinDesiredDirectoriesOfFilesPerQuery()
             : 100;
     MaxInflightListsPerQuery =
-        config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
+        config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 10;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()
                                      ? config.GetListingCallbackThreadCount()
                                      : 0;
@@ -73,7 +74,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
                                             : 100;
     RegexpCacheSize = config.HasRegexpCacheSize() ? config.GetRegexpCacheSize() : 100;
     AllowConcurrentListings =
-        config.HasAllowConcurrentListings() ? config.GetAllowConcurrentListings() : false;
+        config.HasAllowConcurrentListings() ? config.GetAllowConcurrentListings() : true;
     AllowLocalFiles =
         config.HasAllowLocalFiles() ? config.GetAllowLocalFiles() : false;
     GeneratorPathsLimit =

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kafka.h
     pqv1.cpp
 )
 

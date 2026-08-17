@@ -106,13 +106,21 @@ public:
     TControlWrapper ForsetiMinLogCostNsControl;
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
-    TControlWrapper ForsetiOpPieceSizeSsd;
-    TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper ForsetiOpPieceSize;
+    TControlWrapper EnableFreeChunksSortingHDD;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
+    // If enabled (default), the merged (cross-source) device overestimation metric
+    // replaces the legacy PDisk-only DeviceOverestimationRatio/DeviceNonperformanceMs
+    // sensors. Can be toggled via ICB without a cluster restart to revert to the
+    // old algorithm if something goes wrong with the new one.
+    TControlWrapper UseDeviceOverestimationRatioMerged;
     i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper StaticGroupChunkReservePerMille;
+    i64 StaticGroupChunkReservePerMilleCached = 0;
+    TControlWrapper ForcedPDiskSpaceColor;
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {
@@ -145,7 +153,7 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    alignas(16) TDiskFormat Format;
+    alignas(16) TDiskFormat Format = {};
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;
@@ -229,6 +237,7 @@ public:
     ui64 LastInitialSectorIdx;
 
     ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui64 ExpectedSlotSize = 0; // Slot size to use for space limit calculation, 0 if not set.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -383,6 +392,9 @@ public:
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
+    void NormalizeExpectedSlotSettings();
+    i64 GetExpectedOwnerSizeInChunks() const;
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) const;
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);

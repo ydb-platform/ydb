@@ -12,6 +12,8 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -74,8 +76,13 @@ public:
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
 
+    ~TKqpBufferLookupActor() {
+        ClearAllWorkerResults();
+    }
+
     void Bootstrap() {
-        CA_LOG_D("Start buffer lookup actor");
+        YDB_LOG_DEBUG("Starting buffer lookup actor",
+            {"logPrefix", this->LogPrefix});
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLookupActor::StateFunc);
@@ -85,11 +92,8 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
-        AFL_ENSURE(Settings.Alloc);
-        {
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
-            CookieToLookupState.clear();
-        }
+
+        ClearAllWorkerResults();
 
         for (const auto& [readId, state] : ReadIdToState) {
             Settings.Counters->SentIteratorCancels->Inc();
@@ -97,8 +101,9 @@ public:
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
+        ReadIdToState.clear();
 
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
 
@@ -109,16 +114,26 @@ public:
         PassAway();
     }
 
+    void Unlink() override {
+        AFL_ENSURE(ReadIdToState.empty());
+
+        for (auto& [_, state] : ShardToState) {
+            state.HasPipe = false;
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+    }
+
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                default:
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                        TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
+                hFunc(TEvPrivate::TEvRetryRead, Handle);
+            default:
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             RuntimeError(
@@ -141,13 +156,15 @@ public:
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
+            .Database = Settings.Database,
+            .PoolId = Settings.PoolId,
 
             .AllowNullKeysPrefixSize = 0,
             .KeepRowsOrder = false,
             .LookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP,
 
             .KeyColumns = {},
-            .LookupKeyColumns = {},
+            .InputColumns = {},
             .Columns = {},
         };
 
@@ -180,12 +197,19 @@ public:
 
         {
             AFL_ENSURE(lookupKeyPrefix <= keyColumns.size());
-            settings.LookupKeyColumns.reserve(lookupKeyPrefix);
+            settings.InputColumns.reserve(lookupKeyPrefix);
             for (size_t index = 0; index < lookupKeyPrefix; ++index) {
                 const auto& keyColumn = keyColumns.at(index);
-                auto columnIt = settings.KeyColumns.find(keyColumn.GetName());
-                YQL_ENSURE(columnIt != settings.KeyColumns.end());
-                settings.LookupKeyColumns.push_back(&columnIt->second);
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
+                settings.InputColumns.push_back(
+                    TSysTables::TTableColumnInfo{
+                        keyColumn.GetName(),
+                        keyColumn.GetId(),
+                        typeInfo,
+                        keyColumn.GetTypeInfo().GetPgTypeMod(),
+                        static_cast<i32>(index)
+                    }
+                );
             }
         }
 
@@ -250,12 +274,14 @@ public:
 
     void StartLookupTask(ui64 cookie, TLookupState& state, bool isUnique, bool uniqueFailOnRead) {
         auto& worker = state.Worker;
-        auto reads = worker->BuildRequests(Partitioning, ReadId);
+        worker->BuildRequests(Partitioning, ReadId);
 
-        // lookup can't be overloaded
-        AFL_ENSURE(!worker->IsOverloaded(std::numeric_limits<size_t>::max()));
+        while(true) {
+            auto [shardId, read] = worker->PopNextRequest();
+            if (!read) {
+                break;
+            }
 
-        for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
             StartTableRead(cookie, shardId, isUnique, uniqueFailOnRead, std::move(read));
         }
@@ -302,8 +328,11 @@ public:
 
         auto& worker = CookieToLookupState.at(cookie).Worker;
 
-        CA_LOG_D("Start reading of table: " << worker->GetTablePath() << ", readId: " << record.GetReadId()
-            << ", shardId: " << shardId);
+        YDB_LOG_DEBUG("Starting table read for buffer lookup",
+            {"logPrefix", this->LogPrefix},
+            {"table", worker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"shardId", shardId});
 
         Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
         Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
@@ -316,9 +345,10 @@ public:
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);
         record.SetLockTxId(Settings.LockTxId);
         record.SetLockNodeId(Settings.LockNodeId);
-        record.SetLockMode(!isUniqueCheck
-            ? Settings.LockMode
-            : NKikimrDataEvents::OPTIMISTIC);
+
+        record.SetLockMode((isUniqueCheck && Settings.LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION)
+            ? NKikimrDataEvents::OPTIMISTIC // Workaround for Snapshot Isolation with Unique Index
+            : Settings.LockMode);
         if (Settings.QuerySpanId) {
             record.SetQuerySpanId(Settings.QuerySpanId);
         }
@@ -334,12 +364,15 @@ public:
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (buffer lookup) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", tablePath: " << worker->GetTablePath()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Sending EvRead request for buffer lookup",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"readId", record.GetReadId()},
+            {"tablePath", worker->GetTablePath()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         auto& shardState = ShardToState[shardId];
 
@@ -378,7 +411,9 @@ public:
 
         auto readIt = ReadIdToState.find(record.GetReadId());
         if (readIt == ReadIdToState.end() || readIt->second.Blocked) {
-            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
+            YDB_LOG_DEBUG("Dropping read because it is already completed or blocked",
+                {"logPrefix", this->LogPrefix},
+                {"readId", record.GetReadId()});
             return;
         }
 
@@ -394,27 +429,28 @@ public:
         AFL_ENSURE(lookupState.Worker);
         AFL_ENSURE(lookupState.ReadsInflight > 0);
 
-        CA_LOG_D("Recv TEvReadResult (buffer lookup) from ShardID=" << shardId
-            << ", Table = " << lookupState.Worker->GetTablePath()
-            << ", ReadId=" << record.GetReadId() << " (current ReadId=" << ReadId << ")"
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
+        TStringBuilder borkenTxLocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            borkenTxLocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult for buffer lookup",
+            {"logPrefix", this->LogPrefix},
+            {"shardID", shardId},
+            {"tablePath", lookupState.Worker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"currentReadId", ReadId},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", borkenTxLocks});
 
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
@@ -432,7 +468,6 @@ public:
 
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
-                YQL_ENSURE(Settings.TxManager->BrokenLocks());
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
@@ -459,9 +494,14 @@ public:
                     getIssues());
             }
             case Ydb::StatusIds::OVERLOADED: {
-                CA_LOG_D("OVERLOADED was received from tablet: " << shardId << "."
-                    << getIssues().ToOneLineString());
-                if (!RetryTableRead(record.GetReadId(), false)) {
+                YDB_LOG_DEBUG("Received OVERLOADED status from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", shardId},
+                    {"issues", getIssues().ToOneLineString()});
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!RetryTableRead(record.GetReadId(), false, throttleDelay)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::OVERLOADED,
                         NYql::TIssuesIds::KIKIMR_OVERLOADED,
@@ -472,8 +512,10 @@ public:
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                CA_LOG_D("INTERNAL_ERROR was received from tablet: " << shardId << "."
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("Received INTERNAL_ERROR status from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", shardId},
+                    {"issues", getIssues().ToOneLineString()});
                 if (!RetryTableRead(record.GetReadId(), true)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -536,7 +578,9 @@ public:
                 LookupActorSpan.GetTraceId());
 
             shardState.HasPipe = true;
-            CA_LOG_D("TEvReadAck was sent to shard: " << shardId);
+            YDB_LOG_DEBUG("Sent TEvReadAck to datashard",
+                {"logPrefix", this->LogPrefix},
+                {"shard", shardId});
         }
 
         if (failOnUniqueCheck && record.GetRowCount() != 0) {
@@ -548,16 +592,18 @@ public:
 
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
-            lookupState.Worker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-            });
+            lookupState.Worker->AddResult(TStreamLookupShardReadResult(
+                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+            ));
         }
 
         Settings.Callbacks->OnLookupTaskFinished();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
         TVector<ui64> toRetry;
@@ -586,7 +632,9 @@ public:
         const ui64 failedReadId = ev->Get()->ReadId;
         auto readIt = ReadIdToState.find(failedReadId);
         if (readIt == ReadIdToState.end()) {
-            CA_LOG_D("received retry request for already finished/non-existing read, read_id: " << failedReadId);
+            YDB_LOG_DEBUG("Received retry request for already finished/non-existing read",
+                {"logPrefix", this->LogPrefix},
+                {"readId", failedReadId});
             return;
         }
 
@@ -598,18 +646,27 @@ public:
         }
     }
 
-    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry) {
+    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
-        CA_LOG_D("Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
-            << ", shardId: " << failedRead.ShardId);
+        YDB_LOG_DEBUG("Retrying table read for buffer lookup",
+            {"logPrefix", this->LogPrefix},
+            {"table", lookupState.Worker->GetTablePath()},
+            {"failedReadId", failedReadId},
+            {"shardId", failedRead.ShardId});
         failedRead.Blocked = true;
 
-        if (failedRead.RetryAttempts >= MaxShardRetries()) {
-            return false;
+        TDuration delay;
+        if (!throttleDelay) {
+            if (failedRead.RetryAttempts >= MaxShardRetries()) {
+                return false;
+            }
+            ++failedRead.RetryAttempts;
+            delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
         } else {
@@ -625,12 +682,17 @@ public:
         AFL_ENSURE(failedRead.Blocked);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
-        auto requests = lookupState.Worker->RebuildRequest(failedReadId, ReadId);
-        for (auto& request : requests) {
+        lookupState.Worker->RebuildRequest(failedRead.ShardId, failedReadId, ReadId);
+        while(true) {
+            auto [shardId, request] = lookupState.Worker->PopNextRequest();
+            if (!request)  {
+                break;
+            }
+
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
-            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
     }
@@ -679,8 +741,19 @@ public:
     }
 
 private:
+    void ClearAllWorkerResults() {
+        AFL_ENSURE(Settings.Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
+        for (auto& [cookie, state] : CookieToLookupState) {
+            if (state.Worker) {
+                state.Worker->ClearResults(Settings.Alloc->Ref());
+            }
+        }
+        CookieToLookupState.clear();
+    }
+
     TKqpBufferTableLookupSettings Settings;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

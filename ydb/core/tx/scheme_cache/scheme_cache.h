@@ -48,12 +48,7 @@ struct TSchemeCacheConfig : public TThrRefBase {
 
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
-
-    struct TUser {
-        TString Sid;
-
-        TString ToString() const;
-    };
+    using THashInitParams = std::unordered_map<NLoginProto::EHashType::HashType, std::string>;
 
     struct TGroup {
         TString Sid;
@@ -90,9 +85,15 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasSecurityState()) {
             for (const auto& sid : descr.GetSecurityState().GetSids()) {
                 switch (sid.GetType()) {
-                case NLoginProto::ESidType_SidType_USER:
-                    Users.emplace_back(sid.GetName());
+                case NLoginProto::ESidType_SidType_USER: {
+                    THashInitParams userHashesInitParams;
+                    userHashesInitParams.reserve(sid.HashesInitParamsSize());
+                    for (const auto& hashInitParams : sid.GetHashesInitParams()) {
+                        userHashesInitParams.emplace(hashInitParams.GetHashType(), hashInitParams.GetInitParams());
+                    }
+                    Users.emplace(sid.GetName(), std::move(userHashesInitParams));
                     break;
+                }
                 case NLoginProto::ESidType_SidType_GROUP: {
                     TVector<TString> members(sid.GetMembers().begin(), sid.GetMembers().end());
                     Groups.emplace_back(sid.GetName(), std::move(members));
@@ -139,7 +140,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
     ui64 SharedHiveId = 0;
-    TVector<TUser> Users;
+    std::unordered_map<std::string, THashInitParams> Users;
     TVector<TGroup> Groups;
 
     TString ToString() const;
@@ -153,6 +154,7 @@ enum class ETableKind {
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
     KindFulltextIndexTable = 5,
+    KindJsonIndexTable = 6,
 };
 
 struct TSchemeCacheNavigate {
@@ -205,6 +207,7 @@ struct TSchemeCacheNavigate {
         KindSysView = 25,
         KindSecret = 26,
         KindStreamingQuery = 27,
+        KindTestShardSet = 28,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -341,6 +344,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TStreamingQueryDescription Description;
     };
 
+    struct TTestShardSetInfo : public TAtomicRefCount<TTestShardSetInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TTestShardSetDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -372,7 +380,9 @@ struct TSchemeCacheNavigate {
         THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
+        THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
+        TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         ETableKind TableKind = ETableKind::KindUnknown;
@@ -399,6 +409,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
         TIntrusiveConstPtr<TSecretInfo> SecretInfo;
         TIntrusiveConstPtr<TStreamingQueryInfo> StreamingQueryInfo;
+        TIntrusiveConstPtr<TTestShardSetInfo> TestShardSetInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

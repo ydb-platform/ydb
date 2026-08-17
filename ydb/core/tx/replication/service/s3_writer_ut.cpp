@@ -7,7 +7,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(settings, &request));
 
         auto config = std::make_shared<NWrappers::NExternalStorage::TS3ExternalStorageConfig>(
-            NKikimrConfig::TAwsClientConfig(), request);
+            NKikimrConfig::TAwsClientConfig(), request, nullptr);
 
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

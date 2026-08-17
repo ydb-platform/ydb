@@ -5,6 +5,8 @@
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 const THashSet<ui32>& TProgramContainer::GetSourceColumns() const {
@@ -31,7 +33,9 @@ TConclusionStatus TProgramContainer::Init(
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
+        YDB_LOG_DEBUG("",
+            {"event", "parse_program"},
+            {"program", out});
     }
 
     if (programProto.HasKernels()) {
@@ -40,7 +44,9 @@ TConclusionStatus TProgramContainer::Init(
                 return TConclusionStatus::Fail("Can't parse kernels");
             }
         } catch (...) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
+            YDB_LOG_ERROR("",
+                {"event", "program_parsed_error"},
+                {"result", CurrentExceptionMessage()});
             return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
         }
     }
@@ -49,7 +55,9 @@ TConclusionStatus TProgramContainer::Init(
     if (parseStatus.IsFail()) {
         return parseStatus;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", "program_parsed"},
+        {"result", DebugString()});
     return TConclusionStatus::Success();
 }
 
@@ -100,7 +108,8 @@ TConclusionStatus TProgramContainer::Init(
 TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program) {
     using TId = NKikimrSSA::TProgram::TCommand;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
+    YDB_LOG_DEBUG("",
+        {"parseProtoProgram", program.DebugString()});
     NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
     bool hasProjection = false;
     for (auto& cmd : program.GetCommand()) {
@@ -129,6 +138,13 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
             }
             case TId::kGroupBy: {
                 auto status = programBuilder.ReadGroupBy(cmd.GetGroupBy());
+                if (status.IsFail()) {
+                    return status;
+                }
+                break;
+            }
+            case TId::kDistinct: {
+                auto status = programBuilder.ReadDistinct(cmd.GetDistinct());
                 if (status.IsFail()) {
                     return status;
                 }

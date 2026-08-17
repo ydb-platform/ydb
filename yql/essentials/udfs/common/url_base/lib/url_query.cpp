@@ -246,4 +246,23 @@ bool TBuildQueryString::DeclareSignature(const TStringRef& name,
     }
     return false;
 }
+
+const TStringRef& TBuildQueryString::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {arg=T0;cmd=type;value=[DictType;[DataType;String];[ListType;[DataType;String]]]};
+            {arg=T0;cmd=type;value=[DictType;[DataType;String];[ListType;[OptionalType;[DataType;String]]]]};
+            {arg=T0;cmd=type;value=[OptionalType;[DictType;[DataType;String];[ListType;[DataType;String]]]]};
+            {arg=T0;cmd=type;value=[OptionalType;[DictType;[DataType;String];[ListType;[OptionalType;[DataType;String]]]]]}
+        ]};{args=[[DictType;[DataType;String];[ListType;[DataType;String]]]]}];
+        [{cmd=or;value=[
+            {arg=T0;cmd=type;value=[ListType;[TupleType;[[DataType;String];[DataType;String]]]]};
+            {arg=T0;cmd=type;value=[ListType;[TupleType;[[DataType;String];[OptionalType;[DataType;String]]]]]};
+            {arg=T0;cmd=type;value=[OptionalType;[ListType;[TupleType;[[DataType;String];[DataType;String]]]]]};
+            {arg=T0;cmd=type;value=[OptionalType;[ListType;[TupleType;[[DataType;String];[OptionalType;[DataType;String]]]]]]}
+        ]};{args=[[ListType;[TupleType;[[DataType;String];[DataType;String]]]]]}];
+        [[];{args=[[DictType;[DataType;String];[DataType;String]]]}]
+    ])");
+    return Config;
+}
 } // namespace NUrlUdf

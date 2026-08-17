@@ -14,7 +14,11 @@ class TestYdbWorkload(StressFixture):
             erasure=Erasure.NONE,
             extra_feature_flags={
                 "enable_move_column_table": True,
-                "enable_columnshard_bool": True
+                "enable_columnshard_bool": True,
+                "enable_cs_dictionary_encoding": True,
+                "enable_columnshard_interval": True,
+                "enable_columnshard_uuid": True,
+                "enable_columnshard_dy_number": True,
             },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,

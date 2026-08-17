@@ -1,4 +1,5 @@
 RECURSE(
     client
     library
+    plugins
 )

@@ -1,6 +1,7 @@
 items:
 - { name: Overview,                        href: index.md }
 - { name: Basic,                      href: basic.md }
+- { name: Fulltext search,            href: fulltext.md }
 - { name: Aggregate,                   href: aggregation.md }
 - { name: Window,                      href: window.md,            when: feature_window_functions }
 - { name: For lists,       href: list.md }

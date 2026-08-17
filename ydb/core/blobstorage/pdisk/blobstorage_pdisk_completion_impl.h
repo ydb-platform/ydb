@@ -148,13 +148,14 @@ public:
     void Exec(TActorSystem *actorSystem) override {
         Span.Event("PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
-        STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionChunkWrite::Exec",
-                (DiskId, PDiskId),
-                (ReqId, ReqId),
-                (Event, Event->ToString()),
-                (PriorityClass, (ui32)PriorityClass),
-                (timeMs, responseTimeMs),
-                (sizeBytes, SizeBytes));
+        YDB_LOG_DEBUG_CTX_COMP(*actorSystem, BS_PDISK, "TCompletionChunkWrite::Exec",
+            {"marker", "BPD01"},
+            {"diskId", PDiskId},
+            {"reqId", ReqId},
+            {"event", Event->ToString()},
+            {"priorityClass", (ui32)PriorityClass},
+            {"timeMs", responseTimeMs},
+            {"sizeBytes", SizeBytes});
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }
@@ -293,8 +294,8 @@ class TCumulativeCompletionHolder {
     TAtomic Releases;
     TAtomic CompletionActionPtr;
 public:
-    TCumulativeCompletionHolder()
-        : PartsPending(0)
+    TCumulativeCompletionHolder(TAtomicBase partsPending)
+        : PartsPending(partsPending)
         , Releases(0)
         , CompletionActionPtr((TAtomicBase)nullptr)
     {}
@@ -334,9 +335,7 @@ class TCompletionPart : public TCompletionAction {
 public:
     TCompletionPart(TCumulativeCompletionHolder *cumulativeCompletionHolder)
         : CumulativeCompletionHolder(cumulativeCompletionHolder)
-    {
-        cumulativeCompletionHolder->Ref();
-    }
+    {}
 
     void Exec(TActorSystem *actorSystem) override {
         CumulativeCompletionHolder->Exec(actorSystem);

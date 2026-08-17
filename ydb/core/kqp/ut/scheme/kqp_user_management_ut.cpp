@@ -24,11 +24,31 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE USER user1 PASSWORD NULL;
+            CREATE USER user2 PASSWORD NULL;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user3 PASSWORD 'pass-word';
             )";
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Password contains unacceptable characters");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user1 PASSWORD 'password2';
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "User already exists");
         }
     }
 
@@ -60,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be 16 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -74,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be 32 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -87,10 +107,9 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "WrongRequest");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -102,10 +121,9 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )"; // incorrect json
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "WrongRequest");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -119,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -133,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -147,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             TString hashes = R"(
@@ -258,7 +276,14 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user1;
+            CREATE USER user1 PASSWORD 'password1';
+            )";
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
                 ALTER USER user1 HASH '{
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
@@ -272,8 +297,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user2;
-                ALTER USER user2 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "aGtsZm1rbW1tamh2",
                     "type": "argon2id"
@@ -282,13 +306,12 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be 16 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user3;
-                ALTER USER user3 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "ZGl2aW5nbGVzc21pbmluZw==",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
                     "type": "argon2id"
@@ -297,13 +320,12 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be 32 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user4;
-                ALTER USER user4 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
                     "type": "wrongtype"
@@ -311,15 +333,13 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "WrongRequest");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user5;
-                ALTER USER user5 HASH '{{{{}}}
+                ALTER USER user1 HASH '{{{{}}}
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
                     "type": "argon2id"
@@ -327,15 +347,13 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )"; // incorrect json
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "WrongRequest");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user6;
-                ALTER USER user6 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
                     "type": "argon2id",
@@ -345,13 +363,12 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user7;
-                ALTER USER user7 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "Field not in base64 format",
                     "salt": "U+tzBtgo06EBQCjlARA6Jg==",
                     "type": "argon2id"
@@ -360,13 +377,12 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-                CREATE USER user8;
-                ALTER USER user8 HASH '{
+                ALTER USER user1 HASH '{
                     "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                     "salt": "Field not in base64 format",
                     "type": "argon2id"
@@ -375,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             TString hashes = R"(
@@ -387,8 +403,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )";
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user9;
-                ALTER USER user9 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -404,8 +419,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )"; // wrong scram hash format
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user10;
-                ALTER USER user10 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -422,8 +436,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )";
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user11;
-                ALTER USER user11 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -440,8 +453,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )";
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user12;
-                ALTER USER user12 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -458,8 +470,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )"; // wrong scram salt length
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user13;
-                ALTER USER user13 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -476,8 +487,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             )"; // wrong scram stored key length
             auto query = TStringBuilder() << Sprintf(R"(
             --!syntax_v1
-                CREATE USER user14;
-                ALTER USER user14 HASH '%s';
+                ALTER USER user1 HASH '%s';
             )", Base64Encode(hashes).c_str());
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
@@ -672,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
         }
     }
 
-    Y_UNIT_TEST(AlterUser) {
+    Y_UNIT_TEST(AlterUserWithPassword) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         {
@@ -710,6 +720,16 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER USER user1 WITH PASSWORD 'pass-word';
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Password contains unacceptable characters");
         }
     }
 

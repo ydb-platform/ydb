@@ -3,7 +3,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -55,7 +55,6 @@ private:
     TRingQueue<TClosure> Queue_;
     bool CallbackScheduled_ = false;
     bool Dead_ = false;
-
 
     class TInvocationGuard
     {

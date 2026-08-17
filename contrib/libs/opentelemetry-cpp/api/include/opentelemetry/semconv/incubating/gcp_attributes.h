@@ -172,6 +172,15 @@ static constexpr const char *kGcpCloudRunJobTaskIndex = "gcp.cloud_run.job.task_
 static constexpr const char *kGcpGceInstanceHostname = "gcp.gce.instance.hostname";
 
 /**
+  GCE instance labels, @code <key> @endcode being the label name and the value being the label
+  value. <p> For example, a GCE instance label @code team @endcode with value @code observability
+  @endcode SHOULD be recorded as the @code gcp.gce.instance.labels.team @endcode attribute with
+  value @code "observability" @endcode. The @code <key> @endcode MUST be the exact GCE instance
+  label key.
+ */
+static constexpr const char *kGcpGceInstanceLabels = "gcp.gce.instance.labels";
+
+/**
   The instance name of a GCE instance. This is the value provided by @code host.name @endcode, the
   visible name of the instance in the Cloud Console UI, and the prefix for the default hostname of
   the instance as defined by the <a
@@ -179,6 +188,26 @@ static constexpr const char *kGcpGceInstanceHostname = "gcp.gce.instance.hostnam
   internal DNS name</a>.
  */
 static constexpr const char *kGcpGceInstanceName = "gcp.gce.instance.name";
+
+/**
+  The name of the Instance Group Manager (IGM) that manages this VM, if any.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerName =
+    "gcp.gce.instance_group_manager.name";
+
+/**
+  The region of a <strong>regional</strong> Instance Group Manager (e.g., @code us-central1
+  @endcode). Set this <strong>only</strong> when the IGM is regional.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerRegion =
+    "gcp.gce.instance_group_manager.region";
+
+/**
+  The zone of a <strong>zonal</strong> Instance Group Manager (e.g., @code us-central1-a @endcode).
+  Set this <strong>only</strong> when the IGM is zonal.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerZone =
+    "gcp.gce.instance_group_manager.zone";
 
 namespace GcpApphubServiceCriticalityTypeValues
 {

@@ -11,7 +11,6 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -51,11 +50,13 @@ TExecContextBase::TExecContextBase(
     , DisableAnonymousClusterAccess_(services->DisableAnonymousClusterAccess)
     , Hidden(session->SessionId_.EndsWith("_hidden"))
     , Metrics(std::move(metrics))
+    , YtAccessProvider(services->YtAccessProvider)
 {
 }
 
 void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-    const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash) {
+    const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash,
+    const TMaybe<TString>& outputHash) {
     const bool testRun = Config_->GetLocalChainTest();
     if (!testRun && !Hidden) {
         NYT::TNode mergeSpec = Session_->CreateSpecWithDesc();
@@ -66,7 +67,7 @@ void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVe
         auto chunkLimit = settings->QueryCacheChunkLimit.Get(Cluster_).GetOrElse(0);
 
         QueryCacheItem.Reset(new TYtQueryCacheItem(settings->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable),
-            entry, opHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
+            entry, opHash, outputHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
             settings->QueryCacheUseExpirationTimeout.Get().GetOrElse(false),
             settings->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS), LogCtx_));
     }
@@ -124,6 +125,18 @@ TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExpr
         }
     }
     return extraUsage;
+}
+
+void TExecContextBase::ReportFullCaptureCacheHit() const {
+    if (!Session_->FullCapture_ || !UserFiles_) {
+        return;
+    }
+    const auto& files = UserFiles_->GetFiles();
+    if (AnyOf(files, [](const auto& p) { return p.second.IsUdf; })) {
+        Session_->FullCapture_->ReportError(
+            yexception() << "query cache hit for operation with attached UDFs"
+        );
+    }
 }
 
 void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const {

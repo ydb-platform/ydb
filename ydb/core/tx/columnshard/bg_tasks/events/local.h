@@ -1,6 +1,8 @@
 #pragma once
 #include "common.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -8,6 +10,7 @@ namespace NKikimr::NOlap::NBackground {
 class TEvExecuteGeneralLocalTransaction: public TEventLocal<TEvExecuteGeneralLocalTransaction, TEvents::EvExecuteGeneralLocalTransaction> {
 private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> Transaction;
+
 public:
     TEvExecuteGeneralLocalTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
         : Transaction(std::move(transaction))
@@ -24,9 +27,11 @@ public:
 class TEvLocalTransactionCompleted: public TEventLocal<TEvLocalTransactionCompleted, TEvents::EvLocalTransactionComplete> {
 private:
     const ui64 InternalTxId;
+
 public:
     TEvLocalTransactionCompleted(const ui64 internalTxId)
-        : InternalTxId(internalTxId) {
+        : InternalTxId(internalTxId)
+    {
     }
 
     ui64 GetInternalTxId() const {
@@ -38,13 +43,13 @@ class TEvRemoveSession: public TEventLocal<TEvRemoveSession, TEvents::EvRemoveSe
 private:
     YDB_READONLY_DEF(TString, ClassName);
     YDB_READONLY_DEF(TString, Identifier);
+
 public:
     TEvRemoveSession(const TString& className, const TString& identifier)
         : ClassName(className)
         , Identifier(identifier)
     {
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

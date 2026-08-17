@@ -1,0 +1,5 @@
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes;
+
+SELECT * FROM Input ORDER BY CAST(key AS Float);

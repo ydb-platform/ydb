@@ -3,6 +3,7 @@ LIBRARY()
 
 SRCS(
     access_service_mock.h
+    common.cpp
     datastreams_service_mock.h
     folder_service_transitional_mock.h
     folder_service_mock.h

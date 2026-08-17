@@ -11,20 +11,11 @@ namespace NYdb::NBS::NBlockStore {
 struct TCallContext;
 using TCallContextPtr = TIntrusivePtr<TCallContext>;
 
-struct IBlockStore;
-using IBlockStorePtr = std::shared_ptr<IBlockStore>;
-
-struct ISwitchableBlockStore;
-using ISwitchableBlockStorePtr = std::shared_ptr<ISwitchableBlockStore>;
-
-struct ISessionSwitcher;
-using ISessionSwitcherWeakPtr = std::weak_ptr<ISessionSwitcher>;
-
-struct IAuthProvider;
-using IAuthProviderPtr = std::shared_ptr<IAuthProvider>;
-
 struct IStorage;
 using IStoragePtr = std::shared_ptr<IStorage>;
+
+struct IDurableStorage;
+using IDurableStoragePtr = std::shared_ptr<IDurableStorage>;
 
 struct IStorageProvider;
 using IStorageProviderPtr = std::shared_ptr<IStorageProvider>;
@@ -35,6 +26,21 @@ using IDeviceHandlerPtr = std::shared_ptr<IDeviceHandler>;
 struct IDeviceHandlerFactory;
 using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
 
+struct ITraceService;
+using ITraceServicePtr = std::shared_ptr<ITraceService>;
+
+struct TVolumeConfig;
+using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;
+
 using TStorageBuffer = std::shared_ptr<char>;
+
+struct TReadBlocksLocalRequest;
+struct TReadBlocksLocalResponse;
+
+struct TWriteBlocksLocalRequest;
+struct TWriteBlocksLocalResponse;
+
+struct TZeroBlocksLocalRequest;
+struct TZeroBlocksLocalResponse;
 
 }   // namespace NYdb::NBS::NBlockStore

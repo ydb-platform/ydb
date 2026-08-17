@@ -1,9 +1,11 @@
 #pragma once
 #include "kqp_compute_state.h"
 
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
+#include <util/string/builder.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 

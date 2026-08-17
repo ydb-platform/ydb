@@ -92,7 +92,7 @@ Access to data is preserved during decommissioning — users can read and write 
 
 The group decommission instructions work if the following conditions are met:
 
-1. A deployed {{ ydb-short-name }} [cluster](../../concepts/glossary.md#cluster). Deployment instructions are available in the [Initial Deployment](../../devops/deployment-options/manual/initial-deployment.md) section.
+1. A deployed {{ ydb-short-name }} [cluster](../../concepts/glossary.md#cluster). Deployment instructions are available in the [Initial Deployment](../../devops/deployment-options/manual/initial-deployment/index.md) section.
 2. The `ydb-dstool` utility is installed. Installation instructions are available in the [{{ ydb-short-name }} DSTool installation documentation](../../reference/ydb-dstool/install.md).
 3. An authentication token generated for cluster access:
 

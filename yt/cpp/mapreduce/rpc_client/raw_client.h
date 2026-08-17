@@ -1,11 +1,22 @@
 #pragma once
 
+#include "client_impl.h"
+
 #include <yt/cpp/mapreduce/http/context.h>
 
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/yt/client/api/public.h>
+
+// Forward declaration as we don't want to include yt/yt/core/tracing/trace_context.h to avoid possible namespaces conflicts
+namespace NYT::NTracing {
+
+class TCurrentTraceContextGuard;
+
+} // namespace NYT::NTracing
+
+////////////////////////////////////////////////////////////////////////////////
 
 namespace NYT::NDetail {
 
@@ -16,7 +27,7 @@ class TRpcRawClient
 {
 public:
     TRpcRawClient(
-        NApi::IClientPtr client,
+        TApiClients clients,
         const TConfigPtr& config);
 
     // Cypress
@@ -135,7 +146,8 @@ public:
 
     void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) override;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) override;
 
     // Operations
 
@@ -209,7 +221,7 @@ public:
 
     // Files
 
-    std::unique_ptr<IInputStream> ReadFile(
+    std::unique_ptr<IAbortableInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
@@ -289,18 +301,18 @@ public:
         const TMaybe<TFormat>& format,
         const TTableWriterOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTable(
+    std::unique_ptr<IAbortableInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTablePartition(
+    std::unique_ptr<IAbortableInputStream> ReadTablePartition(
         const TString& cookie,
         const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadBlobTable(
+    std::unique_ptr<IAbortableInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TKey& key,
@@ -398,6 +410,9 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
 
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = {}) override;
+
     ui64 GenerateTimestamp() override;
 
     // Batch
@@ -411,7 +426,9 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
-    const NApi::IClientPtr Client_;
+    NTracing::TCurrentTraceContextGuard CreateTraceContext(const std::string& spanName);
+
+    const TApiClients Clients_;
     const TConfigPtr Config_;
 };
 

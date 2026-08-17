@@ -6,6 +6,8 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
+    library/cpp/monlib/service
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion
@@ -15,6 +17,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_configs_dispatcher/ut_private_database_config.proto
     configs_cache_ut.cpp
     configs_dispatcher_ut.cpp
 )

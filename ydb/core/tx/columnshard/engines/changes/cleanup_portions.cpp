@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) const {
@@ -42,13 +44,24 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
             action->DeclareRemove((TTabletId)self->TabletID(), b);
         }
     }
+
+    if (PortionsToDrop.size() && self->LastCleanupSnapshot < MinSnapshotForNewReads) {
+        self->LastCleanupSnapshot = MinSnapshotForNewReads;
+        NIceDb::TNiceDb db(*context.DB);
+        NColumnShard::Schema::SaveSpecialValue(
+            db, NColumnShard::Schema::EValueIds::LastCleanupSnapshotStep, self->LastCleanupSnapshot.GetPlanStep());
+        NColumnShard::Schema::SaveSpecialValue(
+            db, NColumnShard::Schema::EValueIds::LastCleanupSnapshotTxId, self->LastCleanupSnapshot.GetTxId());
+    }
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(*portionInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
+            YDB_LOG_WARN("",
+                {"event", "Cannot erase portion"},
+                {"portion", portionInfo->DebugString()});
         }
     }
     if (self) {

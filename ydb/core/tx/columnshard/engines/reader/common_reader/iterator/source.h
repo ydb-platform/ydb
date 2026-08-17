@@ -19,7 +19,10 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/util/evlog/log.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
+
+#include <atomic>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -40,7 +43,66 @@ private:
 
     std::optional<TFetchingScriptCursor> CursorStep;
 
+private:
+    struct TPrevNodeState {
+        ui32 NodeId = 0;
+        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Failed = false;
+        bool Defined = false;
+    };
+
+    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
+
+    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
+    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
+    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
+    // the immutable compiled graph.
+    TString StartCategoryName;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    std::atomic<TPrevNodeState> PrevNode = {};
+
+    TString RenderCategoryName(const TPrevNodeState& state) const {
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
+
 public:
+    void SetStartCategoryName(TString&& name) {
+        StartCategoryName = std::move(name);
+    }
+
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
+                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
+                           .Failed = conclusion.IsFail(),
+                           .Defined = true }, std::memory_order_release);
+    }
+
+    TString GetPrevCategoryName() const {
+        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
+    }
+
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
+    // load keeps the pair consistent.
+    TPrevNodeTracing GetPrevNodeTracing() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
+        TString executionResult;
+        if (state.Defined) {
+            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
+        }
+        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -60,6 +122,14 @@ public:
 
     bool HasProgramIterator() const {
         return !!ProgramIterator;
+    }
+
+    bool HasExecutionVisitor() const {
+        return !!ExecutionVisitor;
+    }
+
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
+        return ExecutionVisitor;
     }
 
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
@@ -104,6 +174,7 @@ private:
     virtual ui64 DoGetEntityId() const override {
         return SourceIdx;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return DeprecatedPortionId;
     }
@@ -111,6 +182,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
@@ -133,12 +205,95 @@ private:
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    NLWTrace::TOrbit DataSourceOrbit;
+    TMonotonic LastProbeTimestamp;
+    TMonotonic SourcesAheadQueueEnterTime;
+    ui32 SourcesAhead = 0;
+    TMonotonic SourceCreatedTimestamp;
+    TDuration TotalExecutionDuration;
+    ui64 TotalBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
-
     ui64 GetReservedMemory() const;
+
+    TDuration GetAndResetWaitDuration() {
+        const TMonotonic now = TMonotonic::Now();
+        const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
+        LastProbeTimestamp = now;
+        return result;
+    }
+
+    void SetSourcesAheadQueueEnterTime(const TMonotonic t) {
+        SourcesAheadQueueEnterTime = t;
+    }
+
+    TDuration GetSourcesAheadQueueWaitDuration() const {
+        if (!SourcesAhead || !SourcesAheadQueueEnterTime) {
+            return TDuration::Zero();
+        }
+        return TMonotonic::Now() - SourcesAheadQueueEnterTime;
+    }
+
+    void SetSourcesAhead(const ui32 count) {
+        SourcesAhead = count;
+    }
+
+    ui32 GetSourcesAhead() const {
+        return SourcesAhead;
+    }
+
+    ui32 GetFilteredRowsCount() const {
+        if (!HasStageResult() || GetStageResult().IsEmpty()) {
+            return 0;
+        }
+        const auto& notAppliedFilter = GetStageResult().GetNotAppliedFilter();
+        return notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(GetStageResult().GetBatch()->num_rows())
+                                : GetStageResult().GetBatch()->num_rows();
+    }
+
+    NO_SANITIZE_THREAD
+    void AddExecutionDuration(const TDuration d) {
+        TotalExecutionDuration += d;
+    }
+
+    NO_SANITIZE_THREAD
+    void AddBytesRead(const ui64 bytes) {
+        TotalBytesRead += bytes;
+    }
+
+    void OnStartProcessing();
+
+    NO_SANITIZE_THREAD
+    TDuration GetTotalDuration() const {
+        return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
+    }
+
+    NO_SANITIZE_THREAD
+    TDuration GetTotalExecutionDuration() const {
+        return TotalExecutionDuration;
+    }
+
+    NO_SANITIZE_THREAD
+    ui64 GetTotalBytesRead() const {
+        return TotalBytesRead;
+    }
+
+    NO_SANITIZE_THREAD
+    ui64 ExtractTotalBytesRead() {
+        const ui64 result = TotalBytesRead;
+        TotalBytesRead = 0;
+        return result;
+    }
+
+    NLWTrace::TOrbit& GetDataSourceOrbit() {
+        return DataSourceOrbit;
+    }
+
+    const NLWTrace::TOrbit& GetDataSourceOrbit() const {
+        return DataSourceOrbit;
+    }
 
     const TPortionDataAccessor& GetPortionAccessor() const;
 
@@ -214,15 +369,24 @@ public:
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
 
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
+        static std::shared_ptr<ISnapshotSchema> defaultValue;
+        return defaultValue;
+    }
+
+    virtual ui64 GetUsedRawBytesOptional() const {
+        return 0;
+    }
+
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const TSnapshot& recordSnapshotMin,
+        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion,
+        const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -249,9 +413,11 @@ public:
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
     ui64 GetResourceGuardsMemory() const;
+
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
@@ -259,6 +425,15 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();
@@ -301,6 +476,20 @@ public:
     TFetchedResult& MutableStageResult();
 
     virtual std::optional<ui64> GetPortionIdOptional() const = 0;
+
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+
+    ui64 GetRawPathId() const {
+        return GetPathId().GetRawValue();
+    }
+
+    ui64 GetTabletId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+
+    ui64 GetTxId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

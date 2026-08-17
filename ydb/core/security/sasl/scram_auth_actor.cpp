@@ -4,10 +4,10 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/security/login_shared_func.h>
 #include <ydb/core/security/sasl/base_auth_actors.h>
 #include <ydb/core/security/sasl/events.h>
-#include <ydb/core/security/sasl/static_credentials_provider.h>
 
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
 #include <ydb/library/login/sasl/saslprep.h>
@@ -127,61 +127,7 @@ public:
         }
 
         AuthcId = std::move(prepAuthcId);
-
-        const auto [credsLookupResult, userHashInitParams] = TStaticCredentialsProvider::GetInstance()
-            .GetUserHashInitParams(Database, AuthcId);
-
-        if (credsLookupResult == TStaticCredentialsProvider::UnknownDatabase) {
-            std::string error = "UnknownDatabase";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error
-            );
-            SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
-            return CleanupAndDie(ctx);
-        } else if (credsLookupResult == TStaticCredentialsProvider::UnknownUser) {
-            std::stringstream error;
-            error << "Cannot find user '" << AuthcId << "'";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error.str();
-            );
-            SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
-            return CleanupAndDie(ctx);
-        }
-
-        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
-        // in this case we didn't have any user hashes in scram format
-        if (userHashInitParams.empty()) {
-            std::string error = "SchemeShard works on old version ans doesn't support SASL SCRAM";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
-            SendError(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
-            return CleanupAndDie(ctx);
-        }
-
-        const auto itHashesInitParams = userHashInitParams.find(AuthHashType);
-        if (itHashesInitParams == userHashInitParams.end()) {
-            std::stringstream error;
-            error << "Missing hash value for specified hash type";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error.str();
-            );
-            error << ". Needed password change to use SASL SCRAM";
-            SendError(NKikimrIssues::TIssuesIds::WARNING, error.str());
-            return CleanupAndDie(ctx);
-        }
-
-        const auto scramInitParams = NLogin::ParseScramHashInitParams(itHashesInitParams->second);
-        AddServerNonce();
-
-        const std::string firstServerMsg = BuildFirstServerMsg(Nonce, scramInitParams.Salt, scramInitParams.IterationsCount);
-        ConcatenateAuthMsg(firstServerMsg);
-        SendFirstServerMsg(firstServerMsg);
-        return;
+        ResolveSchemeShard(ctx);
     }
 
     void HandleClientFinalMsg(TEvSasl::TEvSaslScramFinalClientRequest::TPtr& ev, const TActorContext &ctx) {
@@ -260,11 +206,71 @@ public:
 
         ConcatenateAuthMsg(parsedFinalClientMsg.ClientFinalMessageWithoutProof);
         ClientProof = std::move(parsedFinalClientMsg.Proof);
-        ResolveSchemeShard(ctx);
-        return;
+
+        SendLoginRequest();
     }
 
 private:
+    virtual void ProceedWithAuthentication(const TActorContext &ctx,
+        TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
+    {
+        const auto itUser = domainInfo->Users.find(AuthcId);
+        if (itUser == domainInfo->Users.end()) {
+            std::stringstream error;
+            error << "Cannot find user '" << AuthcId << "'";
+            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << "Authentication failed: " << error.str();
+            );
+            SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
+            return CleanupAndDie(ctx);
+        }
+
+        const auto& userHashInitParams = itUser->second;
+
+        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
+        // in this case we didn't have any user hashes in scram format
+        if (userHashInitParams.empty()) {
+            std::string error = "SchemeShard works on old version and doesn't support SASL SCRAM";
+            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << error
+            );
+            SendError(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
+            return CleanupAndDie(ctx);
+        }
+
+        const auto itHashesInitParams = userHashInitParams.find(AuthHashType);
+        if (itHashesInitParams == userHashInitParams.end()) {
+            std::stringstream error;
+            error << "Missing hash value for specified hash type";
+            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << "Authentication failed: " << error.str();
+            );
+            error << ". Needed password change to use SASL SCRAM";
+            SendError(NKikimrIssues::TIssuesIds::WARNING, error.str());
+            return CleanupAndDie(ctx);
+        }
+
+        const auto scramInitParams = NLogin::ParseScramHashInitParams(itHashesInitParams->second);
+        if (scramInitParams.IterationsCount.empty() || scramInitParams.Salt.empty()) {
+            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << "Authentication failed: " <<
+                "'" << AuthcId << "' has broken Scram hash";
+            );
+            SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
+            return CleanupAndDie(ctx);
+        }
+
+        AddServerNonce();
+
+        const std::string firstServerMsg = BuildFirstServerMsg(Nonce, scramInitParams.Salt, scramInitParams.IterationsCount);
+        ConcatenateAuthMsg(firstServerMsg);
+        SendFirstServerMsg(firstServerMsg);
+    }
+
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const override final {
         return CreateScramLoginRequest(TString(AuthcId), AuthHashType, TString(ClientProof), TString(AuthMsg),
                                         TString(PeerName), AppData()->AuthConfig);
@@ -282,9 +288,16 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
-        NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
+        EScramServerError scramErrorCode = EScramServerError::OtherError,
         [[maybe_unused]] const std::string& reason = "") const override final
     {
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        if (securityConfig.GetHideAuthenticationFailureReasons()
+            && (scramErrorCode == EScramServerError::UnknownUser || scramErrorCode == EScramServerError::InvalidProof))
+        {
+            scramErrorCode = EScramServerError::OtherError;
+        }
+
         auto response = std::make_unique<TEvSasl::TEvSaslScramFinalServerResponse>();
         response->Msg = BuildErrorMsg(scramErrorCode);
         response->Issue = MakeIssue(issueCode, TString(message));

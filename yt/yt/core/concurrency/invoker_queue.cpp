@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -35,7 +35,7 @@ void TMpmcQueueImpl::Enqueue(TEnqueuedAction&& action)
 
 void TMpmcQueueImpl::Enqueue(TMutableRange<TEnqueuedAction> actions)
 {
-    if (Y_UNLIKELY(actions.empty())) {
+    if (actions.empty()) [[unlikely]] {
         return;
     }
 
@@ -443,9 +443,9 @@ TEnqueuedAction TInvokerQueue<TQueueImpl>::MakeAction(
     YT_ASSERT(callback);
     YT_ASSERT(profilingTag >= 0 && profilingTag < std::ssize(Counters_));
 
-    YT_LOG_TRACE("Callback enqueued (Callback: %v, ProfilingTag: %v)",
-        callback.GetHandle(),
-        profilingTag);
+    YT_TLOG_TRACE("Callback enqueued")
+        .With("Callback", callback.GetHandle())
+        .With("ProfilingTag", profilingTag);
 
     return {
         .Finished = false,
@@ -468,9 +468,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down, incoming action ignored")
+            .With("Callback", callback.GetHandle());
         return GetCpuInstant();
     }
 
@@ -488,9 +487,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c)
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming action ignored")
+            .With("Callback", callback.GetHandle());
     }
 
     return cpuInstant;
@@ -507,8 +505,7 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down, incoming actions ignored");
         return cpuInstant;
     }
 
@@ -530,8 +527,7 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b')
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c')
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming actions ignored");
         return cpuInstant;
     }
 
@@ -703,10 +699,10 @@ typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::Crea
     counters->CumulativeTimeCounter = profiler.TimeCounter("/time/cumulative");
     counters->TotalTimer = profiler.Timer("/time/total");
 
-    profiler.AddFuncGauge("/enqueued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/enqueued", MakeStrong(this), [counters = counters.get()] {
         return counters->EnqueuedCallbacks.load(std::memory_order::relaxed);
     });
-    profiler.AddFuncGauge("/dequeued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/dequeued", MakeStrong(this), [counters = counters.get()] {
         return counters->DequeuedCallbacks.load(std::memory_order::relaxed);
     });
     profiler.AddFuncGauge("/size", MakeStrong(this), [counters = counters.get()] {

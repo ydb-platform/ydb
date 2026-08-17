@@ -11,9 +11,9 @@
 #include <arrow/datum.h>
 #include <arrow/compute/kernel.h>
 
-extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBlockCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBitmapPopCountCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint8_t GetBitmapScalarValue(NYql::NUdf::TUnboxedValuePod data);
 
 namespace NKikimr::NMiniKQL {
 
@@ -27,12 +27,12 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, uint64_t count, NYql::EDatumValidationMode validationMode = NYql::DefaultDatumValidationMode);
 
 class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
 public:
     TBlockFuncNode(TComputationMutables& mutables,
-                   NYql::NUdf::EValidateDatumMode validateDatumMode,
+                   NYql::EDatumValidationMode validateDatumMode,
                    TStringBuf name,
                    TComputationNodePtrVector&& argsNodes,
                    const TVector<TType*>& argsTypes,
@@ -66,7 +66,7 @@ private:
                const std::vector<arrow::ValueDescr>& argsValuesDescr,
                TComputationContext& ctx)
             : TComputationValue(memInfo)
-            , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
+            , ExecContext(&ctx.ArrowMemoryPool, /*executor=*/nullptr, /*func_registry=*/nullptr)
             , KernelContext(&ExecContext)
         {
             if (kernel.init) {
@@ -86,7 +86,7 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
+    NYql::EDatumValidationMode ValidateDatumMode_ = NYql::EDatumValidationMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
@@ -122,6 +122,46 @@ struct TBlockState: public TComputationValue<TBlockState> {
 
     ui64 Slice();
 
-    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
+    NUdf::TUnboxedValuePod Get(ui64 sliceSize, const THolderFactory& holderFactory, size_t idx) const;
+};
+
+template <typename TStreamValue>
+class TBlockStreamValue: public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+
+public:
+    TBlockStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, size_t width)
+        : TBase(memInfo)
+        , HolderFactory_(holderFactory)
+        , State_(HolderFactory_.Create<TBlockState>(width))
+    {
+    }
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        auto& state = GetState(width);
+        if (!state.Count) {
+            state.ClearValues();
+            if (const auto result = static_cast<TStreamValue*>(this)->DoWideFetch(state.Values.data(), width); result != NUdf::EFetchStatus::Ok) {
+                return result;
+            }
+            state.FillArrays();
+        }
+
+        const auto sliceSize = state.Slice();
+        for (ui32 index = 0; index < width; ++index) {
+            output[index] = state.Get(sliceSize, HolderFactory_, index);
+        }
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    TBlockState& GetState(ui32 width) {
+        auto& state = *static_cast<TBlockState*>(State_.AsBoxed().Get());
+        MKQL_ENSURE(state.Values.size() == width, "The given width doesn't equal to the result type size");
+        return state;
+    }
+
+    const THolderFactory& HolderFactory_;
+    NUdf::TUnboxedValue State_;
 };
 } // namespace NKikimr::NMiniKQL

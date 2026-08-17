@@ -1,6 +1,7 @@
 #include "partition_index_generator.h"
 
 #include <util/generic/mapfindptr.h>
+
 #include <format>
 
 namespace NKikimr::NPQ {

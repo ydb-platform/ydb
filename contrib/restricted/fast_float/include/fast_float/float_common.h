@@ -18,7 +18,7 @@
 
 #define FASTFLOAT_VERSION_MAJOR 8
 #define FASTFLOAT_VERSION_MINOR 2
-#define FASTFLOAT_VERSION_PATCH 3
+#define FASTFLOAT_VERSION_PATCH 10
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -197,6 +197,32 @@ using parse_options = parse_options_t<char>;
 #define fastfloat_really_inline inline __attribute__((always_inline))
 #endif
 
+// Branch-probability hint marking the rare slow-path branches as cold, so the
+// optimizer keeps the out-of-line slow-path re-parse off the hot path (and does
+// not duplicate the force-inlined hot scanner into the caller, which bloated
+// the hot frame and hurt ILP on some targets). Used at the call site as
+//   if fastfloat_unlikely(cond) { ... }
+// (the macro supplies the parentheses). It expands to the standard [[unlikely]]
+// attribute when supported, otherwise to __builtin_expect on GCC/Clang, or
+// to a no-op elsewhere (e.g. pre-C++20 MSVC, which has no equivalent hint).
+#ifdef __has_cpp_attribute
+#if __has_cpp_attribute(unlikely) >= 201803L
+// g++-9 hits hits this branch, but then fails to compile
+// [[unlikely]]. This happens only with g++-9.
+#if !defined(__GNUC__) || (__GNUC__ != 9)
+#define FASTFLOAT_USE_UNLIKELY_ATTR
+#endif
+#endif
+#endif
+
+#ifdef FASTFLOAT_USE_UNLIKELY_ATTR
+#define fastfloat_unlikely(x) (x) [[unlikely]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define fastfloat_unlikely(x) (__builtin_expect(!!(x), 0))
+#else
+#define fastfloat_unlikely(x) (x)
+#endif
+
 #ifndef FASTFLOAT_ASSERT
 #define FASTFLOAT_ASSERT(x)                                                    \
   { ((void)(x)); }
@@ -313,8 +339,6 @@ fastfloat_strncasecmp3(UC const *actual_mixedcase,
       return false;
     }
   }
-
-  return true;
 }
 
 template <typename UC>
@@ -369,8 +393,6 @@ fastfloat_strncasecmp5(UC const *actual_mixedcase,
       return false;
     }
   }
-
-  return true;
 }
 
 // Compares two ASCII strings in a case insensitive manner.
@@ -402,7 +424,7 @@ fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
     size_t sz{8 / (sizeof(UC))};
     for (size_t i = 0; i < length; i += sz) {
       val1 = val2 = 0;
-      sz = std::min(sz, length - i);
+      sz = sz < (length - i) ? sz : length - i;
       ::memcpy(&val1, actual_mixedcase + i, sz * sizeof(UC));
       ::memcpy(&val2, expected_lowercase + i, sz * sizeof(UC));
       val1 |= mask;

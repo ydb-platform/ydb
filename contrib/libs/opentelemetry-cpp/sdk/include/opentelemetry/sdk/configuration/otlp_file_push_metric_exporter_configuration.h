@@ -23,15 +23,19 @@ namespace configuration
 class OtlpFilePushMetricExporterConfiguration : public PushMetricExporterConfiguration
 {
 public:
+  static constexpr TemporalityPreference kDefaultTemporalityPreference =
+      TemporalityPreference::cumulative;
+  static constexpr DefaultHistogramAggregation kDefaultHistogramAggregation =
+      DefaultHistogramAggregation::explicit_bucket_histogram;
+
   void Accept(PushMetricExporterConfigurationVisitor *visitor) const override
   {
     visitor->VisitOtlpFile(this);
   }
 
   std::string output_stream;
-  TemporalityPreference temporality_preference{TemporalityPreference::cumulative};
-  DefaultHistogramAggregation default_histogram_aggregation{
-      DefaultHistogramAggregation::explicit_bucket_histogram};
+  TemporalityPreference temporality_preference{kDefaultTemporalityPreference};
+  DefaultHistogramAggregation default_histogram_aggregation{kDefaultHistogramAggregation};
 };
 
 }  // namespace configuration

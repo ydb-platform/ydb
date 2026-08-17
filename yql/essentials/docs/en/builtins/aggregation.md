@@ -12,6 +12,12 @@ Counting the number of rows in the table (if `*` or constant is specified as the
 
 Like other aggregate functions, it can be combined with [GROUP BY](../syntax/group_by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. Use the modifier [DISTINCT](../syntax/group_by.md#distinct) to count distinct values.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
 #### Examples
 
 ```yql
@@ -32,6 +38,12 @@ Minimum or maximum value.
 
 As an argument, you may use an arbitrary computable expression with a numeric result.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
 #### Examples
 
 ```yql
@@ -46,6 +58,14 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `WidenIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Examples
+
 ```yql
 SELECT SUM(value) FROM my_table;
 ```
@@ -57,6 +77,12 @@ Arithmetic average.
 As an argument, you may use an arbitrary computable expression with a numeric result.
 
 Integer values and time intervals are automatically converted to Double.
+
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<T, Uint64>`
+- **Result**: `T`
 
 #### Examples
 
@@ -71,6 +97,12 @@ Number of rows for which the expression specified as the argument is true (the e
 The value `NULL` is equated to `false` (if the argument type is `Bool?`).
 
 The function *does not* do the implicit type casting to Boolean for strings and numbers.
+
+#### Types
+
+- **Item**: `Bool`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
 
 #### Examples
 
@@ -90,6 +122,20 @@ To count distinct values in rows meeting the condition, unlike other aggregate f
 Sum or arithmetic average, but only for the rows that satisfy the condition passed by the second argument.
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
+
+NB. `WidenStateIntegral(T) = if (T is Interval) then Decimal(35, 0) else WidenIntegral(T)`
+
+#### Types SumIf
+
+- **Item**: `T`
+- **SerializedState**: `WidenStateIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Types AvgIf
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<WidenStateIntegral(T), Uint64>`
+- **Result**: `WidenIntegral(T)`
 
 #### Examples
 
@@ -117,6 +163,12 @@ FROM my_table;
 Get the value for an expression specified as an argument, for one of the table rows. Gives no guarantee of which row is used. It's similar to the [any()](https://clickhouse.tech/docs/en/sql-reference/aggregate-functions/reference/any/) function in ClickHouse.
 
 Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
+
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
 
 #### Examples
 
@@ -147,6 +199,12 @@ By selecting accuracy, you can trade added resource and RAM consumption for decr
 
 All the three functions are aliases at the moment, but `CountDistinctEstimate` may start using a different algorithm in the future.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `Uint64`
+
 #### Examples
 
 ```yql
@@ -174,6 +232,12 @@ The order of elements in the result list depends on the implementation and can't
 To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#aslist) or [AsTuple](basic.md#astuple), then pass this container to a single `AGGREGATE_LIST` call.
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/group_by.md).
+
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `List<T>`
+- **Result**: `List<T>`
 
 #### Examples
 
@@ -225,6 +289,18 @@ If the second argument is always `NULL`, the aggregation result is `NULL`.
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
+#### Types without limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<T1, T2>`
+- **Result**: `T1`
+
+#### Types with limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<List<T1>, T2>`
+- **Result**: `List<T1>`
+
 #### Examples
 
 ```yql
@@ -250,6 +326,12 @@ FROM my_table;
 
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, List<T>>`
+- **Result**: `List<T>`
+
 #### Examples
 
 ```yql
@@ -274,6 +356,12 @@ FROM my_table;
 Return a list of values of the first argument for the rows containing the maximum/minimum values of the second argument. The third argument limits the number of items in the list.
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
+
+#### Types
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<Uint32, List<Tuple<T2, T1>>>`
+- **Result**: `List<T1>`
 
 #### Examples
 
@@ -310,6 +398,12 @@ Optional arguments:
 1. For `TOPFREQ`, the desired number of items in the result. `MODE` is an alias to `TOPFREQ` with this argument set to 1. For `TOPFREQ`, this argument is also 1 by default.
 2. The number of items in the buffer used: lets you trade memory consumption for accuracy. Default: 100.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, Uint32, List<Tuple<Uint64, T>>>`
+- **Result**: `List<Struct<Frequency: Uint64, Value: T>>`
+
 #### Examples
 
 ```yql
@@ -334,6 +428,12 @@ Several abbreviated aliases are also defined, for example, `VARPOP` or `STDDEVSA
 
 If all the values passed are `NULL`, it returns `NULL`.
 
+#### Types
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Double, Double, Double>`
+- **Result**: `Double`
+
 #### Examples
 
 ```yql
@@ -354,6 +454,18 @@ Abbreviated versions are also available: `CORR` or `COVAR`. For covariance, ther
 Unlike most other aggregate functions, they don't skip `NULL`, but accept it as 0.
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing two values is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
+
+#### Types CORRELATION
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Types COVARIANCE
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double>`
+- **Result**: `Double`
 
 #### Examples
 
@@ -384,6 +496,14 @@ The first argument (N) must be a table column name. If you need to bypass this r
 
 {% endnote %}
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `T`, `Tuple<T, ...>`, `Struct<name1: T, ...>` or `List<T>` depending on the second argument
+
+#### Examples
+
 ```yql
 SELECT
     MEDIAN(numeric_column),
@@ -398,6 +518,12 @@ FROM my_table;
 Plotting an approximate histogram based on a numeric expression with automatic selection of buckets.
 
 [Auxiliary functions](../udf/list/histogram.md)
+
+#### Types
+
+- **Item**: `Double`
+- **SerializedState**: `String`
+- **Result**: `HistogramStruct`
 
 ### Basic settings
 
@@ -549,6 +675,12 @@ Examples of such behavior can be found below.
 
 To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR` functions.
 
+#### Types
+
+- **Item**: `Bool`
+- **SerializedState**: `Bool`
+- **Result**: `Bool`
+
 #### Examples
 
 ```yql
@@ -577,6 +709,12 @@ FROM AS_TABLE($data);
 ## BIT_AND, BIT_OR and BIT_XOR {#bit-and-or-xor}
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
+
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
 
 #### Examples
 
@@ -641,6 +779,17 @@ When applied to an empty table with no grouping keys, `RANDOM_SAMPLE` returns an
 
 {% endnote %}
 
+#### Types RANDOM_SAMPLE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `List<T>`
+
+#### Types RANDOM_VALUE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `T`
 
 #### Examples
 

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 -- underlying type is tuple
 declare $x1 as Variant<String, Int64>;
 declare $x2 as Variant<String, Int64>;

@@ -29,8 +29,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAffinityGuard
-    : private TMoveOnly
+class TAffinityGuard: private TMoveOnly
 {
 private:
     struct TImpl;

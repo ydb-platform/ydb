@@ -583,6 +583,10 @@ namespace {
             sink.Add(TRoaringAndNot::Name());
 
             sink.Add(TRoaringRunOptimize::Name());
+            sink.Add(TRoaringAdd::Name());
+            sink.Add(TRoaringIsEmpty::Name());
+            sink.Add(TRoaringIntersect::Name());
+            sink.Add(TRoaringIntersectWithBinary::Name());
         }
 
         void CleanupOnTerminate() const final {

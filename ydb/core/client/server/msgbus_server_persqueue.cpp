@@ -11,6 +11,8 @@
 
 #include <util/generic/is_in.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -175,14 +177,15 @@ void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     if (TopicsToRequest.empty()) {
         throw std::runtime_error("No topics in request");
     }
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeTopicsRequest");
+    YDB_LOG_TRACE_CTX(ctx, "Send to PqMetaCache TEvDescribeTopicsRequest");
     TVector<TString> topicsToRequest;
     topicsToRequest.reserve(TopicsToRequest.size());
     for (const auto& topic : TopicsToRequest) {
         topicsToRequest.push_back(topic);
     }
     bool ret = ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest(topicsToRequest));
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeTopicsRequest Result:" << ret);
+    YDB_LOG_TRACE_CTX(ctx, "Send to PqMetaCache TEvDescribeTopicsRequest",
+        {"result", ret});
 
     if (ListNodes) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -322,7 +325,7 @@ bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::CreateChildren");
+    YDB_LOG_TRACE_CTX(ctx, "TPersQueueBaseRequestProcessor::CreateChildren");
 
     if (ChildrenCreationDone)
         return false;
@@ -354,13 +357,16 @@ TPersQueueBaseRequestProcessor::~TPersQueueBaseRequestProcessor() {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics count = " << ChildrenToCreate.size());
+    YDB_LOG_TRACE_CTX(ctx, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics",
+        {"count", ChildrenToCreate.size()});
 
     Y_ABORT_UNLESS(NeedChildrenCreation);
 
     if (AtomicAdd(Infly, ChildrenToCreate.size()) > MAX_INFLY) {
         AtomicSub(Infly, ChildrenToCreate.size());
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "topics count =" << ChildrenToCreate.size() << " is greater then MAX_INFLY=" << MAX_INFLY);
+        YDB_LOG_DEBUG_CTX(ctx, "Topics count is greater then allowed",
+            {"count", ChildrenToCreate.size()},
+            {"allowed", MAX_INFLY});
         return false;
     }
 
@@ -378,13 +384,15 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         }
 
         if (topics.find(name) != topics.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "already present topic '" << name << "'");
+            YDB_LOG_ERROR_CTX(ctx, "Already present topic",
+                {"name", name});
             SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                                  TStringBuilder() << "already present topic '" << name  << "' Marker# PQ95");
             return true;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "CreateTopicSubactor for topic " << name);
+        YDB_LOG_TRACE_CTX(ctx, "CreateTopicSubactor for topic",
+            {"name", name});
 
         THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
@@ -394,7 +402,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             Children.emplace(actorId, std::move(perTopicInfo));
         }
         else
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "CreateTopicSubactor failed.");
+            YDB_LOG_WARN_CTX(ctx, "CreateTopicSubactor failed");
     }
     Y_ABORT_UNLESS(topics.size() == Children.size());
 
@@ -480,7 +488,9 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     default:
-        ALOG_WARN(NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+        YDB_LOG_WARN("Unexpected event",
+            {"type", ev->GetTypeRewrite()},
+            {"ev", ev->ToString()});
     }
 }
 
@@ -928,7 +938,7 @@ public:
     }
 
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got HasDatainfoResponse");
+        YDB_LOG_DEBUG_CTX(ctx, "Got HasDatainfoResponse");
         ProceedFetchRequest(ctx);
     }
 
@@ -1146,7 +1156,8 @@ public:
                         ProceedFetchRequest(ctx);
                     } else {
                         const auto& tabletInfo = TabletInfo[tabletId];
-                        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "sending HasDataInfoResponse " << it->second.FetchInfo[part]->Record);
+                        YDB_LOG_DEBUG_CTX(ctx, "Sending HasDataInfoResponse",
+                            {"response", it->second.FetchInfo[part]->Record});
 
                         NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
                         ++PartTabletsRequested;
@@ -1313,8 +1324,10 @@ public:
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
-                                << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
+            YDB_LOG_ERROR_CTX(ctx, "Proxy fetch error: got response from tablet while waiting from and requested tablet is",
+                {"responseTablet", record.GetPartitionResponse().GetCookie()},
+                {"waitingFrom", CurrentCookie},
+                {"requestedTablet", FetchRequestCurrentReadTablet});
             return;
         }
 
@@ -1362,14 +1375,18 @@ public:
 
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId << " IsMetaRequest " << IsMetaRequest << " IsFetchRequest " << IsFetchRequest);
+        YDB_LOG_INFO_CTX(ctx, "Proxy got request IsMetaRequest IsFetchRequest",
+            {"requestId", RequestId},
+            {"isMetaRequest", IsMetaRequest},
+            {"isFetchRequest", IsFetchRequest});
 
         // handle error from constructor
         if (!!ErrorReason) {
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::BAD_REQUEST, ctx), ctx);
         }
         if (IsFetchRequest) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "scheduling HasDataInfoResponse in " << RequestProto.GetFetchRequest().GetWaitMs());
+            YDB_LOG_DEBUG_CTX(ctx, "Scheduling HasDataInfoResponse",
+                {"waitMs", RequestProto.GetFetchRequest().GetWaitMs()});
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
         Y_ABORT_UNLESS(!TopicInfo.empty());
@@ -1521,7 +1538,8 @@ public:
     void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override {
         THolder<TBusResponse> result(new TBusResponse());
         result->Record.Swap(&record);
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy answer " << TImplActor::RequestId);
+        YDB_LOG_INFO_CTX(ctx, "Proxy answer",
+            {"requestId", TImplActor::RequestId});
 
         SendReplyMove(result.Release());
 

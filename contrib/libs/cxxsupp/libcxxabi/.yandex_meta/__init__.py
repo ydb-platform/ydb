@@ -6,6 +6,7 @@ from devtools.yamaker.project import NixSourceProject
 
 EXCEPTION_ONLY_SRCS = ["src/cxa_exception.cpp", "src/cxa_personality.cpp"]
 NOEXCEPT_ONLY_SRCS = ["src/cxa_noexception.cpp"]
+RTTI_ONLY_SRCS = ["src/private_typeinfo.cpp"]
 
 
 def post_install(self):
@@ -60,6 +61,19 @@ def post_install(self):
                 {
                     "NO_CXX_EXCEPTIONS": Linkable(SRCS=NOEXCEPT_ONLY_SRCS),
                     "default": Linkable(SRCS=EXCEPTION_ONLY_SRCS),
+                }
+            ),
+        )
+
+        for src in RTTI_ONLY_SRCS:
+            libcxxabi.SRCS.remove(src)
+
+        libcxxabi.after(
+            "SRCS",
+            Switch(
+                {
+                    "NO_CXX_RTTI": Linkable(BUILD_ONLY_IF="NO_CXX_EXCEPTIONS"),
+                    "default": Linkable(SRCS=RTTI_ONLY_SRCS),
                 }
             ),
         )

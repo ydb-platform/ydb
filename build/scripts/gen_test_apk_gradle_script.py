@@ -67,8 +67,8 @@ android {{
 
     {keystore}
 
-    compileSdkVersion 35
-    buildToolsVersion "35.0.0"
+    compileSdkVersion 36
+    buildToolsVersion "36.0.0"
 
     compileOptions {{
         sourceCompatibility JavaVersion.VERSION_21
@@ -77,7 +77,7 @@ android {{
 
     defaultConfig {{
         minSdkVersion 26
-        targetSdkVersion 35
+        targetSdkVersion 36
         applicationId "{app_id}"
     }}
 
@@ -187,11 +187,9 @@ if __name__ == '__main__':
         f.write(content)
 
     with open(args.gradle_properties, 'w') as f:
-        f.write(
-            '''android.enableJetifier=true
+        f.write('''android.enableJetifier=true
         android.useAndroidX=true
-        org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=512m'''
-        )
+        org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=512m''')
 
     if args.bundle_name:
         with open(args.settings_gradle, 'w') as f:

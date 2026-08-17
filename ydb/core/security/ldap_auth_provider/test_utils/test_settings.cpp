@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/auth.grpc.pb.h>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 TCertStorage::TCertStorage()
     : CaCertAndKey(GenerateCA(TProps::AsCA()))
@@ -133,4 +133,4 @@ void InitLdapSettingsWithSaslExternalBind(NKikimrProto::TLdapAuthentication* lda
     ldapSettings->MutableExtendedSettings()->SetEnableSaslExternalBind(true);
 }
 
-} // NKikimr
+} // NKikimr::NCertTestUtils

@@ -22,7 +22,8 @@ public:
         THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions, const TString& info)
         : TBase(self, info)
         , Session(session)
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 
     TTxType GetTxType() const override {

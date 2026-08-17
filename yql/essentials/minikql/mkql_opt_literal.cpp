@@ -79,7 +79,7 @@ TRuntimeNode OptimizeIf(TCallable& callable, const TTypeEnvironment& env) {
         return thenInput;
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
@@ -91,12 +91,12 @@ TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
             auto slot = *AS_TYPE(TDataType, dataInput.GetStaticType())->GetDataSlot();
             if (NYql::NUdf::GetDataTypeInfo(slot).Features & NYql::NUdf::EDataTypeFeatures::StringType) {
                 TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput);
-                return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true);
+                return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true);
             }
         }
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeLength(TCallable& callable, const TTypeEnvironment& env) {
@@ -106,11 +106,11 @@ TRuntimeNode OptimizeLength(TCallable& callable, const TTypeEnvironment& env) {
     if (listOrDictInput.HasValue()) {
         if (listOrDictInput.GetStaticType()->IsList()) {
             TListLiteral* value = AS_VALUE(TListLiteral, listOrDictInput);
-            return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)value->GetItemsCount()), NUdf::EDataSlot::Uint64, env), true);
+            return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)value->GetItemsCount()), NUdf::EDataSlot::Uint64, env), /*isImmediate=*/true);
         }
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeAddMember(TCallable& callable, const TTypeEnvironment& env) {
@@ -123,10 +123,10 @@ TRuntimeNode OptimizeAddMember(TCallable& callable, const TTypeEnvironment& env)
     auto structInput = callable.GetInput(0);
     if (structInput.HasValue()) {
         TStructLiteral* value = AS_VALUE(TStructLiteral, structInput);
-        return TRuntimeNode(LiteralAddMember(*value, newType, callable.GetInput(1), callable.GetInput(2), env), true);
+        return TRuntimeNode(LiteralAddMember(*value, newType, callable.GetInput(1), callable.GetInput(2), env), /*isImmediate=*/true);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeRemoveMember(TCallable& callable, const TTypeEnvironment& env) {
@@ -137,10 +137,10 @@ TRuntimeNode OptimizeRemoveMember(TCallable& callable, const TTypeEnvironment& e
     auto structInput = callable.GetInput(0);
     if (structInput.HasValue()) {
         TStructLiteral* value = AS_VALUE(TStructLiteral, structInput);
-        return TRuntimeNode(LiteralRemoveMember(*value, callable.GetInput(1), env), true);
+        return TRuntimeNode(LiteralRemoveMember(*value, callable.GetInput(1), env), /*isImmediate=*/true);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
@@ -159,14 +159,14 @@ TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
         return value->GetValue(positionValue);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeFilter(TCallable& callable, const TTypeEnvironment& env) {
     if (callable.GetInputsCount() == 3U) {
         auto listInput = callable.GetInput(0);
         if (!listInput.GetStaticType()->IsList()) {
-            return TRuntimeNode(&callable, false);
+            return TRuntimeNode(&callable, /*isImmediate=*/false);
         }
 
         auto listType = static_cast<TListType*>(listInput.GetStaticType());
@@ -180,12 +180,12 @@ TRuntimeNode OptimizeFilter(TCallable& callable, const TTypeEnvironment& env) {
             if (predicateValue) {
                 return listInput;
             } else {
-                return TRuntimeNode(TListLiteral::Create(nullptr, 0, listType, env), true);
+                return TRuntimeNode(TListLiteral::Create(/*items=*/nullptr, 0, listType, env), /*isImmediate=*/true);
             }
         }
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
@@ -193,16 +193,16 @@ TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
 
     auto returnType = callable.GetType()->GetReturnType();
     if (!returnType->IsList()) {
-        return TRuntimeNode(&callable, false);
+        return TRuntimeNode(&callable, /*isImmediate=*/false);
     }
 
     auto listType = static_cast<TListType*>(returnType);
     auto newItemInput = callable.GetInput(2);
     if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
-        return TRuntimeNode(env.GetListOfVoidLazy(), true);
+        return TRuntimeNode(env.GetListOfVoidLazy(), /*isImmediate=*/true);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
@@ -210,7 +210,7 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
 
     const auto returnType = callable.GetType()->GetReturnType();
     if (!returnType->IsList() || callable.GetInputsCount() > 3U) {
-        return TRuntimeNode(&callable, false);
+        return TRuntimeNode(&callable, /*isImmediate=*/false);
     }
 
     const auto listType = static_cast<TListType*>(returnType);
@@ -219,17 +219,17 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
         if (newItemInput.GetStaticType()->IsList()) {
             TListLiteral* list = AS_VALUE(TListLiteral, newItemInput);
             if (list->GetItemsCount() == 0) {
-                return TRuntimeNode(env.GetListOfVoidLazy(), true);
+                return TRuntimeNode(env.GetListOfVoidLazy(), /*isImmediate=*/true);
             }
         } else {
             TOptionalLiteral* opt = AS_VALUE(TOptionalLiteral, newItemInput);
             if (!opt->HasItem()) {
-                return TRuntimeNode(env.GetListOfVoidLazy(), true);
+                return TRuntimeNode(env.GetListOfVoidLazy(), /*isImmediate=*/true);
             }
         }
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) {
@@ -247,7 +247,7 @@ TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) 
         }
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeExists(TCallable& callable, const TTypeEnvironment& env) {
@@ -256,10 +256,10 @@ TRuntimeNode OptimizeExists(TCallable& callable, const TTypeEnvironment& env) {
     auto optionalInput = callable.GetInput(0);
     if (optionalInput.HasValue()) {
         const bool has = AS_VALUE(TOptionalLiteral, optionalInput)->HasItem();
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(has), NUdf::EDataSlot::Bool, env), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(has), NUdf::EDataSlot::Bool, env), /*isImmediate=*/true);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
@@ -277,18 +277,18 @@ TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
         return value.GetValue(index);
     }
 
-    return TRuntimeNode(&callable, false);
+    return TRuntimeNode(&callable, /*isImmediate=*/false);
 }
 
 TRuntimeNode OptimizeExtend(TCallable& callable, const TTypeEnvironment& env) {
     auto returnType = callable.GetType()->GetReturnType();
     if (!returnType->IsList()) {
-        return TRuntimeNode(&callable, false);
+        return TRuntimeNode(&callable, /*isImmediate=*/false);
     }
 
     auto itemType = static_cast<TListType*>(returnType)->GetItemType();
     if (!itemType->IsVoid()) {
-        return TRuntimeNode(&callable, false);
+        return TRuntimeNode(&callable, /*isImmediate=*/false);
     }
 
     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
@@ -299,16 +299,16 @@ TRuntimeNode OptimizeExtend(TCallable& callable, const TTypeEnvironment& env) {
         MKQL_ENSURE(static_cast<TListType*>(seqType)->GetItemType()->IsVoid(), "Expected list of void");
 
         if (!seq.HasValue()) {
-            return TRuntimeNode(&callable, false);
+            return TRuntimeNode(&callable, /*isImmediate=*/false);
         }
 
         TListLiteral* listValue = AS_VALUE(TListLiteral, seq);
         if (listValue->GetItemsCount() != 0) {
-            return TRuntimeNode(&callable, false);
+            return TRuntimeNode(&callable, /*isImmediate=*/false);
         }
     }
 
-    return TRuntimeNode(env.GetListOfVoidLazy(), true);
+    return TRuntimeNode(env.GetListOfVoidLazy(), /*isImmediate=*/true);
 }
 
 struct TOptimizationFuncMapFiller {

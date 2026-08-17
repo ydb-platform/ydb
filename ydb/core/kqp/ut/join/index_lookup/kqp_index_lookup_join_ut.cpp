@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
@@ -200,32 +201,20 @@ void PrepareTables(TSession session) {
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 }
 
-void ValidateStats(const auto& result, bool isIdxLookupJoinEnabled, size_t rightTableReads,  size_t leftTableReads = 7) {
+void ValidateStats(const auto& result, size_t rightTableReads,  size_t leftTableReads = 7) {
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    if (isIdxLookupJoinEnabled) {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-        for (const auto& tableStat : stats.query_phases(0).table_access()) {
-            if (tableStat.name() == "/Root/Left") {
-                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), leftTableReads);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
-                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
-            }
+    for (const auto& tableStat : stats.query_phases(0).table_access()) {
+        if (tableStat.name() == "/Root/Left") {
+            UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), leftTableReads);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
+            UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
         }
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Right");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), rightTableReads);
     }
 }
 
@@ -233,10 +222,8 @@ class TTester {
 public:
     TString Query;
     TString Answer;
-    bool StreamLookup;
     size_t RightTableReads = 0;
     size_t LeftTableReads = 7;
-    bool DqReplicate = false;
     bool DoValidateStats = true;
     bool OnlineReadOnly = false;
     NYdb::TParamsBuilder ParamsBuilder;
@@ -244,7 +231,6 @@ public:
 
     TTester& Run() {
         auto settings = TKikimrSettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -271,9 +257,7 @@ public:
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
             Cerr << result.GetStats()->GetAst() << Endl;
             if (DoValidateStats) {
-                ValidateStats(
-                    result, settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin(),
-                    DqReplicate ? RightTableReads / 2 : RightTableReads, DqReplicate ? LeftTableReads / 2: LeftTableReads);
+                ValidateStats(result, RightTableReads, LeftTableReads);
             }
             CompareYson(Answer, ysonResult);
         }
@@ -286,7 +270,7 @@ public:
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
             Cerr << result.GetStats()->GetAst() << Endl;
             if (DoValidateStats) {
-                ValidateStats(result, settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin(), RightTableReads, LeftTableReads);
+                ValidateStats(result, RightTableReads, LeftTableReads);
             }
 
             CompareYson(Answer, ysonResult);
@@ -296,13 +280,13 @@ public:
     }
 };
 
-void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false, size_t leftTableReads = 7, bool dqReplicate = false) {
-    TTester{.Query=query, .Answer=answer, .StreamLookup=useStreamLookup, .RightTableReads=rightTableReads, .LeftTableReads=leftTableReads, .DqReplicate=dqReplicate}.Run();
+void Test(const TString& query, const TString& answer, size_t rightTableReads, size_t leftTableReads = 7) {
+    TTester{.Query=query, .Answer=answer, .RightTableReads=rightTableReads, .LeftTableReads=leftTableReads}.Run();
 }
 
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
-Y_UNIT_TEST_TWIN(MultiJoins, StreamLookup) {
+Y_UNIT_TEST(MultiJoins) {
     auto tester = TTester{
         .Query=R"(
             SELECT main.idx_processId AS `processId`, main.idx_launchNumber AS `launchNumber`
@@ -328,13 +312,12 @@ Y_UNIT_TEST_TWIN(MultiJoins, StreamLookup) {
             [["eProcess"];[5]]
         ])"};
 
-    tester.StreamLookup = StreamLookup;
     tester.DoValidateStats = false;
     tester.OnlineReadOnly = true;
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(Inner, StreamLookup) {
+Y_UNIT_TEST(Inner) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -346,10 +329,10 @@ Y_UNIT_TEST_TWIN(Inner, StreamLookup) {
         )",
         R"([
             [[1];[101];["Value1"];[101];["Value21"]]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
-Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
+Y_UNIT_TEST(JoinWithSubquery) {
     auto tester = TTester{
         .Query=R"(
         $join = (SELECT l.Key AS lKey, l.Value AS lValue, r.Value AS rValue
@@ -368,12 +351,11 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
             [["Value2"]]
         ])"};
 
-    tester.StreamLookup = StreamLookup;
     tester.DoValidateStats = false;
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(Left, StreamLookup) {
+Y_UNIT_TEST(Left) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -389,10 +371,10 @@ Y_UNIT_TEST_TWIN(Left, StreamLookup) {
             [[5];[105];["Value3"];#;#];
             [[6];#;["Value6"];#;#];
             [[7];#;["Value7"];#;#]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
-Y_UNIT_TEST_TWIN(LeftOnly, StreamLookup) {
+Y_UNIT_TEST(LeftOnly) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
@@ -406,10 +388,10 @@ Y_UNIT_TEST_TWIN(LeftOnly, StreamLookup) {
             [[5];[105];["Value3"]];
             [[6];#;["Value6"]];
             [[7];#;["Value7"]]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
-Y_UNIT_TEST_TWIN(LeftSemi, StreamLookup) {
+Y_UNIT_TEST(LeftSemi) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
@@ -422,10 +404,10 @@ Y_UNIT_TEST_TWIN(LeftSemi, StreamLookup) {
         R"([
             [[3];[103];["Value2"]];
             [[4];[104];["Value2"]]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
-Y_UNIT_TEST_TWIN(RightSemi, StreamLookup) {
+Y_UNIT_TEST(RightSemi) {
     Test(
         R"(
             SELECT r.Key, r.Value
@@ -438,10 +420,10 @@ Y_UNIT_TEST_TWIN(RightSemi, StreamLookup) {
         R"([
             [[101];["Value21"]];
             [[103];["Value23"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
+Y_UNIT_TEST(SimpleInnerJoin) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -455,10 +437,10 @@ Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
             [[2];[102];["Value1"];[102];["Value22"]];
             [[3];[103];["Value2"];[103];["Value23"]];
             [[4];[104];["Value2"];[104];#]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(InnerJoinCustomColumnOrder, StreamLookup) {
+Y_UNIT_TEST(InnerJoinCustomColumnOrder) {
     Test(
         R"(
             SELECT r.Value, l.Key, r.Key, l.Value, l.Fk
@@ -472,10 +454,10 @@ Y_UNIT_TEST_TWIN(InnerJoinCustomColumnOrder, StreamLookup) {
             [["Value22"];[2];[102];["Value1"];[102]];
             [["Value23"];[3];[103];["Value2"];[103]];
             [#;[4];[104];["Value2"];[104]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(InnerJoinOnlyRightColumn, StreamLookup) {
+Y_UNIT_TEST(InnerJoinOnlyRightColumn) {
     Test(
         R"(
             SELECT r.Value
@@ -489,10 +471,10 @@ Y_UNIT_TEST_TWIN(InnerJoinOnlyRightColumn, StreamLookup) {
             [["Value21"]];
             [["Value22"]];
             [["Value23"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(InnerJoinOnlyLeftColumn, StreamLookup) {
+Y_UNIT_TEST(InnerJoinOnlyLeftColumn) {
     Test(
         R"(
             SELECT l.Fk
@@ -506,10 +488,10 @@ Y_UNIT_TEST_TWIN(InnerJoinOnlyLeftColumn, StreamLookup) {
             [[102]];
             [[103]];
             [[104]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(InnerJoinLeftFilter, StreamLookup) {
+Y_UNIT_TEST(InnerJoinLeftFilter) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -522,10 +504,10 @@ Y_UNIT_TEST_TWIN(InnerJoinLeftFilter, StreamLookup) {
         R"([
             [[3];[103];["Value2"];[103];["Value23"]];
             [[4];[104];["Value2"];[104];#]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
-Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
+Y_UNIT_TEST(SimpleLeftJoin) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -542,10 +524,10 @@ Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
             [[5];[105];["Value3"];#;#];
             [[6];#;["Value6"];#;#];
             [[7];#;["Value7"];#;#]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
+Y_UNIT_TEST(LeftJoinCustomColumnOrder) {
     Test(
         R"(
             SELECT r.Value, l.Key, r.Key, l.Value, l.Fk
@@ -562,10 +544,10 @@ Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
             [#;[5];#;["Value3"];[105]];
             [#;[6];#;["Value6"];#];
             [#;[7];#;["Value7"];#]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
+Y_UNIT_TEST(LeftJoinOnlyRightColumn) {
     Test(
         R"(
             SELECT r.Value
@@ -582,10 +564,10 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
             [["Value21"]];
             [["Value22"]];
             [["Value23"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
+Y_UNIT_TEST(LeftJoinOnlyLeftColumn) {
     Test(
         R"(
             SELECT l.Fk
@@ -602,10 +584,10 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
             [[103]];
             [[104]];
             [[105]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(SimpleLeftOnlyJoin, StreamLookup) {
+Y_UNIT_TEST(SimpleLeftOnlyJoin) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
@@ -618,10 +600,10 @@ Y_UNIT_TEST_TWIN(SimpleLeftOnlyJoin, StreamLookup) {
             [[5];[105];["Value3"]];
             [[6];#;["Value6"]];
             [[7];#;["Value7"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
+Y_UNIT_TEST(LeftOnlyJoinValueColumn) {
     Test(
         R"(
             SELECT l.Value
@@ -634,10 +616,10 @@ Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
             [["Value3"]];
             [["Value6"]];
             [["Value7"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
+Y_UNIT_TEST(LeftJoinRightNullFilter) {
     Test(
         R"(
             SELECT l.Value, r.Value
@@ -652,10 +634,10 @@ Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 8, StreamLookup, 14, /* dqReplicate */ true);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
+Y_UNIT_TEST(LeftJoinSkipNullFilter) {
     Test(
         R"(
             SELECT l.Value, r.Value
@@ -669,10 +651,10 @@ Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
             [["Value1"];["Value21"]];
             [["Value1"];["Value22"]];
             [["Value2"];["Value23"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(SimpleLeftSemiJoin, StreamLookup) {
+Y_UNIT_TEST(SimpleLeftSemiJoin) {
     Test(
         R"(
             SELECT l.Value
@@ -686,10 +668,10 @@ Y_UNIT_TEST_TWIN(SimpleLeftSemiJoin, StreamLookup) {
             [["Value1"]];
             [["Value2"]];
             [["Value2"]]
-        ])", 4, StreamLookup);
+        ])", 4);
 }
 
-Y_UNIT_TEST_TWIN(LeftSemiJoinWithLeftFilter, StreamLookup) {
+Y_UNIT_TEST(LeftSemiJoinWithLeftFilter) {
     Test(
         R"(
             SELECT l.Value
@@ -702,7 +684,7 @@ Y_UNIT_TEST_TWIN(LeftSemiJoinWithLeftFilter, StreamLookup) {
         R"([
             [["Value2"]];
             [["Value2"]]
-        ])", 2, StreamLookup);
+        ])", 2);
 }
 
 void CreateSimpleTableWithKeyType(TSession session, const TString& tableName, const TString& columnType) {
@@ -770,11 +752,7 @@ void TestKeyCastForAllJoinTypes(TSession session, const TString& leftTable, cons
             return;
         }
 
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 }
 
@@ -839,7 +817,7 @@ Y_UNIT_TEST(CheckAllKeyTypesCast) {
     }
 }
 
-void TestKeyCast(const TKikimrSettings& settings, TSession session, const TString& joinType, const TString& leftTable, const TString& rightTable,
+void TestKeyCast(TSession session, const TString& joinType, const TString& leftTable, const TString& rightTable,
         TString answer, size_t rightTableReads) {
     TExecDataQuerySettings execSettings;
     execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
@@ -847,21 +825,18 @@ void TestKeyCast(const TKikimrSettings& settings, TSession session, const TStrin
     const TString query = GetQuery(joinType, leftTable, rightTable);
     auto result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
 
-    ui32 index = settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1;
-
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    for (const auto& tableStats : stats.query_phases(index).table_access()) {
+    for (const auto& tableStats : stats.query_phases(0).table_access()) {
         if (tableStats.name() == rightTable) {
             UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), rightTableReads);
         }
     }
 }
 
-Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
+Y_UNIT_TEST_TWIN(CheckCastInt32ToInt16, NotNull) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -894,12 +869,11 @@ Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
         [[1];["Value11"];[1];["Value21"]]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
+    TestKeyCast(session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
 }
 
-Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
+Y_UNIT_TEST_TWIN(CheckCastUint32ToUint16, NotNull) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -932,12 +906,11 @@ Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
         [[4294967295u];["Value12"];#;#]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
+    TestKeyCast(session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
 }
 
-Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
+Y_UNIT_TEST_TWIN(CheckCastUint64ToInt64, NotNull) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -972,12 +945,11 @@ Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
         [[18446744073709551615u];["Value11"];#;#]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
+    TestKeyCast(session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
 }
 
-Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
+Y_UNIT_TEST_TWIN(CheckCastInt64ToUint64, NotNull) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1010,12 +982,11 @@ Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
         [[1];["Value11"];[1u];["Value22"]]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
+    TestKeyCast(session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
 }
 
-Y_UNIT_TEST_QUAD(CheckCastUtf8ToString, StreamLookupJoin, NotNull) {
+Y_UNIT_TEST_TWIN(CheckCastUtf8ToString, NotNull) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1048,12 +1019,11 @@ Y_UNIT_TEST_QUAD(CheckCastUtf8ToString, StreamLookupJoin, NotNull) {
         [["six"];["Value11"];["six"];["Value21"]]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
+    TestKeyCast(session, "LEFT", leftKeyColumnType, rightTableName, answer, 1);
 }
 
-Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
+Y_UNIT_TEST(JoinByComplexKeyWithNullComponents) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1108,9 +1078,8 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
             [[1];["one"];["value1"];[1];["one"];["value1"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+        for (const auto& tableStats : stats.query_phases(0).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
@@ -1119,7 +1088,7 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
 }
 
 
-Y_UNIT_TEST_TWIN(LeftJoinOnRightTableOverIndex, StreamLookupJoin) {
+Y_UNIT_TEST(LeftJoinOnRightTableOverIndex) {
     auto tester = TTester{
         .Query=R"(
             SELECT x.a, x.b, y.a, y.b, y.c
@@ -1131,7 +1100,6 @@ Y_UNIT_TEST_TWIN(LeftJoinOnRightTableOverIndex, StreamLookupJoin) {
             [[3];[2];[3];[2];[5]];
             [[3];[3];[3];[3];[6]]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
@@ -1146,9 +1114,24 @@ Y_UNIT_TEST(StreamLookupJoin_RowSeqNoCollision_Repro) {
     // - stream index lookup join enabled (cookie-based sequencing)
     // - many DQ tasks (>= 17) producing overlapping RowSeqNo after Encode/Decode truncation
     // - LEFT join over a non-unique index producing multi-row sequences per left row
-    TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+    // Force the stream lookup actor to flush results in tiny fetches so that the
+    // First/middle/Last markers of different left-row sequences interleave heavily.
+    // This is what surfaces the RowSeqNo cookie collision as the crash in
+    // OmitRowLeftJoin (kqp_compute.cpp): Y_ENSURE(it != state.AllRowsAreNull.end()).
+    // The backoff settings are a process-global singleton, so restore the defaults
+    // when the test finishes to avoid leaking the tiny-fetch setting into other tests.
+    {
+        auto backoff = MakeIntrusive<TIteratorReadBackoffSettings>();
+        backoff->MaxRowsProcessingStreamLookup = 1;
+        SetReadIteratorBackoffSettings(backoff);
+    }
+    Y_DEFER {
+        SetReadIteratorBackoffSettings(MakeIntrusive<TIteratorReadBackoffSettings>());
+    };
 
+    TKikimrSettings settings;
+    // Enable the fixed (v1) cookie format so RowSeqNo no longer overflows for taskId >= 16.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamLookupJoinCookieV2(true);
     TKikimrRunner kikimr(settings);
     auto tableClient = kikimr.GetTableClient();
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -1313,7 +1296,7 @@ Y_UNIT_TEST(StreamLookupJoin_RowSeqNoCollision_Repro) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestEntityFramework, StreamLookupJoin) {
+Y_UNIT_TEST(TestEntityFramework) {
     auto tester = TTester{
         .Query=R"(
             SELECT
@@ -1355,13 +1338,12 @@ Y_UNIT_TEST_TWIN(TestEntityFramework, StreamLookupJoin) {
         )",
         .Answer=R"([
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(JoinLeftJoinPostJoinFilterTest, StreamLookupJoin) {
+Y_UNIT_TEST(JoinLeftJoinPostJoinFilterTest) {
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, B.a, B.b from A
@@ -1372,13 +1354,12 @@ Y_UNIT_TEST_TWIN(JoinLeftJoinPostJoinFilterTest, StreamLookupJoin) {
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(JoinInclusionTestSemiJoin, StreamLookupJoin) {
+Y_UNIT_TEST(JoinInclusionTestSemiJoin) {
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, from A
@@ -1389,13 +1370,12 @@ Y_UNIT_TEST_TWIN(JoinInclusionTestSemiJoin, StreamLookupJoin) {
         .Answer=R"([
             [[1];[2]];[[2];[2]];[[3];[2]];[[4];[2]]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditions, StreamLookupJoin) {
+Y_UNIT_TEST(LeftJoinNonPkJoinConditions) {
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, C.a, C.b from A
@@ -1406,13 +1386,12 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditions, StreamLookupJoin) {
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];[2];[2]];[[3];[2];#;#];[[4];[2];[4];[2]]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
+Y_UNIT_TEST(LeftJoinPointPredicateAndJoinAfterThat) {
     auto tester = TTester{
         .Query=R"(
            	DECLARE $idx_a AS List<String>;
@@ -1443,7 +1422,6 @@ Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
         .Answer=R"([
             [[root_1];[2]]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
 
@@ -1455,7 +1433,7 @@ Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
 }
 
 
-Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
+Y_UNIT_TEST(LeftJoinNonPkJoinConditionsWithCast) {
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, D.a, D.b from A
@@ -1466,7 +1444,6 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];[2];[2]];[[3];[2];#;#];[[4];[2];[4];[2]]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
@@ -1474,7 +1451,7 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
 
 
 
-Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
+Y_UNIT_TEST(JoinInclusionTest) {
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, B.a, B.b from A
@@ -1485,13 +1462,12 @@ Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]
         ])",
-        .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
     };
     tester.Run();
 }
 
-Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
+Y_UNIT_TEST(JoinWithComplexCondition) {
    TString stats = R"(
         {"/Root/Left":{"n_rows":3}, "/Root/Right":{"n_rows":3}}
     )";
@@ -1504,7 +1480,6 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     settings.push_back(setting);
 
     TKikimrSettings serverSettings;
-    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     serverSettings.SetKqpSettings(settings);
 
     TKikimrRunner kikimr(serverSettings);
@@ -1566,9 +1541,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[1];[1];[1];[1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+        for (const auto& tableStats : stats.query_phases(0).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
@@ -1596,9 +1570,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[20];#]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+        for (const auto& tableStats : stats.query_phases(0).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
@@ -1625,9 +1598,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+        for (const auto& tableStats : stats.query_phases(0).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
@@ -1656,9 +1628,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+        for (const auto& tableStats : stats.query_phases(0).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
@@ -1666,9 +1637,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     }
 }
 
-Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
+Y_UNIT_TEST(LeftSemiJoinWithDuplicatesInRightTable) {
     TKikimrSettings settings;
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1724,6 +1694,288 @@ Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
             [[2];[20];["value2"]];
             [[3];[30];["value3"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+
+Y_UNIT_TEST(CrossJoinWithMultipleLeftJoinsAndIndexViews) {
+    TKikimrSettings settings;
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Requests` (
+                subscriber Utf8,
+                fld_01 Utf8,
+                fld_02 Bool,
+                fld_03 Utf8,
+                fld_04 Utf8,
+                category Utf8,
+                fld_05 Utf8,
+                fld_06 Bool,
+                ref Utf8,
+                ref_type Utf8,
+                fld_07 Timestamp,
+                fld_08 Utf8,
+                fld_09 Utf8,
+                fld_10 Utf8,
+                fld_11 Utf8,
+                fld_12 Timestamp,
+                send_ts Timestamp,
+                fld_13 Utf8,
+                fld_14 Utf8,
+                fld_15 Utf8,
+                fld_16 Int32,
+                fld_17 Timestamp,
+                fld_18 Utf8,
+                fld_19 Bool,
+                fld_20 Int64,
+                fld_21 Timestamp,
+                fld_22 Utf8,
+                fld_23 Utf8,
+                id Utf8 NOT NULL,
+                fld_24 Int32,
+                fld_25 Utf8,
+                fld_26 Utf8,
+                fld_27 Utf8,
+                INDEX ix_requests_ts_category GLOBAL SYNC
+                    ON (send_ts, category)
+                    COVER (subscriber, ref_type, ref),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Mappings` (
+                subscriber Utf8,
+                cancelled Bool,
+                fld_01 Utf8,
+                fld_02 Bool,
+                category Utf8,
+                ext_ref Utf8,
+                fld_03 Bool,
+                ref Utf8,
+                fld_04 Bool,
+                fld_05 Utf8,
+                fld_06 Utf8,
+                fld_07 Utf8,
+                fld_08 Timestamp,
+                fld_09 Utf8,
+                fld_10 Bool,
+                fld_11 Int64,
+                fld_12 Timestamp,
+                fld_13 Utf8,
+                fld_14 Utf8,
+                id Utf8 NOT NULL,
+                INDEX ix_mappings_ref_subscriber_category GLOBAL SYNC
+                    ON (ref, subscriber, category)
+                    COVER (cancelled, ext_ref),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Documents` (
+                fld_01 Utf8,
+                fld_02 Utf8,
+                fld_03 Decimal(22, 9),
+                fld_04 Decimal(22, 9),
+                fld_05 Decimal(22, 9),
+                fld_06 Utf8,
+                fld_07 Utf8,
+                fld_08 Timestamp,
+                fld_09 Timestamp,
+                fld_10 Timestamp,
+                fld_11 Timestamp,
+                fld_12 Timestamp,
+                fld_13 Utf8,
+                fld_14 Timestamp,
+                fld_15 Utf8,
+                fld_16 Timestamp,
+                fld_17 Utf8,
+                fld_18 Utf8,
+                fld_19 Utf8,
+                fld_20 Bool,
+                fld_21 Utf8,
+                fld_22 Utf8,
+                fld_23 Utf8,
+                fld_24 Utf8,
+                fld_25 Utf8,
+                fld_26 Utf8,
+                fld_27 Bool,
+                fld_28 Int32,
+                fld_29 Utf8,
+                fld_30 Utf8,
+                fld_31 Utf8,
+                fld_32 Utf8,
+                fld_33 Utf8,
+                fld_34 Utf8,
+                fld_35 Utf8,
+                fld_36 Int32,
+                fld_37 Utf8,
+                fld_38 Utf8,
+                fld_39 Utf8,
+                fld_40 Utf8,
+                fld_41 Utf8,
+                fld_42 Utf8,
+                fld_43 Utf8,
+                fld_44 Utf8,
+                fld_45 Utf8,
+                fld_46 Utf8,
+                fld_47 Utf8,
+                fld_48 Utf8,
+                fld_49 Utf8,
+                status Utf8,
+                fld_50 Utf8,
+                fld_51 Utf8,
+                fld_52 Utf8,
+                fld_53 Utf8,
+                fld_54 Utf8,
+                fld_55 Utf8,
+                fld_56 Int32,
+                fld_57 Utf8,
+                fld_58 Utf8,
+                fld_59 Utf8,
+                fld_60 Utf8,
+                fld_61 String,
+                fld_62 Utf8,
+                fld_63 Utf8,
+                fld_64 String,
+                fld_65 Utf8,
+                fld_66 Utf8,
+                fld_67 Utf8,
+                fld_68 Bool,
+                fld_69 Utf8,
+                fld_70 Utf8,
+                fld_71 Timestamp,
+                fld_72 Utf8,
+                fld_73 Bool,
+                fld_74 Int64,
+                fld_75 Timestamp,
+                fld_76 Utf8,
+                fld_77 Utf8,
+                id Utf8 NOT NULL,
+                fld_78 Utf8,
+                fld_79 Utf8,
+                fld_80 Utf8,
+                fld_81 Utf8,
+                fld_82 Utf8,
+                fld_83 Utf8,
+                fld_84 Utf8,
+                fld_85 Utf8,
+                fld_86 Utf8,
+                fld_87 Utf8,
+                fld_88 Utf8,
+                fld_89 Utf8,
+                fld_90 Utf8,
+                fld_91 Timestamp,
+                fld_92 Timestamp,
+                fld_93 Utf8,
+                fld_94 Utf8,
+                fld_95 Utf8,
+                fld_96 Utf8,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/Requests` (id, subscriber, send_ts, category, ref_type, ref) VALUES
+                ("r1"u, "SUB_A"u, Timestamp("2025-12-20T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r2"u, "SUB_A"u, Timestamp("2025-12-20T15:00:00Z"), "ClassB"u, "TYPE_A"u, "d2"u),
+                ("r3"u, "SUB_A"u, Timestamp("2025-12-20T12:00:00Z"), "ClassC"u, "TYPE_A"u, "d3"u),
+                ("r4"u, "SUB_X"u, Timestamp("2025-12-20T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r5"u, "SUB_A"u, Timestamp("2025-12-19T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r6"u, "SUB_A"u, Timestamp("2025-12-20T08:00:00Z"), "ClassA"u, "TYPE_X"u, "d4"u);
+
+            UPSERT INTO `/Root/Mappings` (id, ref, subscriber, category, ext_ref, cancelled) VALUES
+                ("m1"u, "d1"u, "SUB_B"u, "ClassA"u, "ref-a1"u, false),
+                ("m2"u, "d1"u, "SUB_A"u, "ClassA"u, "ref-b1"u, false),
+                ("m3"u, "d2"u, "SUB_B"u, "ClassB"u, "ref-a2"u, true),
+                ("m4"u, "d2"u, "SUB_A"u, "ClassB"u, "ref-b2"u, false);
+
+            UPSERT INTO `/Root/Documents` (id, status) VALUES
+                ("d1"u, "OPEN"u),
+                ("d2"u, "CLOSED"u),
+                ("d3"u, "REMOVED"u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = Q1_(R"(
+            SELECT
+                m1.ext_ref AS col_a,
+                m2.ext_ref AS col_b,
+                d.status AS col_c,
+                m1.cancelled AS col_d
+            FROM (SELECT 'SUB_B'u AS const_b, 'SUB_A'u AS const_a) AS consts
+            CROSS JOIN `/Root/Requests` VIEW ix_requests_ts_category AS r
+            LEFT JOIN `/Root/Mappings` VIEW ix_mappings_ref_subscriber_category AS m1
+                ON m1.ref = r.ref AND m1.subscriber = consts.const_b
+            LEFT JOIN `/Root/Mappings` VIEW ix_mappings_ref_subscriber_category AS m2
+                ON m2.ref = r.ref AND m2.subscriber = consts.const_a
+            LEFT JOIN `/Root/Documents` AS d
+                ON d.id = r.ref
+            WHERE
+                r.subscriber = 'SUB_A'u
+                AND r.send_ts >= Timestamp("2025-12-20T00:00:00Z")
+                AND r.send_ts < Timestamp("2025-12-21T00:00:00Z")
+                AND r.category != 'ClassC'u
+                AND r.ref_type = 'TYPE_A'u
+                AND d.status != 'REMOVED'u
+            ORDER BY col_a
+            LIMIT 10;
+        )");
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        NYdb::NQuery::TExecuteQuerySettings execSettings;
+        execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [["ref-a1"];["ref-b1"];["OPEN"];[%false]];
+            [["ref-a2"];["ref-b2"];["CLOSED"];[%true]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        TSet<TString> accessedTables;
+        for (int phase = 0; phase < stats.query_phases().size(); ++phase) {
+            for (const auto& ta : stats.query_phases(phase).table_access()) {
+                if (ta.reads().rows() > 0) {
+                    accessedTables.insert(ta.name());
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Requests/ix_requests_ts_category/indexImplTable"),
+            "Expected reads from Requests covering index");
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Mappings/ix_mappings_ref_subscriber_category/indexImplTable"),
+            "Expected reads from Mappings covering index");
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Documents"),
+            "Expected reads from Documents");
+
+        UNIT_ASSERT_C(!accessedTables.contains("/Root/Requests"),
+            "Should not read from Requests main table when covering index has all needed columns");
+        UNIT_ASSERT_C(!accessedTables.contains("/Root/Mappings"),
+            "Should not read from Mappings main table when covering index has all needed columns");
     }
 }
 

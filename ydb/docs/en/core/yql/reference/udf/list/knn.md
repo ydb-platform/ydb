@@ -2,7 +2,7 @@
 
 ## Introduction {#introduction}
 
-One specific case of [vector search](../../../../concepts/vector_search.md) is the [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm) problem, where it is required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
+One specific case of [vector search](../../../../concepts/query_execution/vector_search.md) is the [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm) problem, where it is required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 
 The k-NN problem solution is divided into two major subclasses of methods: exact and approximate.
 

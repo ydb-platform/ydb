@@ -118,6 +118,8 @@ public:
         // Absolute path in the prefix is possible if the backup with SchemaMapping
         if (!path.empty() && path[0] != '/') {
             path = CanonizePath(TStringBuilder() << task.GetFSSettings().GetBasePath() << "/" << path);
+        } else if (path.empty()) {
+            path = task.GetFSSettings().GetBasePath();
         }
         return TStorageSettings(path, task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
     }

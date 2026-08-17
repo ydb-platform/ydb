@@ -24,5 +24,6 @@ namespace NBus {
     };
 
     std::pair<unsigned, TVector<TBindResult>> BindOnPort(int port, bool reusePort);
+    std::pair<unsigned, TVector<TBindResult>> BindOnLoopbackPort(int port, bool reusePort);
 
 }

@@ -34,19 +34,26 @@ struct TAccountQuoterHolder {
 
 class TConsumerReadQuota {
 public:
-    TConsumerReadQuota(THolder<TAccountQuoterHolder> accountQuotaTracker, ui64 readQuotaBurst, ui64 readQuotaSpeed);
+    TConsumerReadQuota(
+        THolder<TAccountQuoterHolder> accountQuotaTracker,
+        ui64 readQuotaBurst,
+        ui64 readQuotaSpeed,
+        ui64 readMessageQuotaBurst,
+        ui64 readMessageQuotaSpeed
+    );
 
 public:
     TQuotaTracker PartitionPerConsumerQuotaTracker;
+    TQuotaTracker PartitionPerConsumerMessageQuotaTracker;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
     std::deque<TRequestContext> ReadRequests;
 };
 
 
 class TPartitionQuoterBase : public TBaseTabletActor<TPartitionQuoterBase>
-                           , private TConstantLogPrefix {
+                           , protected TConstantLogPrefix {
 
-const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
+const TDuration WAKE_UP_TIMEOUT = TDuration::MilliSeconds(50);
 
 public:
     TPartitionQuoterBase(

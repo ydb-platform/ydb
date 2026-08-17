@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/time_provider.h>
 
@@ -93,6 +94,11 @@
         #endif
     #endif
 
+    #if !defined(SYS_faccessat2)
+        #if defined(__NR_faccessat2)
+            #define SYS_faccessat2 __NR_faccessat2
+        #endif
+    #endif
 #endif
 
 using namespace NKikimr;
@@ -173,8 +179,9 @@ void ResolveUDFs() {
             }
 
             TFunctionTypeInfo funcInfo;
-            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), env, typeInfoHelper, nullptr,
-                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
+            auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(udf.GetRuntimeSettings());
+            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), *runtimeSettings, env, typeInfoHelper, /*countersProvider=*/nullptr,
+                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
                                                   << ", reason: " << status.GetError());
@@ -208,7 +215,7 @@ void ResolveUDFs() {
 void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
-    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
+    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), /*allowUdfPatch=*/false, udfPaths,
                                                NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {
@@ -261,7 +268,7 @@ int main(int argc, char** argv) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_flags = SA_RESETHAND | SA_SIGINFO;
-        typedef void (*TSigSysHandler)(int, siginfo_t*, void*);
+        using TSigSysHandler = void (*)(int, siginfo_t*, void*);
         sa.sa_sigaction = (TSigSysHandler)SigSysHandler;
         sigfillset(&sa.sa_mask);
         if (sigaction(SIGSYS, &sa, nullptr) == -1) {
@@ -332,7 +339,7 @@ int main(int argc, char** argv) {
         NYql::SendSignalOnParentThreadExit(SIGTERM);
 
 #ifdef _linux_
-        if (rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
+        if (rlimit limit = {.rlim_cur = 0, .rlim_max = 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
             ythrow TSystemError() << "Failed to set RLIMIT_CORE";
         }
 #endif
@@ -379,6 +386,10 @@ int main(int argc, char** argv) {
                 Allow(eventfd2),
                 Allow(exit),
                 Allow(exit_group),
+                Allow(faccessat),
+    #if defined(SYS_faccessat2)
+                Allow(faccessat2),
+    #endif
                 Allow(fadvise64),
                 Allow(fallocate),
                 Allow(flock),
@@ -405,6 +416,7 @@ int main(int argc, char** argv) {
                 Allow(getpriority),
                 Allow(getrandom),
                 Allow(getrlimit),
+                Allow(prlimit64),
                 Allow(getrusage),
                 Allow(getsid),
                 Allow(gettid),

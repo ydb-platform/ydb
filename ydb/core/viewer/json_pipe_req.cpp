@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 namespace NKikimr::NViewer {
 
 template<typename T>
@@ -165,20 +167,21 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+
     auto request = GetRequest();
     NWilson::TTraceId traceId;
     TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
     }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+        ui8 verbosity = viewerTraceMaxVerbosity;
         if (traceVerbosity) {
-            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
-            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
         }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
@@ -206,6 +209,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
     }
+    if (!Event->Get()->Database.empty()) {
+        Database = Event->Get()->Database;
+    }
     InitConfig(Params);
     SetupTracing(handlerName);
 }
@@ -221,6 +227,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     }
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
+    }
+    if (!HttpEvent->Get()->Database.empty()) {
+        Database = HttpEvent->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);
@@ -374,7 +383,7 @@ bool TViewerPipeClient::IsSuccess(const TEvTxUserProxy::TEvProposeTransactionSta
 }
 
 TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev) {
-    return TStringBuilder() << ev.Record.GetStatus();
+    return TStringBuilder() << NTxProxy::TResultStatus::Str(static_cast<NTxProxy::TResultStatus::EStatus>(ev.Record.GetStatus()));
 }
 
 bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
@@ -460,6 +469,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
         }
     }
     SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    if (flags & IEventHandle::FlagSubscribeOnSession) {
+        SubscriptionNodeIds.push_back(nodeId);
+    }
     return response;
 }
 
@@ -627,6 +639,15 @@ void TViewerPipeClient::ApplyForceMode(TEvBlobStorage::TEvControllerConfigReques
         request.Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
         request.Record.MutableRequest()->SetIgnoreGroupFailModelChecks(true);
     }
+}
+
+bool TViewerPipeClient::RequireAdminIfForce(bool& force, TStringBuf forceParamName) {
+    force = FromStringWithDefault<bool>(Params.Get(forceParamName), force);
+    if (force && !Viewer->CheckAccessAdministration(GetRequest())) {
+        ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Administration access required when force=true"));
+        return false;
+    }
+    return true;
 }
 
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
@@ -874,6 +895,22 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     return response;
 }
 
+TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithoutToken(TPathId pathId, ui64 cookie) {
+    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.TableId.PathId = pathId;
+    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+    entry.RedirectRequired = false;
+    entry.ShowPrivatePath = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    request->ResultSet.emplace_back(entry);
+    auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
+    if (response.Span) {
+        response.Span.Attribute("path_id", pathId.ToString());
+    }
+    return response;
+}
+
 TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>
     TViewerPipeClient::MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options, ui64 cookie) {
     auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
@@ -991,9 +1028,11 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
     MaxRequestsInFlight = FromStringWithDefault(params.Get("max_requests_in_flight"), MaxRequestsInFlight);
-    Database = params.Get("database");
     if (!Database) {
-        Database = params.Get("tenant");
+        Database = params.Get("database");
+        if (!Database) {
+            Database = params.Get("tenant");
+        }
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -1051,28 +1090,29 @@ TRequestState TViewerPipeClient::GetRequest() const {
 }
 
 void TViewerPipeClient::ReplyAndPassAway(TString data, const TString& error) {
-    if (!ReplySent) {
-        if (Event) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        } else if (HttpEvent) {
-            auto response = HttpEvent->Get()->Request->CreateResponseString(data);
-            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
-        }
-        ReplySent = true;
-        if (error) {
-            Error = error;
-        }
-        if (Error.empty()) {
-            TStringBuf dataParser(data);
-            if (dataParser.NextTok(' ') == "HTTP/1.1") {
-                TStringBuf code = dataParser.NextTok(' ');
-                if (code.size() == 3 && code[0] != '2') {
-                    Error = dataParser.NextTok('\n');
-                }
+    if (PassedAway || ReplySent) {
+        return;
+    }
+    if (Event) {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    } else if (HttpEvent) {
+        auto response = HttpEvent->Get()->Request->CreateResponseString(data);
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
+    }
+    ReplySent = true;
+    if (error) {
+        Error = error;
+    }
+    if (Error.empty()) {
+        TStringBuf dataParser(data);
+        if (dataParser.NextTok(' ') == "HTTP/1.1") {
+            TStringBuf code = dataParser.NextTok(' ');
+            if (code.size() == 3 && code[0] != '2') {
+                Error = dataParser.NextTok('\n');
             }
         }
-        PassAway();
     }
+    PassAway();
 }
 
 TString TViewerPipeClient::GetHTTPOK(TString contentType, TString response, TInstant lastModified) {
@@ -1133,7 +1173,10 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        BLOG_ERROR("Requests count mismatch: " << requests << " > " << DataRequests);
+        YDB_LOG_ERROR("Request count mismatch",
+            {"logPrefix", GetLogPrefix()},
+            {"request", requests},
+            {"dataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1164,6 +1207,22 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     RequestDone(requests);
 }
 
+void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+        Cancelled();
+    }
+}
+
+void TViewerPipeClient::Cancelled() {
+    if (PassedAway) {
+        return;
+    }
+    YDB_LOG_DEBUG("Request cancelled",
+        {"logPrefix", GetLogPrefix()});
+    AddEvent("Cancelled");
+    PassAway();
+}
+
 void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     if (ResourceNavigateResponse) {
         ResourceNavigateResponse->Set(std::move(ev));
@@ -1176,9 +1235,9 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
         } else {
             if (CheckDatabase) {
                 if (ResourceNavigateResponse->GetError() == "AccessDenied") {
-                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), ResourceNavigateResponse->GetError());
                 } else {
-                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"), "Shared database not found");
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve shared database"), ResourceNavigateResponse->GetError());
                 }
             } else {
                 AddEvent("Failed to resolve database - shared database not found");
@@ -1195,7 +1254,9 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
         if (DatabaseNavigateResponse->IsOk()) {
             TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
-                ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+                // we successfully resolved serverless database using user's token, now resolve shared database without token
+                // because users of serverless databases don't have direct access to shared database
+                ResourceNavigateResponse = MakeRequestSchemeCacheNavigateWithoutToken(TPathId(entry.DomainInfo->ResourcesDomainKey));
                 --DataRequests; // don't count this request
                 Become(&TViewerPipeClient::StateResolveResource);
             } else {
@@ -1206,9 +1267,9 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
         } else {
             if (CheckDatabase) {
                 if (DatabaseNavigateResponse->GetError() == "AccessDenied") {
-                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), DatabaseNavigateResponse->GetError());
                 } else {
-                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"), "Database not found");
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database"), DatabaseNavigateResponse->GetError());
                 }
             } else {
                 AddEvent("Failed to resolve database - not found");
@@ -1256,6 +1317,8 @@ STATEFN(TViewerPipeClient::StateResolveDatabase) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1264,6 +1327,18 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
         hFunc(TEvStateStorage::TEvBoardInfo, HandleResolve);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveResource);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
+    }
+}
+
+STATEFN(TViewerPipeClient::StateWork) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+        cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+        hFunc(TEvents::TEvUndelivered, Undelivered);
     }
 }
 
@@ -1274,6 +1349,9 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
+    if (HttpEvent) {
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+    }
     auto request = GetRequest();
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
@@ -1293,6 +1371,9 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
 }
 
 void TViewerPipeClient::PassAway() {
+    if (PassedAway) {
+        return;
+    }
     AddEvent("PassAway");
     if (Span) {
         if (Error) {

@@ -5,11 +5,23 @@
 #include "scheme.h"
 #include "diff.h"
 
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> // NTabletFlatExecutor
+
+// protobuf forward declarations
+namespace NKikimrBlobStorage::NDDisk {
+    class TDDiskId;
+};
+
 namespace NKikimr::NBsController {
+    struct TDDiskId;
     struct TPDiskId;
     struct TVSlotId;
 }
 
+template<>
+struct THash<NKikimr::NBsController::TDDiskId> {
+    size_t operator ()(NKikimr::NBsController::TDDiskId) const;
+};
 template<>
 struct THash<NKikimr::NBsController::TPDiskId> {
     size_t operator ()(NKikimr::NBsController::TPDiskId) const;
@@ -178,11 +190,7 @@ namespace NKikimr {
                 , DDiskSlotId(ddiskSlotId)
             {}
 
-            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb)
-                : NodeId(pb.GetNodeId())
-                , PDiskId(pb.GetPDiskId())
-                , DDiskSlotId(pb.GetDDiskSlotId())
-            {}
+            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb);
 
             TDDiskId &operator=(const TDDiskId &other) = default;
 
@@ -194,13 +202,13 @@ namespace NKikimr {
                 return std::tie(NodeId, PDiskId, DDiskSlotId);
             }
 
-            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const {
-                pb->SetNodeId(NodeId);
-                pb->SetPDiskId(PDiskId);
-                pb->SetDDiskSlotId(DDiskSlotId);
+            TPDiskId ComprisingPDiskId() const {
+                return TPDiskId(NodeId, PDiskId);
             }
 
-            friend std::strong_ordering operator <=>(const TDDiskId &x, const TDDiskId &y) { return x.GetKey() <=> y.GetKey(); }
+            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const;
+
+            friend constexpr std::strong_ordering operator <=>(const TDDiskId& x, const TDDiskId& y) = default;
         };
 
         template<typename TKey, typename TValue>
@@ -447,7 +455,7 @@ namespace NKikimr {
                     if (baseIt == Base.end()) {
                         break;
                     }
-                    if (overlay && baseIt->first == key) {
+                    if (baseIt->first == key) {
                         baseIt->second->OnRollback();
                     }
                 }
@@ -475,6 +483,12 @@ namespace NKikimr {
 } // NKikimr
 
 inline size_t THash<NKikimr::NBsController::TPDiskId>::operator ()(NKikimr::NBsController::TPDiskId x) const {
+    auto key = x.GetKey();
+    using T = decltype(key);
+    return THash<T>()(key);
+}
+
+inline size_t THash<NKikimr::NBsController::TDDiskId>::operator ()(NKikimr::NBsController::TDDiskId x) const {
     auto key = x.GetKey();
     using T = decltype(key);
     return THash<T>()(key);

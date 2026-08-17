@@ -43,7 +43,7 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const TActorId& Executer;
+        const TActorId Executer;
         const TString& Database;
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
@@ -53,7 +53,6 @@ public:
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
-        const bool LocalComputeTasks;
         const ui64 MkqlMemoryLimit;
         const NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const bool AllowSinglePartitionOpt;
@@ -66,7 +65,6 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
-        const bool VerboseMemoryLimitException;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
@@ -89,11 +87,12 @@ public:
     const THashSet<ui64>& GetPendingComputeTasks();
     TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
-    ui32 GetnScanTasks();
-    ui32 GetnComputeTasks();
-
     void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
     void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates);
+
+    auto GetUnassignedTasksCount() const {
+        return UnassignedTasks.size();
+    }
 
 private:
 
@@ -112,8 +111,8 @@ private:
 private:
     const ui64 TxId;
     const TActorId ExecuterId;
-    TVector<ui64> ComputeTasks;
-    THashMap<ui64, TVector<ui64>> TasksPerNode;
+    TVector<ui64> UnassignedTasks;
+    THashMap<ui64 /* shardId */, TVector<ui64 /* taskId */>> TasksPerNode;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
@@ -130,8 +129,6 @@ private:
     TKqpTasksGraph& TasksGraph;
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    ui32 nComputeTasks = 0;
-    ui32 nScanTasks = 0;
 
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
@@ -148,7 +145,6 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
-    const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;

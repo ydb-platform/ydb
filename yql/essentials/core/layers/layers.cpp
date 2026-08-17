@@ -284,7 +284,7 @@ private:
 namespace NYql::NLayers {
 
 TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const TLayerInfo*>>& layers, TStringBuf system, const TString& cluster, TExprContext& ctx) {
-    if (!layers.size()) {
+    if (layers.empty()) {
         ctx.AddError(NYql::TIssue("No layers passed to RemoveDuplicates"));
         return {};
     }
@@ -340,7 +340,7 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
                     break;
                 }
                 err << ", " << result.front().front().Path.Quote() << "]";
-                ctx.AddError(NYql::TIssue(std::move(err)));
+                ctx.AddError(NYql::TIssue(err));
                 return {};
             }
             result.emplace_back();

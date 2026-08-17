@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_table_committed.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>

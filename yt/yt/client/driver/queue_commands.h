@@ -75,6 +75,7 @@ private:
     int PartitionIndex;
     NQueueClient::TQueueRowBatchReadOptions RowBatchReadOptions;
 
+    bool HasResponseParameters() const override;
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -95,6 +96,7 @@ private:
     int PartitionIndex;
     NQueueClient::TQueueRowBatchReadOptions RowBatchReadOptions;
 
+    bool HasResponseParameters() const override;
     void DoExecute(ICommandContextPtr context) override;
 };
 

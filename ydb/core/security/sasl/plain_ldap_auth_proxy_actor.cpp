@@ -27,7 +27,9 @@ public:
     }
 
     virtual void Bootstrap(const TActorContext &ctx) override final {
-        ProcessAuthMsg(ctx);
+        if (!ProcessAuthMsg(ctx)) {
+            return;
+        }
 
         auto event = std::make_unique<TEvLdapAuthProvider::TEvAuthenticateRequest>(TString(AuthcId), TString(Passwd));
         ctx.Send(MakeLdapAuthProviderID(), event.release());
@@ -61,6 +63,12 @@ public:
 private:
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const override final {
         return CreatePlainLdapLoginRequest(TString(AuthcId), TString(PeerName), AppData()->AuthConfig);
+    }
+
+    virtual void ProceedWithAuthentication([[maybe_unused]] const TActorContext &ctx,
+        [[maybe_unused]] TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
+    {
+        SendLoginRequest();
     }
 
     virtual void SendIssuedToken(const NKikimrScheme::TEvLoginResult& loginResult) const override final {

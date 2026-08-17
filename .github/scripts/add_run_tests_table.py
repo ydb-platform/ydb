@@ -21,7 +21,7 @@ def normalize_app_domain(app_domain: str) -> str:
 
 
 def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
-    """Generate run tests button with default parameters (relwithdebinfo, all test sizes)."""
+    """Generate run tests button with default parameters (relwithdebinfo, small and medium test sizes)."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
     repo_env = os.environ.get("GITHUB_REPOSITORY")
@@ -31,7 +31,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     workflow_id = "run_tests.yml"
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
-    # Default parameters: relwithdebinfo preset, all test sizes
+    # Default parameters: relwithdebinfo preset, small and medium test sizes
     params = {
         "owner": owner,
         "repo": repo,
@@ -39,8 +39,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
         "ref": "main",
         "pull_number": str(pr_number),
         "test_targets": "ydb/",
-        "test_type": "unittest,py3test,py2test,pytest",
-        "test_size": "small,medium,large",  # All test sizes
+        "test_size": "small,medium",
         "additional_ya_make_args": "",
         "build_preset": "relwithdebinfo",  # Default preset
         "collect_coredumps": "false",
@@ -57,7 +56,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     comment = "<!-- run-tests-table -->\n"
     comment += "<h3>Run Extra Tests</h3>\n\n"
     comment += "Run additional tests for this PR. You can customize:\n"
-    comment += "- **Test Size**: small, medium, large (default: all)\n"
+    comment += "- **Test Size**: small, medium, large (default: small, medium)\n"
     comment += "- **Test Targets**: any directory path (default: `ydb/`)\n"
     comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
     comment += "- **Coredumps**: enable for debugging (default: off)\n"

@@ -1,10 +1,10 @@
-#include "portions_index.h"
 #include "granule.h"
+#include "portions_index.h"
 
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
-bool TPortionsIndex::HasOlderIntervals(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const {
-    for (auto&& [_, p] : Portions) {
+bool TPortionsIndex::HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) {
+    for (const auto& p : portions) {
         if (p->GetPortionId() == inputPortion.GetPortionId()) {
             continue;
         }
@@ -25,4 +25,4 @@ bool TPortionsIndex::HasOlderIntervals(const TPortionInfo& inputPortion, const T
     return false;
 }
 
-}
+}   // namespace NKikimr::NOlap::NGranule::NPortionsIndex

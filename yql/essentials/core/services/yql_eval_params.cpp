@@ -74,7 +74,7 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
     TVector<TTransformStage> transformers;
     const auto issueCode = TIssuesIds::CORE_TYPE_ANN;
     transformers.push_back(TTransformStage(typeTransformer, "TypeAnnotation", issueCode));
-    auto fullTransformer = CreateCompositeGraphTransformer(transformers, false);
+    auto fullTransformer = CreateCompositeGraphTransformer(transformers, /*useIssueScopes=*/false);
 
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;

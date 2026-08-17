@@ -9,18 +9,9 @@
  * express or implied.  See your chosen license for details.
 
 
-====================BSD-3-Clause====================
- * // Use of this source code is governed by a BSD-style license that can be
- * // found in the LICENSE file.
-
-
 ====================COPYRIGHT====================
    Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
 Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
- * // Copyright (c) 2016 The Chromium Authors. All rights reserved.
 
 
 ====================COPYRIGHT====================
@@ -80,6 +71,10 @@ Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2026 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
  * Copyright 2014-2019 Melissa O'Neill <oneill@pcg-random.org>,
  *                     and the PCG Project contributors.
 
@@ -125,6 +120,8 @@ Jean-Philippe Boivin
 Jiawen Geng
 Jixinqi
 Junqi Wang
+Kai Pastor
+Karthik Das
 Karthikdasari0423
 Kazu Yamamoto
 Ken-ichi ICHINO
@@ -135,6 +132,8 @@ Marin Rukavina
 Mark Chiou
 Martin Thomson
 Michael White
+Michal Kovac
+Michaël Zasso
 Mike L.
 Moritz Buhl
 NKTelnet
@@ -150,6 +149,7 @@ Stefan Eissing
 Tal Regev
 Tatsuhiro Tsujikawa
 Tim Gates
+Tim Perry
 Tomas Mraz
 Toni Uhlig
 Valère Plantevin

@@ -13,7 +13,6 @@ from devtools.yamaker.modules import (
 )
 from devtools.yamaker.project import NixSourceProject
 
-
 MODULES_WINDOWS = (
     "Modules/_winapi.c",
     "Modules/overlapped.c",
@@ -77,7 +76,7 @@ def post_install(self):
     self.yamakes["Lib"] = self.module(
         Py3Library,
         PEERDIR=["certs", "contrib/tools/python3/lib2/py"],
-        PY_SRCS=sorted(py_srcs(f"{self.dstdir}/Lib") + ["_sysconfigdata_arcadia.py"]),
+        PY_SRCS=sorted(py_srcs(f"{self.dstdir}/Lib") + ["_pyrepl/terminfo.py", "_sysconfigdata_arcadia.py"]),
         NO_LINT=True,
         NO_PYTHON_INCLUDES=True,
     )
@@ -155,6 +154,7 @@ def post_install(self):
             f'-DVERSION="{self.version[:4]}"',
             '-DVPATH=""',
             '-DPLATLIBDIR="lib"',
+            '$CORE_LIBS_OPTIMIZATION',
         ],
         SRCS=src_srcs,
         NO_COMPILER_WARNINGS=True,
@@ -233,6 +233,7 @@ python3 = NixSourceProject(
     owners=["g:python-contrib"],
     keep_paths=[
         "lib2",
+        "Lib/_pyrepl/terminfo.py",
         "Lib/_sysconfigdata_arcadia.py",
         "Modules/config.c",
         "Python/frozen_modules",
@@ -298,6 +299,8 @@ python3 = NixSourceProject(
         "Tools/i18n/*.py",
     ],
     copy_sources_except=[
+        "Lib/_pyrepl/_minimal_curses.py",
+        "Lib/_pyrepl/curses.py",
         "Modules/_test*.c",
         "Modules/_testinternalcapi/set.c",
         "Modules/_ctypes/_ctypes_test*",

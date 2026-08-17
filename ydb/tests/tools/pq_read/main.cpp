@@ -158,12 +158,17 @@ int main(int argc, const char* argv[]) {
 
     barrier.SetValue();
 
+    timeoutTrackingThread.join();
+
+    // The callbacks in settings retain state, while state owns the session.
+    // Release the session explicitly to break this ownership cycle before
+    // stopping the driver.
+    state->ReadSession.reset();
+
     Cerr << "Stopping driver..." << Endl;
     driver.Stop();
 
     Cerr << "Driver stopped. Exit" << Endl;
-
-    timeoutTrackingThread.join();
 
     if (!maybeEvent) {
         Cerr << "No finish event" << Endl;

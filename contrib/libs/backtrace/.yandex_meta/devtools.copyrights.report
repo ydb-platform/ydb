@@ -29,18 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4f69198d68548caef8c50fb4646f2739
-BELONGS ya.make
-    License text:
-           Copyright (C) 2013-2024 Free Software Foundation, Inc.
-           Written by Ian Lance Taylor, Google.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        atomic.c [2:3]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 89987ec1024c9f4d65e939d586271b9f
 BELONGS ya.make
     License text:
@@ -52,10 +40,10 @@ BELONGS ya.make
     Files with this license:
         LICENSE [1:1]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 9d441f897facb23890579094470bd947
+KEEP     COPYRIGHT_SERVICE_LABEL 90f7cd8fe73b03472491ea6f83d8a1cc
 BELONGS ya.make
     License text:
-           Copyright (C) 2012-2024 Free Software Foundation, Inc.
+           Copyright (C) 2012-2026 Free Software Foundation, Inc.
            Written by Ian Lance Taylor, Google.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -77,17 +65,17 @@ BELONGS ya.make
         sort.c [2:3]
         state.c [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL cc5dd31c1484abddecff8fc275f5c9cc
+KEEP     COPYRIGHT_SERVICE_LABEL d8107155acc25c1eab0150c3d896cffb
 BELONGS ya.make
     License text:
-           Copyright (C) 2020-2024 Free Software Foundation, Inc.
+           Copyright (C) 2013-2026 Free Software Foundation, Inc.
            Written by Ian Lance Taylor, Google.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        macho.c [2:3]
+        atomic.c [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ed42dfc770f5954f5d7da31d293c2a5e
 BELONGS ya.make
@@ -100,3 +88,15 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         filenames.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f793e18405af8008bab7fd80acdea05f
+BELONGS ya.make
+    License text:
+           Copyright (C) 2020-2026 Free Software Foundation, Inc.
+           Written by Ian Lance Taylor, Google.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        macho.c [2:3]

@@ -189,7 +189,6 @@ namespace NKikimr::NStorage {
             , TargetGroupId(targetGroupId)
             , ErrorReason(errorReason)
         {}
-
     };
 
 } // NKikimr::NStorage

@@ -178,6 +178,12 @@ public:
             return TStatus::Ok;
         }
 
+        if (State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY) == ETmpSecurityMode::Force
+            && !State_->Types->OperationOptions.ProjectSlug)
+        {
+            State_->UseSecureTmp->store(true);
+        }
+
         auto config = loadEpoch ? State_->Configuration->GetSettingsVer(settingsVer) : State_->Configuration->Snapshot();
         opts.Config(config)
             .ReadOnly(State_->Types->IsReadOnly || State_->Types->EngineType == EEngineType::Ytflow)
@@ -215,7 +221,7 @@ public:
             .Repeat(TExprStep::ExpandApplyForLambdas)
             .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
-        for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
+        for (size_t i = 0; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);
 
             TString cluster = LoadCtx->Tables[i].first.first;
@@ -235,7 +241,8 @@ public:
                 const auto schemaAttrs = std::initializer_list<TStringBuf>{YqlRowSpecAttribute, SCHEMA_ATTR_NAME, READ_SCHEMA_ATTR_NAME, INFER_SCHEMA_ATTR_NAME};
                 if (AnyOf(schemaAttrs, [&tableDesc](TStringBuf attr) { return tableDesc.Meta->Attrs.contains(attr); })) {
                     auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
+                    auto parseExpressionColumns = State_->Configuration->_ParseExpressionColumns.Get().GetOrElse(DEFAULT_PARSE_EXPRESSION_COLUMNS);
+                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, parseExpressionColumns, ctx)) {
                         return TStatus::Error;
                     }
                     if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {
@@ -313,19 +320,28 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration, cluster);
+                    const TString tmpFolder = GetUserTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
-                        TStringBuilder msg;
-                        msg << "Table " << cluster << "." << tableName
-                            << " contains sensitive data, but is used with the default tmp folder."
-                            << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
-                        auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
-                        if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
-                            ctx.AddError(issue);
-                            return TStatus::Error;
-                        } else {
-                            if (!ctx.AddWarning(issue)) {
+                        const auto tmpSecurity = State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY);
+                        if (tmpSecurity != ETmpSecurityMode::Disable && !State_->Types->OperationOptions.ProjectSlug) {
+                            State_->UseSecureTmp->store(true);
+                        }
+
+                        if (!State_->UseSecureTmp->load() || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
+                            TStringBuilder msg;
+                            msg << "Table " << cluster << "." << tableName
+                                << " contains sensitive data, but is used with the default tmp folder."
+                                << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                            auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                            if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(tmpSecurity == ETmpSecurityMode::Force)) {
+                                // treat this warning as error in force mode
+                                issue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+                                ctx.AddError(issue);
                                 return TStatus::Error;
+                            } else {
+                                if (!ctx.AddWarning(issue)) {
+                                    return TStatus::Error;
+                                }
                             }
                         }
                     }

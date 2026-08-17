@@ -1,9 +1,10 @@
 #include "schemeshard_import.h"
 
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
+
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <util/generic/xrange.h>
 
@@ -273,7 +274,11 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
     );
 }
 
-void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore) {
+    for (ui32 itemIdx = importInfo.Items.size(); itemIdx < itemsSizeBefore; ++itemIdx) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
+    }
+
     // There can be new items, so do at least the same as for creation
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         const auto& item = importInfo.Items.at(itemIdx);

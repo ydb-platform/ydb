@@ -122,6 +122,8 @@ struct aws_mqtt_client_connection_vtable {
 
     int (*get_stats_fn)(void *impl, struct aws_mqtt_connection_operation_statistics *stats);
 
+    int (*set_metrics_fn)(void *impl, const struct aws_mqtt_iot_metrics *metrics);
+
     enum aws_mqtt311_impl_type (*get_impl_type)(const void *impl);
 
     struct aws_event_loop *(*get_event_loop)(const void *impl);
@@ -138,6 +140,10 @@ AWS_MQTT_API enum aws_mqtt311_impl_type aws_mqtt_client_connection_get_impl_type
 AWS_MQTT_API uint64_t aws_mqtt_hash_uint16_t(const void *item);
 
 AWS_MQTT_API bool aws_mqtt_compare_uint16_t_eq(const void *a, const void *b);
+
+AWS_MQTT_API uint64_t aws_mqtt_hash_uint64_t(const void *item);
+
+AWS_MQTT_API bool aws_mqtt_compare_uint64_t_eq(const void *a, const void *b);
 
 AWS_MQTT_API bool aws_mqtt_byte_cursor_hash_equality(const void *a, const void *b);
 

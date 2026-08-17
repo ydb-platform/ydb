@@ -4,8 +4,7 @@ items:
   include:
     mode: link
     path: ../yql/toc_p.yaml
-- name: Compatibility with PostgreSQL
-  href: ../postgresql/intro.md
+- name: PostgreSQL compatibility
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
@@ -39,6 +38,11 @@ items:
   include:
     mode: link
     path: kafka-api/toc_p.yaml
+- name: SQS API
+  href: sqs-api/index.md
+  include:
+    mode: link
+    path: sqs-api/toc_p.yaml
 - name: Configuration
   href: configuration/index.md
   include:
@@ -64,3 +68,7 @@ items:
   include:
     mode: link
     path: docker/toc_p.yaml
+- name: AI tools
+  include:
+    mode: link
+    path: ai/toc_p.yaml

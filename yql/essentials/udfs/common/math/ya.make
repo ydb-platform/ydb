@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(math_udf)
 
     YQL_ABI_VERSION(
         2
-        43
+        46
         0
     )
 
@@ -74,6 +74,7 @@ YQL_UDF_CONTRIB(math_udf)
     ENDIF()
 
     PEERDIR(
+        yql/essentials/core/langver
         yql/essentials/udfs/common/math/lib
     )
 

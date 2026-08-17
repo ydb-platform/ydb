@@ -228,11 +228,10 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         DoSplitMergeChanges(true);
     }
 
-    Y_UNIT_TEST_TWIN(ReplicatedTable, UseSink) {
+    Y_UNIT_TEST(ReplicatedTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
@@ -247,13 +246,8 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
 
         ExecSQL(server, sender, "SELECT * FROM `/Root/table-1`");
-        if (UseSink) {
-            ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
-                Ydb::StatusIds::BAD_REQUEST);
-        } else {
-            ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
-                Ydb::StatusIds::GENERIC_ERROR);
-        }
+        ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
+            Ydb::StatusIds::BAD_REQUEST);
 
         WaitTxNotification(server, sender, AsyncAlterDropReplicationConfig(server, "/Root", "table-1"));
         ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);");

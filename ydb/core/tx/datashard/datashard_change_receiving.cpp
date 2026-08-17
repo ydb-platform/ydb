@@ -315,7 +315,8 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
-            Self->SysLocksTable().BreakLocks(tableId, KeyCells.GetCells()); // probably redundant, we expect target table to be locked until complete restore
+            TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(KeyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+            Self->SysLocksTable().BreakLocks(tableId, uniqueKey); // probably redundant, we expect target table to be locked until complete restore
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccVersion);
         }
 

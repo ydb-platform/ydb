@@ -119,21 +119,19 @@ using TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TRegisterShuffleChunksOptions
-    : public TTimeoutOptions
-{
-    bool OverwriteExistingWriterData = false;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TFetchShuffleChunksOptions
+struct TForsakeChaosCoordinatorOptions
     : public TTimeoutOptions
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TForsakeChaosCoordinatorOptions
+struct TForsakeChaosShortcutOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRemoveChaosCellMailboxOptions
     : public TTimeoutOptions
 { };
 
@@ -217,22 +215,20 @@ struct IInternalClient
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
 
-    virtual TFuture<void> RegisterShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
-        std::optional<int> writerIndex,
-        const TRegisterShuffleChunksOptions& options = {}) = 0;
-
-    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const TFetchShuffleChunksOptions& options = {}) = 0;
-
     virtual TFuture<void> ForsakeChaosCoordinator(
         NHydra::TCellId chaosCellId,
-        NHydra::TCellId coordiantorCellId,
+        NHydra::TCellId coordinatorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosShortcut(
+        NHydra::TCellId coordinatorCellId,
+        NChaosClient::TChaosObjectId chaosObjectId,
+        const TForsakeChaosShortcutOptions& options = {}) = 0;
+
+    virtual TFuture<void> RemoveChaosCellMailbox(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId destinationCellId,
+        const TRemoveChaosCellMailboxOptions& options = {}) = 0;
 
     virtual TFuture<NYson::TYsonString> GetConnectionOrchidValue(
         const TGetConnectionOrchidValueOptions& options = {}) = 0;

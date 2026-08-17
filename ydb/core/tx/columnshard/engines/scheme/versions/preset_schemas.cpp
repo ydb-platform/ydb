@@ -7,7 +7,8 @@ namespace NKikimr::NOlap {
 TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache)
     : DefaultPresetId(defaultPresetId)
-    , SchemaObjectsCache(schemaObjectsCache) {
+    , SchemaObjectsCache(schemaObjectsCache)
+{
     AFL_VERIFY(storagesManager);
     AFL_VERIFY(SchemaObjectsCache);
     RegisterPreset(defaultPresetId);
@@ -18,8 +19,8 @@ TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, con
         auto obj = NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(key);
         AFL_VERIFY(!!obj);
         RegisterPreset(obj->GetPresetId());
-        MutableVersionedIndex(obj->GetPresetId())
-            .AddIndex(TSnapshot::Zero(), SchemaObjectsCache->UpsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
+        MutableVersionedIndex(obj->GetPresetId()).AddIndex(TSnapshot::Zero(),
+            SchemaObjectsCache->UpsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
     }
 }
 

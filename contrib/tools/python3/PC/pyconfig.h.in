@@ -372,6 +372,10 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 #       define ALIGNOF_MAX_ALIGN_T 8
 #endif
 
+#ifdef _DEBUG
+#       define Py_DEBUG
+#endif
+
 
 #ifdef MS_WIN32
 
@@ -522,9 +526,7 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 /* #define WITH_READLINE 1 */
 
 /* Use Python's own small-block memory-allocator. */
-#ifndef address_sanitizer_enabled
 #define WITH_PYMALLOC 1
-#endif
 
 /* Define if you want to compile in mimalloc memory allocator. */
 #define WITH_MIMALLOC 1

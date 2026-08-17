@@ -1,24 +1,17 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
+    meta_cluster_info.cpp
     meta.cpp
     meta_cache.cpp
-    meta_cloud.h
-    meta_cluster.h
-    meta_clusters.h
-    meta_cp_databases.h
-    meta_cp_databases_verbose.h
-    meta_db_clusters.h
+    meta_settings.cpp
     meta_versions.cpp
     mvp.cpp
 )
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/meta/support_links
     ydb/mvp/meta/protos
     ydb/public/api/client/yc_private/resourcemanager
     yql/essentials/public/udf
@@ -37,4 +30,9 @@ END()
 
 RECURSE(
     bin
+    support_links
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

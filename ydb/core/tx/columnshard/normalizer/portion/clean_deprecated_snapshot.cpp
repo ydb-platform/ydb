@@ -3,6 +3,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NCleanDeprecatedSnapshot {
 
 std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
@@ -27,7 +29,8 @@ std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
             return std::nullopt;
         }
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tasks_for_rewrite", chunksToRewrite.size());
+    YDB_LOG_WARN("",
+        {"tasksForRewrite", chunksToRewrite.size()});
     return chunksToRewrite;
 }
 
@@ -37,8 +40,10 @@ private:
 
 public:
     TChanges(std::vector<TColumnChunkLoadContext>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -57,7 +62,9 @@ public:
                     NIceDb::TUpdate<Schema::IndexColumns::Size>(i.GetBlobRange().Size),
                     NIceDb::TUpdate<Schema::IndexColumns::PathId>(i.GetPathId().GetRawValue()));
         }
-        ACFL_WARN("normalizer", "TCleanDeprecatedSnapshotNormalizer")("message", TStringBuilder() << Chunks.size() << " portions rewrited");
+        YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TCleanDeprecatedSnapshotNormalizer"},
+            {"message", TStringBuilder() << Chunks.size() << " portions rewrited"});
         return true;
     }
 
@@ -73,7 +80,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TCleanDeprecatedSnapshotNormaliz
     if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         return std::vector<INormalizerTask::TPtr>();
     }
-    
+
     auto batchesToDelete = GetChunksToRewrite(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");

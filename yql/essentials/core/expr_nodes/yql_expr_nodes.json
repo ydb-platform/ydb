@@ -52,6 +52,20 @@
             "ListBase": "TCoIndex"
         },
         {
+            "Name": "TCoStatistics",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Types", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TCoStatisticsList",
+            "ListBase": "TCoStatistics"
+        },
+        {
             "Name": "TCoChangefeed",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -642,6 +656,11 @@
             "Match": {"Type": "Callable", "Name": "PartitionsByKeys"}
         },
         {
+            "Name": "TCoLPartitionsByKeys",
+            "Base": "TCoPartitionByKeyBase",
+            "Match": {"Type": "Callable", "Name": "LPartitionsByKeys"}
+        },
+        {
             "Name": "TCoSortTraits",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SortTraits"},
@@ -862,6 +881,17 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TCoDataSource"}
+            ]
+        },
+        {
+            "Name": "TCoMaterialize",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "Materialize!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TCoDataSink"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -1581,6 +1611,15 @@
             "Match": {"Type": "Callable", "Name": "WinOnGroups"}
         },
         {
+            "Name": "TCoWinFilter",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinFilter"},
+            "Children": [
+                {"Index": 1, "Name": "ItemType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Predicate", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TCoCalcOverWindowBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -1666,6 +1705,27 @@
             "Name": "TCoEquiJoin",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "EquiJoin"}
+        },
+        {
+            "Name": "TCoSqlCombineInput",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "SqlCombineInput"},
+            "Children": [
+                {"Index": 1, "Name": "PresortKeyLambda",      "Type": "TExprBase"},
+                {"Index": 2, "Name": "PresortDirections",     "Type": "TExprBase"},
+                {"Index": 3, "Name": "KeyExtractorLambda",    "Type": "TCoLambda"},
+                {"Index": 4, "Name": "ListHandlerLambda",     "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoSqlCombine",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SqlCombine"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput",    "Type": "TCoSqlCombineInput"},
+                {"Index": 1, "Name": "RightInput",   "Type": "TCoSqlCombineInput"},
+                {"Index": 2, "Name": "UsingLambda",  "Type": "TCoLambda"}
+            ]
         },
         {
             "Name": "TCoMapJoinCore",
@@ -2770,6 +2830,21 @@
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
                 {"Index": 1, "Name": "AssumeAs", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TCoWatermarkGenerator",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WatermarkGenerator"},
+            "Children": [
+                {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
+                {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"},
+                {"Index": 2, "Name": "WatermarkSettings",    "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TCoTableSource",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "TableSource"}
         }
     ]
 }

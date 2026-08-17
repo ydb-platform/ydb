@@ -33,6 +33,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 218e4fe29cde9e70112b67c8b1edc43c
+BELONGS ya.make
+    License text:
+        // Copyright Antony Polukhin, 2020-2026.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/any/bad_any_cast.hpp [1:1]
+        include/boost/any/unique_any.hpp [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 224ede317f83c513d1a68907e0d028bc
 BELONGS ya.make
     License text:
@@ -44,23 +56,11 @@ BELONGS ya.make
     Files with this license:
         include/boost/any.hpp [373:373]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 56575c8d851d98611bafdb62f758a33b
-BELONGS ya.make
-    License text:
-        // Copyright Antony Polukhin, 2020-2025.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/any/bad_any_cast.hpp [1:1]
-        include/boost/any/unique_any.hpp [1:1]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9e29a51422491ff093ace215247384ab
+KEEP     COPYRIGHT_SERVICE_LABEL 7519cb79d4cab646ba588bc7f1fccf2d
 BELONGS ya.make
     License text:
         // Copyright Ruslan Arutyunyan, 2019-2021.
-        // Copyright Antony Polukhin, 2021-2025.
+        // Copyright Antony Polukhin, 2021-2026.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -71,10 +71,10 @@ BELONGS ya.make
         include/boost/any/detail/placeholder.hpp [1:1]
         include/boost/any/fwd.hpp [1:1]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f7a6c5f84d4ba4d22fc5a7a38e6014ca
+KEEP     COPYRIGHT_SERVICE_LABEL 80da4a1ab74b3afbafdc6369885539bc
 BELONGS ya.make
     License text:
-        // Copyright Antony Polukhin, 2013-2025.
+        // Copyright Antony Polukhin, 2013-2026.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -86,7 +86,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL fe4a46e0c33e697b28d96bddcd54d9da
 BELONGS ya.make
     License text:
         // Copyright Ruslan Arutyunyan, 2019-2021.
-        // Copyright Antony Polukhin, 2021-2025.
+        // Copyright Antony Polukhin, 2021-2026.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00

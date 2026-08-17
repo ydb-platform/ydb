@@ -11,6 +11,10 @@
 namespace NKikimr {
 
     namespace NSyncLog {
+        struct TDeletedChunk {
+            ui32 ChunkIdx = 0;
+            ui32 UsedPagesNum = 0;
+        };
 
         ////////////////////////////////////////////////////////////////////////////
         // SYNC LOG FORMAT
@@ -19,6 +23,8 @@ namespace NKikimr {
         struct TLogoBlobRec {
             ui64 Raw[3]; // TLogoBlobID
             TIngress Ingress;
+
+            TLogoBlobRec() : TLogoBlobRec(TLogoBlobID(0, 0, 0), 0) {}
 
             explicit TLogoBlobRec(const TLogoBlobID &id, ui64 ingressRaw)
                 :  Ingress(ingressRaw)

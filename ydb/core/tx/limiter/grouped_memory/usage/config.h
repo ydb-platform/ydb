@@ -1,6 +1,11 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/core/protos/config.pb.h>
+
+#include <optional>
+
+namespace NKikimrConfig {
+    class TGroupedMemoryLimiterConfig;
+}
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 

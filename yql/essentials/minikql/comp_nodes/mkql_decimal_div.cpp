@@ -1,4 +1,5 @@
 #include "mkql_decimal_div.h"
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h>     // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -12,27 +13,26 @@ extern "C" NYql::NDecimal::TInt128 DecimalDiv(NYql::NDecimal::TInt128 a, NYql::N
     return NYql::NDecimal::Div(a, b);
 }
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TDecimalDivWrapper: public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128> {
-    typedef TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128>(precision, scale)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        const auto& left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -46,7 +46,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -54,11 +54,11 @@ public:
         const auto name = "DecimalMulAndDivNormalMultiplier";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMulAndDivNormalMultiplier));
         const auto fnType =
-            FunctionType::get(valType, {valType, valType, valType}, false);
+            FunctionType::get(valType, {valType, valType, valType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
@@ -107,29 +107,29 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 template <bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalDivIntegralWrapper: public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor<TRight> {
-    typedef TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>;
 
 public:
     TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        const auto& left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -143,7 +143,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -151,11 +151,11 @@ public:
         const auto name = "DecimalDiv";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalDiv));
         const auto fnType =
-            FunctionType::get(valType, {valType, valType}, false);
+            FunctionType::get(valType, {valType, valType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
@@ -188,12 +188,12 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 } // namespace
@@ -201,7 +201,8 @@ private:
 IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
 
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(callable.GetInput(0), isOptionalLeft));
     const auto rightType = UnpackOptionalData(callable.GetInput(1), isOptionalRight);
@@ -213,15 +214,7 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
-            if (isOptionalLeft && isOptionalRight) {
-                return new TDecimalDivWrapper<true, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else if (isOptionalLeft) {
-                return new TDecimalDivWrapper<true, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else if (isOptionalRight) {
-                return new TDecimalDivWrapper<false, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else {
-                return new TDecimalDivWrapper<false, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            }
+            return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TDecimalDivWrapper, 2, isOptionalLeft, isOptionalRight, ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
 #define MAKE_PRIMITIVE_TYPE_DIV(type)                                                            \
     case NUdf::TDataType<type>::Id:                                                              \
         if (isOptionalLeft && isOptionalRight)                                                   \
@@ -239,5 +232,4 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

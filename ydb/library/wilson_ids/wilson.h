@@ -32,6 +32,8 @@ namespace NKikimr {
 #undef DEFINE_TRACING_LEVELS
 
         enum : ui8 {
+            // Detalisation level that doesn't reach storage nodes
+            DynamicNodesOnly = 4,
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
             // The most verbose detalisation level
@@ -78,6 +80,7 @@ namespace NKikimr {
                     ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
                 KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Basic,
+                KqpNodeCreateTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ProposeTransaction = TComponentTracingLevels::TQueryProcessor::Basic,
 
@@ -88,6 +91,8 @@ namespace NKikimr {
 
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
+
+                LockActor = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
@@ -114,6 +119,13 @@ namespace NKikimr {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
+        };
+    };
+
+    struct TWilsonQuoter {
+        enum {
+            QuoterService = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            QuoterProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
         };
     };
 

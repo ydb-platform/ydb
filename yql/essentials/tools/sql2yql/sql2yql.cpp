@@ -5,8 +5,7 @@
 #include <yql/essentials/parser/lexer_common/hints.h>
 
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/v1/complete/check/check_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
@@ -14,6 +13,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
@@ -90,28 +90,28 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
     const Reflection* ref = node.GetReflection();
     ref->ListFields(node, &fields);
 
-    for (auto it = fields.begin(); it != fields.end(); ++it) {
-        if ((*it)->is_repeated()) {
-            const ui32 fieldSize = ref->FieldSize(node, *it);
+    for (auto& field : fields) {
+        if (field->is_repeated()) {
+            const ui32 fieldSize = ref->FieldSize(node, field);
             for (ui32 i = 0; i < fieldSize; ++i) {
-                VisitField(out, **it, ref->GetRepeatedMessage(node, *it, i));
+                VisitField(out, *field, ref->GetRepeatedMessage(node, field, i));
             }
         } else {
-            VisitField(out, **it, ref->GetMessage(node, *it));
+            VisitField(out, *field, ref->GetMessage(node, field));
         }
     }
 }
 
 } // namespace
 
-bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsError) {
+bool TestIssues(const NYql::TAstParseResult& parseRes) {
     bool isOk = parseRes.IsOk();
 
     const bool hasError = AnyOf(parseRes.Issues, [](const NYql::TIssue& issue) {
         return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
     });
 
-    if (parseRes.IsOk() && hasError && isStrictWarningAsError) {
+    if (parseRes.IsOk() && hasError) {
         Cerr << "Errors reported, but yql compiled result!" << Endl << Endl;
         isOk = false;
     }
@@ -125,12 +125,22 @@ bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsErr
 
 bool TestFormat(
     const TString& query,
+    const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
+    const bool checkTripleFormatting,
     const bool checkDoubleFormatting)
 {
+    auto convergence = NSQLFormat::EConvergenceRequirement::None;
+    if (checkTripleFormatting) {
+        convergence = NSQLFormat::EConvergenceRequirement::Triple;
+    }
+    if (checkDoubleFormatting) {
+        convergence = NSQLFormat::EConvergenceRequirement::Double;
+    }
+
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, checkDoubleFormatting);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast, settings, issues, convergence);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -253,7 +263,8 @@ int BuildAST(int argc, char** argv) {
     opts.AddLongOption('F', "flags", "SQL pragma flags").SplitHandler(&flags, ',');
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument();
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
-    opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
+    opts.AddLongOption("test-triple-format", "check that format(format(query)) == format(format(format(query)))").NoArgument();
+    opts.AddLongOption("test-double-format", "check that format(query) == format(format(query))").NoArgument();
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
@@ -264,7 +275,12 @@ int BuildAST(int argc, char** argv) {
     opts.AddLongOption("mem-limit", "Set memory limit in megabytes").Handler1T<ui32>(0, NYql::SetAddressSpaceLimit);
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([&gatewaysConfig, &clusterMapping](const TString& file) {
         gatewaysConfig = ParseProtoConfig<NYql::TGatewaysConfig>(file);
-        GetClusterMappingFromGateways(*gatewaysConfig, clusterMapping);
+
+        THashMap<TString, TString> local;
+        GetClusterMappingFromGateways(*gatewaysConfig, local);
+        for (const auto& [cluster, service] : local) {
+            clusterMapping.emplace(cluster, service); // priority to argv
+        }
     });
     opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE").Handler1T<TString>([](const TString& file) {
         auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);
@@ -273,7 +289,7 @@ int BuildAST(int argc, char** argv) {
         }
         TVector<NYql::NPg::TExtensionDesc> extensions;
         NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-        NYql::NPg::RegisterExtensions(extensions, true,
+        NYql::NPg::RegisterExtensions(extensions, /*typesOnly=*/true,
                                       *NSQLTranslationPG::CreateExtensionSqlParser(),
                                       NKikimr::NMiniKQL::CreateExtensionLoader().get());
     });
@@ -291,30 +307,18 @@ int BuildAST(int argc, char** argv) {
 
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
 
+    NSQLTranslation::TExtendedSqlFlags sqlFlags;
+    for (auto&& flag : std::move(flags)) {
+        sqlFlags[flag] = {};
+    }
     if (gatewaysConfig) {
-        NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(flags);
+        sqlFlags = NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).ToMap(std::move(sqlFlags));
     }
 
     if (!res.Has("query") && queryFiles.empty()) {
         Cerr << "No --query nor query file was specified" << Endl << Endl;
         opts.PrintUsage(argv[0], Cerr);
     }
-
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-        res.Has("test-syntax-ambiguity"),
-        res.Has("debug-syntax-ambiguity"));
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-        res.Has("test-syntax-ambiguity"),
-        res.Has("debug-syntax-ambiguity"));
-
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
 
     TVector<TString> queries;
     int errors = 0;
@@ -364,14 +368,34 @@ int BuildAST(int argc, char** argv) {
             settings.Arena = &arena;
             settings.LangVer = langVer;
             settings.ClusterMapping = clusterMapping;
-            settings.Flags = flags;
+            NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
             settings.SyntaxVersion = syntaxVersion;
             settings.AnsiLexer = res.Has("ansi-lexer");
             settings.WarnOnV0 = false;
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
             settings.TestAntlr4 = res.Has("test-antlr4");
-            settings.EmitReadsForExists = true;
+
+            NSQLTranslationV1::TLexers lexers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+            };
+
+            NSQLTranslationV1::TParsers parsers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+                    res.Has("test-syntax-ambiguity"),
+                    res.Has("debug-syntax-ambiguity"),
+                    settings.MaxParseTreeDepth),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+                    res.Has("test-syntax-ambiguity"),
+                    res.Has("debug-syntax-ambiguity"),
+                    settings.MaxParseTreeDepth),
+            };
+
+            NSQLTranslation::TTranslators translators(
+                nullptr,
+                NSQLTranslationV1::MakeTranslator(lexers, parsers),
+                NSQLTranslationPG::MakeTranslator());
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;
@@ -438,16 +462,24 @@ int BuildAST(int argc, char** argv) {
                 }
             }
 
-            const bool isSQLv1 = (syntaxVersion == 1 && !res.Has("pg"));
+            const bool isSQLv1 =
+                (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
+                 !res.Has("pg"));
 
-            bool hasError = !TestIssues(parseRes, flags.contains("StrictWarningAsError"));
+            bool hasError = !TestIssues(parseRes);
 
             if (hasError || !noDebug) {
                 parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
             }
 
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
-                hasError |= !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
+                hasError |= !TestFormat(
+                    query,
+                    parseRes.Root,
+                    settings,
+                    outFileNameFormat,
+                    /*checkTripleFormatting=*/res.Has("test-triple-format"),
+                    /*checkDoubleFormatting=*/res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && isSQLv1 && parseRes.IsOk()) {

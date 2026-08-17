@@ -62,6 +62,7 @@ Y_UNIT_TEST_SUITE(NodeDisconnected) {
         env.Sim(TDuration::Seconds(simSeconds));
         Cerr << "CTR " << ctr << Endl;
 
-        UNIT_ASSERT(ctr < queuesCount * simSeconds / 10);
+        const ui32 readinessChecksPerQueue = ctr / queuesCount;
+        UNIT_ASSERT_LE(readinessChecksPerQueue, simSeconds / 10);
     }
 }

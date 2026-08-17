@@ -163,6 +163,10 @@ public:
         int simulateTransactionMs,
         int simulateTransactionSelect1Count,
         NQuery::TTxSettings txMode,
+        bool mixedTxMode,
+        double txModeWeightSerializable,
+        double txModeWeightSnapshot,
+        double txModeWeightReadCommitted,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
         std::shared_ptr<TTerminalStats>& stats,
@@ -184,11 +188,16 @@ public:
 
 private:
     NThreading::TFuture<void> Run();
+    NQuery::TTxSettings ChooseTxMode() const;
 
 private:
     ITaskQueue& TaskQueue;
     TTransactionContext Context;
     bool NoDelays;
+    bool MixedTxMode;
+    double TxModeWeightSerializable;
+    double TxModeWeightSnapshot;
+    double TxModeWeightReadCommitted;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;

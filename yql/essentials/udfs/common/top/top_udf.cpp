@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -453,7 +454,7 @@ private:
 
 public:
     explicit TTopCreate(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -550,7 +551,7 @@ private:
 
 public:
     explicit TTopDeserialize(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -579,7 +580,7 @@ private:
 
 public:
     explicit TTopMerge(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -751,12 +752,12 @@ RESOURCE_GENERIC(true, true)
         }                           \
     }
 
-static const auto CreateName = TStringRef::Of("Create");
-static const auto AddValueName = TStringRef::Of("AddValue");
-static const auto SerializeName = TStringRef::Of("Serialize");
-static const auto DeserializeName = TStringRef::Of("Deserialize");
-static const auto MergeName = TStringRef::Of("Merge");
-static const auto GetResultName = TStringRef::Of("GetResult");
+const auto CreateName = TStringRef::Of("Create");
+const auto AddValueName = TStringRef::Of("AddValue");
+const auto SerializeName = TStringRef::Of("Serialize");
+const auto DeserializeName = TStringRef::Of("Deserialize");
+const auto MergeName = TStringRef::Of("Merge");
+const auto GetResultName = TStringRef::Of("GetResult");
 
 class TTopModule: public IUdfModule {
 public:

@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -13,13 +12,13 @@ class TCollectFlowWrapper: public TMutableCodegeneratorRootNode<TCollectFlowWrap
 public:
     TCollectFlowWrapper(TComputationMutables& mutables, IComputationNode* flow)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Flow(flow)
+        , Flow_(flow)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         for (NUdf::TUnboxedValue list = ctx.HolderFactory.GetEmptyContainerLazy();;) {
-            auto item = Flow->GetValue(ctx);
+            auto item = Flow_->GetValue(ctx);
             if (item.IsFinish()) {
                 return list.Release();
             }
@@ -28,7 +27,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
@@ -49,7 +48,7 @@ public:
 
         block = work;
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
 
         const auto select = SwitchInst::Create(item, good, 2U, block);
         select->addCase(GetFinish(context), done);
@@ -79,25 +78,25 @@ private:
     }
 
     void RegisterDependencies() const final {
-        this->DependsOn(Flow);
+        this->DependsOn(Flow_);
     }
 
-    IComputationNode* const Flow;
+    IComputationNode* const Flow_;
 };
 
 template <bool IsList>
 class TCollectWrapper: public TMutableCodegeneratorNode<TCollectWrapper<IsList>> {
-    typedef TMutableCodegeneratorNode<TCollectWrapper<IsList>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TCollectWrapper<IsList>>;
 
 public:
     TCollectWrapper(TComputationMutables& mutables, IComputationNode* seq)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Seq(seq)
+        , Seq_(seq)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto seq = Seq->GetValue(ctx);
+        auto seq = Seq_->GetValue(ctx);
         if (IsList && seq.GetElements()) {
             return seq.Release();
         }
@@ -106,12 +105,12 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
 
-        const auto seq = GetNodeValue(Seq, ctx, block);
+        const auto seq = GetNodeValue(Seq_, ctx, block);
 
         if constexpr (IsList) {
             const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -140,10 +139,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Seq);
+        this->DependsOn(Seq_);
     }
 
-    IComputationNode* const Seq;
+    IComputationNode* const Seq_;
 };
 
 } // namespace
@@ -164,5 +163,4 @@ IComputationNode* WrapCollect(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

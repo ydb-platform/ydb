@@ -1,5 +1,4 @@
-// Copyright (c) 2009, Google Inc.
-// All rights reserved.
+// Copyright 2009 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -77,6 +76,8 @@
   #define ELF_ARCH  EM_MIPS
 #elif defined(__aarch64__)
   #define ELF_ARCH  EM_AARCH64
+#elif defined(__riscv)
+  #define ELF_ARCH  EM_RISCV
 #endif
 
 #if defined(__arm__)
@@ -84,7 +85,7 @@
 // containing core registers, while they use 'user_regs_struct' on other
 // architectures. This file-local typedef simplifies the source code.
 typedef user_regs user_regs_struct;
-#elif defined (__mips__)
+#elif defined (__mips__) || defined(__riscv)
 // This file-local typedef simplifies the source code.
 typedef gregset_t user_regs_struct;
 #endif
@@ -259,7 +260,7 @@ typedef struct prpsinfo {       /* Information about process                 */
   unsigned char  pr_zomb;       /* Zombie                                    */
   signed char    pr_nice;       /* Nice val                                  */
   unsigned long  pr_flag;       /* Flags                                     */
-#if defined(__x86_64__) || defined(__mips__)
+#if defined(__x86_64__) || defined(__mips__) || defined(__riscv)
   uint32_t       pr_uid;        /* User ID                                   */
   uint32_t       pr_gid;        /* Group ID                                  */
 #else
@@ -306,7 +307,7 @@ struct CrashedProcess {
 
   struct Thread {
     pid_t tid;
-#if defined(__mips__)
+#if defined(__mips__) || defined(__riscv)
     mcontext_t mcontext;
 #else
     user_regs_struct regs;
@@ -533,6 +534,71 @@ ParseThreadRegisters(CrashedProcess::Thread* thread,
   thread->mcontext.fpc_eir = rawregs->float_save.fir;
 #endif
 }
+#elif defined(__riscv)
+static void
+ParseThreadRegisters(CrashedProcess::Thread* thread,
+                    const MinidumpMemoryRange& range) {
+# if __riscv_xlen == 32
+  const MDRawContextRISCV* rawregs = range.GetData<MDRawContextRISCV>(0);
+# elif __riscv_xlen == 64
+  const MDRawContextRISCV64* rawregs = range.GetData<MDRawContextRISCV64>(0);
+# else
+#  error "Unexpected __riscv_xlen"
+# endif
+
+  thread->mcontext.__gregs[0]  = rawregs->pc;
+  thread->mcontext.__gregs[1]  = rawregs->ra;
+  thread->mcontext.__gregs[2]  = rawregs->sp;
+  thread->mcontext.__gregs[3]  = rawregs->gp;
+  thread->mcontext.__gregs[4]  = rawregs->tp;
+  thread->mcontext.__gregs[5]  = rawregs->t0;
+  thread->mcontext.__gregs[6]  = rawregs->t1;
+  thread->mcontext.__gregs[7]  = rawregs->t2;
+  thread->mcontext.__gregs[8]  = rawregs->s0;
+  thread->mcontext.__gregs[9]  = rawregs->s1;
+  thread->mcontext.__gregs[10] = rawregs->a0;
+  thread->mcontext.__gregs[11] = rawregs->a1;
+  thread->mcontext.__gregs[12] = rawregs->a2;
+  thread->mcontext.__gregs[13] = rawregs->a3;
+  thread->mcontext.__gregs[14] = rawregs->a4;
+  thread->mcontext.__gregs[15] = rawregs->a5;
+  thread->mcontext.__gregs[16] = rawregs->a6;
+  thread->mcontext.__gregs[17] = rawregs->a7;
+  thread->mcontext.__gregs[18] = rawregs->s2;
+  thread->mcontext.__gregs[19] = rawregs->s3;
+  thread->mcontext.__gregs[20] = rawregs->s4;
+  thread->mcontext.__gregs[21] = rawregs->s5;
+  thread->mcontext.__gregs[22] = rawregs->s6;
+  thread->mcontext.__gregs[23] = rawregs->s7;
+  thread->mcontext.__gregs[24] = rawregs->s8;
+  thread->mcontext.__gregs[25] = rawregs->s9;
+  thread->mcontext.__gregs[26] = rawregs->s10;
+  thread->mcontext.__gregs[27] = rawregs->s11;
+  thread->mcontext.__gregs[28] = rawregs->t3;
+  thread->mcontext.__gregs[29] = rawregs->t4;
+  thread->mcontext.__gregs[30] = rawregs->t5;
+  thread->mcontext.__gregs[31] = rawregs->t6;
+
+# if __riscv_flen == 32
+  for (int i = 0; i < MD_FLOATINGSAVEAREA_RISCV_FPR_COUNT; ++i) {
+    thread->mcontext.__fpregs.__f.__f[i] = rawregs->float_save.regs[i];
+  }
+  thread->mcontext.__fpregs.__f.__fcsr = rawregs->float_save.fpcsr;
+# elif __riscv_flen == 64
+  for (int i = 0; i < MD_FLOATINGSAVEAREA_RISCV_FPR_COUNT; ++i) {
+    thread->mcontext.__fpregs.__d.__f[i] = rawregs->float_save.regs[i];
+  }
+  thread->mcontext.__fpregs.__d.__fcsr = rawregs->float_save.fpcsr;
+# elif __riscv_flen == 128
+  for (int i = 0; i < MD_FLOATINGSAVEAREA_RISCV_FPR_COUNT; ++i) {
+    thread->mcontext.__fpregs.__q.__f[2*i] = rawregs->float_save.regs[i].high;
+    thread->mcontext.__fpregs.__q.__f[2*i+1] = rawregs->float_save.regs[i].low;
+  }
+  thread->mcontext.__fpregs.__q.__fcsr = rawregs->float_save.fpcsr;
+# else
+#  error "Unexpected __riscv_flen"
+# endif
+}
 #else
 #error "This code has not been ported to your platform yet"
 #endif
@@ -622,6 +688,22 @@ ParseSystemInfo(const Options& options, CrashedProcess* crashinfo,
 # else
 #  error "This mips ABI is currently not supported (n32)"
 # endif
+#elif defined(__riscv)
+# if __riscv_xlen == 32
+  if (sysinfo->processor_architecture != MD_CPU_ARCHITECTURE_RISCV) {
+    fprintf(stderr,
+            "This version of minidump-2-core only supports RISCV.\n");
+    exit(1);
+  }
+# elif __riscv_xlen == 64
+  if (sysinfo->processor_architecture != MD_CPU_ARCHITECTURE_RISCV64) {
+    fprintf(stderr,
+            "This version of minidump-2-core only supports RISCV64.\n");
+    exit(1);
+  }
+# else
+#  error "Unexpected __riscv_xlen"
+# endif
 #else
 #error "This code has not been ported to your platform yet"
 #endif
@@ -649,6 +731,10 @@ ParseSystemInfo(const Options& options, CrashedProcess* crashinfo,
             ? "MIPS"
             : sysinfo->processor_architecture == MD_CPU_ARCHITECTURE_MIPS64
             ? "MIPS64"
+            : sysinfo->processor_architecture == MD_CPU_ARCHITECTURE_RISCV
+            ? "RISCV"
+            : sysinfo->processor_architecture == MD_CPU_ARCHITECTURE_RISCV64
+            ? "RISCV64"
             : "???",
             sysinfo->number_of_processors,
             sysinfo->processor_level,
@@ -926,6 +1012,8 @@ WriteThread(const Options& options, const CrashedProcess::Thread& thread,
   pr.pr_pid = thread.tid;
 #if defined(__mips__)
   memcpy(&pr.pr_reg, &thread.mcontext.gregs, sizeof(user_regs_struct));
+#elif defined(__riscv)
+  memcpy(&pr.pr_reg, &thread.mcontext.__gregs, sizeof(user_regs_struct));
 #else
   memcpy(&pr.pr_reg, &thread.regs, sizeof(user_regs_struct));
 #endif

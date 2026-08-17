@@ -79,7 +79,7 @@ class SupportedCodecs(
 
     @staticmethod
     def from_public(
-        codecs: Optional[List[Union[ydb_topic_public_types.PublicCodec, int]]]
+        codecs: Optional[List[Union[ydb_topic_public_types.PublicCodec, int]]],
     ) -> Optional["SupportedCodecs"]:
         if codecs is None:
             return None

@@ -9,6 +9,9 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
+#include <ranges>
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -444,8 +447,8 @@ TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& pred
                     auto expanded = ExpandAndOverOr(orTerm, ctx, types);
                     if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
                         // Update orTermsToProcess with terms after expansion and repeat
-                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
-                            orTermsToProcess.push_front(std::move(*it));
+                        for (auto& it : std::ranges::reverse_view(expanded)) {
+                            orTermsToProcess.push_front(std::move(it));
                             // joinInputs update is not needed
                             // as innerAndTerm can't be newly constructed node
                         }
@@ -861,7 +864,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
         .Seal()
         .Build();
 
-    auto newJoinTree = ctx.ReplaceNode(std::move(joinTree), *parentJoinPtr, newParentJoin);
+    auto newJoinTree = ctx.ReplaceNode(joinTree, *parentJoinPtr, newParentJoin);
 
     // Combine join labels from left tree and associate them with result of `EquiJoin` from above.
     auto combinedLabelList = CombineLabels(leftJoinLabelsFull);
@@ -899,7 +902,7 @@ public:
     TJoinTreeRebuilder(const TJoinLabels& labels, TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
         TExprContext& ctx, bool rotateJoinTree)
         : JoinLabels_(labels)
-        , JoinTree_(joinTree)
+        , JoinTree_(std::move(joinTree))
         , Labels_{ label1, label2 }
         , Columns_{ column1, column2 }
         , Ctx_(ctx)
@@ -937,7 +940,8 @@ private:
         CrossJoins_.clear();
         RestJoins_.clear();
         GatherCross(joinTree);
-        TStringBuf foundCross1, foundCross2;
+        TStringBuf foundCross1;
+        TStringBuf foundCross2;
         auto inCross1 = FindCrossJoinLabel(Labels_[0], foundCross1);
         auto inCross2 = FindCrossJoinLabel(Labels_[1], foundCross2);
         if (inCross1 || inCross2) {
@@ -1091,21 +1095,22 @@ private:
         TMaybe<ui32> found2;
         auto& left = children[1];
         if (!left->IsAtom()) {
-            TMaybe<ui32> leftFound1, leftFound2;
+            TMaybe<ui32> leftFound1;
+            TMaybe<ui32> leftFound2;
             std::tie(left, leftFound1, leftFound2) = AddLink(left);
             if (leftFound1) {
-                found1 = 1u;
+                found1 = 1U;
             }
 
             if (leftFound2) {
-                found2 = 1u;
+                found2 = 1U;
             }
         } else {
             auto input1 = JoinLabels_.FindInput(Labels_[0]);
             YQL_ENSURE(input1);
             for (const auto& t : (*input1)->Tables) {
                 if (left->Content() == t) {
-                    found1 = 1u;
+                    found1 = 1U;
                 }
             }
 
@@ -1113,21 +1118,22 @@ private:
             YQL_ENSURE(input2);
             for (const auto& t : (*input2)->Tables) {
                 if (left->Content() == t) {
-                    found2 = 1u;
+                    found2 = 1U;
                 }
             }
         }
 
         auto& right = children[2];
         if (!right->IsAtom()) {
-            TMaybe<ui32> rightFound1, rightFound2;
+            TMaybe<ui32> rightFound1;
+            TMaybe<ui32> rightFound2;
             std::tie(right, rightFound1, rightFound2) = AddLink(right);
             if (rightFound1) {
-                found1 = 2u;
+                found1 = 2U;
             }
 
             if (rightFound2) {
-                found2 = 2u;
+                found2 = 2U;
             }
         }
         else {
@@ -1135,7 +1141,7 @@ private:
             YQL_ENSURE(input1);
             for (const auto& t : (*input1)->Tables) {
                 if (right->Content() == t) {
-                    found1 = 2u;
+                    found1 = 2U;
                 }
             }
 
@@ -1143,7 +1149,7 @@ private:
             YQL_ENSURE(input2);
             for (const auto& t : (*input2)->Tables) {
                 if (right->Content() == t) {
-                    found2 = 2u;
+                    found2 = 2U;
                 }
             }
         }
@@ -1195,7 +1201,8 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
     const TJoinLabels& labels, const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
     TExprContext& ctx, bool rotateJoinTree)
 {
-    TExprNode::TPtr left, right;
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
     if (!IsMemberEquality(predicate, row, left, right)) {
         return equiJoin;
     }
@@ -1669,7 +1676,8 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
     THashMap<TString, size_t> column2id;
     THashSet<ui32> makeNoNullInputs;
     for (auto pred : andComponents) {
-        TExprNode::TPtr left, right;
+        TExprNode::TPtr left;
+        TExprNode::TPtr right;
         // TODO: handle case IsEquality() && !IsMemberEquality()
         if (!IsMemberEquality(pred, row, left, right)) {
             rest.push_back(pred);
@@ -1692,7 +1700,8 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
             continue;
         }
 
-        TStringBuf leftTable, rightTable;
+        TStringBuf leftTable;
+        TStringBuf rightTable;
         TStringBuf column;
         SplitTableName(leftCol, leftTable, column);
         SplitTableName(rightCol, rightTable, column);
@@ -1760,7 +1769,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
                 extraInputPreds[*idx].MainColumn = it->second.Name;
                 AppendEquality(predicate->Pos(), extraInputPreds[*idx], it->second.Name, col, label, ctx);
             } else {
-                eqSetByInput.insert({*idx, {col, 0}});
+                eqSetByInput.insert({*idx, {.Name=col, .UseCount=0}});
             }
         }
     }
@@ -2008,7 +2017,7 @@ TExprBase FlatMapOverEquiJoin(
             TSet<ui32> inputs;
             GatherJoinInputs(andTerm, row, parentsMap, backRenameMap, labels, inputs, usedFields);
 
-            if (!multiUsage && inputs.size() == 0) {
+            if (!multiUsage && inputs.empty()) {
                 YQL_CLOG(DEBUG, Core) << "ConstantPredicatePushdownOverEquiJoin";
                 ret = ConstantPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, ordered, ctx);
                 extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);

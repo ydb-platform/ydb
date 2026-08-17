@@ -84,6 +84,7 @@ def get_test_history(test_names_array, days_back, build_type, branch):
         AND ($build_type = '' OR t.build_type = $build_type)
         AND ($branch = '' OR t.branch = $branch)
         AND t.job_name != 'Run-tests'
+        AND (t.pull IS NULL OR NOT String::Contains(t.pull, 'manual'))
     ORDER BY 
         test_name, 
         run_timestamp DESC;

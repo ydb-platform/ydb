@@ -7,6 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/datetime/base.h>
 #include <util/network/socket.h>
+#include <util/string/builder.h>
 #include <util/system/getpid.h>
 
 #ifdef _linux_
@@ -17,6 +18,7 @@
 #include <csignal>
 #include <cerrno>
 #include <cstdlib>
+#include <array>
 
 namespace NYql {
 
@@ -146,7 +148,7 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
         }
     }
 
-    if (SigProcMask(SIG_BLOCK, &interestedSignals, NULL) == -1) {
+    if (SigProcMask(SIG_BLOCK, &interestedSignals, /*oset=*/nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 
@@ -158,16 +160,16 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
 void InitSignals()
 {
     auto handlerDescs = std::to_array<TSignalHandlerDesc>({
-        {SIGTERM, SignalHandler},
-        {SIGINT, SignalHandler},
-        {SIGQUIT, SignalHandler},
+        {.Signo = SIGTERM, .Handler = SignalHandler},
+        {.Signo = SIGINT, .Handler = SignalHandler},
+        {.Signo = SIGQUIT, .Handler = SignalHandler},
 #ifdef _unix_
-        {SIGPIPE, SIG_IGN},
-        {SIGHUP, SignalHandler},
-        {SIGUSR1, SignalHandler},
-        {SIGCHLD, SignalHandler},
+        {.Signo = SIGPIPE, .Handler = SIG_IGN},
+        {.Signo = SIGHUP, .Handler = SignalHandler},
+        {.Signo = SIGUSR1, .Handler = SignalHandler},
+        {.Signo = SIGCHLD, .Handler = SignalHandler},
 #endif
-        {-1, nullptr},
+        {.Signo = -1, .Handler = nullptr},
     });
 
     SetSignalHandlers(handlerDescs.data());
@@ -176,16 +178,16 @@ void InitSignals()
 void InitSignalsWithSelfPipe()
 {
     auto handlerDescs = std::to_array<TSignalHandlerDesc>({
-        {SIGTERM, SignalHandlerWithSelfPipe},
-        {SIGINT, SignalHandlerWithSelfPipe},
-        {SIGQUIT, SignalHandlerWithSelfPipe},
+        {.Signo = SIGTERM, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGINT, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGQUIT, .Handler = SignalHandlerWithSelfPipe},
 #ifdef _unix_
-        {SIGPIPE, SIG_IGN},
-        {SIGHUP, SignalHandlerWithSelfPipe},
-        {SIGUSR1, SignalHandlerWithSelfPipe},
-        {SIGCHLD, SignalHandlerWithSelfPipe},
+        {.Signo = SIGPIPE, .Handler = SIG_IGN},
+        {.Signo = SIGHUP, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGUSR1, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGCHLD, .Handler = SignalHandlerWithSelfPipe},
 #endif
-        {-1, nullptr},
+        {.Signo = -1, .Handler = nullptr},
     });
 
     TPipe::Pipe(SignalPipeR, SignalPipeW);
@@ -195,6 +197,56 @@ void InitSignalsWithSelfPipe()
     SetSignalHandlers(handlerDescs.data());
 }
 
+void ResetSignalFlags()
+{
+    // we do not reset NeedTerminate and NeedQuit here
+    // they should be preserved after fork
+    NeedReconfigure = 0;
+    NeedReopenLog = 0;
+    NeedReapZombies = 0;
+    NeedInterrupt = 0;
+}
+
+void EnsureSignalsAreBlocked() {
+#ifdef _unix_
+    sigset_t currentMask = {};
+    SigEmptySet(&currentMask);
+    if (sigprocmask(SIG_BLOCK, nullptr, &currentMask) == -1) {
+        ythrow TSystemError() << "Cannot get current signal mask";
+    }
+
+    const auto requiredSignals = std::to_array({SIGTERM, SIGINT, SIGQUIT,
+                                                SIGHUP, SIGUSR1, SIGCHLD});
+
+    std::vector<int> unblockedSignals;
+
+    for (int signo : requiredSignals) {
+        const int r = sigismember(&currentMask, signo);
+        if (r == -1) {
+            ythrow TSystemError() << "Error in sigismember";
+        }
+        if (r == 0) {
+            unblockedSignals.push_back(signo);
+        }
+    }
+
+    if (!unblockedSignals.empty()) {
+        TStringBuilder errorMsg;
+        errorMsg << "Required signals are not blocked: ";
+
+        for (size_t i = 0; i < unblockedSignals.size(); ++i) {
+            if (i > 0) {
+                errorMsg << ", ";
+            }
+            const char* signalName = strsignal(unblockedSignals[i]);
+            errorMsg << (signalName ? signalName : "unknown");
+        }
+
+        ythrow yexception() << errorMsg;
+    }
+#endif
+}
+
 void CatchInterruptSignal(bool doCatch) {
     CatchInterrupt = doCatch;
 }
@@ -202,7 +254,9 @@ void CatchInterruptSignal(bool doCatch) {
 void SigSuspend(const sigset_t* mask)
 {
 #ifdef _unix_
-    sigsuspend(mask);
+    if (sigsuspend(mask) == -1 && errno != EINTR) {
+        ythrow TSystemError() << "sigsuspend failed";
+    }
 #else
     Y_UNUSED(mask);
     Sleep(TDuration::Seconds(1));
@@ -214,7 +268,7 @@ void AllowAnySignals()
     sigset_t blockMask;
     SigEmptySet(&blockMask);
 
-    if (SigProcMask(SIG_SETMASK, &blockMask, NULL) == -1) {
+    if (SigProcMask(SIG_SETMASK, &blockMask, /*oset=*/nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 }

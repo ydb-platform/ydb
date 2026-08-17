@@ -1,9 +1,11 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NYql {
 
+constexpr TStringBuf PqSource = NDq::PqSource;
 constexpr TStringBuf PartitionsCountProp = "PartitionsCount";
 constexpr TStringBuf FederatedClustersProp = "FederatedClusters";
 constexpr TStringBuf ConsumerSetting = "Consumer";
@@ -17,11 +19,11 @@ constexpr TStringBuf WatermarksGranularityUsSetting = "WatermarksGranularityUs";
 constexpr TStringBuf WatermarksLateArrivalDelayUsSetting = "WatermarksLateArrivalDelayUs";
 constexpr TStringBuf WatermarksIdleTimeoutUsSetting = "WatermarksIdleTimeoutUs";
 constexpr TStringBuf WatermarksIdlePartitionsSetting = "WatermarksIdlePartitions";
-constexpr TStringBuf WatermarksLateEventsPolicySetting = "WatermarksLateEventsPolicy";
 constexpr TStringBuf ReconnectPeriod = "ReconnectPeriod";
 constexpr TStringBuf ReadGroup = "ReadGroup";
 constexpr TStringBuf SkipJsonErrors = "SkipJsonErrors";
 constexpr TStringBuf StreamingTopicRead = "StreamingTopicRead";
 constexpr TStringBuf PartitionsBalancingIdleTimeoutUsSetting = "PartitionsBalancingIdleTimeoutUs";
+constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
 
 } // namespace NYql

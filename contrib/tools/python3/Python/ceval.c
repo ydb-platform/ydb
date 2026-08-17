@@ -513,7 +513,7 @@ _PyEval_MatchClass(PyThreadState *tstate, PyObject *subject, PyObject *type,
         if (allowed < nargs) {
             const char *plural = (allowed == 1) ? "" : "s";
             _PyErr_Format(tstate, PyExc_TypeError,
-                          "%s() accepts %d positional sub-pattern%s (%d given)",
+                          "%s() accepts %zd positional sub-pattern%s (%zd given)",
                           ((PyTypeObject*)type)->tp_name,
                           allowed, plural, nargs);
             goto fail;
@@ -1183,7 +1183,7 @@ format_missing(PyThreadState *tstate, const char *kind,
     if (name_str == NULL)
         return;
     _PyErr_Format(tstate, PyExc_TypeError,
-                  "%U() missing %i required %s argument%s: %U",
+                  "%U() missing %zd required %s argument%s: %U",
                   qualname,
                   len,
                   kind,
@@ -2031,14 +2031,17 @@ _PyEval_ExceptionGroupMatch(PyObject* exc_value, PyObject *match_type,
             PyThreadState *tstate = _PyThreadState_GET();
             _PyInterpreterFrame *frame = _PyThreadState_GetFrame(tstate);
             PyFrameObject *f = _PyFrame_GetFrameObject(frame);
-            if (f != NULL) {
-                PyObject *tb = _PyTraceBack_FromFrame(NULL, f);
-                if (tb == NULL) {
-                    return -1;
-                }
-                PyException_SetTraceback(wrapped, tb);
-                Py_DECREF(tb);
+            if (f == NULL) {
+                Py_DECREF(wrapped);
+                return -1;
             }
+
+            PyObject *tb = _PyTraceBack_FromFrame(NULL, f);
+            if (tb == NULL) {
+                return -1;
+            }
+            PyException_SetTraceback(wrapped, tb);
+            Py_DECREF(tb);
             *match = wrapped;
         }
         *rest = Py_NewRef(Py_None);
@@ -2505,6 +2508,11 @@ PyEval_GetLocals(void)
 
     if (PyFrameLocalsProxy_Check(locals)) {
         PyFrameObject *f = _PyFrame_GetFrameObject(current_frame);
+        if (f == NULL) {
+            Py_DECREF(locals);
+            return NULL;
+        }
+
         PyObject *ret = f->f_locals_cache;
         if (ret == NULL) {
             ret = PyDict_New();

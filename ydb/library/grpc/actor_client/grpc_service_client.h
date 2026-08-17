@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/services/services.pb.h>
@@ -44,7 +45,7 @@ class TGrpcServiceClient  {
     template <typename TProtoMessageType>
     static TString Trim(const TProtoMessageType& message) {
         TStringBuilder log;
-        log << message.GetDescriptor()->name() << " { " << Trim(message.ShortDebugString()) << " }";
+        log << message.GetDescriptor()->name() << " { " << Trim(NKikimr::SecureDebugString(message)) << " }";
         return log;
     }
 
@@ -127,6 +128,7 @@ public:
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
         NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
+        config.UserAgentPrefix = settings.UserAgentPrefix;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;

@@ -27,11 +27,13 @@ public:
 private:
     STFUNC(StateWork);
 
-    void Handle(const TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev,
-                const TActorContext& ctx);
+    void Handle(
+        const TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev,
+        const TActorContext& ctx);
 
-    void Handle(const TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
-                const TActorContext& ctx);
+    void Handle(
+        const TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
+        const TActorContext& ctx);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -43,8 +45,10 @@ STFUNC(TReplyProxyActor::StateWork)
         HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
 
         default:
-            HandleUnexpectedEvent(ev, NKikimrServices::NBS_SS_PROXY,
-                                  __PRETTY_FUNCTION__);
+            HandleUnexpectedEvent(
+                ev,
+                NKikimrServices::NBS_SS_PROXY,
+                __PRETTY_FUNCTION__);
             break;
     }
 }
@@ -86,26 +90,35 @@ void TSSProxyActor::HandleWaitSchemeTx(
     }
 }
 
-void TSSProxyActor::SendWaitTxRequest(const TActorContext& ctx,
-                                      ui64 schemeShard, ui64 txId)
+void TSSProxyActor::SendWaitTxRequest(
+    const TActorContext& ctx,
+    ui64 schemeShard,
+    ui64 txId)
 {
     auto& state = SchemeShardStates[schemeShard];
     if (!state.ReplyProxy) {
-        LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-                  "Creating reply proxy actor for schemeshard %lu",
-                  schemeShard);
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_SS_PROXY,
+            "Creating reply proxy actor for schemeshard %lu",
+            schemeShard);
 
         state.ReplyProxy =
             NYdb::NBS::Register<TReplyProxyActor>(ctx, ctx.SelfID, schemeShard);
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-              "Sending NotifyTxCompletion to %lu for txId# %lu", schemeShard,
-              txId);
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_SS_PROXY,
+        "Sending NotifyTxCompletion to %lu for txId# %lu",
+        schemeShard,
+        txId);
 
     TActorId clientId = ClientCache->Prepare(ctx, schemeShard);
-    NTabletPipe::SendData(ctx.MakeFor(state.ReplyProxy), clientId,
-                          new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+    NTabletPipe::SendData(
+        ctx.MakeFor(state.ReplyProxy),
+        clientId,
+        new TEvSchemeShard::TEvNotifyTxCompletion(txId));
 }
 
 void TSSProxyActor::HandleTxRegistered(
@@ -117,9 +130,12 @@ void TSSProxyActor::HandleTxRegistered(
     const auto* msg = ev->Get();
     ui64 txId = msg->Record.GetTxId();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-              "Received NotifyTxCompletionRegistered from %lu for txId# %lu",
-              schemeShard, txId);
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_SS_PROXY,
+        "Received NotifyTxCompletionRegistered from %lu for txId# %lu",
+        schemeShard,
+        txId);
 }
 
 void TSSProxyActor::HandleTxResult(
@@ -132,15 +148,19 @@ void TSSProxyActor::HandleTxResult(
     const auto* msg = ev->Get();
     ui64 txId = msg->Record.GetTxId();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_SS_PROXY,
-              "Received NotifyTxCompletionResult from %lu for txId# %lu",
-              schemeShard, txId);
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_SS_PROXY,
+        "Received NotifyTxCompletionResult from %lu for txId# %lu",
+        schemeShard,
+        txId);
 
     auto it = state.TxToRequests.find(txId);
     if (it != state.TxToRequests.end()) {
         for (const auto& request: it->second) {
             NYdb::NBS::Reply(
-                ctx, *request,
+                ctx,
+                *request,
                 std::make_unique<TEvSSProxy::TEvWaitSchemeTxResponse>());
         }
         state.TxToRequests.erase(it);

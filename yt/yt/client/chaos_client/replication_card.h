@@ -5,8 +5,11 @@
 #include <yt/yt/client/chaos_client/public.h>
 
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/schema.h>
 
-#include <yt/yt/client/tablet_client/public.h>
+#include <yt/yt/client/tablet_client/index_info.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NChaosClient {
 
@@ -20,12 +23,16 @@ struct TReplicationProgress
         NTransactionClient::TTimestamp Timestamp;
 
         void Persist(const TStreamPersistenceContext& context);
+
+        bool operator==(const TSegment& other) const;
     };
 
     std::vector<TSegment> Segments;
     NTableClient::TUnversionedOwningRow UpperKey;
 
     void Persist(const TStreamPersistenceContext& context);
+
+    bool operator==(const TReplicationProgress& other) const = default;
 };
 
 struct TReplicaHistoryItem
@@ -37,6 +44,8 @@ struct TReplicaHistoryItem
 
     bool IsSync() const;
     void Persist(const TStreamPersistenceContext& context);
+
+    bool operator==(const TReplicaHistoryItem& other) const = default;
 };
 
 struct TReplicaInfo
@@ -53,6 +62,8 @@ struct TReplicaInfo
     //! Returns index of history item corresponding to timestamp, -1 if none.
     int FindHistoryItemIndex(NTransactionClient::TTimestamp timestamp) const;
 };
+
+bool operator==(const TReplicaInfo& lhs, const TReplicaInfo& rhs);
 
 struct TReplicationProgressProjection
 {
@@ -72,6 +83,7 @@ struct TReplicationCard
     NTransactionClient::TTimestamp CurrentTimestamp = NTransactionClient::NullTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;
+    THashMap<TReplicationCardId, NTabletClient::TIndexInfo> SecondaryIndices;
 
     //! Returns pointer to replica with a given id, nullptr if none.
     TReplicaInfo* FindReplica(TReplicaId replicaId);
@@ -130,7 +142,7 @@ void FormatValue(
     const TReplicationCard& replicationCard,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 
@@ -146,6 +158,7 @@ bool IsReplicaReallySync(
     const std::vector<TReplicaHistoryItem>& replicaHistory);
 NTabletClient::ETableReplicaMode GetTargetReplicaMode(NTabletClient::ETableReplicaMode mode);
 NTabletClient::ETableReplicaState GetTargetReplicaState(NTabletClient::ETableReplicaState state);
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode);
 
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update);
 
@@ -163,6 +176,9 @@ void CanonizeReplicationProgress(TReplicationProgress* progress);
 
 NTransactionClient::TTimestamp GetReplicationProgressMinTimestamp(const TReplicationProgress& progress);
 NTransactionClient::TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progress);
+std::pair<NTransactionClient::TTimestamp, NTransactionClient::TTimestamp> GetReplicationProgressMinMaxTimestamp(
+    const TReplicationProgress& progress);
+
 NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
     const TReplicationCard& replicationCard,
     NTableClient::TLegacyKey lower,

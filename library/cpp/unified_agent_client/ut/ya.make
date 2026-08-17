@@ -1,6 +1,8 @@
 GTEST()
 
 SRCS(
+    async_joiner_ut.cpp
+    grpc_io_ut.cpp
     logger_ut.cpp
 )
 

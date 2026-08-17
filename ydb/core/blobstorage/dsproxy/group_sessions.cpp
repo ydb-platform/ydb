@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
+
 namespace NKikimr {
 
 static NKikimrBlobStorage::EVDiskQueueId VDiskQueues[] = {
@@ -76,11 +78,12 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             TActorId queue = TActivationContext::Register(queueActor.release(), ProxyActor, TMailboxType::ReadAsFilled,
                 AppData()->SystemPoolId);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << info->GroupID
-                << " Actor# " << ProxyActor
-                << " Create Queue# " << queue.ToString()
-                << " targetNodeId# " << targetNodeId
-                << " Marker# DSP01");
+            YDB_LOG_DEBUG("Create",
+                {"group", info->GroupID},
+                {"actor", ProxyActor},
+                {"queue", queue},
+                {"targetNodeId", targetNodeId},
+                {"marker", "DSP01"});
 
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;
@@ -144,7 +147,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
             q.CostModel = nullptr;
         }
     }
-    q.IsConnected = connected;
+    q.IsConnected.store(connected, std::memory_order_release);
 
     if (updated) {
         auto iterate = [](auto& currentCostModel, const auto& next) {

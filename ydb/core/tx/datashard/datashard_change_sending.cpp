@@ -3,6 +3,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <optional>
 
 namespace NKikimr::NDataShard {
@@ -114,9 +116,18 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithBody(details.template GetValue<typename TDetailsTable::Body>())
             .WithSource(source);
 
+        NACLib::TUserContextBuilder userCtxBuilder;
         if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
-            builder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
+            userCtxBuilder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
         }
+        if (details.template HaveValue<typename TDetailsTable::UserTraceId>()) {
+            const auto value = details.template GetValue<typename TDetailsTable::UserTraceId>();
+
+            NActorsProto::TTraceId serializedTraceId;
+            serializedTraceId.SetData(value);
+            userCtxBuilder.WithUserTraceId(NWilson::TTraceId(serializedTraceId));
+        }
+        builder.WithUserCtx(userCtxBuilder.Build());
 
         if constexpr (HaveLock) {
             Y_ENSURE(commited);
@@ -190,7 +201,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         TChangeRecordBuilder(result.Record)
                             .WithLockId(itQueue->second.LockId)
                             .WithLockOffset(itQueue->second.LockOffset)
-                            .WithUserSID(result.Record->GetUserSID())
+                            .WithUserCtx(result.Record->GetUserCtx())
                             .Build()
                     );
                 } else {
@@ -411,7 +422,7 @@ private:
 /// Request
 void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
-    SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
+    SetCounter(COUNTER_CHANGE_RECORDS_REQUESTED, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
         return sum + kv.second.size();
     }));
     ScheduleRequestChangeRecords(ctx);

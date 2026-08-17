@@ -16,12 +16,15 @@ class IClassBehaviour {
 public:
     using TFactory = NObjectFactory::TObjectFactory<IClassBehaviour, TString>;
     using TPtr = std::shared_ptr<IClassBehaviour>;
+
 private:
     mutable std::shared_ptr<NInitializer::IInitializationBehaviour> Initializer;
+
 protected:
     virtual std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const = 0;
     virtual TString GetInternalStorageTablePath() const = 0;
     virtual TString GetInternalStorageHistoryTablePath() const;
+
 public:
     virtual ~IClassBehaviour() = default;
     TString GetStorageTablePath() const;

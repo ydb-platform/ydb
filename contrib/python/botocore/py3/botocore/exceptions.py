@@ -351,7 +351,7 @@ class ValidationError(BotoCoreError):
     :ivar type_name: The name of the underlying type.
     """
 
-    fmt = "Invalid value ('{value}') for param {param} " "of type {type_name} "
+    fmt = "Invalid value ('{value}') for param {param} of type {type_name} "
 
 
 class ParamValidationError(BotoCoreError):
@@ -371,8 +371,7 @@ class UnknownKeyError(ValidationError):
     """
 
     fmt = (
-        "Unknown key '{value}' for param '{param}'.  Must be one "
-        "of: {choices}"
+        "Unknown key '{value}' for param '{param}'.  Must be one of: {choices}"
     )
 
 
@@ -482,9 +481,7 @@ class WaiterError(BotoCoreError):
 class IncompleteReadError(BotoCoreError):
     """HTTP response did not return expected number of bytes."""
 
-    fmt = (
-        '{actual_bytes} read, but total bytes ' 'expected is {expected_bytes}.'
-    )
+    fmt = '{actual_bytes} read, but total bytes expected is {expected_bytes}.'
 
 
 class InvalidExpressionError(BotoCoreError):
@@ -514,7 +511,7 @@ class UnknownClientMethodError(BotoCoreError):
 class UnsupportedSignatureVersionError(BotoCoreError):
     """Error when trying to use an unsupported Signature Version."""
 
-    fmt = 'Signature version is not supported: {signature_version}'
+    fmt = 'Signature version(s) are not supported: {signature_version}'
 
 
 class ClientError(Exception):
@@ -773,6 +770,32 @@ class UnauthorizedSSOTokenError(SSOError):
     )
 
 
+class LoginError(BotoCoreError):
+    fmt = (
+        "An unspecified error happened when resolving AWS credentials or "
+        "refreshing a login session profile."
+    )
+
+
+class LoginRefreshRequired(LoginError):
+    fmt = "Your session has expired or credentials have changed. Please reauthenticate using 'aws login'."
+
+
+class LoginInsufficientPermissions(LoginError):
+    fmt = (
+        "Unable to create or refresh login credentials due to insufficient "
+        "permissions. You may be missing permission for the 'signin:CreateOAuth2Token' action."
+    )
+
+
+class LoginTokenLoadError(LoginError):
+    fmt = "Error loading login session token: {error_msg}"
+
+
+class LoginAuthorizationCodeError(LoginError):
+    fmt = "Error loading or redeeming a login authorization code: {error_msg} "
+
+
 class CapacityNotAvailableError(BotoCoreError):
     fmt = 'Insufficient request capacity available.'
 
@@ -814,3 +837,21 @@ class EndpointResolutionError(EndpointProviderError):
 
 class UnknownEndpointResolutionBuiltInName(EndpointProviderError):
     fmt = 'Unknown builtin variable name: {name}'
+
+
+class InvalidChecksumConfigError(BotoCoreError):
+    """Error when an invalid checksum config value is supplied."""
+
+    fmt = (
+        'Unsupported configuration value for {config_key}. '
+        'Expected one of {valid_options} but got {config_value}.'
+    )
+
+
+class UnsupportedServiceProtocolsError(BotoCoreError):
+    """Error when a service does not use any protocol supported by botocore."""
+
+    fmt = (
+        'Botocore supports {botocore_supported_protocols}, but service {service} only '
+        'supports {service_supported_protocols}.'
+    )

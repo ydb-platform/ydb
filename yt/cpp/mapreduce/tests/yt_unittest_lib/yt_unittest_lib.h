@@ -45,6 +45,8 @@ void WriteProtoTable(const IClientBasePtr& client, const TString& tablePath, con
 
 bool UseRpcClient();
 
+bool UseDefaultHttpClient();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO: should be removed, usages should be replaced with TConfigSaverGuard
@@ -217,6 +219,9 @@ void Out<NYT::NTesting::TOwningYaMRRow>(IOutputStream& out, const NYT::NTesting:
 
 #define SKIP_IF_RPC() \
     SKIP_TEST_IF(UseRpcClient(), "Unsupported test for RPC Client")
+
+#define SKIP_IF_DEFAULT_HTTP() \
+    SKIP_TEST_IF(UseDefaultHttpClient(), "Unsupported test for default (sync) HTTP Client")
 
 #define YT_UNITTEST_LIB_H_
 #include "yt_unittest_lib-inl.h"

@@ -455,6 +455,13 @@ namespace NJson {
         return Value.String;
     }
 
+    TString& TJsonValue::GetStringSafe() {
+        if (!IsString()) {
+            ythrow TJsonException() << "Not a string";
+        }
+        return Value.String;
+    }
+
     bool TJsonValue::GetBooleanSafe(const bool defaultValue) const {
         if (Type == JSON_UNDEFINED) {
             return defaultValue;
@@ -884,6 +891,11 @@ namespace NJson {
 
     const TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) const noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
+    }
+    TJsonValue& TJsonValue::GetValueByPathOrCreate(TStringBuf path, char delimiter) noexcept {
+        TJsonValue* const ptr = GetValuePtrByPath<true>(this, path, delimiter);
+        Y_ASSERT(ptr);
+        return *ptr;
     }
 
     TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) noexcept {

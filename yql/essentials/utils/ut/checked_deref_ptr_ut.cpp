@@ -8,7 +8,7 @@ namespace {
 struct TTestStruct {
     int Value = 42;
 
-    int GetValue() const {
+    [[nodiscard]] int GetValue() const {
         return Value;
     }
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST(CopyConstructor) {
 Y_UNIT_TEST(MoveConstructor) {
     TTestStruct obj;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj);
-    TCheckedDerefPtr<TTestStruct> ptr2(std::move(ptr1));
+    TCheckedDerefPtr<TTestStruct> ptr2(std::move(ptr1)); // NOLINT(performance-move-const-arg)
     UNIT_ASSERT_EQUAL(ptr2.Get(), &obj);
 }
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST(MoveAssignment) {
     TTestStruct obj;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj);
     TCheckedDerefPtr<TTestStruct> ptr2;
-    ptr2 = std::move(ptr1);
+    ptr2 = std::move(ptr1); // NOLINT(performance-move-const-arg)
     UNIT_ASSERT_EQUAL(ptr2.Get(), &obj);
 }
 
@@ -151,7 +151,8 @@ Y_UNIT_TEST(Reset) {
 }
 
 Y_UNIT_TEST(ResetWithPointer) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr(&obj1);
     UNIT_ASSERT_EQUAL(ptr.Get(), &obj1);
 
@@ -160,7 +161,8 @@ Y_UNIT_TEST(ResetWithPointer) {
 }
 
 Y_UNIT_TEST(Swap) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj1);
     TCheckedDerefPtr<TTestStruct> ptr2(&obj2);
 
@@ -170,7 +172,8 @@ Y_UNIT_TEST(Swap) {
 }
 
 Y_UNIT_TEST(StdSwap) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj1);
     TCheckedDerefPtr<TTestStruct> ptr2(&obj2);
 

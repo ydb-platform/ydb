@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           sparse-checkout: |
@@ -25,4 +25,6 @@ jobs:
           head_branch: rightlib
           label: rightlib
           repository: ${{ github.repository }}
+          force_overwrite: true
+          overwrite_exclude: "build/ext_mapping.conf.json build/internal/conf/autoincludes.json build/internal/conf/internal.conf build/internal/conf/settings.conf build/internal/ya.conf"
           gh_personal_access_token: ${{ env.GH_TOKEN }}

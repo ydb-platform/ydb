@@ -6,7 +6,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_AS_DEQUE_20061213_2210)
+#ifndef FUSION_AS_DEQUE_20061213_2210
 #define FUSION_AS_DEQUE_20061213_2210
 
 #include <boost/preprocessor/iterate.hpp>

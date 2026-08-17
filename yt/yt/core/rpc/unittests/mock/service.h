@@ -255,6 +255,12 @@ public:
         (override));
 
     MOCK_METHOD(
+        IDirectPlacementTransferPtr,
+        TryGetRequestAttachmentsTransfer,
+        (),
+        (override));
+
+    MOCK_METHOD(
         std::vector<TSharedRef>&,
         ResponseAttachments,
         (),

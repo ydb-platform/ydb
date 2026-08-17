@@ -14,20 +14,23 @@ struct TEndpointRecord {
     std::int32_t Priority;
     std::string SslTargetNameOverride;
     std::uint64_t NodeId = 0;
+    std::string Location;
 
     TEndpointRecord()
         : Endpoint()
         , Priority(0)
         , SslTargetNameOverride()
         , NodeId(0)
+        , Location()
     {
     }
 
-    TEndpointRecord(std::string endpoint, std::int32_t priority, std::string sslTargetNameOverride = std::string(), std::uint64_t nodeId = 0)
+    TEndpointRecord(std::string endpoint, std::int32_t priority, std::string sslTargetNameOverride = std::string(), std::uint64_t nodeId = 0, std::string location = std::string())
         : Endpoint(std::move(endpoint))
         , Priority(priority)
         , SslTargetNameOverride(std::move(sslTargetNameOverride))
         , NodeId(nodeId)
+        , Location(std::move(location))
     {
     }
 
@@ -97,6 +100,9 @@ public:
     // Move endpoint to the end
     void PessimizeEndpoint(const std::string& endpoint);
 
+    // Move all endpoints of a certain node to the end
+    void PessimizeNode(const std::uint64_t nodeId);
+
     // Returns % of pessimized endpoints
     int GetPessimizationRatio() const;
 
@@ -110,6 +116,9 @@ public:
 
     class TObjRegistry;
 private:
+    // Move endpoint to the end
+    bool PessimizeEndpointUnlocked(const std::string& endpoint);
+
     using TTaggedObjRegistry = std::unordered_map<const void*, std::shared_ptr<TObjRegistry>>;
 
     struct TKnownEndpoint {

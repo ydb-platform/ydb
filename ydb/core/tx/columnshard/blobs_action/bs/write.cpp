@@ -1,5 +1,8 @@
 #include "write.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -27,8 +30,10 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
 }
 
 void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "write_blob")("blob_id", blobId.ToStringNew());
+    YDB_LOG_INFO("",
+        {"event", "write_blob"},
+        {"blobId", blobId.ToStringNew()});
     return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

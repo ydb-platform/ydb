@@ -30,12 +30,18 @@ class TJsonQuery : public TViewerPipeClient {
     int TotalRows = 0;
     bool CollectDiagnostics = true;
     bool Long = false;
+    bool Forget = false;
+    bool QueryForgotten = false;
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
+    TDuration ForgetAfter = TDuration::Seconds(1);
     TInstant LastSendTime;
     TInstant QueryStartTime;
+    TInstant QueryRequestStartTime;
     TInstant Deadline;
+    TInstant WakeupScheduledAt;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
+    static constexpr TDuration MaxForgetAfter = TDuration::Seconds(60);
 
     enum ESchemaType {
         Classic,
@@ -89,6 +95,23 @@ private:
         }
     }
 
+    TDuration GetWakeupPeriod(TInstant now = TInstant()) const {
+        if (Forget && QueryRequestStartTime) {
+            now = now ? now : TActivationContext::Now();
+            return Min(WakeupPeriod, ForgetAfter - Min(now - QueryRequestStartTime, ForgetAfter));
+        }
+        return WakeupPeriod;
+    }
+
+    void ScheduleWakeup(TDuration period, TInstant now = TInstant()) {
+        now = now ? now : TActivationContext::Now();
+        TInstant wakeupAt = now + period;
+        if (!WakeupScheduledAt || wakeupAt < WakeupScheduledAt) {
+            WakeupScheduledAt = wakeupAt;
+            Schedule(period, new TEvents::TEvWakeup());
+        }
+    }
+
     void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message) {
         InitJsonResponse(jsonResponse);
         jsonResponse["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
@@ -118,6 +141,8 @@ private:
             beginTx->mutable_stale_read_only();
         } else if (mode == "snapshot-read-only") {
             beginTx->mutable_snapshot_read_only();
+        } else if (mode == "snapshot-read-write") {
+            beginTx->mutable_snapshot_read_write();
         } else {
             return; // Don't set transaction control for unknown modes
         }
@@ -279,7 +304,6 @@ public:
     }
 
     void InitConfig(const TCgiParameters& params) {
-        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -293,6 +317,7 @@ public:
             Action = params.Get("action");
         }
         Long = Action == "execute-long-query";
+        Forget = Action == "execute-query-and-forget";
         if (params.Has("schema")) {
             Schema = StringToSchemaType(params.Get("schema"));
             if (Params.Get("schema") == "multipart") {
@@ -342,6 +367,14 @@ public:
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
+        if (params.Has("forget_after")) {
+            ForgetAfter = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("forget_after"), ForgetAfter.MilliSeconds()), 1, MaxForgetAfter.MilliSeconds()));
+        }
+        if (Streaming == EStreamingType::None || params.Has("timeout")) {
+            Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
+        } else {
+            Timeout = TDuration::Max(); // no timeout for streaming queries by default
+        }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
@@ -361,6 +394,8 @@ public:
             if (!OperationId && ExecutionId.empty()) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
             }
+        } else if (Action != "cancel-query" && Syntax == "pg") {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
         }
         if (Streaming != EStreamingType::None) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
@@ -386,33 +421,32 @@ public:
         if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
         SendKpqProxyRequest();
         Become(&TThis::StateWork);
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
-            Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+            ScheduleWakeup(GetWakeupPeriod());
         }
         QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
     void CancelQuery() {
-        if (SessionId) {
+        if (SessionId && !QueryForgotten) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-            if (QueryResponse && !QueryResponse.IsDone()) {
+            if (!QueryResponse.IsDone()) {
                 QueryResponse.Error("QueryCancelled");
             }
         }
     }
 
     void CloseSession() {
-        if (SessionId) {
-            if (QueryResponse && !QueryResponse.IsDone()) {
+        if (SessionId && !QueryForgotten) {
+            if (!QueryResponse.IsDone()) {
                 CancelQuery();
             }
             auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -422,14 +456,12 @@ public:
     }
 
     void Cancelled() {
-        CancelQuery();
-        PassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
+        if (Forget) {
+            ForgetQuery();
+            return TBase::Cancelled();
         }
+        CancelQuery();
+        TBase::Cancelled();
     }
 
     void PassAway() override {
@@ -454,8 +486,9 @@ public:
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -539,7 +572,8 @@ public:
     void PingSession() {
         auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
         event->Record.MutableRequest()->SetSessionId(SessionId);
-        ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+        TActorId ctrlActor = Forget ? MakeViewerID(SelfId().NodeId()) : SelfId();
+        ActorIdToProto(ctrlActor, event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
@@ -563,7 +597,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
             request.SetKeepSession(false);
-        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute" || Forget) {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
@@ -616,8 +650,6 @@ public:
         }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
-        } else if (Syntax == "pg") {
-            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
@@ -630,6 +662,9 @@ public:
         }
         request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+        if (Forget && !QueryRequestStartTime) {
+            QueryRequestStartTime = TActivationContext::Now();
+        }
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }
 
@@ -660,6 +695,9 @@ public:
             StreamJsonResponse("SessionCreated", std::move(json));
         }
         QueryResponse = MakeQueryRequest<NKqp::TEvKqp::TEvQueryRequest, NKqp::TEvKqp::TEvQueryResponse>();
+        if (Forget) {
+            ScheduleWakeup(GetWakeupPeriod());
+        }
     }
 
 private:
@@ -1213,6 +1251,20 @@ private:
         ReplyWithJsonAndPassAway("Error", std::move(json), error);
     }
 
+    void ReplyAndForgetQuery() {
+        ForgetQuery();
+
+        NJson::TJsonValue json;
+        InitJsonResponse(json);
+        json["status"] = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds::SUCCESS);
+        json["message"] = "Query is running in background";
+        ReplyWithJsonAndPassAway("QueryForgotten", std::move(json));
+    }
+
+    void ForgetQuery() {
+        QueryForgotten = true;
+    }
+
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
             GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
@@ -1221,16 +1273,20 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
-        if (Timeout && (now - QueryStartTime > Timeout)) {
+        WakeupScheduledAt = TInstant();
+        if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
+            return ReplyAndForgetQuery();
+        }
+        if (Timeout && (!Forget || !QueryRequestStartTime) && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
-        if (KeepAlive && (now - LastSendTime > KeepAlive)) {
+        if (!Forget && KeepAlive && (now - LastSendTime > KeepAlive)) {
             SendKeepAlive();
         }
         if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
             CheckOperationStatus();
         }
-        Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+        ScheduleWakeup(GetWakeupPeriod(now), now);
     }
 
 private:
@@ -1421,11 +1477,12 @@ public:
               - name: action
                 in: query
                 type: string
-                enum: [execute-scan, execute-script, execute-query, execute-data, execute-long-query, fetch-long-query, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
+                enum: [execute-scan, execute-script, execute-query, execute-query-and-forget, execute-data, execute-long-query, fetch-long-query, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
                 required: true
                 description: >
                     execute method:
                       * `execute-query` - execute query (QueryService)
+                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget_after for an immediate response, then leave it running in background; after the query is forgotten, it cannot be cancelled using query_id
                       * `execute-data` - execute data query (DataQuery)
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
@@ -1465,9 +1522,8 @@ public:
                 description: >
                     query syntax:
                       * `yql_v1` - YQL v1 (default)
-                      * `pg` - PostgreSQL compatible
                 type: string
-                enum: [yql_v1, pg]
+                enum: [yql_v1]
                 required: false
               - name: schema
                 in: query
@@ -1501,8 +1557,9 @@ public:
                       * `online-read-only`
                       * `stale-read-only`
                       * `snapshot-read-only`
+                      * `snapshot-read-write`
                 type: string
-                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
+                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only, snapshot-read-write]
                 required: false
               - name: output_chunk_max_size
                 in: query
@@ -1529,10 +1586,16 @@ public:
                 default: true
               - name: timeout
                 in: query
-                description: timeout in ms
+                description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-                default: 60000
+              - name: forget_after
+                in: query
+                description: maximum time in ms to wait for an execute-query-and-forget result before leaving the query running in background
+                type: integer
+                required: false
+                default: 1000
+                maximum: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

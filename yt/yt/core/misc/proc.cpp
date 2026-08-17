@@ -1,16 +1,15 @@
 #include "proc.h"
-#include "common.h"
-#include "string.h"
 
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/error_code.h>
 #include <yt/yt/core/misc/fs.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/misc/fs.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -22,9 +21,12 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
+#include <util/system/getpid.h>
 #include <util/system/info.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
+#include <util/system/thread.h>
+
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 
@@ -72,7 +74,7 @@ namespace NYT {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 std::string LinuxErrorCodeFormatter(int code)
 {
@@ -108,7 +110,7 @@ bool IsSystemError(const TError& error)
 
 TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
     : FD_(fd)
-{}
+{ }
 
 TFileDescriptorGuard::~TFileDescriptorGuard()
 {
@@ -146,7 +148,7 @@ TFileDescriptor TFileDescriptorGuard::Release() noexcept
 void TFileDescriptorGuard::Reset() noexcept
 {
     if (FD_ != -1) {
-        YT_VERIFY(TryClose(FD_, false));
+        YT_VERIFY(TryClose(FD_, /*ignoreBadFD*/ false));
         FD_ = -1;
     }
 }
@@ -325,28 +327,6 @@ std::vector<int> GetPidsUnderParent(int targetPid)
 #endif
 }
 
-size_t GetCurrentProcessId()
-{
-#if defined(_linux_)
-    return getpid();
-#else
-    YT_ABORT();
-#endif
-}
-
-size_t GetCurrentThreadId()
-{
-#if defined(_linux_)
-    return static_cast<size_t>(::syscall(SYS_gettid));
-#elif defined(_darwin_)
-    uint64_t tid;
-    YT_VERIFY(pthread_threadid_np(nullptr, &tid) == 0);
-    return static_cast<size_t>(tid);
-#else
-    return ::GetCurrentThreadId();
-#endif
-}
-
 std::vector<size_t> GetCurrentProcessThreadIds()
 {
 #ifdef __linux__
@@ -360,7 +340,8 @@ std::vector<size_t> GetCurrentProcessThreadIds()
             }
         }
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/task");
+        YT_TLOG_ERROR("Error listing /proc/self/task")
+            .With(TError(ex));
         return {};
     }
     return result;
@@ -371,10 +352,20 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#ifdef __linux__
+#if defined(__linux__)
     TFileInput file(Format("/proc/%v/stat", tid));
-    auto statFields = SplitString(file.ReadLine(), " ");
-    constexpr int StartStackIndex = 27;
+    auto line = file.ReadLine();
+    // The format of /proc/PID/stat is: "pid (comm) state ...".
+    // Field 2 (comm) is the process name wrapped in parentheses and may contain
+    // spaces and even parentheses. The kernel always closes it with ')', so we
+    // find the last ')' and split only the fields that follow it.
+    auto closeParenPos = line.rfind(')');
+    auto statFields = SplitString(
+        closeParenPos != TString::npos ? line.substr(closeParenPos + 2) : line,
+        " ");
+    // Fields are now 0-indexed starting from field 3 (state). StartStackIndex
+    // is field 28 (0-indexed as 25) in the original 1-based numbering.
+    constexpr int StartStackIndex = 25;
     if (statFields.size() < StartStackIndex) {
         return false;
     }
@@ -383,7 +374,38 @@ bool IsUserspaceThread(size_t tid)
     return startStack != 0;
 #else
     Y_UNUSED(tid);
-    return false;
+    return true;
+#endif
+}
+
+std::string GetCurrentProcessName()
+{
+#if defined(__linux__)
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#elif defined(_win_)
+    char path[MAX_PATH];
+    DWORD length = ::GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (length == 0) {
+        return "(unknown)";
+    }
+    std::string fullPath(path, length);
+    auto pos = fullPath.find_last_of("\\/");
+    return pos == std::string::npos ? fullPath : fullPath.substr(pos + 1);
+#else
+    return "(unknown)";
+#endif
+}
+
+std::string GetCurrentProcessCommandLine()
+{
+#if defined(__linux__)
+    auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
+    auto delimiterPos = cmdline.find('\0');
+    return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
+#elif defined(_win_)
+    return ::GetCommandLineA();
+#else
+    return "(unknown)";
 #endif
 }
 
@@ -394,8 +416,8 @@ void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& us
         auto res = HandleEintr(::chown, path.data(), *userId, -1);
         if (res != 0) {
             THROW_ERROR_EXCEPTION("Failed to change owner for directory %v", path)
-                << TErrorAttribute("owner_uid", *userId)
-                << TError::FromSystem();
+                .With("owner_uid", *userId)
+                .With(TError::FromSystem());
         }
     }
 
@@ -403,8 +425,8 @@ void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& us
         auto res = HandleEintr(::chmod, path.data(), *permissions);
         if (res != 0) {
             THROW_ERROR_EXCEPTION("Failed to set permissions for directory %v", path)
-                << TErrorAttribute("permissions", *permissions)
-                << TError::FromSystem();
+                .With("permissions", *permissions)
+                .With(TError::FromSystem());
         }
     }
 #else
@@ -432,7 +454,7 @@ void SetThreadPriority(int tid, int priority)
     auto res = ::setpriority(PRIO_PROCESS, tid, priority);
     if (res != 0) {
         THROW_ERROR_EXCEPTION("Failed to set priority for thread %v",
-            tid) << TError::FromSystem();
+            tid).With(TError::FromSystem());
     }
 #else
     YT_ABORT();
@@ -478,8 +500,8 @@ std::vector<TProcessCgroup> GetProcessCgroups(int pid)
         auto fields = SplitString(line, ":", 3, KEEP_EMPTY_TOKENS);
         if (fields.size() != 3) {
             THROW_ERROR_EXCEPTION("Failed parse process cgroups")
-                << TErrorAttribute("line", line)
-                << TErrorAttribute("fields", fields);
+                .With("line", line)
+                .With("fields", fields);
         }
 
         TProcessCgroup group;
@@ -685,21 +707,21 @@ TError StatusToError(int status)
             EProcessErrorCode::Signal,
             "Process terminated by signal %v",
             signalNumber)
-            << TErrorAttribute("signal", signalNumber);
+            .With("signal", signalNumber);
     } else if (WIFSTOPPED(status)) {
         int signalNumber = WSTOPSIG(status);
         return TError(
             EProcessErrorCode::Signal,
             "Process stopped by signal %v",
             signalNumber)
-            << TErrorAttribute("signal", signalNumber);
+            .With("signal", signalNumber);
     } else if (WIFEXITED(status)) {
         int exitCode = WEXITSTATUS(status);
         return TError(
             EProcessErrorCode::NonZeroExitCode,
             "Process exited with code %v",
             exitCode)
-            << TErrorAttribute("exit_code", exitCode);
+            .With("exit_code", exitCode);
     } else {
         return TError("Unknown status %v", status);
     }
@@ -718,7 +740,7 @@ TError ProcessInfoToError(const siginfo_t& processInfo)
                     EProcessErrorCode::NonZeroExitCode,
                     "Process exited with code %v",
                     exitCode)
-                    << TErrorAttribute("exit_code", exitCode);
+                    .With("exit_code", exitCode);
             }
         }
 
@@ -729,8 +751,8 @@ TError ProcessInfoToError(const siginfo_t& processInfo)
                 EProcessErrorCode::Signal,
                 "Process terminated by signal %v",
                 signal)
-                << TErrorAttribute("signal", signal)
-                << TErrorAttribute("core_dumped", processInfo.si_code == CLD_DUMPED);
+                .With("signal", signal)
+                .With("core_dumped", processInfo.si_code == CLD_DUMPED);
         }
 
         default:
@@ -794,9 +816,9 @@ void SafeDup2(int oldFD, int newFD)
 {
     if (!TryDup2(oldFD, newFD)) {
         THROW_ERROR_EXCEPTION("dup2 failed")
-            << TErrorAttribute("old_fd", oldFD)
-            << TErrorAttribute("new_fd", newFD)
-            << TError::FromSystem();
+            .With("old_fd", oldFD)
+            .With("new_fd", newFD)
+            .With(TError::FromSystem());
     }
 }
 
@@ -805,13 +827,13 @@ void SafeSetCloexec(int fd)
     int getResult = ::fcntl(fd, F_GETFD);
     if (getResult == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe: fcntl failed to get descriptor flags")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     int setResult = ::fcntl(fd, F_SETFD, getResult | FD_CLOEXEC);
     if (setResult == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe: fcntl failed to set descriptor flags")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -820,7 +842,7 @@ void SetUid(int uid)
     // Set unprivileged uid for user process.
     if (setuid(0) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set zero uid")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     errno = 0;
@@ -832,27 +854,27 @@ void SetUid(int uid)
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-            << TErrorAttribute("uid", uid)
-            << TErrorAttribute("gid", gid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With("gid", gid)
+            .With(TError::FromSystem());
     }
 
     if (setresuid(uid, uid, uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set uids")
-            << TErrorAttribute("uid", uid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With(TError::FromSystem());
     }
 #else
     if (setuid(uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set uid")
-            << TErrorAttribute("uid", uid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With(TError::FromSystem());
     }
 
     if (setgid(uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gid")
-            << TErrorAttribute("gid", uid)
-            << TError::FromSystem();
+            .With("gid", uid)
+            .With(TError::FromSystem());
     }
 #endif
 }
@@ -863,14 +885,14 @@ void SafePipe(int fd[2])
     auto result = ::pipe2(fd, O_CLOEXEC);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #else
     {
         int result = ::pipe(fd);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error creating pipe")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
     SafeSetCloexec(fd[0]);
@@ -883,7 +905,7 @@ int SafeDup(int fd)
     auto result = ::dup(fd);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error duplicating fd")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     return result;
 }
@@ -912,7 +934,7 @@ void SafeOpenPty(int* masterFD, int* slaveFD, int height, int width)
         int result = ::openpty(masterFD, slaveFD, nullptr, &tt, wsPtr);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error creating pty: pty creation failed")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
     SafeSetCloexec(*masterFD);
@@ -928,7 +950,7 @@ void SafeLoginTty(int slaveFD)
     int result = ::login_tty(slaveFD);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error attaching pty to standard streams")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(slaveFD);
@@ -943,7 +965,7 @@ void SafeSetTtyWindowSize(int fd, int height, int width)
         int result = ::ioctl(fd, TIOCGWINSZ, &ws);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error reading tty window size")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
         if (ws.ws_row != height || ws.ws_col != width) {
             ws.ws_row = height;
@@ -951,7 +973,7 @@ void SafeSetTtyWindowSize(int fd, int height, int width)
             result = ::ioctl(fd, TIOCSWINSZ, &ws);
             if (result == -1) {
                 THROW_ERROR_EXCEPTION("Error setting tty window size")
-                    << TError::FromSystem();
+                    .With(TError::FromSystem());
             }
         }
     }
@@ -978,7 +1000,7 @@ void SafeMakeNonblocking(int fd)
 {
     if (!TryMakeNonblocking(fd)) {
         THROW_ERROR_EXCEPTION("Failed to set nonblocking mode for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -999,7 +1021,7 @@ void SafeSetPipeCapacity(int fd, int capacity)
 {
     if (!TrySetPipeCapacity(fd, capacity)) {
         THROW_ERROR_EXCEPTION("Failed to set capacity for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -1029,7 +1051,7 @@ void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd)
 {
     if (!TryEnableEmptyPipeEpollEvent(fd)) {
         THROW_ERROR_EXCEPTION("Failed to enable empty pipe epoll event for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -1053,7 +1075,7 @@ void SafeSetUid(int uid)
 {
     if (!TrySetUid(uid)) {
         THROW_ERROR_EXCEPTION("Failed to set uid to %v", uid)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -1062,7 +1084,7 @@ std::string SafeGetUsernameByUid(int uid)
     int bufferSize = ::sysconf(_SC_GETPW_R_SIZE_MAX);
     if (bufferSize < 0) {
         THROW_ERROR_EXCEPTION("Failed to get username, sysconf(_SC_GETPW_R_SIZE_MAX) failed")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     char buffer[bufferSize];
     struct passwd pwd, * pwdptr = nullptr;
@@ -1210,7 +1232,8 @@ int GetFileDescriptorCount()
         // Don't count opened /proc/self/fd.
         --descriptorCount;
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/fd");
+        YT_TLOG_ERROR("Error listing /proc/self/fd")
+            .With(TError(ex));
     }
 #endif
     return descriptorCount;
@@ -1222,7 +1245,7 @@ void SafeCreateStderrFile(std::string fileName)
     if (freopen(fileName.data(), "a", stderr) == nullptr) {
         auto lastError = TError::FromSystem();
         THROW_ERROR_EXCEPTION("Stderr redirection failed")
-            << lastError;
+            .With(lastError);
     }
 #endif
 }
@@ -1301,7 +1324,7 @@ void SendSignal(const std::vector<int>& pids, const std::string& signalName)
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
             THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 #else
@@ -1389,8 +1412,9 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const std::string& rawSMaps)
             if (!condition) {
                 Cerr << "Failed to parse smaps: " << rawSMaps << Endl;
                 Cerr << "Failed line: " << line << Endl;
-                YT_LOG_ERROR("Failed to parse smaps (SMaps: %v)", rawSMaps);
-                YT_LOG_ERROR("Failed line (Line: %v)", line);
+                YT_TLOG_ERROR("Failed to parse smaps")
+                    .With("SMaps", rawSMaps)
+                    .With("Line", line);
                 YT_ABORT();
             }
         };
@@ -1717,7 +1741,8 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
         } catch (const TSystemError& ex) {
             if (ex.Status() == ENOENT) {
                 supported = false;
-                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+                YT_TLOG_WARNING("Task I/O accounting is not supported by kernel")
+                    .With(TError(ex));
             } else {
                 throw;
             }
@@ -1738,7 +1763,7 @@ TFile MemfdCreate(const std::string& name)
     int fd = memfd_create(name.c_str(), 0);
     if (fd == -1) {
         THROW_ERROR_EXCEPTION("Unable to create memfd")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
     }
 
     return TFile{fd};

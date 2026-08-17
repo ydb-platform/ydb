@@ -53,5 +53,19 @@ extend google.protobuf.FieldOptions {
 
     // **Top-level** options marked with that label are allowed to be used in the database configuration.
     optional bool AllowInDatabaseConfig = 82004;
-}
 
+    // **Top-level** options marked with that label are opaque to the cluster
+    // in the dynamic YAML configuration (main and database).
+    //  - must be of (empty) message type (TOpaqueConfig type should be used)
+    //  - the cluster never understands the payload
+    //  - opaque configs are still subject:
+    //      - to the YAML syntax validation
+    //      - to the YAML resolving mechanism
+    //    These are the reasons message type is used instead of simple string
+    //  - makes the YAML->proto parser accept that sub-tree without validating it
+    //    (so the console needs no allow_unknown_fields)
+    //  - the actual content travels in the resolved YAML
+    //  - the configs dispatcher hands it to an end-node-provided parser,
+    //    which interprets it with its own schema
+    optional bool OpaqueConfig = 82005;
+}

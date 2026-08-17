@@ -6,7 +6,6 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <util/datetime/cputimer.h>
 #include <util/system/thread.h>
 
 using namespace NKikimr;
@@ -50,7 +49,7 @@ int main(int, char**) {
                     auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &runAlloc.Ref()));
                     TBindTerminator terminator(graph->GetTerminator());
 
-                    auto param = graph->GetEntryPoint(0, false);
+                    auto param = graph->GetEntryPoint(0, /*require=*/false);
                     auto& ctx = graph->GetContext();
 
                     TString s = ToString(i);

@@ -5,13 +5,19 @@ SRCS(
     inflight_limiter.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
+    pqdata_transaction_compat.cpp
     utils.cpp
     write_id.cpp
 )
 
 PEERDIR(
     ydb/core/base
+    ydb/core/metering
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/cloud_events
     ydb/core/protos
+    ydb/core/tx/scheme_board
+    ydb/library/actors/core
 )
 
 END()
@@ -24,7 +30,10 @@ RECURSE(
     fetcher
     list_topics
     mlp
+    nameresolver
     partition_index_generator
     partition_key_range
+    schema
     write_meta
+    cloud_events
 )

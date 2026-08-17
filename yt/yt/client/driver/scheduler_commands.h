@@ -33,8 +33,8 @@ public:
                 !operationId && !command->OperationAlias.has_value())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
-                    << TErrorAttribute("operation_id", command->OperationId)
-                    << TErrorAttribute("operation_alias", command->OperationAlias);
+                    .With("operation_id", command->OperationId)
+                    .With("operation_alias", command->OperationAlias);
             }
 
             if (command->OperationId) {
@@ -51,7 +51,7 @@ protected:
 
 private:
     NScheduler::TOperationId OperationId;
-    std::optional<TString> OperationAlias;
+    std::optional<std::string> OperationAlias;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -294,7 +294,7 @@ private:
     NJobTrackerClient::TJobId JobId;
     NYTree::INodePtr Parameters;
     // TODO(bystrovserg): Move ShellName to options parameter.
-    std::optional<TString> ShellName;
+    std::optional<std::string> ShellName;
 
     void DoExecute(ICommandContextPtr context) override;
 };

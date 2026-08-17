@@ -169,7 +169,7 @@ void TAttachmentsInputStream::AbortUnlessClosed(const TError& error, bool fireAb
         return;
     }
 
-    auto FinishedError = TError("Request finished") << GetErrorAttributes();
+    auto FinishedError = TError("Request finished").With(GetErrorAttributes());
     DoAbort(
         guard,
         error.IsOK() ? FinishedError : error,
@@ -200,8 +200,8 @@ void TAttachmentsInputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, cons
 void TAttachmentsInputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream read timed out")
-        << TErrorAttribute("timeout", *Timeout_)
-        << GetErrorAttributes());
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
@@ -371,7 +371,7 @@ void TAttachmentsOutputStream::AbortUnlessClosed(const TError& error, bool fireA
     }
 
     auto requestAlreadyCompletedError = TError("Request is already completed")
-        << GetErrorAttributes();
+        .With(GetErrorAttributes());
 
     DoAbort(
         guard,
@@ -418,8 +418,8 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
 void TAttachmentsOutputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream write timed out")
-        << TErrorAttribute("timeout", *Timeout_)
-        << GetErrorAttributes());
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback)

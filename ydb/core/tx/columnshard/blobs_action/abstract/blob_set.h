@@ -1,27 +1,28 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/util/gen_step.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <util/generic/string.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/string.h>
 #include <util/system/types.h>
 
 namespace NKikimrColumnShardBlobOperationsProto {
 class TTabletByBlob;
 class TTabletsByBlob;
-}
+}   // namespace NKikimrColumnShardBlobOperationsProto
 
 namespace NKikimr::NOlap {
 
 class TTabletByBlob {
 private:
     THashMap<TUnifiedBlobId, TTabletId> Data;
+
 public:
     NKikimrColumnShardBlobOperationsProto::TTabletByBlob SerializeToProto() const;
 
@@ -42,7 +43,6 @@ public:
     THashMap<TUnifiedBlobId, TTabletId>* operator->() {
         return &Data;
     }
-
 };
 
 class TBlobsByGenStep {
@@ -58,17 +58,22 @@ private:
             }
         }
     };
+
     std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator> Blobs;
+
 public:
     [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
         return Blobs.emplace(blobId).second;
     }
+
     [[nodiscard]] bool Remove(const TLogoBlobID& blobId) {
         return Blobs.erase(blobId);
     }
+
     bool IsEmpty() const {
         return Blobs.empty();
     }
+
     size_t GetSize() const {
         return Blobs.size();
     }
@@ -79,7 +84,7 @@ public:
     }
 
     template <class TActor>
-    requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
+        requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
     bool ExtractTo(const TGenStep& lessOrEqualThan, const ui32 countLimit, const TActor& actor) {
         ui32 idx = 0;
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
@@ -103,6 +108,7 @@ class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;
     i32 Size = 0;
+
 public:
     ui32 GetSize() const {
         return Size;
@@ -173,9 +179,11 @@ public:
         const TTabletsByBlob& Owner;
         THashMap<TUnifiedBlobId, THashSet<TTabletId>>::const_iterator BlobsIterator;
         THashSet<TTabletId>::const_iterator TabletsIterator;
+
     public:
         TIterator(const TTabletsByBlob& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             BlobsIterator = Owner.Data.begin();
             if (BlobsIterator != Owner.Data.end()) {
                 TabletsIterator = BlobsIterator->second.begin();
@@ -251,7 +259,7 @@ public:
     }
 
     bool Add(const TTabletId tabletId, const TUnifiedBlobId& blobId) {
-        THashSet<TUnifiedBlobId> hashSet = {blobId};
+        THashSet<TUnifiedBlobId> hashSet = { blobId };
         return Add(tabletId, hashSet);
     }
 
@@ -270,7 +278,7 @@ public:
         for (auto&& i : blobIds) {
             auto it = Data.find(i);
             if (it == Data.end()) {
-                THashSet<TTabletId> tabletsLocal = {tabletId};
+                THashSet<TTabletId> tabletsLocal = { tabletId };
                 it = Data.emplace(i, tabletsLocal).first;
                 Size += 1;
             } else {
@@ -323,12 +331,14 @@ public:
 class TBlobsByTablet {
 private:
     THashMap<TTabletId, THashSet<TUnifiedBlobId>> Data;
+
 public:
     class TIterator {
     private:
         const TBlobsByTablet* Owner;
         THashMap<TTabletId, THashSet<TUnifiedBlobId>>::const_iterator TabletsIterator;
         THashSet<TUnifiedBlobId>::const_iterator BlobsIterator;
+
     public:
         TIterator(const TBlobsByTablet& owner)
             : Owner(&owner)
@@ -441,7 +451,7 @@ public:
     bool Add(const TTabletId tabletId, const TUnifiedBlobId& blobId) {
         auto it = Data.find(tabletId);
         if (it == Data.end()) {
-            THashSet<TUnifiedBlobId> hashSet = {blobId};
+            THashSet<TUnifiedBlobId> hashSet = { blobId };
             Data.emplace(tabletId, std::move(hashSet));
             return true;
         } else {
@@ -491,6 +501,7 @@ private:
     YDB_READONLY_DEF(TBlobsByTablet, Sharing);
     YDB_ACCESSOR_DEF(TBlobsByTablet, Direct);
     YDB_READONLY_DEF(TBlobsByTablet, Borrowed);
+
 public:
     bool IsEmpty() const {
         return Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
@@ -567,18 +578,23 @@ public:
     void AddDirect(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Direct.Add(tabletId, id));
     }
+
     void AddBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Borrowed.Add(tabletId, id));
     }
+
     void AddSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Sharing.Add(tabletId, id));
     }
+
     [[nodiscard]] bool RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
         return Sharing.Remove(tabletId, id);
     }
+
     [[nodiscard]] bool RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
         return Borrowed.Remove(tabletId, id);
     }
+
     TBlobsCategories(const TTabletId selfTabletId)
         : SelfTabletId(selfTabletId)
     {
@@ -586,4 +602,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

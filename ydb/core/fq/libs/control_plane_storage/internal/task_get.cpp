@@ -12,6 +12,8 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 namespace {
@@ -353,7 +355,8 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
                 auto beginStr = StripString(item.substr(0, it - item.begin()));
                 auto endStr = StripString(item.substr(it - item.begin() + 1));
                 if (beginStr.empty() || endStr.empty()) {
-                    CPS_LOG_AS_E(*actorSystem, "Failed to parse mapping nodes: db value " << nodes << ", empty token");
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value, empty token)",
+                        {"nodes", nodes});
                     break;
                 }
                 ui64 begin = FromString(beginStr);
@@ -366,7 +369,9 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
             result.insert(FromString<ui64>(StripString(item)));
         }
     } catch (...) {
-        CPS_LOG_AS_E(*actorSystem, "Failed to parse mapping nodes (db value " << nodes << "): " << CurrentExceptionMessage());
+        YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value)",
+            {"nodes", nodes},
+            {"ex", CurrentExceptionMessage()});
     }
     return result;
 }
@@ -385,10 +390,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const ui64 tasksBatchSize = Config->Proto.GetTasksBatchSize();
     const ui64 numTasksProportion = Config->Proto.GetNumTasksProportion();
 
-    CPS_LOG_T("GetTaskRequest: {" << request.DebugString() << "}");
+    YDB_LOG_TRACE("GetTaskRequest",
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("GetTaskRequest: {" << request.DebugString() << "} FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("GetTaskRequest",
+            {"request", request.DebugString()},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetTaskRequest, owner, hostName, delta, false);
@@ -455,15 +463,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                 task.NodeIds = *node;
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
-                CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
-                    << " LastSeenAt: " << lastSeenAt);
+                YDB_LOG_TRACE_CTX(*actorSystem, "Task Lease TIMEOUT, RetryCounterUpdatedAt",
+                    {"queryId", task.QueryId},
+                    {"retryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                    {"lastSeenAt", lastSeenAt});
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, config->TaskLeaseRetryPolicy, now);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
-            CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate
-                << " RetryCounter: " << taskInternal.RetryLimiter.RetryCount << " At: " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
-                << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));
+            YDB_LOG_TRACE_CTX(*actorSystem, "Task",
+                {"queryId", task.QueryId},
+                {"retryRate", taskInternal.RetryLimiter.RetryRate},
+                {"retryCounter", taskInternal.RetryLimiter.RetryCount},
+                {"at", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                {"abortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
         }
 
         std::shuffle(tasks.begin(), tasks.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));

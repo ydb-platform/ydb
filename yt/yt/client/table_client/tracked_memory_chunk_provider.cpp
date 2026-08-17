@@ -62,9 +62,9 @@ std::unique_ptr<TAllocationHolder> TTrackedMemoryChunkProvider::Allocate(size_t 
     do {
         if (allocated + size > Limit_) {
             THROW_ERROR_EXCEPTION("Not enough memory to serve allocation")
-                << TErrorAttribute("allocation_size", size)
-                << TErrorAttribute("allocated", allocated)
-                << TErrorAttribute("limit", Limit_);
+                .With("allocation_size", size)
+                .With("allocated", allocated)
+                .With("limit", Limit_);
         }
     } while (!Allocated_.compare_exchange_weak(allocated, allocated + size));
 
@@ -83,9 +83,11 @@ std::unique_ptr<TAllocationHolder> TTrackedMemoryChunkProvider::Allocate(size_t 
     });
 
     if (MemoryTracker_) {
-        auto error = MemoryTracker_->TryAcquire(allocatedSize);
-        if (!AllowMemoryOvercommit_) {
-            error.ThrowOnError();
+        if (AllowMemoryOvercommit_) {
+            MemoryTracker_->Acquire(allocatedSize);
+        } else {
+            MemoryTracker_->TryAcquire(allocatedSize)
+                .ThrowOnError();
         }
     }
 

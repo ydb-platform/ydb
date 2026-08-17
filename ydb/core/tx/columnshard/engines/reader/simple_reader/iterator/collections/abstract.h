@@ -24,6 +24,7 @@ private:
     virtual TString DoDebugString() const {
         return "";
     }
+
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const = 0;
     virtual bool DoHasData() const = 0;
 
@@ -35,6 +36,7 @@ public:
     ui64 GetTabletId() const {
         return Context->GetCommonContext()->GetReadMetadata()->GetTabletId();
     }
+
     virtual TString GetClassName() const = 0;
 
     template <class T>
@@ -75,6 +77,14 @@ public:
     void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
         AFL_VERIFY(source);
         DoOnSourceFinished(source);
+        if (!source->IsInFlightReleased()) {
+            SourcesInFlightCount.Dec();
+        }
+    }
+
+    void ReleaseInFlight(const std::shared_ptr<NCommon::IDataSource>& source) {
+        AFL_VERIFY(source);
+        source->SetInFlightReleased();
         SourcesInFlightCount.Dec();
     }
 

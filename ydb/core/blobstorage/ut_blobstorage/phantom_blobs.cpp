@@ -3,7 +3,7 @@
 
 using namespace NKikimr;
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
@@ -17,6 +17,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         EOnline Online;
         bool PhantomFlagStorageEnabled;
         ui64 MemoryLimit = 10_MB;
+        bool PersistentPhantomFlagStorageEnabled = false;
     };
 
     struct TTestCtx : public TTestCtxBase {
@@ -38,6 +39,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                         NodeStates[nodeId - 1].PhantomFlagStorageEnabled);
                 Env->SetIcbControl(nodeId, "VDiskControls.PhantomFlagStorageLimitPerVDiskBytes",
                         NodeStates[nodeId - 1].MemoryLimit);
+                Env->SetIcbControl(nodeId, "VDiskControls.EnablePersistentPhantomFlagStorage",
+                        NodeStates[nodeId - 1].PersistentPhantomFlagStorageEnabled);
             }
         }
 
@@ -61,7 +64,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 TString data;
                 SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvCollectGarbage(
                         TabletId, Generation, ++GenerationCtr, Channel, true, Generation, Step,
-                        keepFlags, doNotKeepFlags, TInstant::Max(), true, false));
+                        keepFlags, doNotKeepFlags, TInstant::Max(), true, TWriteSource::Unknown, false));
             });
             Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
                     Edge, false, TInstant::Max());
@@ -192,7 +195,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest() {
             Initialize();
             const std::vector<TLogoBlobID> blobs = WriteInitialData();
-            auto itMiddle = blobs.begin() + blobs.size() / 2;
+            auto itMiddle1 = blobs.begin() + blobs.size() * 1 / 3;
+            auto itMiddle2 = blobs.begin() + blobs.size() * 2 / 3;
 
             Ctest << "Set Keep flags" << Endl;
             CollectBlobs(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
@@ -203,7 +207,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             WaitForSync();
 
             Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
-            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle));
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle1));
             WaitForSync();
 
             WriteUnsyncedBlobs();
@@ -211,14 +215,14 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             BaldSyncLog();
 
             Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
-            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle1, itMiddle2));
             WaitForSync();
 
             WriteUnsyncedBlobs();
-
             BaldSyncLog();
-
             CheckMemoryConsumption();
+
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle2, blobs.end()));
 
             Ctest << "Restart nodes" << Endl;
             ToggleNodes(false, false, true);
@@ -288,6 +292,47 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             }
         }
 
+        ui64 RunBlobSizeLimitTest(ui64 blobSizeLimit, ui64 blobSize, ui32 blobCount) {
+            Initialize();
+
+            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                Env->SetIcbControl(nodeId,
+                        "VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes", blobSizeLimit);
+            }
+
+            Ctest << "Write blobs of size# " << blobSize << " count# " << blobCount << Endl;
+            std::vector<TLogoBlobID> blobs = WriteCompressedData(TDataProfile{
+                .GroupId = GroupId,
+                .TotalBlobs = blobCount,
+                .BlobSize = blobSize,
+                .TabletId = TabletId,
+                .Channel = Channel,
+                .Generation = Generation,
+                .Step = Step,
+            });
+
+            Ctest << "Set Keep flags" << Endl;
+            CollectBlobs(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
+            WaitForSync();
+
+            Ctest << "Stop dead nodes" << Endl;
+            ToggleNodes(true, false, false);
+            WaitForSync();
+
+            Ctest << "Set DoNotKeepFlags on all blobs" << Endl;
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), blobs.end()));
+            WaitForSync();
+
+            WriteUnsyncedBlobs();
+            BaldSyncLog();
+            WaitForSync();
+
+            ui64 storedFlags = Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, NodeCount,
+                    GroupId, PDiskLayout, "phantomflagstorage", "StoredFlagsCount");
+            Ctest << "StoredFlagsCount# " << storedFlags << Endl;
+            return storedFlags;
+        }
+
     public:
         const ui64 TabletId = 5000;
         const ui32 Channel = 1;
@@ -306,27 +351,28 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     };
 
     std::vector<TNodeState> GetStates(TBlobStorageGroupType erasure, EOnline online,
-            bool phantomFlagStorageEnabled, ui64 memoryLimit) {
+            bool phantomFlagStorageEnabled, bool isPersistent, ui64 memoryLimit) {
         return std::vector<TNodeState>(erasure.BlobSubgroupSize(), 
                 TNodeState{
                     .Online = online,
                     .PhantomFlagStorageEnabled = phantomFlagStorageEnabled,
-                    .MemoryLimit = memoryLimit
+                    .MemoryLimit = memoryLimit,
+                    .PersistentPhantomFlagStorageEnabled = isPersistent,
                 });
     }
 
     std::vector<TNodeState> GetStatesAllAlive(TBlobStorageGroupType erasure, ui64 memoryLimit) {
-        return GetStates(erasure, EOnline::Alive, true, memoryLimit);
+        return GetStates(erasure, EOnline::Alive, true, false, memoryLimit);
     }
 
     std::vector<TNodeState> GetStatesOneDead(TBlobStorageGroupType erasure, ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         return states;
     }
 
     std::vector<TNodeState> GetStatesTwoDead(TBlobStorageGroupType erasure, ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         states[4].Online = EOnline::Dead;
         return states;
@@ -334,14 +380,14 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     std::vector<TNodeState> GetStatesOneDeadAllRestart(TBlobStorageGroupType erasure,
             ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Restart, true, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Restart, true, true, memoryLimit);
         states[0].Online = EOnline::Dead;
         return states;
     }
 
     std::vector<TNodeState> GetStatesOneDeadActiveOneDeadInactive(TBlobStorageGroupType erasure,
             ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         states[0].PhantomFlagStorageEnabled = false;
         states[4].Online = EOnline::Dead;
@@ -351,7 +397,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     std::vector<TNodeState> GetStatesTwoDeadInactive(TBlobStorageGroupType erasure,
             ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         states[0].PhantomFlagStorageEnabled = false;
         states[4].Online = EOnline::Dead;
@@ -361,7 +407,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     std::vector<TNodeState> GetStatesTwoDeadAllAliveInactive(TBlobStorageGroupType erasure,
             ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         states[0].PhantomFlagStorageEnabled = true;
         states[4].Online = EOnline::Dead;
@@ -371,7 +417,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     std::vector<TNodeState> GetStatesTwoDeadSomeAliveInactive(TBlobStorageGroupType erasure,
             ui64 memoryLimit) {
-        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false, memoryLimit);
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false, false, memoryLimit);
         states[0].Online = EOnline::Dead;
         states[0].PhantomFlagStorageEnabled = true;
         states[1].PhantomFlagStorageEnabled = true;
@@ -393,7 +439,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .PDiskChunkSize = 32_MB,
             .EnablePhantomFlagStorage = false,
             .TinySyncLog = true,
-        }, 100, 10000, nodeStates, expectPhantoms);
+            .EnablePersistentPhantomFlagStorage = false,
+        }, 300, 10000, nodeStates, expectPhantoms);
         if (nodeStates2) {
             ctx.RunTestWithUpdate(*nodeStates2);
         } else {
@@ -415,10 +462,9 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     TEST_PHANTOM_BLOBS(TwoDead, Mirror3dc, false, 10_KB);
 
-    // TODO (serg-belyakov@): persistent phantom flag storage
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3dc, false);
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3of4, false);
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, 4Plus2Block, false);
+    TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3dc, false, 10_KB);
+    TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3of4, false, 10_KB);
+    TEST_PHANTOM_BLOBS(OneDeadAllRestart, 4Plus2Block, false, 10_KB);
 
     TEST_PHANTOM_BLOBS(TwoDeadInactive, Mirror3dc, false, 10_KB);
     TEST_PHANTOM_BLOBS(OneDeadActiveOneDeadInactive, Mirror3dc, false, 10_KB);
@@ -429,28 +475,62 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     Y_UNIT_TEST(TestDisabling) {
         auto erasure = TBlobStorageGroupType::ErasureMirror3dc;
-        auto states1 = GetStates(erasure, EOnline::Alive, true, 10_KB);
+        auto states1 = GetStates(erasure, EOnline::Alive, true, false, 10_KB);
         states1[0].Online = EOnline::Dead;
-        auto states2 = GetStates(erasure, EOnline::Alive, false, 10_KB);
+        auto states2 = GetStates(erasure, EOnline::Alive, false, false, 10_KB);
         states2[0].Online = EOnline::Dead;
         Test(erasure, states1, states2, true);
     }
 
     Y_UNIT_TEST(TestEnabling) {
         auto erasure = TBlobStorageGroupType::ErasureMirror3dc;
-        auto states1 = GetStates(erasure, EOnline::Alive, false, 10_KB);
+        auto states1 = GetStates(erasure, EOnline::Alive, false, false, 10_KB);
         states1[0].Online = EOnline::Dead;
-        auto states2 = GetStates(erasure, EOnline::Alive, true, 10_KB);
+        auto states2 = GetStates(erasure, EOnline::Alive, true, false, 10_KB);
         states2[0].Online = EOnline::Dead;
         Test(erasure, states1, states2, true);
     }
     Y_UNIT_TEST(TestLoweringMemoryLimit) {
         auto erasure = TBlobStorageGroupType::ErasureMirror3dc;
-        auto states1 = GetStates(erasure, EOnline::Alive, true, 10_KB);
+        auto states1 = GetStates(erasure, EOnline::Alive, true, false, 10_KB);
         states1[0].Online = EOnline::Dead;
-        auto states2 = GetStates(erasure, EOnline::Alive, true, 100_B);
+        auto states2 = GetStates(erasure, EOnline::Alive, true, false, 100_B);
         states2[0].Online = EOnline::Dead;
         Test(erasure, states1, states2, true);
+    }
+
+    void TestBlobSizeLimit(TBlobStorageGroupType erasure, ui64 blobSize, bool expectStored) {
+        std::vector<TNodeState> nodeStates = GetStatesOneDead(erasure, 10_MB);
+        auto it = std::find_if(nodeStates.begin(), nodeStates.end(),
+                [&](const TNodeState& state) { return state.Online != EOnline::Dead; });
+        Y_VERIFY(it != nodeStates.end());
+        ui32 controllerNodeId = it - nodeStates.begin() + 1;
+        TTestCtx ctx({
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+            .ControllerNodeId = controllerNodeId,
+            .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = false,
+            .TinySyncLog = true,
+            .EnablePersistentPhantomFlagStorage = false,
+        }, 0, 10000, nodeStates, false);
+
+        ui64 storedFlags = ctx.RunBlobSizeLimitTest(1_MB, blobSize, 50);
+        if (expectStored) {
+            UNIT_ASSERT_C(storedFlags > 0,
+                    "Expected blobs above the size limit to be stored, but StoredFlagsCount# " << storedFlags);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(storedFlags, 0,
+                    "Expected blobs below the size limit not to occupy space");
+        }
+    }
+
+    Y_UNIT_TEST(TestBlobSizeLimitAboveLimit) {
+        TestBlobSizeLimit(TBlobStorageGroupType::ErasureMirror3dc, 2_MB, true);
+    }
+
+    Y_UNIT_TEST(TestBlobSizeLimitBelowLimit) {
+        TestBlobSizeLimit(TBlobStorageGroupType::ErasureMirror3dc, 200, false);
     }
 
     #undef TEST_PHANTOM_BLOBS

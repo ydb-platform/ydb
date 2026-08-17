@@ -22,11 +22,11 @@ public:
 
     explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
-        TFakeMmap::OnMunmap = [this](void* addr, size_t s) {
+        TFakeMmap::GetInstance().OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});
         };
 
-        TFakeMmap::OnMmap = [this](size_t size) -> void* {
+        TFakeMmap::GetInstance().OnMmap = [this](size_t size) -> void* {
             // Allocate more memory to ensure we have enough space for alignment
             Storage_ = THolder<char, TDeleteArray>(new char[AlignUp(size + EXTRA_SPACE_FOR_UNALIGNMENT, TAlignedPagePool::POOL_PAGE_SIZE)]);
             UNIT_ASSERT(Storage_.Get());
@@ -44,8 +44,8 @@ public:
     }
 
     ~TScopedMemoryMapper() {
-        TFakeMmap::OnMunmap = {};
-        TFakeMmap::OnMmap = {};
+        TFakeMmap::GetInstance().OnMunmap = {};
+        TFakeMmap::GetInstance().OnMmap = {};
         Storage_.Reset();
     }
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST(AlignedMmapPageSize) {
     TScopedMemoryMapper mmapper(/*aligned=*/true);
     auto size = TAlignedPagePool::POOL_PAGE_SIZE;
     auto block = std::shared_ptr<void>(alloc.GetBlock(size), [&](void* addr) { alloc.ReturnBlock(addr, size); });
-    UNIT_ASSERT_EQUAL(0u, mmapper.MunmapsSize());
+    UNIT_ASSERT_EQUAL(0U, mmapper.MunmapsSize());
 
     UNIT_ASSERT_VALUES_EQUAL(block.get(), mmapper.PointerToAlignedMemory());
 
@@ -114,11 +114,11 @@ Y_UNIT_TEST(AlignedMmapUnalignedSize) {
     auto block = std::shared_ptr<void>(alloc.GetBlock(size), [&](void* addr) { alloc.ReturnBlock(addr, size); });
 
     UNIT_ASSERT_EQUAL(2, mmapper.MunmapsSize());
-    auto expected0 = (TScopedMemoryMapper::TUnmapEntry{(char*)mmapper.PointerToAlignedMemory() + size, TAlignedPagePool::POOL_PAGE_SIZE - smallSize});
+    auto expected0 = (TScopedMemoryMapper::TUnmapEntry{.Addr = (char*)mmapper.PointerToAlignedMemory() + size, .Size = TAlignedPagePool::POOL_PAGE_SIZE - smallSize});
     UNIT_ASSERT_EQUAL(expected0, mmapper.Munmaps(0));
     auto expected1 = TScopedMemoryMapper::TUnmapEntry{
-        (char*)mmapper.PointerToAlignedMemory() + TAlignedPagePool::ALLOC_AHEAD_PAGES * TAlignedPagePool::POOL_PAGE_SIZE + size - smallSize,
-        smallSize};
+        .Addr = (char*)mmapper.PointerToAlignedMemory() + TAlignedPagePool::ALLOC_AHEAD_PAGES * TAlignedPagePool::POOL_PAGE_SIZE + size - smallSize,
+        .Size = smallSize};
     UNIT_ASSERT_EQUAL(expected1, mmapper.Munmaps(1));
 
     UNIT_ASSERT_VALUES_EQUAL(block.get(), mmapper.PointerToAlignedMemory());

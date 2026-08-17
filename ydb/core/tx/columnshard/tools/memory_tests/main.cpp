@@ -1,5 +1,5 @@
-#include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/formats/arrow/rows/view.h>
 
 #include <chrono>
 #include <iostream>
@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     long long TYPE = 0;
     long long SLEEP_TIME_SEC = 60;
     try {
-        N =  std::stoll(argv[1]);
+        N = std::stoll(argv[1]);
         TYPE = std::stoll(argv[2]);
         if (argc > 3) {
             SLEEP_TIME_SEC = std::stoll(argv[3]);
@@ -91,7 +91,8 @@ int main(int argc, char** argv) {
     auto schema = MakeFullSchema();
     auto start = std::chrono::high_resolution_clock::now();
     for (auto i : std::ranges::views::iota(0ll, N)) {
-        arrow::TimestampBuilder id1_B = arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
+        arrow::TimestampBuilder id1_B =
+            arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
         if (!id1_B.Append(i * 123123123ull).ok()) {
             return -6;
         }
@@ -118,7 +119,7 @@ int main(int argc, char** argv) {
             return -11;
         }
 
-        std::shared_ptr<arrow::Table> table = arrow::Table::Make(schema, {id1_A, id2_A, id3_A});
+        std::shared_ptr<arrow::Table> table = arrow::Table::Make(schema, { id1_A, id2_A, id3_A });
 
         switch (TYPE) {
             case 1:
@@ -128,7 +129,8 @@ int main(int argc, char** argv) {
                 recordBatches.emplace_back(ExtractBatch(table));
                 break;
             case 3:
-                sortableBatchPositions.emplace_back(std::make_shared<NKikimr::NArrow::NMerger::TSortableBatchPosition>(ExtractBatch(table), 0, false));
+                sortableBatchPositions.emplace_back(
+                    std::make_shared<NKikimr::NArrow::NMerger::TSortableBatchPosition>(ExtractBatch(table), 0, false));
                 break;
             default:
                 return -12;
@@ -137,7 +139,7 @@ int main(int argc, char** argv) {
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "Data generated in " <<  elapsed.count() << " ms, now sleeping " << SLEEP_TIME_SEC << " seconds" << std::endl;
+    std::cout << "Data generated in " << elapsed.count() << " ms, now sleeping " << SLEEP_TIME_SEC << " seconds" << std::endl;
 
     std::this_thread::sleep_for(std::chrono::seconds(SLEEP_TIME_SEC));
 

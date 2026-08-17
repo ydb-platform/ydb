@@ -192,6 +192,17 @@ def call(cmd, cwd, env=None):
     return subprocess.check_output(cmd, stdin=None, stderr=subprocess.STDOUT, cwd=cwd, env=env, text=True)
 
 
+# Mirror cmd/internal/objabi.EncodeArg from the Go stdlib: the response file
+# read by `go link @file` parses `\` as the start of an escape, so only `\\`
+# and `\n` are legal. Windows paths in build_root (e.g. `C:\...\main.a`)
+# otherwise trip cmd/link with `panic: badly formatted input`.
+_GO_LINK_ARG_ESCAPES = str.maketrans({'\\': r'\\', '\n': r'\n'})
+
+
+def _encode_go_link_arg(arg):
+    return arg.translate(_GO_LINK_ARG_ESCAPES)
+
+
 def classify_srcs(srcs, args):
     args.go_srcs = [x for x in srcs if x.endswith('.go')]
     args.asm_srcs = [x for x in srcs if x.endswith('.s')]
@@ -367,6 +378,9 @@ def do_vet(args):
 
 
 def _do_compile_go(args):
+    if not args.go_srcs:
+        raise RuntimeError("Attempt to compile go package without source files!")
+
     import_path, is_std_module = args.import_path, args.is_std
     cmd = [
         args.go_compile,
@@ -400,6 +414,8 @@ def _do_compile_go(args):
     if args.embed:
         embed_config_name = create_embed_config(args)
         cmd.extend(['-embedcfg', embed_config_name])
+    if args.cover_cfg:
+        cmd.extend(['-coveragecfg', os.path.join(args.output_root, args.cover_cfg)])
     if args.asmhdr:
         cmd += ['-asmhdr', args.asmhdr]
     # Use .symabis (starting from 1.12 version)
@@ -555,62 +571,23 @@ def do_link_exe(args):
         extldflags.extend(cgo_peers)
     if len(extldflags) > 0:
         for p in args.ld_plugins:
-            res = subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root).decode().strip()
+            res = (
+                subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root)
+                .decode()
+                .strip()
+            )
             if res:
                 extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
-    call(cmd, args.build_root)
-
-
-def gen_cover_info(args):
-    lines = []
-    lines.extend(
-        [
-            """
-var (
-    coverCounters = make(map[string][]uint32)
-    coverBlocks = make(map[string][]testing.CoverBlock)
-)
-        """,
-            'func init() {',
-        ]
-    )
-    for var, file in (x.split(':') for x in args.cover_info):
-        lines.append(
-            '    coverRegisterFile("{file}", _cover0.{var}.Count[:], _cover0.{var}.Pos[:], _cover0.{var}.NumStmt[:])'.format(
-                file=file, var=var
-            )
-        )
-    lines.extend(
-        [
-            '}',
-            """
-func coverRegisterFile(fileName string, counter []uint32, pos []uint32, numStmts []uint16) {
-    if 3*len(counter) != len(pos) || len(counter) != len(numStmts) {
-        panic("coverage: mismatched sizes")
-    }
-    if coverCounters[fileName] != nil {
-        // Already registered.
-        return
-    }
-    coverCounters[fileName] = counter
-    block := make([]testing.CoverBlock, len(counter))
-    for i := range counter {
-        block[i] = testing.CoverBlock{
-            Line0: pos[3*i+0],
-            Col0: uint16(pos[3*i+2]),
-            Line1: pos[3*i+1],
-            Col1: uint16(pos[3*i+2]>>16),
-            Stmts: numStmts[i],
-        }
-    }
-    coverBlocks[fileName] = block
-}
-        """,
-        ]
-    )
-    return lines
+    # newline='\n' keeps text mode from emitting CRLF on Windows hosts.
+    with tempfile.NamedTemporaryFile(mode='w', newline='\n', delete_on_close=False) as response_file:
+        for arg in cmd[1:]:
+            response_file.write(_encode_go_link_arg(arg))
+            response_file.write('\n')
+        response_file.close()
+        cmd = [cmd[0], '@' + response_file.name]
+        call(cmd, args.build_root)
 
 
 def filter_out_skip_tests(tests, skip_tests):
@@ -649,8 +626,7 @@ def create_strip_symlink():
 def gen_test_main(args, test_lib_args, xtest_lib_args):
     assert args and (test_lib_args or xtest_lib_args)
     test_miner = args.test_miner
-    test_module_path = test_lib_args.import_path if test_lib_args else xtest_lib_args.import_path
-    is_cover = args.cover_info and len(args.cover_info) > 0
+    cover_mode = args.cover_mode  # Go coverage per Go-package
 
     # Prepare GOPATH
     # $BINDIR
@@ -661,8 +637,17 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     go_path_root = os.path.join(args.output_root, '__go__')
     test_src_dir = os.path.join(go_path_root, 'src')
     target_os_arch = '_'.join([args.targ_os, args.targ_arch])
-    test_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(test_module_path))
-    os.makedirs(test_pkg_dir)
+    any_test_import_paths = []  # new coverage can support test and xtest together
+    test_import_path = test_lib_args.import_path if test_lib_args else None
+    if test_import_path:
+        any_test_import_paths.append(test_import_path)
+        test_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(test_import_path))
+        os.makedirs(test_pkg_dir, exist_ok=True)
+    xtest_import_path = xtest_lib_args.import_path if xtest_lib_args else None
+    if xtest_import_path:
+        any_test_import_paths.append(xtest_import_path)
+        xtest_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(xtest_import_path))
+        os.makedirs(xtest_pkg_dir, exist_ok=True)
 
     my_env = os.environ.copy()
     my_env['GOROOT'] = ''
@@ -682,101 +667,106 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
 
     # Get the list of "internal" tests
     if test_lib_args:
-        os.makedirs(os.path.join(test_src_dir, test_module_path))
-        os_symlink(test_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(test_module_path) + '.a'))
-        cmd = [test_miner, '-benchmarks', '-tests', test_module_path]
+        os.makedirs(os.path.join(test_src_dir, test_import_path), exist_ok=True)
+        os_symlink(test_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(test_import_path) + '.a'))
+        cmd = [test_miner, '-benchmarks', '-tests', test_import_path]
         tests = [x for x in (call(cmd, test_lib_args.output_root, my_env) or '').strip().split('\n') if len(x) > 0]
         if args.skip_tests:
             tests = filter_out_skip_tests(tests, args.skip_tests)
-    test_main_found = '#TestMain' in tests
 
     # Get the list of "external" tests
     if xtest_lib_args:
-        xtest_module_path = xtest_lib_args.import_path
-        os.makedirs(os.path.join(test_src_dir, xtest_module_path))
-        os_symlink(xtest_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(xtest_module_path) + '.a'))
-        cmd = [test_miner, '-benchmarks', '-tests', xtest_module_path]
+        os.makedirs(os.path.join(test_src_dir, xtest_import_path), exist_ok=True)
+        os_symlink(xtest_lib_args.output, os.path.join(xtest_pkg_dir, os.path.basename(xtest_import_path) + '.a'))
+        cmd = [test_miner, '-benchmarks', '-tests', xtest_import_path]
         xtests = [x for x in (call(cmd, xtest_lib_args.output_root, my_env) or '').strip().split('\n') if len(x) > 0]
         if args.skip_tests:
             xtests = filter_out_skip_tests(xtests, args.skip_tests)
-    xtest_main_found = '#TestMain' in xtests
 
-    test_main_package = None
+    test_main_found = '#TestMain' in tests
+    xtest_main_found = '#TestMain' in xtests
     if test_main_found and xtest_main_found:
         assert False, 'multiple definition of TestMain'
-    elif test_main_found:
+    if test_main_found:
         test_main_package = '_test'
     elif xtest_main_found:
         test_main_package = '_xtest'
+    else:
+        test_main_package = None
 
     shutil.rmtree(go_path_root)
 
-    lines = ['package main', '', 'import (']
-    if test_main_package is None:
-        lines.append('    "os"')
-    lines.extend(['    "testing"', '    "testing/internal/testdeps"'])
-    lines.extend(['    _ "{}library/go/test/yatest"'.format(args.arc_project_prefix)])
+    has_tests = len(tests) > 0
+    has_xtests = len(xtests) > 0
 
-    if len(tests) > 0:
-        lines.append('    _test "{}"'.format(test_module_path))
-    elif test_lib_args:
-        lines.append('    _ "{}"'.format(test_module_path))
-
-    if len(xtests) > 0:
-        lines.append('    _xtest "{}"'.format(xtest_module_path))
-    elif xtest_lib_args:
-        lines.append('    _ "{}"'.format(xtest_module_path))
-
-    if is_cover:
-        lines.append('    _cover0 "{}"'.format(test_module_path))
-    lines.extend([')', ''])
-
-    if compare_versions('1.18', args.goversion) < 0:
-        kinds = ['Test', 'Benchmark', 'Example']
-    else:
-        kinds = ['Test', 'Benchmark', 'FuzzTarget', 'Example']
-
-    var_names = []
-    for kind in kinds:
-        var_name = '{}s'.format(kind.lower())
-        var_names.append(var_name)
-        lines.append('var {} = []testing.Internal{}{{'.format(var_name, kind))
-        for test in [x for x in tests if x.startswith(kind)]:
-            lines.append('    {{"{test}", _test.{test}}},'.format(test=test))
-        for test in [x for x in xtests if x.startswith(kind)]:
-            lines.append('    {{"{test}", _xtest.{test}}},'.format(test=test))
-        lines.extend(['}', ''])
-
-    if is_cover:
-        lines.extend(gen_cover_info(args))
-
-    lines.append('func main() {')
-    if is_cover:
-        lines.extend(
-            [
-                '    testing.RegisterCover(testing.Cover{',
-                '        Mode: "set",',
-                '        Counters: coverCounters,',
-                '        Blocks: coverBlocks,',
-                '        CoveredPackages: "",',
-                '    })',
-            ]
-        )
-    lines.extend(
+    # Original template at https://github.com/golang/go/blob/fefb02adf45c4bcc879bd406a8d61f2a292c26a9/src/cmd/go/internal/load/test.go#L781
+    lines = (
         [
-            '    m := testing.MainStart(testdeps.TestDeps{{}}, {})'.format(', '.join(var_names)),
-            '',
+            'package main',
+            'import (',
         ]
+        + (['    "os"'] if not test_main_package else [])  # else unused import os happened
+        # Skip "reflect", because os.Exit called inside TestMain and reflect functions not used
+        + (['    "internal/coverage/cfile"'] if cover_mode else [])
+        + [
+            '    "testing"',
+            '    "testing/internal/testdeps"',
+            f'    _ "{args.arc_project_prefix}library/go/test/yatest"',
+        ]
+        + (
+            [f'    _test "{test_import_path}"']
+            if has_tests
+            else ([f'    _ "{test_import_path}"'] if test_lib_args else [])
+        )
+        + (
+            [f'    _xtest "{xtest_import_path}"']
+            if has_xtests
+            else ([f'    _ "{xtest_import_path}"'] if xtest_lib_args else [])
+        )
+        + [')', '']
     )
 
-    if test_main_package:
-        lines.append('    {}.TestMain(m)'.format(test_main_package))
-    else:
-        lines.append('    os.Exit(m.Run())')
+    var_names = []
+    for kind in ['Test', 'Benchmark', 'FuzzTarget', 'Example']:
+        var_name = kind[:1].lower() + kind[1:] + 's'
+        var_names.append(var_name)
+        test_lines = [f'    {{"{test}", _test.{test}}},' for test in [x for x in tests if x.startswith(kind)]]
+        xtest_lines = [f'    {{"{xtest}", _xtest.{xtest}}},' for xtest in [x for x in xtests if x.startswith(kind)]]
+        lines.extend([f'var  {var_name} = []testing.Internal{kind}{{'] + test_lines + xtest_lines + ['}', ''])
+
+    lines.append('func init() {')
+    if cover_mode:
+        lines.extend(
+            [
+                f'    testdeps.CoverMode = "{cover_mode}"',
+                f'    testdeps.Covered = "in {', '.join(any_test_import_paths)}"',
+                f'    testdeps.CoverSelectedPackages =  []string{{"{'", "'.join(any_test_import_paths)}"}}',
+                '    testdeps.CoverSnapshotFunc = cfile.Snapshot',
+                '    testdeps.CoverProcessTestDirFunc = cfile.ProcessCoverTestDir',
+                '    testdeps.CoverMarkProfileEmittedFunc = cfile.MarkProfileEmitted',
+            ]
+        )
     lines.extend(['}', ''])
 
+    lines.extend(
+        [
+            'func main() {',
+            f'    m := testing.MainStart(testdeps.TestDeps{{}}, {', '.join(var_names)})',
+        ]
+        + (
+            [
+                f'    {test_main_package}.TestMain(m)',
+                # Skip os.Exit(int(reflect.ValueOf(m).Elem().FieldByName("exitCode").Int()))
+                # os.Exit(m.Run()) called in TestMain in devtools/ya/test/programs/test_tool/resolve_go_coverage/tests/data/testing/main_test.go
+            ]
+            if test_main_package
+            else ['    os.Exit(m.Run())']
+        )
+        + ['}', '']
+    )
+
     content = '\n'.join(lines)
-    # sys.stderr.write('{}\n'.format(content))
+    # sys.stderr.write('\n\n\nCONTENT _test_main.go\n\n\n' + content + '\n\n\n')
     return content
 
 
@@ -825,6 +815,8 @@ def do_link_test(args):
         if test_lib_args:
             xtest_lib_args.module_map[test_import_path] = test_lib_args.output
         need_append_ydx = args.ydx_file and args.srcs and args.vet_flags
+        # Сompile xtest sources without new coverage out config, because it in another package ..._test
+        xtest_lib_args.cover_cfg = None
         do_link_lib(xtest_lib_args)
 
     if need_append_ydx:
@@ -854,6 +846,7 @@ def do_link_test(args):
     if args.vet:
         dump_vet_report_for_tests(test_args, test_lib_args, xtest_lib_args)
     test_args.vet = False
+    test_args.cover_cfg = None
 
     do_link_exe(test_args)
 
@@ -885,7 +878,13 @@ if __name__ == '__main__':
     parser.add_argument('++cgo-srcs', nargs='*')
     parser.add_argument('++test_srcs', nargs='*')
     parser.add_argument('++xtest_srcs', nargs='*')
-    parser.add_argument('++cover_info', nargs='*')
+    parser.add_argument('++cover-mode', choices=['set', 'count', 'atomic'])
+    parser.add_argument('++cover-cfg', help='coverage output config, if zero-size, really no coverage')
+    parser.add_argument(
+        '++cover-covervars',
+        default='covervars.go',
+        help='basename of coverage vars go-file, if zero-size ++cover-cfg, must be excluded',
+    )
     parser.add_argument('++ld_plugins', nargs='*')
     parser.add_argument('++output', nargs='?', default=None)
     parser.add_argument('++source-root', default=None)
@@ -924,6 +923,14 @@ if __name__ == '__main__':
     parser.add_argument('++embed', action='append', nargs='*')
     parser.add_argument('++embed_xtest', action='append', nargs='*')
     args = parser.parse_args(args)
+
+    if args.cover_cfg:
+        coveragecfg = os.path.join(args.output_root, args.cover_cfg)
+        # when not found source files for covering config is empty
+        if not os.path.getsize(coveragecfg):
+            args.cover_cfg = None  # really no coverage
+            # if no coverage, we must exclude covervars.go from compile
+            args.srcs = [src for src in args.srcs if not src.endswith(os.path.join('', args.cover_covervars))]
 
     arc_project_prefix = args.arc_project_prefix
     std_lib_prefix = args.std_lib_prefix

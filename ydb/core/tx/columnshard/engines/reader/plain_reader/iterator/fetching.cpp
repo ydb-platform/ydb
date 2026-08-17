@@ -10,6 +10,8 @@
 
 #include <yql/essentials/minikql/mkql_terminator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NPlain {
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(
@@ -17,8 +19,7 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            true));
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -108,13 +109,14 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         if (source->MutableStageData().GetTable().HasColumn(IIndexInfo::GetColumnIdVerified(f->name()))) {
             auto arr = source->MutableStageData().GetTable().GetArrayVerified(IIndexInfo::GetColumnIdVerified(f->name()));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "spec_column_exists")("column_name", f->name())(
-                "col", NArrow::DebugJson(arr, 2, 2).GetStringRobust());
+            YDB_LOG_WARN("",
+                {"event", "spec_column_exists"},
+                {"columnName", f->name()},
+                {"col", NArrow::DebugJson(arr, 2, 2).GetStringRobust()});
         } else {
             source->MutableStageData().MutableTable().AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                    NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())),
-                true);
+                    NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
         }
     }
     return true;

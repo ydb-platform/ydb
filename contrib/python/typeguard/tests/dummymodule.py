@@ -11,13 +11,14 @@ from typing import (
     Generator,
     List,
     Literal,
+    ParamSpec,
     Sequence,
     Tuple,
     Type,
+    TypedDict,
     TypeVar,
     Union,
     no_type_check,
-    no_type_check_decorator,
     overload,
 )
 
@@ -28,11 +29,6 @@ from typeguard import (
     typeguard_ignore,
 )
 
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
-
 if TYPE_CHECKING:
     from nonexistent import Imaginary
 
@@ -41,6 +37,7 @@ P = ParamSpec("P")
 
 
 if sys.version_info <= (3, 13):
+    from typing import no_type_check_decorator
 
     @no_type_check_decorator
     def dummy_decorator(func):
@@ -209,6 +206,11 @@ def builtin_generic_collections(x: "list[set[int]]") -> Any:
 
 
 @typechecked
+def empty_tuple(x: "tuple[()]") -> Any:
+    return x
+
+
+@typechecked
 def paramspec_function(func: P, args: P.args, kwargs: P.kwargs) -> None:
     pass
 
@@ -243,6 +245,13 @@ def unpacking_assign() -> Tuple[int, str]:
     x: int
     x, y = (1, "foo")
     return x, y
+
+
+@typechecked
+def unpacking_assign_single_item_tuple() -> str:
+    x: str
+    (x,) = ("foo",)
+    return x
 
 
 @typechecked
@@ -351,3 +360,12 @@ def typevar_forwardref(x: Type[T]) -> T:
 def never_called(x: List["NonExistentType"]) -> List["NonExistentType"]:  # noqa: F821
     """Regression test for #335."""
     return x
+
+
+# Regression test for #536 - forward reference evaluation on Python 3.14
+class ModuleLocalClass:
+    """A class only available in this module's namespace, not the caller's."""
+
+
+class TypedDictWithForwardRef(TypedDict):
+    x: "ModuleLocalClass"

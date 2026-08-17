@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_yt_client.cpp
+    yql_yt_raw_table_queue.cpp
     yql_yt_column_group_helpers.cpp
     yql_yt_index_serialisation.cpp
     yql_yt_log_context.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     yt/yql/providers/yt/codec
     yt/yql/providers/yt/lib/yson_helpers
     yql/essentials/utils
+    yt/yql/providers/yt/fmr/test_tools/yson
 )
 
 YQL_LAST_ABI_VERSION()

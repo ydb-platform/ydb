@@ -1,5 +1,15 @@
+$input = AsList(
+    <|key:"MixAsciiAndUnicode", subkey:"Simple строка long enough", value:"hguone gnol \xb0\xd0\xba\xd0\xbe\xd0\x80\xd1\x82\xd1\x81\xd1 elpmiS"|>,
+    <|key:"Empty", subkey:"", value:""|>,
+    <|key:"Ascii", subkey:"ABCDEFG", value:"GFEDCBA"|>,
+    <|key:"Unicode", subkey:"строка", value:"\xb0\xd0\xba\xd0\xbe\xd0\x80\xd1\x82\xd1\x81\xd1"|>,
+    <|key:"Hex", subkey:"\xff\xae\x00\x01\x02\x03\x04\x05\x06\x07", value:"\x07\x06\x05\x04\x03\x02\x01\x00\xae\xff"|>,
+    <|key:"Polindrome", subkey:"radar", value:"radar"|>,
+    <|key:"SingleChar", subkey:"A", value:"A"|>
+);
+
 SELECT
     -- Use explicit comparasion instead of canonization to produce more human readable test input data.
     -- Canonization of binary data produces encoded bytes.
     key,
-    String::ReverseBytes(subkey) == value FROM Input;
+    String::ReverseBytes(subkey) == value FROM AS_TABLE($input);

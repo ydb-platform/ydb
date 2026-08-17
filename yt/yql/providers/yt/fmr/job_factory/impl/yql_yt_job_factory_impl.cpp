@@ -1,6 +1,9 @@
-#include <util/system/mutex.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <util/system/mutex.h>
 
 namespace NYql::NFmr {
 
@@ -53,7 +56,8 @@ public:
     }
 
     void Start() override {
-        ThreadPool_ = CreateThreadPool(NumThreads_, MaxQueueSize_, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+        ThreadPool_.Reset(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(true)));
+        ThreadPool_->Start(NumThreads_, MaxQueueSize_);
     }
 
     void Stop() override {

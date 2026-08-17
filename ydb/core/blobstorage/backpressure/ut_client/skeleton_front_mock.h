@@ -26,8 +26,17 @@ class TSkeletonFrontMockActor : public TActorBootstrapped<TSkeletonFrontMockActo
     std::deque<TOperation> Operations;
 
 public:
-    TSkeletonFrontMockActor()
-        : Server(true, 1000000, 100000, 20000, 200000, 100000, 200000, 300000, TDuration::Minutes(1))
+    explicit TSkeletonFrontMockActor(ui64 totalCost = 700000000)
+        : Server(
+            true,
+            totalCost,
+            totalCost * 2 / 100,
+            totalCost * 2 / 100,
+            totalCost * 50 / 100,
+            5,
+            totalCost * 20 / 100,
+            totalCost * 33 / 100,
+            TDuration::Minutes(1))
     {}
 
     void Bootstrap() {
@@ -39,7 +48,7 @@ public:
     }
 
     void HandleWakeup() {
-        LOG_DEBUG(*TlsActivationContext, NActorsServices::TEST, "HandleWakeup");
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NActorsServices::TEST, "HandleWakeup");
         Ready = true;
         for (const TActorId& id : std::exchange(Notify, {})) {
             Send(id, new TEvBlobStorage::TEvVReadyNotify);
@@ -55,7 +64,10 @@ public:
         if (!Ready && record.GetNotifyIfNotReady()) {
             Notify.insert(ev->Sender);
         }
-        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false));
+        auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(
+            Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false);
+        CostModel->FillInSettings(*res->Record.MutableCostSettings());
+        Reply(*ev, res.release());
     }
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
@@ -79,7 +91,7 @@ public:
             Reply(*ev, new TEvBlobStorage::TEvVPutResult(NKikimrProto::NOTREADY,
                 blobId, vdiskId, record.HasCookie() ? &cookie : nullptr,
                 TOutOfSpaceStatus(0, 0), TActivationContext::Now(), ev->Get()->GetCachedByteSize(),
-                &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), 0, TString()));
+                &record, nullptr, nullptr, nullptr, ev->Get()->GetBufferBytes(), 0, TString()));
             if (record.GetNotifyIfNotReady()) {
                 Notify.insert(ev->Sender);
             }
@@ -91,10 +103,11 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> reply(new TEvBlobStorage::TEvVPutResult(NKikimrProto::OK,
             blobId, vdiskId, record.HasCookie() ? &cookie : nullptr,
             TOutOfSpaceStatus(0, 0), TActivationContext::Now(), ev->Get()->GetCachedByteSize(),
-            &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), 0, TString()));
+            &record, nullptr, nullptr, nullptr, ev->Get()->GetBufferBytes(), 0, TString()));
 
         auto *qos = reply->Record.MutableMsgQoS();
-        LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, "Received " << SingleLineProto(*qos));
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Received",
+            {"qos", SingleLineProto(*qos)});
 
         if (qos->GetSendMeCostSettings()) {
             FillInCostSettings(qos->MutableCostSettings());
@@ -116,7 +129,8 @@ public:
             reply->Record.SetStatus(feedback.first.Status == NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId
                 ? NKikimrProto::TRYLATER : NKikimrProto::TRYLATER_SIZE);
 
-            LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, "Sending bad " << SingleLineProto(reply->Record));
+            YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending bad",
+                {"reply", SingleLineProto(reply->Record)});
 
             Reply(*ev, reply.release());
         }
@@ -125,7 +139,8 @@ public:
     void HandleProcessQueue() {
         TOperation& op = Operations.front();
 
-        LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, "Sending " << SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record));
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending",
+            {"op", SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record)});
 
         TActivationContext::Send(op.Result.release());
 
@@ -146,10 +161,10 @@ public:
 
     void FillInCostSettings(NKikimrBlobStorage::TVDiskCostSettings *settings) {
         settings->SetSeekTimeUs(60e6 / 7200); // HDD, for instance
-        settings->SetReadSpeedBps(60e6);
-        settings->SetWriteSpeedBps(60e6);
-        settings->SetReadBlockSize(4096);
-        settings->SetWriteBlockSize(4096);
+        settings->SetReadSpeedBps(128e6);
+        settings->SetWriteSpeedBps(128e6);
+        settings->SetReadBlockSize(512 << 10);
+        settings->SetWriteBlockSize(512 << 10);
         settings->SetMinHugeBlobInBytes(512 << 10);
     }
 

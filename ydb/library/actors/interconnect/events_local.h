@@ -10,7 +10,19 @@
 #include "interconnect_stream.h"
 #include "types.h"
 
+#include <expected>
+#include <optional>
+#include <functional>
+
 namespace NActors {
+    class TInterconnectProxyTCP;
+    struct IInterconnectSession;
+    class TInterconnectSessionRdma;
+    // Must not outlive the actor system. Its deleter may send a cleanup request through
+    // the captured TActorSystem; during actor system shutdown losing this request is
+    // acceptable because registered actors are cleaned up by the actor system itself.
+    using TRdmaPreinitedSessionPtr = std::unique_ptr<TInterconnectSessionRdma, std::function<void(TInterconnectSessionRdma*)>>;
+
     struct TEvSocketReadyRead: public TEventLocal<TEvSocketReadyRead, ui32(ENetwork::SocketReadyRead)> {
     };
 
@@ -121,6 +133,7 @@ namespace NActors {
         struct TOk {
             NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
             NInterconnect::NRdma::ICq::TPtr RdmaCq;
+            TRdmaPreinitedSessionPtr PreinitedSession;
         };
 
         struct TDisabled {
@@ -128,9 +141,10 @@ namespace NActors {
         };
 
         TRdmaHandshakeResult(NInterconnect::NRdma::TQueuePair::TPtr qp,
-            NInterconnect::NRdma::ICq::TPtr cq)
+            NInterconnect::NRdma::ICq::TPtr cq,
+            TRdmaPreinitedSessionPtr session)
         {
-            Result.emplace<TOk>(qp, cq);
+            Result.emplace<TOk>(std::move(qp), std::move(cq), std::move(session));
         }
 
         explicit TRdmaHandshakeResult(TDisabled disabled) {
@@ -148,6 +162,15 @@ namespace NActors {
         TDisabled* GetDisabled() noexcept {
             return std::get_if<TDisabled>(&Result);
         }
+
+        bool HasPreinitedSession() const noexcept {
+            if (auto ok = std::get_if<TOk>(&Result)) {
+                return bool(ok->PreinitedSession);
+            }
+            return false;
+        }
+
+        TInterconnectSessionRdma* ReleasePreinitedSession() noexcept;
     private:
         std::variant<TOk, TDisabled> Result;
     };
@@ -170,7 +193,7 @@ namespace NActors {
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
-            , RdmaHanshakeResult(rdmaHandshakeResult)
+            , RdmaHanshakeResult(std::move(rdmaHandshakeResult))
         {
         }
 
@@ -191,14 +214,26 @@ namespace NActors {
             HANDSHAKE_FAIL_SESSION_MISMATCH,
         };
 
-        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation)
+        enum class EReason {
+            Unspecified,
+            RemoteNodeDoesNotKnowLocalNode,
+        };
+
+        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation, TString peerHostName = {},
+                         TString peerError = {}, EReason reason = EReason::Unspecified)
             : Temporary(temporary)
             , Explanation(std::move(explanation))
+            , PeerHostName(std::move(peerHostName))
+            , PeerError(std::move(peerError))
+            , Reason(reason)
         {
         }
 
         const EnumHandshakeFail Temporary;
         const TString Explanation;
+        const TString PeerHostName;
+        const TString PeerError;
+        const EReason Reason;
     };
 
     struct TEvKick: public TEventLocal<TEvKick, ui32(ENetwork::Kick)> {
@@ -359,6 +394,24 @@ namespace NActors {
         {}
     };
 
+    struct TEvForwardSubscribeSession : TEventLocal<TEvForwardSubscribeSession, (ui32)ENetwork::EvForwardSubscribeSession> {
+        TAutoPtr<IEventHandle> Event;
+        ui32 ActivityIndex = Max<ui32>();
+        TString EventTypeName;
+        TString StackTrace;
+
+        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, ui32 activityIndex, TString eventTypeName, TString stackTrace)
+            : Event(std::move(event))
+            , ActivityIndex(activityIndex)
+            , EventTypeName(std::move(eventTypeName))
+            , StackTrace(std::move(stackTrace))
+        {}
+
+        ui32 CalculateSerializedSize() const override {
+            return Event ? Event->GetSize() : 0;
+        }
+    };
+
     struct TEvSubscribeForConnection : TEventLocal<TEvSubscribeForConnection, (ui32)ENetwork::EvSubscribeForConnection> {
         TString HandshakeId;
         bool Subscribe;
@@ -377,5 +430,31 @@ namespace NActors {
             : HandshakeId(std::move(handshakeId))
             , Socket(std::move(socket))
         {}
+    };
+
+    class IProxyCall {
+    // Only proxy can call session methods directly
+    friend class TInterconnectProxyTCP;
+    private:
+        void virtual Call(TInterconnectProxyTCP* const proxy) = 0;
+        void virtual ReportError(TString Error) = 0;
+    public:
+        virtual ~IProxyCall() = default;
+    };
+
+    struct TEvProxyCall
+        : TEventLocal<TEvProxyCall, (ui32)ENetwork::EvProxyCall>
+        , public IProxyCall
+    {
+    };
+
+    struct TEvRdmaSyncResult : TEventLocal<TEvRdmaSyncResult, (ui32)ENetwork::EvRdmaSyncResult> {
+        std::expected<TRdmaPreinitedSessionPtr, TString> Session;
+
+        TEvRdmaSyncResult() = default;
+        TEvRdmaSyncResult(TRdmaPreinitedSessionPtr session);
+        TEvRdmaSyncResult(TString error);
+        std::optional<TString> Error() const;
+        TRdmaPreinitedSessionPtr ExtractSession();
     };
 }

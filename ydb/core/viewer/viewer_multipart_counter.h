@@ -37,8 +37,12 @@ public:
         if (params.Has("content_type")) {
             ContentType = params.Get("content_type");
         }
-        BLOG_D("Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance << ", ContentType: " << ContentType);
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Started",
+            {"logPrefix", GetLogPrefix()},
+            {"maxCounter", MaxCounter},
+            {"period", Period},
+            {"failChance", FailChance},
+            {"contentType", ContentType});
         HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         Become(&TThis::StateWork, TDuration::MilliSeconds(Period), new TEvents::TEvWakeup());
@@ -47,11 +51,14 @@ public:
     void HandleTimer() {
         ++Counter;
         if (FailChance > 0 && ((ui32)NPrivate::TRandom() % 100) < FailChance) {
-            BLOG_D("Simulate fail");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Simulate fail",
+                {"logPrefix", GetLogPrefix()});
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("failed"));
             return ReplyAndPassAway();
         } else {
-            BLOG_D("Counter: " << Counter);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Dump counter",
+                {"logPrefix", GetLogPrefix()},
+                {"counter", Counter});
             TStringBuilder content;
             content << "{\"Counter\":" << Counter << "}";
             TStringBuilder data;
@@ -72,19 +79,9 @@ public:
         }
     }
 
-    void Cancelled() {
-        BLOG_D("Cancelled");
-        ReplyAndPassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
-        }
-    }
-
     void ReplyAndPassAway() override {
-        BLOG_D("Done");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Done",
+            {"logPrefix", GetLogPrefix()});
         HttpEvent.Reset(); // to avoid double reply
         TBase::ReplyAndPassAway("ok");
     }
@@ -92,8 +89,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::Wakeup, HandleTimer);
-            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 };

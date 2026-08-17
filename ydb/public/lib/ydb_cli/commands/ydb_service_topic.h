@@ -14,6 +14,7 @@ namespace NYdb::NConsoleClient {
     TVector<NTopic::ECodec> InitAllowedCodecs();
     const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
     std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination); // parses timestamp in the following formats: unix time, ISO-8601
+    ui32 ParsePartitionPerTabletValue(TStringBuf s);
 
     class TCommandWithSupportedCodecs {
     protected:
@@ -85,9 +86,12 @@ namespace NYdb::NConsoleClient {
     private:
         TDuration RetentionPeriod_ = TDuration::Hours(24);
         ui64 RetentionStorageMb_;
+        bool ContentBasedDeduplication_ = false;
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui64> PartitionWriteSpeedMessagesPerSecond_;
+        TMaybe<ui64> PartitionWriteBurstMessages_;
         TMaybe<ui32> PartitionsPerTablet_;
         TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
@@ -110,11 +114,14 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<ui64> PartitionWriteSpeedMessagesPerSecond_;
+        TMaybe<ui64> PartitionWriteBurstMessages_;
         TMaybe<bool> KeepMessagesOrder_;
         TMaybe<TDuration> DefaultProcessingTimeout_;
         TMaybe<ui32> DlqMaxProcessingAttempts_;
         TMaybe<bool> DlqEnabled_;
         TMaybe<TString> DlqQueueName_;
+        TMaybe<bool> ContentBasedDeduplication_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -156,6 +163,8 @@ namespace NYdb::NConsoleClient {
         TMaybe<TDuration> DefaultProcessingTimeout_;
         TMaybe<ui32> MaxProcessingAttempts_;
         TMaybe<TString> DlqQueueName_;
+        TMaybe<TDuration> ReceiveMessageWaitTime_;
+        TMaybe<TDuration> ReceiveMessageDelay_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
@@ -222,6 +231,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Consumer_ = "";
+        bool ReadWithoutConsumer_ = false;
         TVector<ui64> PartitionIds_;
         TMaybe<uint64_t> Offset_;
         TMaybe<uint32_t> Partition_;

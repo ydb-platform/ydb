@@ -77,6 +77,41 @@
 
 Каждому топику в базе данных также соответствует одноименная директория в иерархии директорий файловой структуры, в которой находится файл `create_topic.pb`, содержащий информацию о параметрах топика, настройках партиционирования и консьюмерах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
+## Представления (view) {#views}
+
+Каждому представлению в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+
+- Файл `create_view.sql`, содержащий YQL-запрос создания представления
+- Файл `permissions.pb`, содержащий информацию об ACL представления и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+## Асинхронные репликации {#async-replications}
+
+Каждой асинхронной репликации в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+
+- Файл `create_async_replication.sql`, содержащий YQL-запрос создания асинхронной репликации
+- Файл `permissions.pb`, содержащий информацию об ACL репликации и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+## Трансферы {#transfers}
+
+Каждому трансферу в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+
+- Файл `create_transfer.sql`, содержащий YQL-запрос создания трансфера
+- Файл `permissions.pb`, содержащий информацию об ACL трансфера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+## Внешние источники данных {#external-data-sources}
+
+Каждому внешнему источнику данных в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+
+- Файл `create_external_data_source.sql`, содержащий YQL-запрос создания внешнего источника данных
+- Файл `permissions.pb`, содержащий информацию об ACL внешнего источника данных и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+## Внешние таблицы {#external-tables}
+
+Каждой внешней таблице в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+
+- Файл `create_external_table.sql`, содержащий YQL-запрос создания внешней таблицы
+- Файл `permissions.pb`, содержащий информацию об ACL внешней таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
 ## Файлы с данными {#datafiles}
 
 Формат файлов с данными - `.csv`, одна строка соответствует одной записи в таблице, без строки с заголовками колонок. Для строк применяется  представление в urlencoded формате. Например, строка файла для таблицы с колонками uint64 и utf8, содержащая число 1 и строку "Привет" соответственно, выглядит таким образом:

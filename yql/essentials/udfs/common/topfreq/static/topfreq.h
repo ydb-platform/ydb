@@ -22,7 +22,7 @@ protected:
     ui32 MaxSize_ = 0;
 
     void Add(const TTopFreqBase& otherCalc);
-    void Update(const TUnboxedValuePod& key, const ui64 value);
+    void Update(const TUnboxedValuePod& key, ui64 value);
     void TryCompress();
     void Compress(ui32 newSize, bool sort = false);
     TUnboxedValue Convert(const IValueBuilder* valueBuilder) const;
@@ -30,7 +30,7 @@ protected:
 protected:
     TTopFreqBase(THash hash, TEquals equals);
 
-    void Init(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize);
+    void Init(const TUnboxedValuePod& value, ui32 minSize, ui32 maxSize);
     void Merge(const TTopFreqBase& TopFreq1, const TTopFreqBase& TopFreq2);
     void Deserialize(const TUnboxedValuePod& serialized);
 
@@ -49,7 +49,7 @@ public:
         NKikimr::NUdf::TUnboxedValueHash<Slot>,
         NKikimr::NUdf::TUnboxedValueEquals<Slot>>;
 
-    TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize);
+    TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& value, ui32 minSize, ui32 maxSize);
     TTopFreqData(const TTopFreqData& topFreq1, const TTopFreqData& topFreq2);
     explicit TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& serialized);
 
@@ -81,7 +81,7 @@ class TTopFreqGeneric
 public:
     using TBase = TTopFreqBase<TGenericHash, TGenericEquals>;
 
-    TTopFreqGeneric(const NKikimr::NUdf::TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize,
+    TTopFreqGeneric(const NKikimr::NUdf::TUnboxedValuePod& value, ui32 minSize, ui32 maxSize,
                     NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
     TTopFreqGeneric(const TTopFreqGeneric& topFreq1, const TTopFreqGeneric& topFreq2,
                     NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);

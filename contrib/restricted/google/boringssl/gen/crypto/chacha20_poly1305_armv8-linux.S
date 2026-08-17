@@ -4,7 +4,6 @@
 #include <contrib/restricted/google/boringssl/include/openssl/asm_base.h>
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__ELF__)
-#include <contrib/restricted/google/boringssl/include/openssl/arm_arch.h>
 .section	.rodata
 
 .align	7
@@ -1200,7 +1199,7 @@ chacha20_poly1305_seal:
 	subs	x4, x4, #1
 	b.gt	.Lseal_hash_extra_load
 
-    // Hash in the final padded extra_in blcok
+    // Hash in the final padded extra_in block
 	mov	x11, v20.d[0]
 	mov	x12, v20.d[1]
 	adds	x8, x8, x11

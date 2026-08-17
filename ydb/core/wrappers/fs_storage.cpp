@@ -13,15 +13,19 @@
 #include <util/system/fs.h>
 #include <util/generic/guid.h>
 
+#include <optional>
 #include <type_traits>
 
-namespace NKikimr::NWrappers::NExternalStorage {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FS_WRAPPER
 
-#define FS_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
+#define YDB_LOG_IF_ACTIVE(LOG_MACRO, ...) \
+    do {                                  \
+        if (TlsActivationContext) {       \
+            LOG_MACRO(__VA_ARGS__);       \
+        }                                 \
+    } while (false)
+
+namespace NKikimr::NWrappers::NExternalStorage {
 
 namespace {
 
@@ -38,12 +42,15 @@ private:
             : Key(key)
             , File(key, OpenAlways | WrOnly | ForAppend)
         {
+            FsyncParentDir(key);
             File.Flock(LOCK_EX | LOCK_NB);
             File.Resize(0);
         }
     };
 
     THashMap<TString, TMultipartUploadSession> ActiveUploads;
+    static constexpr std::pair<ui64, ui64> EmptyRange = std::make_pair(0, 0);
+    static constexpr auto InvalidRange = EmptyRange;
 
     template<typename TEvResponse>
     struct RequiresKey : std::true_type {};
@@ -57,6 +64,15 @@ private:
     template<typename TEvResponse>
     static constexpr bool HasKeyConstructor() {
         return RequiresKey<TEvResponse>::value;
+    }
+
+    static void FsyncParentDir(const TFsPath& fsPath) {
+        TFile dirFd(fsPath.Parent().GetPath(), RdOnly | Seq);
+        dirFd.Flush();
+    }
+
+    static void FsyncParentDir(const TString& filePath) {
+        FsyncParentDir(TFsPath(filePath));
     }
 
     template<typename TEvResponse>
@@ -74,52 +90,115 @@ private:
         this->Send(sender, response.release());
     }
 
-    template<typename TEvResponse>
-    void ReplyError(
-            const NActors::TActorId& sender,
-            const std::optional<TString>& key,
-            const TString& errorMessage,
-            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
-            bool retryable = false)
-    {
-        Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-            errorType,
-            "FsStorageError",
-            errorMessage,
-            retryable
-        );
-        Aws::S3::S3Error error(std::move(awsError));
-        Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
+    struct TReplyErrorOpts {
+        TString ErrorMessage;
+        Aws::S3::S3Errors ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE;
+        bool Retryable = false;
+        TString ExceptionName = "FsStorageError";
+        std::optional<Aws::Http::HttpResponseCode> ResponseCode = std::nullopt;
+    };
 
-        std::unique_ptr<TEvResponse> response;
-        if constexpr (HasKeyConstructor<TEvResponse>()) {
-            Y_ENSURE(key, "Key is required for this response type");
-            response = std::make_unique<TEvResponse>(*key, std::move(outcome));
-        } else {
-            response = std::make_unique<TEvResponse>(std::move(outcome));
+    template<typename TEvResponse>
+    auto CreateOutcome(const TReplyErrorOpts& opts) {
+        Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
+            opts.ErrorType, opts.ExceptionName, opts.ErrorMessage, opts.Retryable);
+        if (opts.ResponseCode) {
+            awsError.SetResponseCode(*opts.ResponseCode);
         }
+        return Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error>(
+            Aws::S3::S3Error(std::move(awsError)));
+    }
+
+    template<typename TEvResponse, typename... Args>
+    void ReplyError(const NActors::TActorId& sender, TReplyErrorOpts opts, Args&&... args) {
+        auto outcome = CreateOutcome<TEvResponse>(opts);
+        auto response = std::make_unique<TEvResponse>(std::forward<Args>(args)..., std::move(outcome));
         this->Send(sender, response.release());
     }
 
-    template<typename TEvResponse>
-    bool HandleFileLockError(
-            const TSystemError& ex,
-            const NActors::TActorId& sender,
-            const TString& key,
-            const TString& operation)
-    {
-        if (ex.Status() == EWOULDBLOCK) {
-            FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
-                << ": key# " << key);
-            ReplyError<TEvResponse>(sender, key, "File is locked by another process",
-                Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
-            return true;
+    static std::optional<TReplyErrorOpts> ClassifyFsError(int status) {
+        switch (status) {
+            case EACCES:
+            case EPERM:
+            case EROFS:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::ACCESS_DENIED,
+                    .ExceptionName = "FsPermissionDenied",
+                    .ResponseCode = Aws::Http::HttpResponseCode::FORBIDDEN,
+                };
+            case EDQUOT:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::ACCESS_DENIED,
+                    .ExceptionName = "FsQuotaExceeded",
+                    .ResponseCode = Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE,
+                };
+            case ENOENT:
+            case ENOTDIR:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::NO_SUCH_KEY,
+                    .ExceptionName = "FsPathNotFound",
+                    .ResponseCode = Aws::Http::HttpResponseCode::NOT_FOUND,
+                };
+            case EISDIR:
+            case ENAMETOOLONG:
+            case EINVAL:
+            case ELOOP:
+            case EXDEV:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsInvalidPath",
+                    .ResponseCode = Aws::Http::HttpResponseCode::BAD_REQUEST,
+                };
+            case EFBIG:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsFileTooLarge",
+                    .ResponseCode = Aws::Http::HttpResponseCode::BAD_REQUEST,
+                };
+            case ENOSPC:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsNoSpaceLeft",
+                    .ResponseCode = Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE,
+                };
+            case EWOULDBLOCK:
+#if EAGAIN != EWOULDBLOCK
+            case EAGAIN:
+#endif
+                return TReplyErrorOpts{
+                    .ErrorMessage = "File is locked by another process",
+                    .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                    .Retryable = true,
+                    .ExceptionName = "FsFileLocked",
+                    .ResponseCode = Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE,
+                };
+            default:
+                return std::nullopt;
         }
-        return false;
+    }
+
+    template<typename TEvResponse, typename... Args>
+    void ReplyFsSystemError(const NActors::TActorId& sender, const TString& context, const TSystemError& ex, Args&&... args) {
+        const auto msg = TStringBuilder() << context
+            << ", error# " << ex.what()
+            << ", errno# " << ex.Status();
+
+        auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
+
+        if (opts.Retryable) {
+            YDB_LOG_WARN(msg);
+        } else {
+            YDB_LOG_ERROR(msg);
+        }
+
+        if (opts.ErrorMessage.empty()) {
+            opts.ErrorMessage = ex.what();
+        }
+        ReplyError<TEvResponse>(sender, std::move(opts), std::forward<Args>(args)...);
     }
 
 public:
-    TFsOperationActor(const TString& basePath)
+    explicit TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
     {
     }
@@ -129,7 +208,7 @@ public:
     }
 
     void Bootstrap() {
-        FS_LOG_T("TFsOperationActor Bootstrap called");
+        YDB_LOG_TRACE("TFsOperationActor Bootstrap called");
         Become(&TThis::StateWork);
     }
 
@@ -140,21 +219,21 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_D("TFsOperationActor: cleaning up"
-            << ": active MPU sessions# " << ActiveUploads.size());
+        YDB_LOG_IF_ACTIVE(YDB_LOG_DEBUG, "TFsOperationActor: cleaning up active MPU",
+            {"sessions", ActiveUploads.size()});
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
                 const TString filePath = session.Key;
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
-                    << ": uploadId# " << uploadId
-                    << ", file# " << filePath);
+                YDB_LOG_IF_ACTIVE(YDB_LOG_TRACE, "TFsOperationActor: closed and deleted incomplete file",
+                    {"uploadId", uploadId},
+                    {"file", filePath});
             } catch (const std::exception& ex) {
-                FS_LOG_W("Failed to cleanup MPU session"
-                    << ": uploadId# " << uploadId
-                    << ", error# " << ex.what());
+                YDB_LOG_IF_ACTIVE(YDB_LOG_WARN, "Failed to cleanup MPU session",
+                    {"uploadId", uploadId},
+                    {"error", ex.what()});
             }
         }
         ActiveUploads.clear();
@@ -163,8 +242,8 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG_T("TFsOperationActor StateWork received event type"
-            << ": type# " << ev->GetTypeRewrite());
+        YDB_LOG_TRACE("TFsOperationActor StateWork received event type",
+            {"type", ev->GetTypeRewrite()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
             hFunc(TEvGetObjectRequest, Handle);
@@ -180,8 +259,8 @@ public:
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                FS_LOG_W("TFsOperationActor StateWork received unknown event type"
-                    << ": type# " << ev->GetTypeRewrite());
+                YDB_LOG_WARN("TFsOperationActor StateWork received unknown event type",
+                    {"type", ev->GetTypeRewrite()});
         }
     }
 
@@ -194,33 +273,29 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("PutObject"
-            << ": key# " << key
-            << ", size# " << body.size());
+        YDB_LOG_DEBUG("PutObject",
+            {"key", key},
+            {"size", body.size()});
 
         try {
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
-            file.Flock(LOCK_EX | LOCK_NB);
-            file.Write(body.data(), body.size());
-            file.Flush();
-            file.Close();
+            TMultipartUploadSession session(key);
+            session.File.Write(body.data(), body.size());
+            session.File.Flush();
+            session.File.Close();
+
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                FS_LOG_E("PutObject failed with system error"
-                    << ": key# " << key
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
-            }
+            ReplyFsSystemError<TEvPutObjectResponse>(ev->Sender,
+                TStringBuilder() << "PutObject failed with system error"
+                    << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("PutObject failed"
-                << ": key# " << key
-                << ", error# " << ex.what());
-            ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
+            YDB_LOG_ERROR("PutObject failed",
+                {"key", key},
+                {"error", ex.what()});
+            ReplyError<TEvPutObjectResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -228,8 +303,8 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("GetObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("GetObject",
+            {"key", key});
 
         try {
             TFile file(key, RdOnly);
@@ -241,7 +316,7 @@ public:
                 awsResult.SetETag("\"fs-file\"");
                 Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
-                auto response = std::make_unique<TEvGetObjectResponse>(key, std::make_pair(0, 0), std::move(outcome), TString());
+                auto response = std::make_unique<TEvGetObjectResponse>(key, EmptyRange, std::move(outcome), TString());
                 Send(ev->Sender, response.release());
                 return;
             }
@@ -251,7 +326,9 @@ public:
 
             if (!rangeStr.empty()) {
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
-                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range format");
+                    ReplyError<TEvGetObjectResponse>(ev->Sender,
+                        {.ErrorMessage = TStringBuilder() << "Invalid range format: " << rangeStr},
+                        key, InvalidRange);
                     return;
                 }
             } else {
@@ -261,13 +338,15 @@ public:
             ui64 start = range.first;
             ui64 end = range.second;
             if (start > end) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range: start > end");
+                ReplyError<TEvGetObjectResponse>(ev->Sender,
+                    {.ErrorMessage = TStringBuilder() << "Invalid range: start > end: " << rangeStr},
+                    key, InvalidRange);
                 return;
             }
             const ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Range out of bounds");
+                ReplyError<TEvGetObjectResponse>(ev->Sender, {.ErrorMessage = "Range out of bounds"}, key, range);
                 return;
             }
 
@@ -277,9 +356,9 @@ public:
             size_t bytesRead = file.Read(data.begin(), length);
             data.resize(bytesRead);
 
-            FS_LOG_I("GetObject read"
-                << ": bytes# " << bytesRead
-                << ", from# " << key);
+            YDB_LOG_INFO("GetObject read",
+                {"bytes", bytesRead},
+                {"key", key});
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
@@ -288,12 +367,17 @@ public:
 
             auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
             Send(ev->Sender, response.release());
-
+        } catch (const TSystemError& ex) {
+            ReplyFsSystemError<TEvGetObjectResponse>(ev->Sender,
+                TStringBuilder() << "GetObject failed with system error"
+                    << ": key# " << key, ex, key, InvalidRange);
         } catch (const std::exception& ex) {
-            FS_LOG_E("GetObject error"
-                << ": key# " << key
-                << ", error# " << ex.what());
-            ReplyError<TEvGetObjectResponse>(ev->Sender, key, TString("File read error: ") + ex.what());
+            YDB_LOG_ERROR("GetObject error",
+                {"key", key},
+                {"error", ex.what()});
+            ReplyError<TEvGetObjectResponse>(ev->Sender,
+                {.ErrorMessage = TString("File read error: ") + ex.what()},
+                key, InvalidRange);
         }
     }
 
@@ -301,16 +385,16 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("HeadObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("HeadObject",
+            {"key", key});
 
         try {
             TFile file(key, RdOnly | Seq);
             const i64 fileSize = file.GetLength();
 
-            FS_LOG_I("HeadObject"
-                << ": file size# " << fileSize
-                << " for# " << key);
+            YDB_LOG_INFO("HeadObject",
+                {"fileSize", fileSize},
+                {"key", key});
 
             Aws::S3::Model::HeadObjectResult awsResult;
             awsResult.SetContentLength(fileSize);
@@ -319,54 +403,154 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
             Send(ev->Sender, response.release());
-        } catch (const TFileError& ex) {
-            FS_LOG_W("HeadObject"
-                << ": key# " << key
-                << ", error# " << "file not found");
-                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File not found: " << ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
+        } catch (const TSystemError& ex) {
+            ReplyFsSystemError<TEvHeadObjectResponse>(ev->Sender,
+                TStringBuilder() << "HeadObject failed with system error"
+                    << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("HeadObject error"
-                << ": key# " << key
-                << ", error# " << ex.what());
-                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File head error: " << ex.what());
+            YDB_LOG_ERROR("HeadObject error",
+                {"key", key},
+                {"error", ex.what()});
+            ReplyError<TEvHeadObjectResponse>(ev->Sender,
+                {.ErrorMessage = TStringBuilder() << "File head error: " << ex.what()}, key);
         }
     }
 
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        FS_LOG_W("DeleteObject: not implemented");
-        ReplyError<TEvDeleteObjectResponse>(ev->Sender, key, "Not implemented");
+        YDB_LOG_WARN("DeleteObject: not implemented");
+        ReplyError<TEvDeleteObjectResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        FS_LOG_W("CheckObjectExists: not implemented");
-        ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
+        YDB_LOG_WARN("CheckObjectExists: not implemented");
+        ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
+    }
+
+    static constexpr int DefaultMaxListKeys = 1000;
+
+    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+        Aws::S3::Model::ListObjectsResult& result)
+    {
+        TVector<TString> children;
+        dir.ListNames(children);
+
+        THashSet<TString> directories;
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                directories.insert(name);
+            }
+        }
+
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
+            return keyA < keyB;
+        });
+
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsSymlink()) {
+                continue;
+            }
+            if (child.IsFile()) {
+                const TString& path = child.GetPath();
+                if (!marker.empty() && path <= marker) {
+                    continue;
+                }
+                if (static_cast<int>(result.GetContents().size()) >= maxKeys) {
+                    return true;
+                }
+                Aws::S3::Model::Object obj;
+                obj.SetKey(Aws::String(path.data(), path.size()));
+                result.AddContents(std::move(obj));
+            } else if (directories.contains(name)) {
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-        FS_LOG_W("ListObjects"
-            << ": prefix# " << prefix
-            << ", not implemented");
-        ReplyError<TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
+        const TString requestPrefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
+        const TString prefix = requestPrefix.empty() ? BasePath : requestPrefix;
+        const TString marker = TString(request.GetMarker().data(), request.GetMarker().size());
+        const int maxKeys = request.GetMaxKeys() > 0
+            ? std::min(request.GetMaxKeys(), DefaultMaxListKeys)
+            : DefaultMaxListKeys;
+
+        YDB_LOG_DEBUG("ListObjects",
+            {"prefix", prefix},
+            {"marker", marker},
+            {"maxKeys", maxKeys});
+
+        try {
+            TFsPath dirPath(prefix);
+            TFsPath basePath(BasePath);
+
+            Aws::S3::Model::ListObjectsResult awsResult;
+            bool truncated = false;
+
+            if (dirPath.Exists()) {
+                TFsPath realDirPath = dirPath.RealPath();
+                TFsPath realBasePath = basePath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(realBasePath)) {
+                    auto errorMsg = TStringBuilder() << "Prefix outside of base path"
+                        << ": prefix# " << dirPath.GetPath()
+                        << ", basePath# " << basePath.GetPath();
+                    if (realDirPath.GetPath() != dirPath.GetPath()) {
+                        errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
+                    }
+                    if (basePath.GetPath() != realBasePath.GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
+                    }
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, {.ErrorMessage = errorMsg});
+                    return;
+                }
+
+                if (dirPath.IsDirectory()) {
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                }
+            }
+
+            awsResult.SetIsTruncated(truncated);
+
+            Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));
+            Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            ReplyFsSystemError<TEvListObjectsResponse>(ev->Sender,
+                TStringBuilder() << "ListObjects failed with system error"
+                    << ": prefix# " << prefix, ex);
+        } catch (const std::exception& ex) {
+            YDB_LOG_ERROR("ListObjects failed",
+                {"prefix", prefix},
+                {"error", ex.what()});
+            ReplyError<TEvListObjectsResponse>(ev->Sender,
+                {.ErrorMessage = TString("ListObjects error: ") + ex.what()});
+        }
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        FS_LOG_W("DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
-        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
+        YDB_LOG_WARN("DeleteObjects: not implemented",
+            {"objectCount", request.GetDelete().GetObjects().size()});
+        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("CreateMultipartUpload"
-            << ": key# " << originalKey);
+        YDB_LOG_DEBUG("CreateMultipartUpload",
+            {"key", originalKey});
 
         try {
             const TString key = GetIncompletePath(originalKey.c_str());
@@ -376,10 +560,9 @@ public:
 
             ActiveUploads.emplace(uploadId, TMultipartUploadSession(key));
 
-            FS_LOG_I("CreateMultipartUpload"
-                << ": key# " << key
-                << ", uploadId# " << uploadId
-                << ", file opened with exclusive lock");
+            YDB_LOG_INFO("CreateMultipartUpload: file opened with exclusive lock",
+                {"key", key},
+                {"uploadId", uploadId});
 
             Aws::S3::Model::CreateMultipartUploadResult awsResult;
             awsResult.SetKey(request.GetKey());
@@ -389,18 +572,14 @@ public:
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, originalKey, "CreateMultipartUpload")) {
-                FS_LOG_E("CreateMultipartUpload failed with system error"
-                    << ": key# " << originalKey
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
-            }
+            ReplyFsSystemError<TEvCreateMultipartUploadResponse>(ev->Sender,
+                TStringBuilder() << "CreateMultipartUpload failed with system error"
+                    << ": key# " << originalKey, ex, originalKey);
         } catch (const std::exception& ex) {
-            FS_LOG_E("CreateMultipartUpload failed"
-                << ": key# " << originalKey
-                << ", error# " << ex.what());
-            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
+            YDB_LOG_ERROR("CreateMultipartUpload failed",
+                {"key", originalKey},
+                {"error", ex.what()});
+            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
 
@@ -411,11 +590,11 @@ public:
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
-        FS_LOG_D("UploadPart"
-            << ": key# " << originalKey
-            << ", uploadId# " << uploadId
-            << ", part# " << partNumber
-            << ", size# " << body.size());
+        YDB_LOG_DEBUG("UploadPart",
+            {"key", originalKey},
+            {"uploadId", uploadId},
+            {"part", partNumber},
+            {"size", body.size()});
 
         try {
             const TString key = GetIncompletePath(originalKey.c_str());
@@ -428,8 +607,12 @@ public:
                     const TString errorMsg = TStringBuilder()
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
-                    FS_LOG_E("UploadPart: " << errorMsg);
-                    ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, errorMsg, Aws::S3::S3Errors::INTERNAL_FAILURE);
+                    YDB_LOG_ERROR(errorMsg,
+                        {"part", partNumber},
+                        {"uploadId", uploadId});
+                    ReplyError<TEvUploadPartResponse>(ev->Sender,
+                        {.ErrorMessage = errorMsg, .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE},
+                        originalKey);
                     return;
                 }
                 it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
@@ -438,12 +621,13 @@ public:
             auto& session = it->second;
 
             session.File.Write(body.data(), body.size());
+            session.File.Flush();
             session.TotalSize += body.size();
 
-            FS_LOG_I("UploadPart: written under lock"
-                << ": uploadId# " << uploadId
-                << ", part# " << partNumber
-                << ", total size# " << session.TotalSize);
+            YDB_LOG_INFO("UploadPart: written under lock",
+                {"uploadId", uploadId},
+                {"part", partNumber},
+                {"totalSize", session.TotalSize});
 
             const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -454,20 +638,16 @@ public:
             auto response = std::make_unique<TEvUploadPartResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, originalKey, "UploadPart")) {
-                FS_LOG_E("UploadPart failed with system error"
+            ReplyFsSystemError<TEvUploadPartResponse>(ev->Sender,
+                TStringBuilder() << "UploadPart failed with system error"
                     << ": key# " << originalKey
-                    << ", uploadId# " << uploadId
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
-            }
+                    << ", uploadId# " << uploadId, ex, originalKey);
         } catch (const std::exception& ex) {
-            FS_LOG_E("UploadPart failed"
-                << ": key# " << originalKey
-                << ", uploadId# " << uploadId
-                << ", error# " << ex.what());
-            ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
+            YDB_LOG_ERROR("UploadPart failed",
+                {"key", originalKey},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
+            ReplyError<TEvUploadPartResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
 
@@ -476,39 +656,58 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_D("CompleteMultipartUpload"
-            << ": key# " << key
-            << ", uploadId# " << uploadId);
+        YDB_LOG_DEBUG("CompleteMultipartUpload",
+            {"key", key},
+            {"uploadId", uploadId});
 
         try {
             const TString incompleteKey = GetIncompletePath(key.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                // Upload session not found - likely due to actor restart
-                // Return retryable error to force datashard to retry with cleared uploadId
-                Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-                    Aws::S3::S3Errors::INTERNAL_FAILURE,
-                    "OperationAborted",
-                    TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
-                    true // retryable
-                );
-                Aws::S3::S3Error error(std::move(awsError));
-                Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(error));
-                auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-                this->Send(ev->Sender, response.release());
+                ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender,
+                    {
+                        .ErrorMessage = TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
+                        .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                        .Retryable = true,
+                        .ExceptionName = "FsCompleteMultipartUploadFailed",
+                    },
+                    key);
                 return;
             }
 
             auto& session = it->second;
             session.File.Flush();
 
-            NFs::Rename(incompleteKey, key);
+            if (!NFs::Rename(incompleteKey, key)) {
+                const TString errorMsg = TStringBuilder()
+                    << "Failed to rename " << incompleteKey << " to " << key
+                    << ": " << LastSystemErrorText();
+                YDB_LOG_ERROR(errorMsg,
+                    {"incompleteKey", incompleteKey},
+                    {"key", key});
+
+                session.File.Close();
+                NFs::Remove(incompleteKey);
+                ActiveUploads.erase(it);
+
+                ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender,
+                    {
+                        .ErrorMessage = errorMsg,
+                        .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                        .Retryable = true,
+                        .ExceptionName = "FsCompleteMultipartUploadFailed",
+                    },
+                    key);
+                return;
+            }
+            FsyncParentDir(key);
             session.File.Close();
 
-            FS_LOG_I("CompleteMultipartUpload"
-                << ": uploadId# " << uploadId
-                << ", total size# " << session.TotalSize
-                << ", file mv from# " << incompleteKey << " to# " << key);
+            YDB_LOG_INFO("CompleteMultipartUpload: file mv",
+                {"uploadId", uploadId},
+                {"totalSize", session.TotalSize},
+                {"from", incompleteKey},
+                {"to", key});
 
             ActiveUploads.erase(it);
 
@@ -520,9 +719,17 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            ReplyFsSystemError<TEvCompleteMultipartUploadResponse>(ev->Sender,
+                TStringBuilder() << "CompleteMultipartUpload failed with system error"
+                    << ": key# " << key
+                    << ", uploadId# " << uploadId, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
-            ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
+            YDB_LOG_ERROR("CompleteMultipartUpload failed",
+                {"key", key},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
+            ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -531,36 +738,38 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_D("AbortMultipartUpload"
-            << ": key# " << key
-            << ", uploadId# " << uploadId);
+        YDB_LOG_DEBUG("AbortMultipartUpload",
+            {"key", key},
+            {"uploadId", uploadId});
 
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                FS_LOG_W("AbortMultipartUpload"
-                    << ": session not found"
-                    << ": uploadId# " << uploadId);
+                YDB_LOG_WARN("AbortMultipartUpload: session not found",
+                    {"uploadId", uploadId});
             } else {
                 auto& session = it->second;
                 const TString filePath = session.Key;
 
-                NFs::Remove(filePath);
-                session.File.Close();
+                bool removed = NFs::Remove(filePath);
+                if (!removed) {
+                    YDB_LOG_WARN("AbortMultipartUpload: failed to delete incomplete file",
+                        {"uploadId", uploadId},
+                        {"file", filePath});
+                }
                 ActiveUploads.erase(it);
 
-                FS_LOG_I("AbortMultipartUpload"
-                    << ": uploadId# " << uploadId
-                    << ", file deleted, lock released");
+                YDB_LOG_INFO("AbortMultipartUpload: file deleted, lock released",
+                    {"uploadId", uploadId});
             }
 
             ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("AbortMultipartUpload failed"
-                << ": key# " << key
-                << ", uploadId# " << uploadId
-                << ", error# " << ex.what());
-            ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, key, ex.what());
+            YDB_LOG_ERROR("AbortMultipartUpload failed",
+                {"key", key},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
+            ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -568,8 +777,8 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_W("UploadPartCopy: not implemented");
-        ReplyError<TEvUploadPartCopyResponse>(ev->Sender, key, "Not implemented");
+        YDB_LOG_WARN("UploadPartCopy: not implemented");
+        ReplyError<TEvUploadPartCopyResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 };
 
@@ -594,14 +803,14 @@ void TFsExternalStorage::EnsureActor() const {
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;
 
-    FS_LOG_I("TFsExternalStorage: Created persistent actor"
-        << ": OperationActorId# " << OperationActorId);
+    YDB_LOG_INFO("TFsExternalStorage: Created persistent actor",
+        {"operationActorId", OperationActorId});
 }
 
 void TFsExternalStorage::Shutdown() {
     if (ActorCreated && TlsActivationContext) {
-        FS_LOG_I("TFsExternalStorage: Shutting down actor"
-            << ": OperationActorId# " << OperationActorId);
+        YDB_LOG_INFO("TFsExternalStorage: Shutting down actor",
+            {"operationActorId", OperationActorId});
         TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
         ActorCreated = false;
     }

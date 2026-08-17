@@ -25,6 +25,7 @@ namespace NKikimr::NSchemeShard {
     public:
         bool Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
 
+        bool ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys);
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
         void ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;

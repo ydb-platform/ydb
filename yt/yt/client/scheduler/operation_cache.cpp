@@ -14,13 +14,13 @@ using namespace NYson;
 
 TOperationCache::TOperationCache(
     TAsyncExpiringCacheConfigPtr config,
-    THashSet<TString> attributes,
+    THashSet<std::string> attributes,
     NApi::IClientPtr client,
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         std::move(config),
         NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-        SchedulerLogger().WithTag("Cache: Operation"),
+        SchedulerLogger().WithTag("Cache", "Operation"),
         std::move(profiler))
     , Attributes_(std::move(attributes))
     , Client_(std::move(client))

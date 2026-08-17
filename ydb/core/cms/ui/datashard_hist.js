@@ -98,7 +98,7 @@ function loadHistogram() {
         return;
 
     HistogramState.loading = true;
-    var url = '../cms/api/datashard/json/getdatahist?tabletid=' + TabletId;
+    var url = makeMonUrl('/cms/api/datashard/json/getdatahist?tabletid=' + TabletId);
     $.get(url).done(onHistogramLoaded).fail(onHistogramFailed);
 }
 

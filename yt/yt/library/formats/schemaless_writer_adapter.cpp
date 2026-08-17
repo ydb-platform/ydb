@@ -60,18 +60,28 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
         TabletIndexId_ = NameTable_->GetIdOrRegisterName(TabletIndexColumnName);
     } catch (const std::exception& ex) {
         SetError(TError("Failed to add system columns to name table for a format writer")
-            << ex);
+            .With(ex));
     }
 }
 
 TFuture<void> TSchemalessFormatWriterBase::GetReadyEvent()
 {
     ProcessWriteFutures();
-    if (HasError()) {
-        return MakeFuture(GetError());
+    if (WriteFutures_.empty()) {
+        if (HasError()) {
+            return MakeFuture(GetError());
+        }
+        return OKFuture;
     }
+
     // NB: Must wait for *all* outstanding requests, not just the first (front) one.
-    return WriteFutures_.empty() ? OKFuture : WriteFutures_.back();
+    if (HasError()) {
+        return WriteFutures_.back()
+            .Apply(BIND([error = GetError()] (const TError& /*writeError*/) {
+                THROW_ERROR error;
+            }));
+    }
+    return WriteFutures_.back();
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Close()
@@ -115,6 +125,16 @@ void TSchemalessFormatWriterBase::MaybeFlushBuffer(bool force)
 i64 TSchemalessFormatWriterBase::GetWrittenSize() const
 {
     return WrittenSize_;
+}
+
+i64 TSchemalessFormatWriterBase::GetEncodedRowBatchCount() const
+{
+    return 0;
+}
+
+i64 TSchemalessFormatWriterBase::GetEncodedColumnarBatchCount() const
+{
+    return 0;
 }
 
 void TSchemalessFormatWriterBase::FlushWriter()

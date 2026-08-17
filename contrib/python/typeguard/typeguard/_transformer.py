@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import sys
 import typing
 from ast import (
     AST,
@@ -63,6 +62,12 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast, overload
+from typing import __all__ as typing_all
+
+from typing_extensions import __all__ as typing_extensions_all
+
+PreliminaryNameTypePair: typing.TypeAlias = tuple[Constant, "expr | None"]
+NameTypePair: typing.TypeAlias = tuple[Constant, expr]
 
 generator_names = (
     "typing.Generator",
@@ -384,15 +389,6 @@ class AnnotationTransformer(NodeTransformer):
             elif self._memo.name_matches(node.right, *anytype_names):
                 return node.right
 
-            # Turn union types to typing.Union constructs on Python 3.9
-            if sys.version_info < (3, 10):
-                union_name = self.transformer._get_import("typing", "Union")
-                return Subscript(
-                    value=union_name,
-                    slice=Tuple(elts=[node.left, node.right], ctx=Load()),
-                    ctx=Load(),
-                )
-
         return node
 
     def visit_Attribute(self, node: Attribute) -> Any:
@@ -435,7 +431,8 @@ class AnnotationTransformer(NodeTransformer):
                     return None
 
                 # If all items in the subscript were Any, erase the subscript entirely
-                if all(item is None for item in items):
+                # (but not for an empty subscript like tuple[()], which is meaningful)
+                if items and all(item is None for item in items):
                     return node.value
 
                 for index, item in enumerate(items):
@@ -453,9 +450,8 @@ class AnnotationTransformer(NodeTransformer):
                     node.value, "typing.Optional"
                 ) and not hasattr(node, "slice"):
                     return None
-                if sys.version_info >= (3, 9) and not hasattr(node, "slice"):
-                    return node.value
-                elif sys.version_info < (3, 9) and not hasattr(node.slice, "value"):
+
+                if not hasattr(node, "slice"):
                     return node.value
 
         return node
@@ -611,7 +607,19 @@ class TypeguardTransformer(NodeTransformer):
 
     def visit_ImportFrom(self, node: ImportFrom) -> ImportFrom:
         for name in node.names:
-            if name.name != "*":
+            if name.name == "*":
+                match node.module:
+                    case "typing":
+                        imported_names = typing_all
+                    case "typing_extensions":
+                        imported_names = typing_extensions_all
+                    case _:
+                        continue
+
+                for item in imported_names:
+                    self._memo.local_names.add(item)
+                    self._memo.imported_names.setdefault(item, f"{node.module}.{item}")
+            else:
                 alias = name.asname or name.name
                 self._memo.local_names.add(alias)
                 self._memo.imported_names[alias] = f"{node.module}.{name.name}"
@@ -767,7 +775,7 @@ class TypeguardTransformer(NodeTransformer):
                     ],
                 )
                 func_name = self._get_import(
-                    "typeguard._functions", "check_argument_types"
+                    "typeguard._functions", "check_argument_types_internal"
                 )
                 args = [
                     self._memo.joined_path,
@@ -790,7 +798,7 @@ class TypeguardTransformer(NodeTransformer):
                 )
             ):
                 func_name = self._get_import(
-                    "typeguard._functions", "check_return_type"
+                    "typeguard._functions", "check_return_type_internal"
                 )
                 return_node = Return(
                     Call(
@@ -901,7 +909,7 @@ class TypeguardTransformer(NodeTransformer):
                         Assign([cls_name], first_args_expr),
                     )
 
-                # Rmove any placeholder "pass" at the end
+                # Remove any placeholder "pass" at the end
                 if isinstance(node.body[-1], Pass):
                     del node.body[-1]
 
@@ -920,7 +928,9 @@ class TypeguardTransformer(NodeTransformer):
             and self._memo.should_instrument
             and not self._memo.is_ignored_name(self._memo.return_annotation)
         ):
-            func_name = self._get_import("typeguard._functions", "check_return_type")
+            func_name = self._get_import(
+                "typeguard._functions", "check_return_type_internal"
+            )
             old_node = node
             retval = old_node.value or Constant(None)
             node = Return(
@@ -1011,13 +1021,8 @@ class TypeguardTransformer(NodeTransformer):
                     )
                     targets_arg = List(
                         [
-                            List(
-                                [
-                                    Tuple(
-                                        [Constant(node.target.id), annotation],
-                                        ctx=Load(),
-                                    )
-                                ],
+                            Tuple(
+                                [Constant(node.target.id), annotation],
                                 ctx=Load(),
                             )
                         ],
@@ -1045,18 +1050,22 @@ class TypeguardTransformer(NodeTransformer):
 
         # Only instrument function-local assignments
         if isinstance(self._memo.node, (FunctionDef, AsyncFunctionDef)):
-            preliminary_targets: list[list[tuple[Constant, expr | None]]] = []
+            preliminary_targets: list[
+                PreliminaryNameTypePair | list[PreliminaryNameTypePair]
+            ] = []
             check_required = False
-            for target in node.targets:
+            for node_target in node.targets:
                 elts: Sequence[expr]
-                if isinstance(target, Name):
-                    elts = [target]
-                elif isinstance(target, Tuple):
-                    elts = target.elts
+                if isinstance(node_target, Name):
+                    elts = [node_target]
+                    single_target = True
+                elif isinstance(node_target, Tuple):
+                    elts = node_target.elts
+                    single_target = False
                 else:
                     continue
 
-                annotations_: list[tuple[Constant, expr | None]] = []
+                annotations_: list[PreliminaryNameTypePair] = []
                 for exp in elts:
                     prefix = ""
                     if isinstance(exp, Starred):
@@ -1082,33 +1091,49 @@ class TypeguardTransformer(NodeTransformer):
                         else:
                             annotations_.append((Constant(name), None))
 
-                preliminary_targets.append(annotations_)
+                preliminary_targets.append(
+                    annotations_[0] if single_target else annotations_
+                )
 
             if check_required:
                 # Replace missing annotations with typing.Any
-                targets: list[list[tuple[Constant, expr]]] = []
+                targets: list[NameTypePair | list[NameTypePair]] = []
                 for items in preliminary_targets:
-                    target_list: list[tuple[Constant, expr]] = []
-                    targets.append(target_list)
-                    for key, expression in items:
-                        if expression is None:
-                            target_list.append((key, self._get_import("typing", "Any")))
-                        else:
+                    if isinstance(items, list):
+                        target_list: list[NameTypePair] = []
+                        targets.append(target_list)
+                        for key, expression_or_none in items:
+                            expression = expression_or_none or self._get_import(
+                                "typing", "Any"
+                            )
                             target_list.append((key, expression))
+                    else:
+                        key, expression_or_none = items
+                        expression = expression_or_none or self._get_import(
+                            "typing", "Any"
+                        )
+                        targets.append((key, expression))
 
                 func_name = self._get_import(
                     "typeguard._functions", "check_variable_assignment"
                 )
-                targets_arg = List(
-                    [
-                        List(
-                            [Tuple([name, ann], ctx=Load()) for name, ann in target],
-                            ctx=Load(),
+                elements: list[expr] = []
+                for target in targets:
+                    if isinstance(target, list):
+                        elements.append(
+                            List(
+                                [
+                                    Tuple([name, ann], ctx=Load())
+                                    for name, ann in target
+                                ],
+                                ctx=Load(),
+                            )
                         )
-                        for target in targets
-                    ],
-                    ctx=Load(),
-                )
+                    else:
+                        name_constant, ann = target
+                        elements.append(Tuple([name_constant, ann], ctx=Load()))
+
+                targets_arg = List(elements, ctx=Load())
                 node.value = Call(
                     func_name,
                     [node.value, targets_arg, self._memo.get_memo_name()],
@@ -1141,13 +1166,8 @@ class TypeguardTransformer(NodeTransformer):
                     node.value,
                     List(
                         [
-                            List(
-                                [
-                                    Tuple(
-                                        [Constant(node.target.id), annotation],
-                                        ctx=Load(),
-                                    )
-                                ],
+                            Tuple(
+                                [Constant(node.target.id), annotation],
                                 ctx=Load(),
                             )
                         ],
@@ -1187,12 +1207,7 @@ class TypeguardTransformer(NodeTransformer):
                 operator_func, [Name(node.target.id, ctx=Load()), node.value], []
             )
             targets_arg = List(
-                [
-                    List(
-                        [Tuple([Constant(node.target.id), annotation], ctx=Load())],
-                        ctx=Load(),
-                    )
-                ],
+                [Tuple([Constant(node.target.id), annotation], ctx=Load())],
                 ctx=Load(),
             )
             check_call = Call(

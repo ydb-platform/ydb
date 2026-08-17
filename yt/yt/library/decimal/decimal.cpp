@@ -701,11 +701,11 @@ TStringBuf TDecimal::BinaryToText(TStringBuf binaryDecimal, int precision, int s
     YT_ABORT();
 }
 
-TString TDecimal::BinaryToText(TStringBuf binaryDecimal, int precision, int scale)
+std::string TDecimal::BinaryToText(TStringBuf binaryDecimal, int precision, int scale)
 {
-    TString result;
-    result.ReserveAndResize(MaxTextSize);
-    auto resultSize = BinaryToText(binaryDecimal, precision, scale, result.Detach(), result.size()).size();
+    std::string result;
+    result.resize(MaxTextSize);
+    auto resultSize = BinaryToText(binaryDecimal, precision, scale, result.data(), result.size()).size();
     result.resize(resultSize);
     return result;
 }
@@ -740,11 +740,11 @@ TStringBuf TDecimal::TextToBinary(TStringBuf textValue, int precision, int scale
     }
 }
 
-TString TDecimal::TextToBinary(TStringBuf textValue, int precision, int scale)
+std::string TDecimal::TextToBinary(TStringBuf textValue, int precision, int scale)
 {
-    TString result;
-    result.ReserveAndResize(MaxBinarySize);
-    auto resultSize = TextToBinary(textValue, precision, scale, result.Detach(), result.size()).size();
+    std::string result;
+    result.resize(MaxBinarySize);
+    auto resultSize = TextToBinary(textValue, precision, scale, result.data(), result.size()).size();
     result.resize(resultSize);
     return result;
 }
@@ -789,7 +789,7 @@ static void ValidateDecimalBinaryValueImpl(TStringBuf binaryDecimal, int precisi
         precision,
         scale,
         textDecimal)
-        << TErrorAttribute("binary_value", HexEncode(binaryDecimal));
+        .With("binary_value", HexEncode(binaryDecimal));
 }
 
 void TDecimal::ValidateBinaryValue(TStringBuf binaryDecimal, int precision, int scale)

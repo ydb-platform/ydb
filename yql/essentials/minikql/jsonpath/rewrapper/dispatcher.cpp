@@ -29,7 +29,7 @@ void AddLibrary(ui32 id, TCompiler compiler, TDeserializer deserializer) {
     if (GetModules()->size() < id) {
         GetModules()->resize(id);
     }
-    GetModules()->at(id - 1) = TLib{id, compiler, deserializer};
+    GetModules()->at(id - 1) = TLib{.Id = id, .Compiler = compiler, .Deserializer = deserializer};
 }
 
 } // namespace NRegistrator

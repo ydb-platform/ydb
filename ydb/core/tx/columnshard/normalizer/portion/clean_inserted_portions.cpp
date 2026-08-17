@@ -16,7 +16,8 @@ class TCleanInsertedPortionsNormalizer::TNormalizerResult: public INormalizerCha
 
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions)
-        : InsertedPortions(std::move(portions)) {
+        : InsertedPortions(std::move(portions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
@@ -56,7 +57,8 @@ public:
     }
 };
 
-bool TCleanInsertedPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TCleanInsertedPortionsNormalizer::CheckPortion(
+    const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
     return false;
 }
 
@@ -69,8 +71,12 @@ INormalizerTask::TPtr TCleanInsertedPortionsNormalizer::BuildTask(
         }
     }
     auto taskResult = std::make_shared<TNormalizerResult>(std::move(insertedPortions));
-    ACFL_WARN("normalizer", "TCleanInsertedPortionsNormalizer")("message", taskResult->DebugString());
-    ACFL_WARN("normalizer", "TCleanInsertedPortionsNormalizer")("all portions", portions.size());
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanInsertedPortionsNormalizer"},
+        {"message", taskResult->DebugString()});
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanInsertedPortionsNormalizer"},
+        {"allPortions", portions.size()});
     return std::make_shared<TTrivialNormalizerTask>(taskResult);
 }
 

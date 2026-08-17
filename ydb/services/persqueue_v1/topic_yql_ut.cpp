@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateTopicYqlBackCompatibility) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -55,7 +54,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateAndAlterTopicYql) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -77,7 +75,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                     auto_partitioning_up_utilization_percent = 50,
                     auto_partitioning_down_utilization_percent = 40,
                     retention_period = Interval('PT1H'),
-                    retention_storage_mb = 15,
                     supported_codecs = 'RAW, GZIP',
                     partition_write_speed_bytes_per_second = 9000,
                     partition_write_burst_bytes = 100500,
@@ -140,7 +137,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             ALTER CONSUMER c4 SET (availability_period = Interval('PT48H')),
             SET (min_active_partitions = 3,
                  retention_period = Interval('PT2H'),
-                 retention_storage_mb = 10,
                  partition_count_limit = 5,
                  partition_write_burst_bytes = 100501,
                  partition_write_speed_bytes_per_second = 9001
@@ -174,7 +170,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         {
             const auto& describe = pqGroup2.GetPQTabletConfig();
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup2.DebugString();
-            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetLifetimeSeconds(), 7200);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetBurstSize(), 100501);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9001);
@@ -203,7 +199,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(AlterAutopartitioning) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -251,7 +246,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateSharedConsumer) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         ff.SetEnableTopicMessageLevelParallelism(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
@@ -265,6 +259,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                           type = 'shared'
                         , keep_messages_order = true
                         , default_processing_timeout = Interval('PT31S')
+                        , receive_message_wait_time = Interval('PT5S')
+                        , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
                         , dead_letter_queue = 'dead_letter_queue_97'
@@ -286,6 +282,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), true);
             UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 7000);
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
@@ -295,7 +293,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(AlterSharedConsumer) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         ff.SetEnableTopicMessageLevelParallelism(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
@@ -324,8 +321,10 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 1000);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED));
             UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "");
@@ -336,6 +335,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ALTER TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
                     ALTER CONSUMER c1 SET (
                           default_processing_timeout = Interval('PT31S')
+                        , receive_message_wait_time = Interval('PT5S')
+                        , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
                         , dead_letter_queue = 'dead_letter_queue_97'
@@ -357,6 +358,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
             UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 7000);
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));

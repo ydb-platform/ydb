@@ -129,7 +129,7 @@ private:
 
 class IBuiltinFunctionRegistry: public TThrRefBase, private TNonCopyable {
 public:
-    typedef TIntrusivePtr<IBuiltinFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IBuiltinFunctionRegistry>;
 
     virtual ui64 GetMetadataEtag() const = 0;
 

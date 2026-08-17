@@ -47,7 +47,8 @@ namespace NKikimr {
                     const TStoragePoolInfo& info = kv.second;
                     if ((!params.HasName() || params.GetName() == info.Name) && (!params.HasKind() || params.GetKind() == info.Kind)) {
                         const TBoxStoragePoolId& id = kv.first;
-                        for (auto it = storagePoolGroups.lower_bound(id); it != storagePoolGroups.end() && it->first == id; ++it) {
+                        for (auto it = storagePoolGroups.lower_bound({id, Min<TGroupId>()});
+                                it != storagePoolGroups.end() && it->first == id; ++it) {
                             const TGroupInfo *groupInfo = findGroupCallback(it->second);
                             Y_DEBUG_ABORT_UNLESS(groupInfo);
                             if (groupInfo && groupInfo->Listable() && !groupInfo->BridgePileId) {

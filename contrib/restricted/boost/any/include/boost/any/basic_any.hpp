@@ -1,5 +1,5 @@
 // Copyright Ruslan Arutyunyan, 2019-2021.
-// Copyright Antony Polukhin, 2021-2025.
+// Copyright Antony Polukhin, 2021-2026.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -173,27 +173,9 @@ BOOST_ANY_BEGIN_MODULE_EXPORT
         {};
 
         template <typename ValueType>
-        static void create(basic_any& any, const ValueType& value, std::true_type)
-        {
-            using DecayedType = typename std::decay<const ValueType>::type;
-
-            any.man = &small_manager<DecayedType>;
-            new (&any.content.small_value) ValueType(value);
-        }
-
-        template <typename ValueType>
-        static void create(basic_any& any, const ValueType& value, std::false_type)
-        {
-            using DecayedType = typename std::decay<const ValueType>::type;
-
-            any.man = &large_manager<DecayedType>;
-            any.content.large_value = new DecayedType(value);
-        }
-
-        template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::true_type)
         {
-            using DecayedType = typename std::decay<const ValueType>::type;
+            using DecayedType = typename std::decay<ValueType>::type;
             any.man = &small_manager<DecayedType>;
             new (&any.content.small_value) DecayedType(std::forward<ValueType>(value));
         }
@@ -201,15 +183,15 @@ BOOST_ANY_BEGIN_MODULE_EXPORT
         template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::false_type)
         {
-            using DecayedType = typename std::decay<const ValueType>::type;
+            using DecayedType = typename std::decay<ValueType>::type;
             any.man = &large_manager<DecayedType>;
             any.content.large_value = new DecayedType(std::forward<ValueType>(value));
         }
         /// @endcond
 
     public: // non-type template parameters accessors
-            static constexpr std::size_t buffer_size = OptimizeForSize;
-            static constexpr std::size_t buffer_align = OptimizeForAlignment;
+        static constexpr std::size_t buffer_size = OptimizeForSize;
+        static constexpr std::size_t buffer_align = OptimizeForAlignment;
 
     public: // structors
 

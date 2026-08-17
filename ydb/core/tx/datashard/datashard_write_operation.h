@@ -12,12 +12,14 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
 class TValidatedWriteTxOperation: TMoveOnly {
 public:
-    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
+    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
     void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
 
@@ -28,7 +30,7 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
-    YDB_READONLY_DEF(TString, UserSID);
+    YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -36,7 +38,7 @@ public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
     TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
-            bool mvccSnapshotRead);
+            const NWilson::TTraceId& traceId, bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
     EType GetType() const override {
@@ -152,7 +154,7 @@ public:
     static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
 
     explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const NWilson::TTraceId& traceId);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
@@ -289,6 +291,7 @@ private:
 
 private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
+    NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
     TValidatedWriteTx::TPtr WriteTx;

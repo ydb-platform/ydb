@@ -20,20 +20,63 @@ namespace openai
 {
 
 /**
-  The service tier requested. May be a specific tier, default, or auto.
+  The type of OpenAI API being used.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kOpenaiRequestServiceTier = "openai.request.service_tier";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kOpenaiApiType = "openai.api.type";
+
+/**
+  The service tier requested. May be a specific tier, default, or auto.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kOpenaiRequestServiceTier =
+    "openai.request.service_tier";
 
 /**
   The service tier used for the response.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kOpenaiResponseServiceTier = "openai.response.service_tier";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kOpenaiResponseServiceTier =
+    "openai.response.service_tier";
 
 /**
   A fingerprint to track any eventual change in the Generative AI environment.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kOpenaiResponseSystemFingerprint =
+OPENTELEMETRY_DEPRECATED static constexpr const char *kOpenaiResponseSystemFingerprint =
     "openai.response.system_fingerprint";
+
+namespace OpenaiApiTypeValues
+{
+/**
+  The OpenAI <a href="https://developers.openai.com/api/reference/chat-completions/overview">Chat
+  Completions API</a>.
+ */
+static constexpr const char *kChatCompletions = "chat_completions";
+
+/**
+  The OpenAI <a href="https://developers.openai.com/api/reference/responses/overview">Responses
+  API</a>.
+ */
+static constexpr const char *kResponses = "responses";
+
+}  // namespace OpenaiApiTypeValues
 
 namespace OpenaiRequestServiceTierValues
 {

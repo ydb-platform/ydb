@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
         for (ui32 i = 0; i < vputsCount; ++i) {
             TLogoBlobID partId(100, 1, 1, 0, /*blobSize=*/0, i, /*partId=*/1);
             TString data;
-            ev->AddVPut(partId, TRcBuf(data), nullptr, false, false, nullptr, {}, false);
+            ev->AddVPut(partId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
         }
         ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
 

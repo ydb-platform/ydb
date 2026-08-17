@@ -6,6 +6,8 @@
 
 #include <openssl/sha.h>
 
+#include <utility>
+
 namespace NYql::NCommon {
 
 namespace {
@@ -28,20 +30,20 @@ TString MakeHash(const TString& str) {
 class TResolver: public IUdfResolver {
 public:
     TResolver(IUdfResolver::TPtr inner, const TQContext& qContext)
-        : Inner_(inner)
+        : Inner_(std::move(inner))
         , QContext_(qContext)
     {
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            auto res = QContext_.GetReader()->Get({UdfResolver_GetSystemModulePath, TString(moduleName)}).GetValueSync();
+            auto res = QContext_.GetReader()->Get({.Component = UdfResolver_GetSystemModulePath, .Label = TString(moduleName)}).GetValueSync();
             return MakeMaybe<TFilePathWithMd5>(res ? res->Value : "", "");
         }
 
         auto res = Inner_->GetSystemModulePath(moduleName);
         if (res && QContext_.CanWrite()) {
-            QContext_.GetWriter()->Put({UdfResolver_GetSystemModulePath, TString(moduleName)}, res->Path).GetValueSync();
+            QContext_.GetWriter()->Put({.Component = UdfResolver_GetSystemModulePath, .Label = TString(moduleName)}, res->Path).GetValueSync();
         }
 
         return res;
@@ -52,7 +54,7 @@ public:
         if (QContext_.CanRead()) {
             for (auto& import : imports) {
                 auto key = MakeKey(import);
-                auto res = QContext_.GetReader()->Get({UdfResolver_LoadMetadataImports, key}).GetValueSync();
+                auto res = QContext_.GetReader()->Get({.Component = UdfResolver_LoadMetadataImports, .Label = key}).GetValueSync();
                 if (!res) {
                     // for compatibility
                     continue;
@@ -63,7 +65,7 @@ public:
 
             for (auto& f : functions) {
                 auto key = MakeKey(f);
-                auto res = QContext_.GetReader()->Get({UdfResolver_LoadMetadata, key}).GetValueSync();
+                auto res = QContext_.GetReader()->Get({.Component = UdfResolver_LoadMetadata, .Label = key}).GetValueSync();
                 if (!res) {
                     ythrow yexception() << "Missing replay data";
                 }
@@ -79,14 +81,14 @@ public:
             for (const auto& import : imports) {
                 auto key = MakeKey(import);
                 auto value = SaveValue(import);
-                QContext_.GetWriter()->Put({UdfResolver_LoadMetadataImports, key}, value).GetValueSync();
+                QContext_.GetWriter()->Put({.Component = UdfResolver_LoadMetadataImports, .Label = key}, value).GetValueSync();
             }
 
             // calculate hash for each function and store it
             for (const auto& f : functions) {
                 auto key = MakeKey(f);
                 auto value = SaveValue(f);
-                QContext_.GetWriter()->Put({UdfResolver_LoadMetadata, key}, value).GetValueSync();
+                QContext_.GetWriter()->Put({.Component = UdfResolver_LoadMetadata, .Label = key}, value).GetValueSync();
             }
         }
 
@@ -103,7 +105,7 @@ public:
 
     bool ContainsModule(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            auto res = QContext_.GetReader()->Get({UdfResolver_ContainsModule, TString(moduleName)}).GetValueSync();
+            auto res = QContext_.GetReader()->Get({.Component = UdfResolver_ContainsModule, .Label = TString(moduleName)}).GetValueSync();
             if (!res) {
                 ythrow yexception() << "Missing replay data";
             }
@@ -113,7 +115,7 @@ public:
 
         auto ret = Inner_->ContainsModule(moduleName);
         if (QContext_.CanWrite()) {
-            QContext_.GetWriter()->Put({UdfResolver_ContainsModule, TString(moduleName)}, ret ? "1" : "0").GetValueSync();
+            QContext_.GetWriter()->Put({.Component = UdfResolver_ContainsModule, .Label = TString(moduleName)}, ret ? "1" : "0").GetValueSync();
         }
 
         return ret;

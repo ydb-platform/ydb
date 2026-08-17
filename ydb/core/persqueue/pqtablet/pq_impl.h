@@ -10,6 +10,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -71,6 +72,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //partitions will send some times it's counters
     void Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext&);
+    void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&);
 
     void Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&);
 
@@ -90,6 +92,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
@@ -101,6 +104,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
+    void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -109,7 +114,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
-    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
+    TString RenderSendReadSetHtmlForms(
+        const TDistributedTransaction& tx,
+        const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
+        const TStringBuf pathInfo) const;
 
     void HandleDie(const TActorContext& ctx) override;
 
@@ -143,6 +151,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> MakeDeregisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
+
+    void FillBatchInfo(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+        TEvPQ::TEvWrite::TMsg& msg) const;
 
     void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
@@ -198,6 +210,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
+    void ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
@@ -224,6 +237,7 @@ private:
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+    ui64 ReservedBytes = 0;
 
     struct TTxWriteInfo {
         THashMap<ui32, TPartitionId> Partitions;
@@ -239,6 +253,7 @@ private:
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
+    TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;
@@ -275,7 +290,8 @@ private:
         TEvPQ::TEvMLPUnlockRequest::TPtr,
         TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
         TEvPQ::TEvMLPPurgeRequest::TPtr,
-        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
+        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr,
+        TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
 
@@ -320,7 +336,6 @@ private:
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
-    bool DeleteTxsContainsKafkaTxs = false;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
@@ -520,6 +535,7 @@ private:
     void ProcessStatusRequests(const TActorContext &ctx);
 
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
+    THashMap<ui32, TVector<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr>> CheckMessageDeduplicationRequests;
     TMaybe<ui64> TabletGeneration;
 
     TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;
@@ -550,9 +566,13 @@ private:
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
-                                                  NWilson::TTraceId traceId,
-                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                  const TActorContext& ctx);
+                                                   NWilson::TTraceId traceId,
+                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                   const TActorContext& ctx);
+    void HandleAbortDeferredStagingRequest(const ui64 responseCookie,
+                                           NWilson::TTraceId traceId,
+                                           const NKikimrClient::TPersQueuePartitionRequest& req,
+                                           const TActorContext& ctx);
 
     void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
 
@@ -658,6 +678,19 @@ private:
     void MovePendingDeferredReadSetAcks();
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
+
+    // All-unknown TEvPlanStep (no TxId in Txs): ack only after a successful WRITE_TX cycle,
+    // so a stale leader cannot confirm a plan step without winning the KV write.
+    struct TDeferredPlanStepAck {
+        TActorId Sender;
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Event;
+    };
+    TDeque<TDeferredPlanStepAck> PendingDeferredPlanStepAcks;
+    TDeque<TDeferredPlanStepAck> DeferredPlanStepAcks;
+
+    void MovePendingDeferredPlanStepAcks();
+    void AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack);
+    void SendDeferredPlanStepAcks(const TActorContext& ctx);
 };
 
 }// NPQ

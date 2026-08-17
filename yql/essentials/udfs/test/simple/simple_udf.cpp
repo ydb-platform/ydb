@@ -5,6 +5,8 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -101,6 +103,13 @@ SIMPLE_UDF(TSleep, ui64(ui64)) {
     return TUnboxedValuePod(static_cast<ui64>(0));
 }
 
+SIMPLE_UDF(TSecureParamLength, ui32(char*)) {
+    TStringRef secureParamValue;
+    auto paramKey = args[0].AsStringRef();
+    Y_ENSURE(valueBuilder->GetSecureParam(paramKey, secureParamValue));
+    return TUnboxedValuePod(secureParamValue.Size());
+}
+
 using TComplexReturnTypeSignature = TDict<char*, ui32>(char*);
 SIMPLE_UDF(TComplexReturnType, TComplexReturnTypeSignature) {
     const TStringBuf s = args[0].AsStringRef();
@@ -165,13 +174,13 @@ UDF_IMPL(TIncrementWithCounters,
 
 class TGenericAsStruct: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;
         auto result = valueBuilder->NewArray(Argc_, items);
         for (size_t i = 0; i < Argc_; ++i) {
-            items[i] = std::move(args[i]);
+            items[i] = args[i];
         }
         return result;
     }
@@ -215,7 +224,7 @@ public:
                 auto argType = argsTypeInspector.GetElementType(i);
                 argBuilder->Add(argType);
                 TString name = TStringBuilder() << "arg_" << i;
-                structBuilder->AddField(name, argType, nullptr);
+                structBuilder->AddField(name, argType, /*index=*/nullptr);
             }
 
             argBuilder->Done().Returns(builder.Optional()->Item(structBuilder->Build()).Build());
@@ -236,7 +245,7 @@ private:
 class TLogging: public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
-        : Logger_(logger)
+        : Logger_(std::move(logger))
         , Component_(component)
     {
     }
@@ -283,6 +292,43 @@ SIMPLE_UDF(TFileExists, bool(char*)) {
     return TUnboxedValuePod(NFs::Exists(TString(args[0].AsStringRef())));
 }
 
+class TTestUdfSetting: public TBoxedValue {
+public:
+    explicit TTestUdfSetting(TString value)
+        : Value_(std::move(value))
+    {
+    }
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(args);
+        if (Value_.empty()) {
+            return TUnboxedValuePod();
+        }
+        return valueBuilder->NewString(TStringRef(Value_)).MakeOptional();
+    }
+
+    static const TStringRef& Name() {
+        static auto Name = TStringRef::Of("TestUdfSetting");
+        return Name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() != name) {
+            return false;
+        }
+        builder.Args()->Done().Returns<TOptional<char*>>();
+        if (!typesOnly) {
+            TString value(builder.GetRuntimeSetting(TStringRef::Of("TestUdfSetting")));
+            builder.Implementation(new TTestUdfSetting(std::move(value)));
+        }
+        return true;
+    }
+
+private:
+    TString Value_;
+};
+
 SIMPLE_MODULE(TSimpleUdfModule,
               TCrash,
               TException,
@@ -296,6 +342,7 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TConst,
               TConcat,
               TRepeat,
+              TSecureParamLength,
               TSleep,
               TComplexReturnType,
               TNamedArgs,
@@ -304,7 +351,8 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TIncrementWithCounters,
               TGenericAsStruct,
               TLogging,
-              TFileExists)
+              TFileExists,
+              TTestUdfSetting)
 
 } // namespace
 

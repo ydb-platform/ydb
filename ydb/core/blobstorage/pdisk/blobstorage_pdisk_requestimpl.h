@@ -402,6 +402,7 @@ public:
     ui64 Offset;
     ui64 Size;
     void *Cookie;
+    TLogoBlobID BlobId;
 
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
@@ -428,6 +429,7 @@ public:
         , Offset(ev.Offset)
         , Size(ev.Size)
         , Cookie(ev.Cookie)
+        , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
@@ -521,6 +523,8 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+
+    TLogoBlobID BlobId;
 
     ui32 TotalSize;
     ui32 CurrentPart = 0;
@@ -1282,11 +1286,13 @@ class TChangeExpectedSlotCount : public TRequestBase {
 public:
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
     TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChangeExpectedSlotCount, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ExpectedSlotCount(ev.ExpectedSlotCount)
         , SlotSizeInUnits(ev.SlotSizeInUnits)
+        , ExpectedSlotSize(ev.ExpectedSlotSize)
     {}
 
     ERequestType GetType() const override {
@@ -1298,6 +1304,7 @@ public:
         str << "TChangeExpectedSlotCount {"
             << " ExpectedSlotCount# " << ExpectedSlotCount
             << " SlotSizeInUnits# " << SlotSizeInUnits
+            << " ExpectedSlotSize# " << ExpectedSlotSize
             << " }";
         return str.Str();
     }

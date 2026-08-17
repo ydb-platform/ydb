@@ -4,7 +4,7 @@ IF (OS_LINUX AND SANITIZER_TYPE != "memory")
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     port_manager.cpp
     rdma_xdc_ut.cpp    
+    sync_actor_ut.cpp
 )
 
 PEERDIR(

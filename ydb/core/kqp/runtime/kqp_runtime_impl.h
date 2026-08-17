@@ -17,11 +17,6 @@ TTableId ParseTableId(const NMiniKQL::TRuntimeNode& node);
 
 NScheme::TTypeInfo UnwrapTypeInfoFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 
-NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
-    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
-    TVector<NScheme::TTypeInfo>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
-
 NYql::NDq::IDqOutputConsumer::TPtr CreateKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx);
 
 } // namespace NKqp

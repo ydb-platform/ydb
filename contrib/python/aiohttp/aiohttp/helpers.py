@@ -163,7 +163,9 @@ class BasicAuth(namedtuple("BasicAuth", ["login", "password", "encoding"])):
         """Create BasicAuth from url."""
         if not isinstance(url, URL):
             raise TypeError("url should be yarl.URL instance")
-        if url.user is None and url.password is None:
+        # Check raw_user and raw_password first as yarl is likely
+        # to already have these values parsed from the netloc in the cache.
+        if url.raw_user is None and url.raw_password is None:
             return None
         return cls(url.user or "", url.password or "", encoding=encoding)
 
@@ -174,11 +176,12 @@ class BasicAuth(namedtuple("BasicAuth", ["login", "password", "encoding"])):
 
 
 def strip_auth_from_url(url: URL) -> Tuple[URL, Optional[BasicAuth]]:
-    auth = BasicAuth.from_url(url)
-    if auth is None:
+    """Remove user and password from URL if present and return BasicAuth object."""
+    # Check raw_user and raw_password first as yarl is likely
+    # to already have these values parsed from the netloc in the cache.
+    if url.raw_user is None and url.raw_password is None:
         return url, None
-    else:
-        return url.with_user(None), auth
+    return url.with_user(None), BasicAuth(url.user or "", url.password or "")
 
 
 def netrc_from_env() -> Optional[netrc.netrc]:
@@ -614,6 +617,8 @@ def calculate_timeout_when(
 class TimeoutHandle:
     """Timeout handle"""
 
+    __slots__ = ("_timeout", "_loop", "_ceil_threshold", "_callbacks")
+
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
@@ -662,11 +667,17 @@ class TimeoutHandle:
 
 
 class BaseTimerContext(ContextManager["BaseTimerContext"]):
+
+    __slots__ = ()
+
     def assert_timeout(self) -> None:
         """Raise TimeoutError if timeout has been exceeded."""
 
 
 class TimerNoop(BaseTimerContext):
+
+    __slots__ = ()
+
     def __enter__(self) -> BaseTimerContext:
         return self
 
@@ -682,10 +693,13 @@ class TimerNoop(BaseTimerContext):
 class TimerContext(BaseTimerContext):
     """Low resolution timeout context manager"""
 
+    __slots__ = ("_loop", "_tasks", "_cancelled", "_cancelling")
+
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
         self._tasks: List[asyncio.Task[Any]] = []
         self._cancelled = False
+        self._cancelling = 0
 
     def assert_timeout(self) -> None:
         """Raise TimeoutError if timer has already been cancelled."""
@@ -694,11 +708,16 @@ class TimerContext(BaseTimerContext):
 
     def __enter__(self) -> BaseTimerContext:
         task = asyncio.current_task(loop=self._loop)
-
         if task is None:
             raise RuntimeError(
                 "Timeout context manager should be used " "inside a task"
             )
+
+        if sys.version_info >= (3, 11):
+            # Remember if the task was already cancelling
+            # so when we __exit__ we can decide if we should
+            # raise asyncio.TimeoutError or let the cancellation propagate
+            self._cancelling = task.cancelling()
 
         if self._cancelled:
             raise asyncio.TimeoutError from None
@@ -712,11 +731,22 @@ class TimerContext(BaseTimerContext):
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
+        enter_task: Optional[asyncio.Task[Any]] = None
         if self._tasks:
-            self._tasks.pop()
+            enter_task = self._tasks.pop()
 
         if exc_type is asyncio.CancelledError and self._cancelled:
-            raise asyncio.TimeoutError from None
+            assert enter_task is not None
+            # The timeout was hit, and the task was cancelled
+            # so we need to uncancel the last task that entered the context manager
+            # since the cancellation should not leak out of the context manager
+            if sys.version_info >= (3, 11):
+                # If the task was already cancelling don't raise
+                # asyncio.TimeoutError and instead return None
+                # to allow the cancellation to propagate
+                if enter_task.uncancel() > self._cancelling:
+                    return None
+            raise asyncio.TimeoutError from exc_val
         return None
 
     def timeout(self) -> None:
@@ -784,11 +814,7 @@ class HeadersMixin:
     def content_length(self) -> Optional[int]:
         """The value of Content-Length HTTP header."""
         content_length = self._headers.get(hdrs.CONTENT_LENGTH)
-
-        if content_length is not None:
-            return int(content_length)
-        else:
-            return None
+        return None if content_length is None else int(content_length)
 
 
 def set_result(fut: "asyncio.Future[_T]", result: _T) -> None:

@@ -46,7 +46,13 @@ struct TTMStorage {
     }
 
     inline void FromDate(const NUdf::IDateBuilder& builder, ui16 value, ui16 timezoneId = 0) {
-        ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
 
         if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
             ythrow yexception() << "Error in FullSplitDate";
@@ -70,7 +76,7 @@ struct TTMStorage {
             if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
                 ythrow yexception() << "Error in MakeDatetime";
             }
-            return datetime / 86400u;
+            return datetime / 86400U;
         } else {
             ui16 date;
             if (!builder.MakeDate(Year, Month, Day, date)) {
@@ -81,7 +87,16 @@ struct TTMStorage {
     }
 
     inline void FromDatetime(const NUdf::IDateBuilder& builder, ui32 value, ui16 timezoneId = 0) {
-        ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 hour;
+        ui32 minute;
+        ui32 second;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
 
         if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
             ythrow yexception() << "Error in FullSplitDatetime";
@@ -110,13 +125,13 @@ struct TTMStorage {
     }
 
     inline void FromTimestamp(const NUdf::IDateBuilder& builder, ui64 value, ui16 timezoneId = 0) {
-        const ui32 seconds = value / 1000000ull;
+        const ui32 seconds = value / 1000000ULL;
         FromDatetime(builder, seconds, timezoneId);
-        Microsecond = value - seconds * 1000000ull;
+        Microsecond = value - seconds * 1000000ULL;
     }
 
     inline ui64 ToTimestamp(const NUdf::IDateBuilder& builder) const {
-        return ToDatetime(builder) * 1000000ull + Microsecond;
+        return ToDatetime(builder) * 1000000ULL + Microsecond;
     }
 
     inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
@@ -139,7 +154,16 @@ struct TTMStorage {
             }
         }
 
-        ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 hour;
+        ui32 minute;
+        ui32 second;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
         if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
             ythrow yexception() << "Error in FullSplitDatetime.";
         }
@@ -159,19 +183,19 @@ struct TTMStorage {
     }
 
     inline void FromTimeOfDay(ui64 value) {
-        Hour = value / 3600000000ull;
-        value -= Hour * 3600000000ull;
-        Minute = value / 60000000ull;
-        value -= Minute * 60000000ull;
-        Second = value / 1000000ull;
-        Microsecond = value - Second * 1000000ull;
+        Hour = value / 3600000000ULL;
+        value -= Hour * 3600000000ULL;
+        Minute = value / 60000000ULL;
+        value -= Minute * 60000000ULL;
+        Second = value / 1000000ULL;
+        Microsecond = value - Second * 1000000ULL;
     }
 
     inline ui64 ToTimeOfDay() const {
-        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+        return ((Hour * 60ULL + Minute) * 60ULL + Second) * 1000000ULL + Microsecond;
     }
 
-    const TString ToString() const {
+    TString ToString() const {
         const auto& tzName = NTi::GetTimezones()[TimezoneId];
         return Sprintf("%4d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
                        Year, Month, Day, Hour, Minute, Second, Microsecond,

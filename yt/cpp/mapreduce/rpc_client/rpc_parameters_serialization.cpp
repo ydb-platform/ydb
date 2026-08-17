@@ -121,6 +121,8 @@ NYTree::EPermission ToApiPermission(EPermission permission)
             return NYTree::EPermission::Mount;
         case EPermission::Manage:
             return NYTree::EPermission::Manage;
+        case EPermission::FullRead:
+            return NYTree::EPermission::FullRead;
     }
     YT_ABORT();
 }
@@ -266,10 +268,10 @@ NJobTrackerClient::EJobState ToApiJobState(EJobState state)
     YT_ABORT();
 }
 
-THashSet<TString> ToApiJobAttributes(const THashSet<EJobAttribute>& attributes) {
-    THashSet<TString> result;
+THashSet<std::string> ToApiJobAttributes(const THashSet<EJobAttribute>& attributes) {
+    THashSet<std::string> result;
     for (const auto& attribute : attributes) {
-        result.insert(ToString(attribute));
+        result.insert(std::string(ToString(attribute)));
     }
     return result;
 }
@@ -308,6 +310,45 @@ static void SerializeSuppressableAccessTrackingOptions(
     apiOptions->SuppressModificationTracking = options.SuppressModificationTracking_;
 }
 
+// TApiOptions template parameter as TTransactionStartOptions doesn't inherit TPrerequisiteOptions
+template <typename TApiOptions, typename T>
+static void SerializePrerequisiteTransactionsOptions(
+    TApiOptions* apiOptions,
+    const TPrerequisiteTransactionsOptions<T>& options)
+{
+    for (const auto& txId : options.PrerequisiteTransactionIds_) {
+        apiOptions->PrerequisiteTransactionIds.push_back(YtGuidFromUtilGuid(txId));
+    }
+}
+
+template <typename T>
+static void SerializePrerequisiteRevisionsOptions(
+    NApi::TPrerequisiteOptions* apiOptions,
+    const TPrerequisiteRevisionsOptions<T>& options)
+{
+    for (const auto& revisionConfig : options.PrerequisiteRevisions_) {
+        if (!revisionConfig.Path_) {
+            ythrow TApiUsageError() << "Path for TPrerequisiteRevision must be explicitly specified";
+        }
+        if (!revisionConfig.Revision_) {
+            ythrow TApiUsageError() << "Revision for TPrerequisiteRevision must be explicitly specified";
+        }
+        auto apiConfigPtr = New<NApi::TPrerequisiteRevisionConfig>();
+        apiConfigPtr->Path = *revisionConfig.Path_;
+        apiConfigPtr->Revision = NHydra::TRevision(*revisionConfig.Revision_);
+        apiOptions->PrerequisiteRevisions.push_back(apiConfigPtr);
+    }
+}
+
+template <typename T>
+static void SerializePrerequisiteOptions(
+    NApi::TPrerequisiteOptions* apiOptions,
+    const TPrerequisiteOptions<T>& options)
+{
+    SerializePrerequisiteTransactionsOptions(apiOptions, options);
+    SerializePrerequisiteRevisionsOptions(apiOptions, options);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 NApi::TGetNodeOptions SerializeOptionsForGet(
@@ -317,6 +358,7 @@ NApi::TGetNodeOptions SerializeOptionsForGet(
     NApi::TGetNodeOptions result;
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.AttributeFilter_) {
         result.Attributes = options.AttributeFilter_->Attributes_;
     }
@@ -338,6 +380,7 @@ NApi::TSetNodeOptions SerializeOptionsForSet(
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.Force_) {
         result.Force = *options.Force_;
     }
@@ -352,6 +395,7 @@ NApi::TNodeExistsOptions SerializeOptionsForExists(
     NApi::TNodeExistsOptions result;
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.ReadFrom_) {
         result.ReadFrom = NApi::EMasterChannelKind(*options.ReadFrom_);
     }
@@ -367,6 +411,7 @@ NApi::TMultisetAttributesNodeOptions SerializeOptionsForMultisetAttributes(
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.Force_) {
         result.Force = *options.Force_;
     }
@@ -379,6 +424,7 @@ NApi::TCreateObjectOptions SerializeOptionsForCreateObject(
 {
     NApi::TCreateObjectOptions result;
     SetMutationId(&result, &mutationId);
+    SerializePrerequisiteOptions(&result, options);
     if (options.Attributes_) {
         result.Attributes = NYTree::ConvertToAttributes(
             NYson::TYsonString(NodeToYsonString(*options.Attributes_, NYson::EYsonFormat::Binary)));
@@ -394,6 +440,7 @@ NApi::TCreateNodeOptions SerializeOptionsForCreate(
     NApi::TCreateNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Force = options.Force_;
     if (options.Attributes_) {
         result.Attributes = NYTree::ConvertToAttributes(
@@ -413,6 +460,7 @@ NApi::TCopyNodeOptions SerializeOptionsForCopy(
     NApi::TCopyNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Force = options.Force_;
     result.PreserveAccount = options.PreserveAccount_;
     if (options.PreserveExpirationTime_) {
@@ -430,6 +478,7 @@ NApi::TMoveNodeOptions SerializeOptionsForMove(
     NApi::TMoveNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Force = options.Force_;
     result.PreserveAccount = options.PreserveAccount_;
     if (options.PreserveExpirationTime_) {
@@ -447,6 +496,7 @@ NApi::TRemoveNodeOptions SerializeOptionsForRemove(
     NApi::TRemoveNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Force = options.Force_;
     result.Recursive = options.Recursive_;
     return result;
@@ -459,6 +509,7 @@ NApi::TListNodeOptions SerializeOptionsForList(
     NApi::TListNodeOptions result;
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.AttributeFilter_) {
         result.Attributes = options.AttributeFilter_->Attributes_;
     }
@@ -479,6 +530,7 @@ NApi::TLinkNodeOptions SerializeOptionsForLink(
     NApi::TLinkNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Force = options.Force_;
     if (options.Attributes_) {
         result.Attributes = NYTree::ConvertToAttributes(
@@ -497,6 +549,7 @@ NApi::TLockNodeOptions SerializeOptionsForLock(
     NApi::TLockNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result.Waitable = options.Waitable_;
     if (options.AttributeKey_) {
         result.AttributeKey = *options.AttributeKey_;
@@ -510,11 +563,12 @@ NApi::TLockNodeOptions SerializeOptionsForLock(
 NApi::TUnlockNodeOptions SerializeOptionsForUnlock(
     TMutationId& mutationId,
     const TTransactionId& transactionId,
-    const TUnlockOptions& /*options*/)
+    const TUnlockOptions& options)
 {
     NApi::TUnlockNodeOptions result;
     SetMutationId(&result, &mutationId);
     SetTransactionId(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -537,6 +591,7 @@ NApi::TTransactionStartOptions SerializeOptionsForStartTransaction(
 {
     NApi::TTransactionStartOptions result;
     SetMutationId(&result, &mutationId);
+    SerializePrerequisiteTransactionsOptions(&result, options);
     result.ParentId = YtGuidFromUtilGuid(parentId);
     result.Timeout = options.Timeout_.GetOrElse(timeout);
     if (options.Deadline_) {
@@ -567,10 +622,13 @@ NApi::TTransactionAbortOptions SerializeOptionsForAbortTransaction(TMutationId& 
     return result;
 }
 
-NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(TMutationId& mutationId)
+NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(
+    TMutationId& mutationId,
+    const TCommitTransactionOptions& options)
 {
     NApi::TTransactionCommitOptions result;
     SetMutationId(&result, &mutationId);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -595,9 +653,9 @@ NApi::TGetOperationOptions SerializeOptionsForGetOperation(const TGetOperationOp
         result.IncludeRuntime = true;
     }
     if (options.AttributeFilter_) {
-        result.Attributes = THashSet<TString>();
+        result.Attributes = THashSet<std::string>();
         for (const auto& attribute : options.AttributeFilter_->Attributes_) {
-            result.Attributes->emplace(ToString(attribute));
+            result.Attributes->emplace(std::string(ToString(attribute)));
         }
     }
     return result;
@@ -832,7 +890,7 @@ NApi::TFileWriterOptions SerializeOptionsForWriteFile(
             result.Config->UploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
         }
         if (writerOptions->MinUploadReplicationFactor_) {
-            result.Config->MinUploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
+            result.Config->MinUploadReplicationFactor = *writerOptions->MinUploadReplicationFactor_;
         }
         if (writerOptions->DesiredChunkSize_) {
             result.Config->DesiredChunkSize = *writerOptions->DesiredChunkSize_;
@@ -1180,6 +1238,19 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     }
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
+    result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    NApi::TCheckClusterLivenessOptions result;
+    result.CheckCypressRoot = options.CheckCypressRoot_;
+    result.CheckSecondaryMasterCells = options.CheckSecondaryMasterCells_;
+    if (options.CheckTabletCellBundle_) {
+        result.CheckTabletCellBundle = *options.CheckTabletCellBundle_;
+    }
     return result;
 }
 

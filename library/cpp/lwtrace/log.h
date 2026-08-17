@@ -44,6 +44,8 @@ namespace NLWTrace {
     public:
         explicit TCyclicBuffer(size_t capacity)
             : Data(capacity)
+            , Front(nullptr)
+            , Back(nullptr)
             , Size(0)
         {
         }
@@ -448,10 +450,12 @@ namespace NLWTrace {
             template <class TReader>
             void ExtractItems(TReader& r) {
                 ReadItems(r);
-                for (TItem *i = OldBuffer->GetFront(), *e = OldBuffer->GetBack();; OldBuffer->Inc(i)) {
-                    i->Clear();
-                    if (i == e) {
-                        break;
+                if (OldBuffer->GetSize() > 0) {
+                    for (TItem *i = OldBuffer->GetFront(), *e = OldBuffer->GetBack();; OldBuffer->Inc(i)) {
+                        i->Clear();
+                        if (i == e) {
+                            break;
+                        }
                     }
                 }
                 OldBuffer->Clear();

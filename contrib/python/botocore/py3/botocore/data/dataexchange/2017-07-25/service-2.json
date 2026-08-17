@@ -2,9 +2,10 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2017-07-25",
+    "auth":["aws.auth#sigv4"],
     "endpointPrefix":"dataexchange",
-    "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"AWS Data Exchange",
     "serviceId":"DataExchange",
     "signatureVersion":"v4",
@@ -12,6 +13,25 @@
     "uid":"dataexchange-2017-07-25"
   },
   "operations":{
+    "AcceptDataGrant":{
+      "name":"AcceptDataGrant",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/data-grants/{DataGrantArn}/accept",
+        "responseCode":200
+      },
+      "input":{"shape":"AcceptDataGrantRequest"},
+      "output":{"shape":"AcceptDataGrantResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation accepts a data grant.</p>"
+    },
     "CancelJob":{
       "name":"CancelJob",
       "http":{
@@ -28,6 +48,25 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>This operation cancels a job. Jobs can be cancelled only when they are in the WAITING state.</p>"
+    },
+    "CreateDataGrant":{
+      "name":"CreateDataGrant",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/data-grants",
+        "responseCode":201
+      },
+      "input":{"shape":"CreateDataGrantRequest"},
+      "output":{"shape":"CreateDataGrantResponse"},
+      "errors":[
+        {"shape":"ServiceLimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation creates a data grant.</p>"
     },
     "CreateDataSet":{
       "name":"CreateDataSet",
@@ -120,6 +159,23 @@
       ],
       "documentation":"<p>This operation deletes an asset.</p>"
     },
+    "DeleteDataGrant":{
+      "name":"DeleteDataGrant",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/v1/data-grants/{DataGrantId}",
+        "responseCode":204
+      },
+      "input":{"shape":"DeleteDataGrantRequest"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation deletes a data grant.</p>"
+    },
     "DeleteDataSet":{
       "name":"DeleteDataSet",
       "http":{
@@ -189,6 +245,24 @@
       ],
       "documentation":"<p>This operation returns information about an asset.</p>"
     },
+    "GetDataGrant":{
+      "name":"GetDataGrant",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/data-grants/{DataGrantId}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetDataGrantRequest"},
+      "output":{"shape":"GetDataGrantResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation returns information about a data grant.</p>"
+    },
     "GetDataSet":{
       "name":"GetDataSet",
       "http":{
@@ -240,6 +314,24 @@
       ],
       "documentation":"<p>This operation returns information about a job.</p>"
     },
+    "GetReceivedDataGrant":{
+      "name":"GetReceivedDataGrant",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/received-data-grants/{DataGrantArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetReceivedDataGrantRequest"},
+      "output":{"shape":"GetReceivedDataGrantResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation returns information about a received data grant.</p>"
+    },
     "GetRevision":{
       "name":"GetRevision",
       "http":{
@@ -256,6 +348,24 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>This operation returns information about a revision.</p>"
+    },
+    "ListDataGrants":{
+      "name":"ListDataGrants",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/data-grants",
+        "responseCode":200
+      },
+      "input":{"shape":"ListDataGrantsRequest"},
+      "output":{"shape":"ListDataGrantsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation returns information about all data grants.</p>"
     },
     "ListDataSetRevisions":{
       "name":"ListDataSetRevisions",
@@ -289,7 +399,7 @@
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>This operation lists your data sets. When listing by origin OWNED, results are sorted by CreatedAt in descending order. When listing by origin ENTITLED, there is no order and the maxResults parameter is ignored.</p>"
+      "documentation":"<p>This operation lists your data sets. When listing by origin OWNED, results are sorted by CreatedAt in descending order. When listing by origin ENTITLED, there is no order.</p>"
     },
     "ListEventActions":{
       "name":"ListEventActions",
@@ -324,6 +434,24 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>This operation lists your jobs sorted by CreatedAt in descending order.</p>"
+    },
+    "ListReceivedDataGrants":{
+      "name":"ListReceivedDataGrants",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/received-data-grants",
+        "responseCode":200
+      },
+      "input":{"shape":"ListReceivedDataGrantsRequest"},
+      "output":{"shape":"ListReceivedDataGrantsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>This operation returns information about all received data grants.</p>"
     },
     "ListRevisionAssets":{
       "name":"ListRevisionAssets",
@@ -526,6 +654,97 @@
     }
   },
   "shapes":{
+    "AcceptDataGrantRequest":{
+      "type":"structure",
+      "required":["DataGrantArn"],
+      "members":{
+        "DataGrantArn":{
+          "shape":"DataGrantArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant to accept.</p>",
+          "location":"uri",
+          "locationName":"DataGrantArn"
+        }
+      }
+    },
+    "AcceptDataGrantResponse":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "GrantDistributionScope",
+        "DataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the accepted data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "Description":{
+          "shape":"DataGrantDescription",
+          "documentation":"<p>The description of the accepted data grant.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "GrantDistributionScope":{
+          "shape":"GrantDistributionScope",
+          "documentation":"<p>The distribution scope for the data grant.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the accepted data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        }
+      }
+    },
+    "AcceptanceStateFilterValue":{
+      "type":"string",
+      "enum":[
+        "PENDING_RECEIVER_ACCEPTANCE",
+        "ACCEPTED"
+      ]
+    },
+    "AcceptanceStateFilterValues":{
+      "type":"list",
+      "member":{"shape":"AcceptanceStateFilterValue"}
+    },
     "AccessDeniedException":{
       "type":"structure",
       "required":["Message"],
@@ -771,7 +990,7 @@
       "required":["JobId"],
       "members":{
         "JobId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a job.</p>",
           "location":"uri",
           "locationName":"JobId"
@@ -819,6 +1038,123 @@
         "senderFault":true
       },
       "exception":true
+    },
+    "CreateDataGrantRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "GrantDistributionScope",
+        "ReceiverPrincipal",
+        "SourceDataSetId"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "GrantDistributionScope":{
+          "shape":"GrantDistributionScope",
+          "documentation":"<p>The distribution scope of the data grant.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "SourceDataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set used to create the data grant.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "Description":{
+          "shape":"Description",
+          "documentation":"<p>The description of the data grant.</p>"
+        },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>The tags to add to the data grant. A tag is a key-value pair.</p>"
+        }
+      }
+    },
+    "CreateDataGrantResponse":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "SenderPrincipal",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "GrantDistributionScope",
+        "DataSetId",
+        "SourceDataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "Description":{
+          "shape":"DataGrantDescription",
+          "documentation":"<p>The description of the data grant.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "GrantDistributionScope":{
+          "shape":"GrantDistributionScope",
+          "documentation":"<p>The distribution scope for the data grant.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "SourceDataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set used to create the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>The tags associated to the data grant. A tag is a key-value pair.</p>"
+        }
+      }
     },
     "CreateDataSetRequest":{
       "type":"structure",
@@ -909,6 +1245,10 @@
         "Event":{
           "shape":"Event",
           "documentation":"<p>What occurs to start an action.</p>"
+        },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>Key-value pairs that you can associate with the event action.</p>"
         }
       }
     },
@@ -934,6 +1274,10 @@
         "Id":{
           "shape":"Id",
           "documentation":"<p>The unique identifier for the event action.</p>"
+        },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>The tags for the event action.</p>"
         },
         "UpdatedAt":{
           "shape":"Timestamp",
@@ -1004,7 +1348,7 @@
           "documentation":"<p>An optional comment about the revision.</p>"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -1114,6 +1458,97 @@
       },
       "documentation":"<p>Details about the response of the operation to create an S3 data access from an S3 bucket.</p>"
     },
+    "DataGrantAcceptanceState":{
+      "type":"string",
+      "enum":[
+        "PENDING_RECEIVER_ACCEPTANCE",
+        "ACCEPTED"
+      ]
+    },
+    "DataGrantArn":{
+      "type":"string",
+      "pattern":"arn:aws:dataexchange:[\\-a-z0-9]*:(\\d{12}):data-grants\\/[a-zA-Z0-9]{30,40}"
+    },
+    "DataGrantDescription":{
+      "type":"string",
+      "max":16384,
+      "min":1
+    },
+    "DataGrantId":{
+      "type":"string",
+      "pattern":"[a-zA-Z0-9]{30,40}$|^arn:aws:dataexchange:[\\-a-z0-9]*:(\\d{12}):data-grants\\/[a-zA-Z0-9]{30,40}"
+    },
+    "DataGrantName":{
+      "type":"string",
+      "max":256,
+      "min":1
+    },
+    "DataGrantSummaryEntry":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "SenderPrincipal",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "DataSetId",
+        "SourceDataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "SourceDataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set used to create the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        }
+      },
+      "documentation":"<p>Information about a data grant.</p>"
+    },
     "DataSetEntry":{
       "type":"structure",
       "required":[
@@ -1222,22 +1657,34 @@
       ],
       "members":{
         "AssetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for an asset.</p>",
           "location":"uri",
           "locationName":"AssetId"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
+        }
+      }
+    },
+    "DeleteDataGrantRequest":{
+      "type":"structure",
+      "required":["DataGrantId"],
+      "members":{
+        "DataGrantId":{
+          "shape":"DataGrantId",
+          "documentation":"<p>The ID of the data grant to delete.</p>",
+          "location":"uri",
+          "locationName":"DataGrantId"
         }
       }
     },
@@ -1246,7 +1693,7 @@
       "required":["DataSetId"],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -1273,13 +1720,13 @@
       ],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -1547,19 +1994,19 @@
       ],
       "members":{
         "AssetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for an asset.</p>",
           "location":"uri",
           "locationName":"AssetId"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -1611,12 +2058,102 @@
         }
       }
     },
+    "GetDataGrantRequest":{
+      "type":"structure",
+      "required":["DataGrantId"],
+      "members":{
+        "DataGrantId":{
+          "shape":"DataGrantId",
+          "documentation":"<p>The ID of the data grant.</p>",
+          "location":"uri",
+          "locationName":"DataGrantId"
+        }
+      }
+    },
+    "GetDataGrantResponse":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "SenderPrincipal",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "GrantDistributionScope",
+        "DataSetId",
+        "SourceDataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "Description":{
+          "shape":"DataGrantDescription",
+          "documentation":"<p>The description of the data grant.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "GrantDistributionScope":{
+          "shape":"GrantDistributionScope",
+          "documentation":"<p>The distribution scope for the data grant.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "SourceDataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set used to create the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>The tags associated to the data grant. A tag is a key-value pair.</p>"
+        }
+      }
+    },
     "GetDataSetRequest":{
       "type":"structure",
       "required":["DataSetId"],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -1707,6 +2244,10 @@
           "shape":"Id",
           "documentation":"<p>The unique identifier for the event action.</p>"
         },
+        "Tags":{
+          "shape":"MapOf__string",
+          "documentation":"<p>The tags for the event action.</p>"
+        },
         "UpdatedAt":{
           "shape":"Timestamp",
           "documentation":"<p>The date and time that the event action was last updated, in ISO 8601 format.</p>"
@@ -1718,7 +2259,7 @@
       "required":["JobId"],
       "members":{
         "JobId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a job.</p>",
           "location":"uri",
           "locationName":"JobId"
@@ -1762,6 +2303,86 @@
         }
       }
     },
+    "GetReceivedDataGrantRequest":{
+      "type":"structure",
+      "required":["DataGrantArn"],
+      "members":{
+        "DataGrantArn":{
+          "shape":"DataGrantArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>",
+          "location":"uri",
+          "locationName":"DataGrantArn"
+        }
+      }
+    },
+    "GetReceivedDataGrantResponse":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "GrantDistributionScope",
+        "DataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "Description":{
+          "shape":"DataGrantDescription",
+          "documentation":"<p>The description of the data grant.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "GrantDistributionScope":{
+          "shape":"GrantDistributionScope",
+          "documentation":"<p>The distribution scope for the data grant.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        }
+      }
+    },
     "GetRevisionRequest":{
       "type":"structure",
       "required":[
@@ -1770,13 +2391,13 @@
       ],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -1836,7 +2457,17 @@
         }
       }
     },
-    "Id":{"type":"string"},
+    "GrantDistributionScope":{
+      "type":"string",
+      "enum":[
+        "AWS_ORGANIZATION",
+        "NONE"
+      ]
+    },
+    "Id":{
+      "type":"string",
+      "pattern":"[a-zA-Z0-9]{30,40}"
+    },
     "ImportAssetFromApiGatewayApiRequestDetails":{
       "type":"structure",
       "required":[
@@ -2474,15 +3105,48 @@
         "Revisions per AWS Lake Formation data permission data set",
         "Revisions per Amazon S3 data access data set",
         "Amazon S3 data access assets per revision",
-        "Concurrent in progress jobs to create Amazon S3 data access assets from S3 buckets"
+        "Concurrent in progress jobs to create Amazon S3 data access assets from S3 buckets",
+        "Active and pending data grants",
+        "Pending data grants per consumer"
       ]
+    },
+    "ListDataGrantsRequest":{
+      "type":"structure",
+      "members":{
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to be included in the next page.</p>",
+          "box":true,
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "NextToken":{
+          "shape":"__string",
+          "documentation":"<p>The pagination token used to retrieve the next page of results for this operation.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      }
+    },
+    "ListDataGrantsResponse":{
+      "type":"structure",
+      "members":{
+        "DataGrantSummaries":{
+          "shape":"ListOfDataGrantSummaryEntry",
+          "documentation":"<p>An object that contains a list of data grant information.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The pagination token used to retrieve the next page of results for this operation.</p>"
+        }
+      }
     },
     "ListDataSetRevisionsRequest":{
       "type":"structure",
       "required":["DataSetId"],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -2640,6 +3304,10 @@
       "type":"list",
       "member":{"shape":"AssetSourceEntry"}
     },
+    "ListOfDataGrantSummaryEntry":{
+      "type":"list",
+      "member":{"shape":"DataGrantSummaryEntry"}
+    },
     "ListOfDataSetEntry":{
       "type":"list",
       "member":{"shape":"DataSetEntry"}
@@ -2682,6 +3350,10 @@
       "type":"list",
       "member":{"shape":"LakeFormationTagPolicyDetails"}
     },
+    "ListOfReceivedDataGrantSummariesEntry":{
+      "type":"list",
+      "member":{"shape":"ReceivedDataGrantSummariesEntry"}
+    },
     "ListOfRedshiftDataShareAssetSourceEntry":{
       "type":"list",
       "member":{"shape":"RedshiftDataShareAssetSourceEntry"}
@@ -2714,6 +3386,43 @@
       "type":"list",
       "member":{"shape":"__string"}
     },
+    "ListReceivedDataGrantsRequest":{
+      "type":"structure",
+      "members":{
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to be included in the next page.</p>",
+          "box":true,
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "NextToken":{
+          "shape":"__string",
+          "documentation":"<p>The pagination token used to retrieve the next page of results for this operation.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "AcceptanceState":{
+          "shape":"AcceptanceStateFilterValues",
+          "documentation":"<p>The acceptance state of the data grants to list.</p>",
+          "location":"querystring",
+          "locationName":"acceptanceState"
+        }
+      }
+    },
+    "ListReceivedDataGrantsResponse":{
+      "type":"structure",
+      "members":{
+        "DataGrantSummaries":{
+          "shape":"ListOfReceivedDataGrantSummariesEntry",
+          "documentation":"<p>An object that contains a list of received data grant information.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The pagination token used to retrieve the next page of results for this operation.</p>"
+        }
+      }
+    },
     "ListRevisionAssetsRequest":{
       "type":"structure",
       "required":[
@@ -2722,7 +3431,7 @@
       ],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -2740,7 +3449,7 @@
           "locationName":"nextToken"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -2834,6 +3543,10 @@
         "ProductId":{
           "shape":"__string",
           "documentation":"<p>The product ID of the origin of the data set.</p>"
+        },
+        "DataGrantId":{
+          "shape":"__string",
+          "documentation":"<p>The ID of the data grant.</p>"
         }
       },
       "documentation":"<p>Details about the origin of the data set.</p>"
@@ -2841,6 +3554,71 @@
     "ProtocolType":{
       "type":"string",
       "enum":["REST"]
+    },
+    "ReceivedDataGrantSummariesEntry":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "SenderPrincipal",
+        "ReceiverPrincipal",
+        "AcceptanceState",
+        "DataSetId",
+        "Id",
+        "Arn",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "members":{
+        "Name":{
+          "shape":"DataGrantName",
+          "documentation":"<p>The name of the data grant.</p>"
+        },
+        "SenderPrincipal":{
+          "shape":"SenderPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant sender.</p>"
+        },
+        "ReceiverPrincipal":{
+          "shape":"ReceiverPrincipal",
+          "documentation":"<p>The Amazon Web Services account ID of the data grant receiver.</p>"
+        },
+        "AcceptanceState":{
+          "shape":"DataGrantAcceptanceState",
+          "documentation":"<p>The acceptance state of the data grant.</p>"
+        },
+        "AcceptedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was accepted.</p>"
+        },
+        "EndsAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when access to the associated data set ends.</p>"
+        },
+        "DataSetId":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data set associated to the data grant.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the data grant.</p>"
+        },
+        "Arn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the data grant.</p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the data grant was last updated.</p>"
+        }
+      },
+      "documentation":"<p>Information about a received data grant.</p>"
+    },
+    "ReceiverPrincipal":{
+      "type":"string",
+      "pattern":"\\d{12}"
     },
     "RedshiftDataShareAsset":{
       "type":"structure",
@@ -2971,7 +3749,8 @@
         "REVISION",
         "ASSET",
         "JOB",
-        "EVENT_ACTION"
+        "EVENT_ACTION",
+        "DATA_GRANT"
       ]
     },
     "ResponseDetails":{
@@ -3115,13 +3894,13 @@
       ],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -3420,7 +4199,7 @@
           "documentation":"<p>Free-form text field for providers to add information about their notifications.</p>"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>Affected data set of the notification.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -3439,6 +4218,10 @@
       "type":"structure",
       "members":{
       }
+    },
+    "SenderPrincipal":{
+      "type":"string",
+      "pattern":"\\d{12}"
     },
     "ServerSideEncryptionTypes":{
       "type":"string",
@@ -3476,7 +4259,7 @@
       "required":["JobId"],
       "members":{
         "JobId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a job.</p>",
           "location":"uri",
           "locationName":"JobId"
@@ -3621,13 +4404,13 @@
       ],
       "members":{
         "AssetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for an asset.</p>",
           "location":"uri",
           "locationName":"AssetId"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -3637,7 +4420,7 @@
           "documentation":"<p>The name of the asset. When importing from Amazon S3, the Amazon S3 object key is used as the asset name. When exporting to Amazon S3, the asset name is used as default target Amazon S3 object key. When importing from Amazon API Gateway API, the API name is used as the asset name. When importing from Amazon Redshift, the datashare name is used as the asset name. When importing from AWS Lake Formation, the static values of \"Database(s) included in the LF-tag policy\" or \"Table(s) included in LF-tag policy\" are used as the name.</p>"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"
@@ -3694,7 +4477,7 @@
       "required":["DataSetId"],
       "members":{
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -3811,7 +4594,7 @@
           "documentation":"<p>An optional comment about the revision.</p>"
         },
         "DataSetId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a data set.</p>",
           "location":"uri",
           "locationName":"DataSetId"
@@ -3821,7 +4604,7 @@
           "documentation":"<p>Finalizing a revision tells AWS Data Exchange that your changes to the assets in the revision are complete. After it's in this read-only state, you can publish the revision to your products.</p>"
         },
         "RevisionId":{
-          "shape":"__string",
+          "shape":"Id",
           "documentation":"<p>The unique identifier for a revision.</p>",
           "location":"uri",
           "locationName":"RevisionId"

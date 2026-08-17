@@ -11,12 +11,15 @@ public:
 
 private:
     static const inline auto Registrator = TFactory::TRegistrator<TDefaultDataExtractor>(GetClassNameStatic());
+
     virtual void DoSerializeToProto(TProto& /*proto*/) const override {
         return;
     }
+
     virtual bool DoDeserializeFromProto(const TProto& /*proto*/) override {
         return true;
     }
+
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& /*jsonInfo*/) override {
         return TConclusionStatus::Success();
     }

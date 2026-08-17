@@ -7,11 +7,14 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
@@ -194,6 +197,24 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     );
                 }
             }
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                if (settings.format_case() == Ydb::Export::ExportToS3Settings::kParquet) {
+                    if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::UNSUPPORTED,
+                            "Parquet export to S3 is disabled by feature flag EnableExportInParquet"
+                        );
+                    }
+                    if (settings.has_encryption_settings()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::BAD_REQUEST,
+                            "Encryption is not supported for Parquet export"
+                        );
+                    }
+                }
+            }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
             if constexpr (HasIncludeIndexData<TSettings>) {
                 exportInfo->IncludeIndexData = settings.include_index_data();
@@ -339,6 +360,10 @@ private:
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        auto implTablePath = childPath.Child(implTableName);
+                        if (implTablePath.IsDeleted()) {
+                            continue;
+                        }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
@@ -473,6 +498,8 @@ private:
     template <typename Func>
     auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
         switch (exportInfo.Kind) {
+        case TExportInfo::EKind::YT:
+            return func.template operator()<Ydb::Export::ExportToYtSettings>();
         case TExportInfo::EKind::S3:
             return func.template operator()<Ydb::Export::ExportToS3Settings>();
         case TExportInfo::EKind::FS:
@@ -504,15 +531,8 @@ private:
     void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
+        UploadScheme<Ydb::Export::ExportToYtSettings>(exportInfo, itemIdx, ctx); // Common code for all types of storage
 
-        item.SubState = ESubState::Proposed;
-
-        LOG_I("TExport::TTxProgress: UploadScheme"
-            << ": info# " << exportInfo.ToString()
-            << ", item# " << item.ToString(itemIdx)
-        );
-
-        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         if (IsPathTypeSchemeObject(item)) {
             TSettings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
@@ -535,6 +555,22 @@ private:
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }
+    }
+
+    template <>
+    void UploadScheme<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TExport::TTxProgress: UploadScheme"
+            << ": info# " << exportInfo.ToString()
+            << ", item# " << item.ToString(itemIdx)
+        );
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
     }
 
     template <typename TSettings>
@@ -611,6 +647,13 @@ private:
         return true;
     }
 
+    template <>
+    bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, TString& issues) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(issues);
+        return true;
+    }
+
     template <typename TSettings>
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
         TSettings exportSettings;
@@ -624,6 +667,13 @@ private:
             CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
         return true;
+    }
+
+    template <>
+    bool UploadExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, const TActorContext& ctx) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(ctx);
+        return false;
     }
 
     bool CancelTransferring(TExportInfo& exportInfo, ui32 itemIdx) {
@@ -748,7 +798,7 @@ private:
         for (size_t i : xrange(exportInfo.Items.size())) {
             const auto& item = exportInfo.Items[i];
 
-            if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+            if (!IsPathTypeTable(item)) {
                 // only tables can be targets of the copy tables operation
                 continue;
             }
@@ -833,16 +883,17 @@ private:
     TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-            if (!Self->ColumnTables.contains(item.SourcePathId)) {
-                return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
-            }
-
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();
-            return GetIssues(table, item.SourcePathId, backupTxId);
-        }
 
         auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+            if (!Self->ColumnTables.contains(itemPathId)) {
+                return TStringBuilder() << "Cannot find table: " << itemPathId;
+            }
+
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(itemPathId).GetPtr();
+            return GetIssues(table, itemPathId, backupTxId);
+        }
+
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
@@ -1176,9 +1227,11 @@ private:
                     }
 
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
+                                sourcePathMissing = true;
                                 break;
                             }
 
@@ -1194,6 +1247,10 @@ private:
 
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
+                        }
+
+                        if (!sourcePathMissing) {
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 
@@ -1447,8 +1504,8 @@ private:
         case EState::CreateExportDir: {
             exportInfo->WaitTxId = InvalidTxId;
 
-            const bool supportEncryptedExport = AppData()->FeatureFlags.GetEnableEncryptedExport();
-            if (TString issues; supportEncryptedExport && !FillExportMetadata(*exportInfo, issues)) {
+            const bool supportExportFiltering = NBackup::IsExportFilteringEnabled(*AppData());
+            if (TString issues; supportExportFiltering && !FillExportMetadata(*exportInfo, issues)) {
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
@@ -1456,7 +1513,7 @@ private:
                 break;
             }
 
-            if (supportEncryptedExport && UploadExportMetadata(*exportInfo, ctx)) {
+            if (supportExportFiltering && UploadExportMetadata(*exportInfo, ctx)) {
                 exportInfo->State = EState::UploadExportMetadata;
 
                 // Persist modified metadata and new settings

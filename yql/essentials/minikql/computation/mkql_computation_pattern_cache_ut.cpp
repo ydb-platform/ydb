@@ -1,5 +1,7 @@
 #include "library/cpp/threading/local_executor/local_executor.h"
 #include "yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h"
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -19,6 +21,53 @@
 namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
+namespace {
+
+class TMockComputationPattern final: public IComputationPattern {
+public:
+    explicit TMockComputationPattern(size_t codeSize)
+        : Size_(codeSize)
+    {
+    }
+
+    void Compile(TString, IStatsRegistry*) override {
+        Compiled_ = true;
+    }
+    bool IsCompiled() const override {
+        return Compiled_;
+    }
+    size_t CompiledCodeSize() const override {
+        return Size_;
+    }
+    void RemoveCompiledCode() override {
+        Compiled_ = false;
+    }
+    THolder<IComputationGraph> Clone(const TComputationOptsFull&) override {
+        return {};
+    }
+    bool GetSuitableForCache() const override {
+        return true;
+    }
+
+private:
+    const size_t Size_;
+    bool Compiled_ = false;
+};
+
+TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
+    auto entry = std::make_shared<TPatternCacheEntry>();
+    entry->Pattern = MakeIntrusive<TMockComputationPattern>(codeSize);
+    return entry;
+}
+
+NYql::TRuntimeSettingsStableHash MakeStableHash(ui8 fill) {
+    NYql::TRuntimeSettingsStableHash hash;
+    constexpr size_t arbitraryLength = 12;
+    hash->resize(arbitraryLength, fill);
+    return hash;
+}
+
+} // namespace
 
 TComputationNodeFactory GetListTestFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -31,15 +80,15 @@ TComputationNodeFactory GetListTestFactory() {
 
 TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     if (list) {
-        return pb.ToFlow(TRuntimeNode(list, false));
+        return pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {});
     } else {
         std::vector<const TRuntimeNode> arr;
         arr.reserve(vecSize);
         for (ui64 i = 0; i < vecSize; ++i) {
-            arr.push_back(pb.NewDataLiteral<ui64>((i + 124515) % 6740234));
+            arr.push_back(NTest::ConvertValueToLiteralNode(pb, ui64((i + 124515) % 6740234)));
         }
         TArrayRef<const TRuntimeNode> arrRef(std::move(arr));
-        return pb.ToFlow(pb.AsList(arrRef));
+        return pb.ToFlow(pb.AsList(arrRef), {});
     }
 }
 
@@ -53,8 +102,8 @@ TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable*
 
     auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.Filter(flow, handler);
 }
@@ -66,8 +115,8 @@ TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable* 
 
     auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.NarrowMap(
         pb.WideFilter(
@@ -87,8 +136,8 @@ TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable* li
 
     auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.Map(flow, handler);
 }
@@ -100,8 +149,8 @@ TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable* lis
 
     auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode::TList {
         return {pb.AggrEquals(
-            pb.Mod(node.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)))};
+            pb.Mod(node.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)))};
     };
     return pb.NarrowMap(
         pb.WideMap(
@@ -120,12 +169,12 @@ TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallabl
     auto flow = CreateFlow(pb, vecSize, list);
 
     auto switcherHandler = [&](TRuntimeNode, TRuntimeNode) -> TRuntimeNode {
-        return pb.NewDataLiteral<bool>(false);
+        return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
     };
     auto updateHandler = [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNode {
         return pb.Add(item, state);
     };
-    TRuntimeNode state = pb.NewDataLiteral<ui64>(0);
+    TRuntimeNode state = NTest::ConvertValueToLiteralNode(pb, ui64(0));
     return pb.Condense(flow, state, switcherHandler, updateHandler);
 }
 
@@ -134,7 +183,6 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    TRuntimeNode state = pb.NewDataLiteral<ui64>(0);
     return pb.NarrowMap(
         pb.WideCondense1(
             /* stream */
@@ -143,7 +191,7 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
             /* init */
             [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item}; },
             /* switcher */
-            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return pb.NewDataLiteral<bool>(false); },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false); },
             /* handler */
             [&](TRuntimeNode::TList item, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.Add(item.front(), state.front())}; }),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
@@ -163,8 +211,8 @@ TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable
         [&](TRuntimeNode item) -> TRuntimeNode { return item; },
         /* groupSwitch */
         [&](TRuntimeNode key, TRuntimeNode /*item*/) -> TRuntimeNode { return pb.AggrEquals(
-                                                                           pb.Mod(key, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-                                                                           pb.NewOptional(pb.NewDataLiteral<ui64>(0))); },
+                                                                           pb.Mod(key, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+                                                                           NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0))); },
         /* groupHandler */
         [&](TRuntimeNode, TRuntimeNode list) -> TRuntimeNode { return list; });
 };
@@ -184,8 +232,8 @@ TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable*
             /* groupSwitch */
             [&](TRuntimeNode::TList key, TRuntimeNode::TList /*item*/) -> TRuntimeNode {
                 return pb.AggrEquals(
-                    pb.Mod(key.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-                    pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+                    pb.Mod(key.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+                    NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
             },
             /* groupHandler */
             [&](TRuntimeNode::TList, TRuntimeNode input) { return pb.WideMap(input, [](TRuntimeNode::TList items) { return items; }); }),
@@ -204,7 +252,7 @@ TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable
         /* stream */
         flow,
         /* keyExtractor */
-        [&](TRuntimeNode /*item*/) -> TRuntimeNode { return pb.NewDataLiteral<ui64>(0); },
+        [&](TRuntimeNode /*item*/) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, ui64(0)); },
         /* init */
         [&](TRuntimeNode /* key */, TRuntimeNode item) -> TRuntimeNode { return item; },
         /* update */
@@ -228,7 +276,7 @@ TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable*
             /* memlimit */
             64 << 20,
             /* keyExtractor */
-            [&](TRuntimeNode::TList /*item*/) -> TRuntimeNode::TList { return {pb.NewDataLiteral<ui64>(0)}; },
+            [&](TRuntimeNode::TList /*item*/) -> TRuntimeNode::TList { return {NTest::ConvertValueToLiteralNode(pb, ui64(0))}; },
             /* init */
             [&](TRuntimeNode::TList /* key */, TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item}; },
             /* update */
@@ -292,7 +340,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable* list = n
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    auto count = pb.NewDataLiteral<ui64>(500);
+    auto count = NTest::ConvertValueToLiteralNode(pb, ui64(500));
     if (Wide) {
         return pb.NarrowMap(
             pb.Skip(
@@ -315,7 +363,7 @@ TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable*
                      [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
         [&](TRuntimeNode::TList item) -> TRuntimeNode {
             auto x = pb.NewOptional(item.front());
-            return Flow ? pb.ToFlow(x) : x;
+            return Flow ? pb.ToFlow(x, {}) : x;
         });
 }
 
@@ -342,7 +390,7 @@ TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCal
                          [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
             /*all*/ false,
             /*keySelector*/ [&](TRuntimeNode::TList item) { return item.front(); },
-            /*payloadSelector*/ [&](TRuntimeNode::TList) { return WithPayload ? pb.NewDataLiteral<ui64>(0) : pb.NewVoid(); }),
+            /*payloadSelector*/ [&](TRuntimeNode::TList) { return WithPayload ? NTest::ConvertValueToLiteralNode(pb, ui64(0)) : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }),
         [&](TRuntimeNode item) { return pb.DictKeys(item); });
 }
 
@@ -350,26 +398,19 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                            pb.NewDataType(NUdf::TDataType<ui64>::Id)});
-
     const auto list1 = pb.Map(flow, [&](TRuntimeNode item) {
-        return pb.NewTuple({pb.Mod(item, pb.NewDataLiteral<ui64>(1000)), pb.NewDataLiteral<ui32>(1)});
+        return pb.NewTuple({pb.Mod(item, NTest::ConvertValueToLiteralNode(pb, ui64(1000))), NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     });
 
-    const auto list2 = pb.NewList(tupleType, {
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<ui64>(3 * 1000)}),
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(2), pb.NewDataLiteral<ui64>(4 * 1000)}),
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(3), pb.NewDataLiteral<ui64>(5 * 1000)}),
-                                             });
+    const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, ui64>>{{1, 3000}, {2, 4000}, {3, 5000}});
 
-    const auto dict = pb.ToSortedDict(list2, false,
+    const auto dict = pb.ToSortedDict(list2, /*all=*/false,
                                       [&](TRuntimeNode item) { return pb.Nth(item, 0); },
                                       [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
     const auto resultType = pb.NewFlowType(pb.NewMultiType({
-        pb.NewDataType(NUdf::TDataType<char*>::Id),
-        pb.NewDataType(NUdf::TDataType<char*>::Id),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
     }));
 
     return pb.Map(
@@ -409,7 +450,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
     TProgramBuilder pb(typeEnv, *functionRegistry);
 
-    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto listType = NTest::ConvertToMinikqlType<TVector<ui64>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
     TRuntimeNode progReturn;
     with_lock (alloc) {
@@ -426,7 +467,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
         auto guard = entry->Env.BindAllocator();
         entry->Pattern = MakeComputationPattern(explorer, progReturn, {list}, opts);
     }
-    cache.EmplacePattern("a", entry);
+    cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "a"}, entry);
     auto genData = [&]() {
         std::vector<ui64> data;
         data.reserve(vecSize);
@@ -443,7 +484,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
     NPar::LocalExecutor().RunAdditionalThreads(inFlight);
     NPar::LocalExecutor().ExecRange([&](int id) {
         for (ui32 i = 0; i < 100; ++i) {
-            auto key = "a";
+            TProgramKey key{NYql::UnknownLangVersion, {}, "a"};
 
             auto randomProvider = CreateDeterministicRandomProvider(1);
             auto timeProvider = CreateDeterministicTimeProvider(10000000);
@@ -457,7 +498,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
             auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
             TUnboxedValue* items = nullptr;
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
+            graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
 
             std::transform(data.cbegin(), data.cend(), items,
                            [](const auto s) {
@@ -518,7 +559,7 @@ Y_UNIT_TEST_QUAD(NarrowFlatMap, Flow, UseLLVM) {
 }
 
 Y_UNIT_TEST_TWIN(NarrowMultiMap, UseLLVM) {
-    ParallelProgTest(CreateNarrowMultiMap, UseLLVM, 1295145000ull * 2);
+    ParallelProgTest(CreateNarrowMultiMap, UseLLVM, 1295145000ULL * 2);
 }
 
 Y_UNIT_TEST_QUAD(SqueezeToSortedDict, WithPayload, UseLLVM) {
@@ -547,7 +588,7 @@ Y_UNIT_TEST(Smoke) {
 
         TRuntimeNode progReturn;
         with_lock (alloc) {
-            progReturn = pb.NewDataLiteral<NYql::NUdf::EDataSlot::String>("qwerty");
+            progReturn = NTest::ConvertValueToLiteralNode(pb, TStringBuf("qwerty"));
         }
 
         TExploringNodeVisitor explorer;
@@ -571,11 +612,11 @@ Y_UNIT_TEST(Smoke) {
         // Hence, to avoid undesired cache flushes, release the free pages
         // of the allocator of the particular entry.
         alloc.ReleaseFreePages();
-        cache.EmplacePattern(TString((char)('a' + i)), entry);
+        cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, TString((char)('a' + i))}, entry);
     }
 
     for (ui32 i = 0; i < cacheItems; ++i) {
-        auto key = TString((char)('a' + i));
+        TProgramKey key{NYql::UnknownLangVersion, {}, TString((char)('a' + i))};
 
         auto randomProvider = CreateDeterministicRandomProvider(1);
         auto timeProvider = CreateDeterministicTimeProvider(10000000);
@@ -588,58 +629,27 @@ Y_UNIT_TEST(Smoke) {
 
         auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
         auto value = graph->GetValue();
-        UNIT_ASSERT_EQUAL(NYql::NUdf::TStringRef("qwerty"), value.AsStringRef());
+        AssertUnboxedValueElementEqual(value, TStringBuf("qwerty"));
     }
 }
 
 Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
-    class TMockComputationPattern final: public IComputationPattern {
-    public:
-        explicit TMockComputationPattern(size_t codeSize)
-            : Size_(codeSize)
-        {
-        }
-
-        void Compile(TString, IStatsRegistry*) override {
-            Compiled_ = true;
-        }
-        bool IsCompiled() const override {
-            return Compiled_;
-        }
-        size_t CompiledCodeSize() const override {
-            return Size_;
-        }
-        void RemoveCompiledCode() override {
-            Compiled_ = false;
-        }
-        THolder<IComputationGraph> Clone(const TComputationOptsFull&) override {
-            return {};
-        }
-        bool GetSuitableForCache() const override {
-            return true;
-        }
-
-    private:
-        const size_t Size_;
-        bool Compiled_ = false;
-    };
-
-    const TString key = "program";
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
     const ui32 cacheSize = 2;
     TComputationPatternLRUCache cache({cacheSize, cacheSize});
 
     auto entry = std::make_shared<TPatternCacheEntry>();
-    entry->Pattern = MakeIntrusive<TMockComputationPattern>(1u);
+    entry->Pattern = MakeIntrusive<TMockComputationPattern>(1U);
     cache.EmplacePattern(key, entry);
 
     for (ui32 i = 0; i < cacheSize + 1; ++i) {
-        entry->Pattern->Compile("", nullptr);
+        entry->Pattern->Compile("", /*stats=*/nullptr);
         cache.NotifyPatternCompiled(key);
     }
 
     entry = std::make_shared<TPatternCacheEntry>();
     entry->Pattern = MakeIntrusive<TMockComputationPattern>(cacheSize + 1);
-    entry->Pattern->Compile("", nullptr);
+    entry->Pattern->Compile("", /*stats=*/nullptr);
     cache.EmplacePattern(key, entry);
 }
 
@@ -651,8 +661,8 @@ Y_UNIT_TEST(AddPerf) {
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
 
     TProgramBuilder pb(typeEnv, *functionRegistry);
-    auto prog1 = pb.NewDataLiteral<ui64>(123591592ULL);
-    auto prog2 = pb.NewDataLiteral<ui64>(323591592ULL);
+    auto prog1 = NTest::ConvertValueToLiteralNode(pb, ui64(123591592ULL));
+    auto prog2 = NTest::ConvertValueToLiteralNode(pb, ui64(323591592ULL));
     auto progReturn = pb.Add(prog1, prog2);
 
     TExploringNodeVisitor explorer;
@@ -723,7 +733,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
     TProgramBuilder pb(typeEnv, *functionRegistry);
     const ui64 vecSize = 100'000;
     Cerr << "vecSize: " << vecSize << Endl;
-    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto listType = NTest::ConvertToMinikqlType<TVector<ui64>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
     auto progReturn = CreateFilter<Wide>(pb, vecSize, list);
 
@@ -780,7 +790,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
             auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
             auto data = genData();
             TUnboxedValue* items = nullptr;
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
+            graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
 
             std::transform(data.cbegin(), data.cend(), items,
                            [](const auto s) {
@@ -854,6 +864,160 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
         Cerr << "lambda: " << Sprintf("%.3f", total.SecondsFloat()) << "s" << Endl;
     }
 }
+
+Y_UNIT_TEST(UpdateConfigurationResize) {
+    constexpr size_t patternSize = 100;
+    constexpr size_t patternCount = 4;
+    constexpr size_t initialMaxBytes = patternSize * patternCount;
+
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto maxSizeBytes = counters->GetCounter("PatternCache/MaxSizeBytes", /*derivative=*/false);
+    auto maxCompiledSizeBytes = counters->GetCounter("PatternCache/MaxCompiledSizeBytes", /*derivative=*/false);
+    auto sizeCompiledBytes = counters->GetCounter("PatternCache/SizeCompiledBytes", /*derivative=*/false);
+
+    TComputationPatternLRUCache cache({initialMaxBytes, initialMaxBytes, 0}, counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), initialMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), initialMaxBytes);
+
+    TVector<TProgramKey> keys;
+    for (size_t i = 0; i < patternCount; ++i) {
+        TProgramKey key{NYql::UnknownLangVersion, {}, "p" + ToString(i)};
+        keys.push_back(key);
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(patternSize);
+        entry->Pattern->Compile("", /*stats=*/nullptr);
+        cache.EmplacePattern(key, entry);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), patternSize * patternCount);
+
+    // Resize up: entries preserved, sensors reflect new limit.
+    constexpr size_t expandedMaxBytes = initialMaxBytes * 2;
+    cache.UpdateConfiguration({expandedMaxBytes, expandedMaxBytes, 0});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(cache.GetConfiguration().MaxSizeBytes, expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), patternSize * patternCount);
+    for (const auto& key : keys) {
+        auto entry = cache.Find(key);
+        UNIT_ASSERT(entry);
+        UNIT_ASSERT(entry->Pattern->IsCompiled());
+    }
+
+    // Resize down past current compiled usage: oldest compiled code evicted.
+    constexpr size_t shrunkMaxBytes = patternSize * 2;
+    cache.UpdateConfiguration({expandedMaxBytes, shrunkMaxBytes, 0});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), shrunkMaxBytes);
+    UNIT_ASSERT_LE(static_cast<size_t>(*sizeCompiledBytes), shrunkMaxBytes);
+    // Entries themselves still resolvable; only the compiled code of the LRU
+    // entries was dropped.
+    size_t stillCompiled = 0;
+    for (const auto& key : keys) {
+        auto entry = cache.Find(key);
+        UNIT_ASSERT(entry);
+        if (entry->Pattern->IsCompiled()) {
+            ++stillCompiled;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(stillCompiled, shrunkMaxBytes / patternSize);
+}
+
+Y_UNIT_TEST(TripletKeyFieldsDistinguishEntries) {
+    // Four entries that differ from each other in exactly one field at a time
+    const NYql::TLangVersion ver1 = NYql::MakeLangVersion(2025, 1);
+    const NYql::TLangVersion ver2 = NYql::MakeLangVersion(2025, 2);
+    const NYql::TRuntimeSettingsStableHash hash1 = MakeStableHash(0xAA);
+    const NYql::TRuntimeSettingsStableHash hash2 = MakeStableHash(0xBB);
+
+    const TProgramKey keyBase{ver1, hash1, "prog"};
+    const TProgramKey keyDiffVer{ver2, hash1, "prog"};   // only lang version differs
+    const TProgramKey keyDiffHash{ver1, hash2, "prog"};  // only stable hash differs
+    const TProgramKey keyDiffProg{ver1, hash1, "other"}; // only program differs
+
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entryBase = MakeMockEntry();
+    auto entryDiffVer = MakeMockEntry();
+    auto entryDiffHash = MakeMockEntry();
+    auto entryDiffProg = MakeMockEntry();
+
+    cache.EmplacePattern(keyBase, entryBase);
+    cache.EmplacePattern(keyDiffVer, entryDiffVer);
+    cache.EmplacePattern(keyDiffHash, entryDiffHash);
+    cache.EmplacePattern(keyDiffProg, entryDiffProg);
+
+    UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 4);
+
+    UNIT_ASSERT_EQUAL(cache.Find(keyBase), entryBase);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffVer), entryDiffVer);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffHash), entryDiffHash);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffProg), entryDiffProg);
+
+    UNIT_ASSERT(!cache.Find(TProgramKey{ver2, hash2, "missing"}));
+}
+
+Y_UNIT_TEST(TripletKeyNotifyPatternCompiled) {
+    const TProgramKey key{NYql::MakeLangVersion(2025, 1), MakeStableHash(0x10), "prog"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entry = MakeMockEntry(512);
+    cache.EmplacePattern(key, entry);
+
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    cache.NotifyPatternCompiled(key);
+
+    auto found = cache.Find(key);
+    UNIT_ASSERT_EQUAL(found, entry);
+    UNIT_ASSERT(found->Pattern->IsCompiled());
+}
+
+Y_UNIT_TEST(TripletKeyNotifyPatternMissing) {
+    // NotifyPatternMissing releases waiters for the specific triplet
+    const TProgramKey key{NYql::MakeLangVersion(2025, 1), MakeStableHash(0x20), "prog"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    // Register as the first subscriber (gets an empty future to trigger creation)
+    auto firstFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(!firstFuture.Initialized());
+
+    // Register a second subscriber (gets a promise future)
+    auto secondFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(secondFuture.Initialized());
+    UNIT_ASSERT(!secondFuture.HasValue());
+
+    // Notify missing - second subscriber should receive nullptr
+    cache.NotifyPatternMissing(key);
+    UNIT_ASSERT(secondFuture.HasValue());
+    UNIT_ASSERT(!secondFuture.GetValue());
+}
+
+Y_UNIT_TEST(TripletKeyFindOrSubscribeDistinctKeys) {
+    // FindOrSubscribe distinguishes entries by full triplet
+    const NYql::TLangVersion ver1 = NYql::MakeLangVersion(2025, 1);
+    const NYql::TLangVersion ver2 = NYql::MakeLangVersion(2025, 2);
+    const NYql::TRuntimeSettingsStableHash hash = {};
+    const TString program = "prog";
+
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entry1 = MakeMockEntry();
+    auto entry2 = MakeMockEntry();
+
+    // Emplace both entries
+    cache.EmplacePattern(TProgramKey{ver1, hash, program}, entry1);
+    cache.EmplacePattern(TProgramKey{ver2, hash, program}, entry2);
+
+    // FindOrSubscribe should find the correct entry for each triplet
+    auto future1 = cache.FindOrSubscribe(TProgramKey{ver1, hash, program});
+    auto future2 = cache.FindOrSubscribe(TProgramKey{ver2, hash, program});
+
+    UNIT_ASSERT(future1.Initialized() && future1.HasValue());
+    UNIT_ASSERT(future2.Initialized() && future2.HasValue());
+    UNIT_ASSERT_EQUAL(future1.GetValue(), entry1);
+    UNIT_ASSERT_EQUAL(future2.GetValue(), entry2);
+}
+
 } // Y_UNIT_TEST_SUITE(ComputationPatternCache)
 
 } // namespace NKikimr::NMiniKQL

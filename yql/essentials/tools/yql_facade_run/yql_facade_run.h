@@ -86,11 +86,12 @@ public:
     TString OperationId;
     TQContext QPlayerContext;
 
-    THashSet<TString> SqlFlags;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags;
     ui16 SyntaxVersion = 1;
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
+    bool AutoUseYqlLibs = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;
@@ -132,7 +133,7 @@ public:
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
-    TMaybe<TString> GatewaysPatch;
+    THolder<TGatewaysConfig> GatewaysPatch;
 
     // No command line options for these settings. Should be configured in the inherited class
     bool NoDebug = false;
@@ -146,6 +147,8 @@ public:
     bool OptimizeLibs = true;
     bool CustomTests = false;
     bool EnableLineage = false;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
     void Parse(int argc, const char** argv);
 

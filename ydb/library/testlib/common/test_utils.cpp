@@ -1,10 +1,16 @@
 #include "test_utils.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <csignal>
+#include <cstring>
+#include <sstream>
+#include <thread>
 
 namespace NTestUtils {
 
@@ -15,6 +21,13 @@ std::terminate_handler DefaultTerminateHandler;
 void TerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
+    Cerr << colors.Red() << "std::terminate called in thread " << (std::stringstream() << std::this_thread::get_id()).str() << colors.Default() << Endl;
+    if (std::current_exception()) {
+        Cerr << colors.Red() << "Uncaught exception: " << CurrentExceptionMessage() << colors.Default() << Endl;
+    } else {
+        Cerr << colors.Red() << "Terminate for unknown reason (no current exception)" << colors.Default() << Endl;
+    }
+
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
     if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
@@ -22,12 +35,6 @@ void TerminateHandler() {
         backtrace.PrintTo(Cerr);
     }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    if (std::current_exception()) {
-        Cerr << colors.Red() << "Uncaught exception: " << CurrentExceptionMessage() << colors.Default() << Endl;
-    } else {
-        Cerr << colors.Red() << "Terminate for unknown reason (no current exception)" << colors.Default() << Endl;
-    }
 
     if (DefaultTerminateHandler) {
         DefaultTerminateHandler();
@@ -81,6 +88,7 @@ TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
 } // anonymous namespace
 
 void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> predicate) {
+    auto delay = TDuration::MilliSeconds(1);
     const TInstant start = TInstant::Now();
     TString errorString;
     while (TInstant::Now() - start <= timeout) {
@@ -89,7 +97,8 @@ void WaitFor(TDuration timeout, const TString& description, std::function<bool(T
         }
 
         Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
-        Sleep(TDuration::Seconds(1));
+        Sleep(delay);
+        delay = std::min(2 * delay, TDuration::Seconds(1));
     }
 
     UNIT_FAIL("Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString);
@@ -152,6 +161,16 @@ void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<
             }
         }
     }
+}
+
+void RestartTablet(const NActors::TActorSystem& runtime, ui64 tabletId) {
+    runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvForward(
+        tabletId,
+        new NActors::IEventHandle(NActors::TActorId(), NActors::TActorId(), new NActors::TEvents::TEvPoisonPill()),
+        {},
+        NKikimr::TEvTabletResolver::TEvForward::EActor::Tablet
+    ));
+    runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvTabletProblem(tabletId, NActors::TActorId()));
 }
 
 }  // namespace NTestUtils

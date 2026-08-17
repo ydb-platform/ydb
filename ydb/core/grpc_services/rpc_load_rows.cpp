@@ -1,11 +1,14 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common/rpc_common.h"
+#include "rpc_load_rows.h"
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/aclib/user_context.h>
 
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/minikql/dom/yson.h>
@@ -155,6 +158,65 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
 
 }
 
+std::shared_ptr<arrow::RecordBatch> RowsToBatch(
+    const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+    const std::set<std::string>& notNullColumns,
+    bool enableValidation,
+    TString& errorMessage)
+{
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
+    batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+    const auto startStatus = batchBuilder.Start(ydbSchema);
+    if (!startStatus.ok()) {
+        errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
+        return {};
+    }
+
+    for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+        const auto& key = rows[rowIdx].first;
+        const auto& valueSerialized = rows[rowIdx].second;
+
+        TSerializedCellVec value;
+        if (!TSerializedCellVec::TryParse(valueSerialized, value)) {
+            errorMessage = "Cannot parse serialized cell vec for value";
+            return {};
+        }
+
+        const auto keyCells = key.GetCells();
+        const auto valueCells = value.GetCells();
+
+        if (enableValidation) {
+            if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
+                errorMessage = TStringBuilder()
+                    << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
+                    << " (expected " << ydbSchema.size() << ")";
+                return {};
+            }
+
+            for (size_t i = 0; i < keyCells.size(); ++i) {
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+            for (size_t i = 0; i < valueCells.size(); ++i) {
+                const size_t col = keyCells.size() + i;
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+        }
+
+        batchBuilder.AddRow(keyCells, valueCells);
+    }
+
+    return batchBuilder.FlushBatch(false);
+}
+
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
     Ydb::Table::BulkUpsertResponse>;
 
@@ -174,7 +236,10 @@ class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::T
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
-            GetUserSID(request),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
@@ -298,29 +363,8 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(*Rows, errorMessage);
+        Batch = NGRpcService::RowsToBatch(*Rows, YdbSchema, NotNullColumns, IsBulkUpsertValidationEnabled(), errorMessage);
         return Batch.get();
-    }
-
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        const auto startStatus = batchBuilder.Start(YdbSchema);
-        if (!startStatus.ok()) {
-            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
-            return {};
-        }
-
-        for (const auto& kv : rows) {
-            const TSerializedCellVec& key = kv.first;
-            const TSerializedCellVec value(kv.second);
-
-            batchBuilder.AddRow(key.GetCells(), value.GetCells());
-        }
-
-        return batchBuilder.FlushBatch(false);
     }
 
 private:
@@ -332,8 +376,11 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(), 
-            GetUserSID(request),
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
@@ -526,6 +573,65 @@ private:
                 }
 
                 break;
+            }
+        }
+
+        return ValidateInputBatch(errorMessage);
+    }
+
+    bool ValidateInputBatch(TString& errorMessage) {
+        return ValidateNotNullColumns(errorMessage) &&
+            ValidateUtf8(errorMessage);
+    }
+
+    bool ValidateNotNullColumns(TString& errorMessage) {
+        if (!Batch || NotNullColumns.empty()) {
+            return true;
+        }
+
+        for (const std::string& columnName : NotNullColumns) {
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing not null column: " + TString(columnName);
+                return false;
+            }
+
+            if (column->null_count() > 0) {
+                errorMessage = "Received NULL value for not null column: " + TString(columnName);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ValidateUtf8(TString& errorMessage) {
+        if (!Batch) {
+            return true;
+        }
+
+        for (const auto& [columnName, columnType] : YdbSchema) {
+            if (columnType.GetTypeId() != NScheme::NTypeIds::Utf8) {
+                continue;
+            }
+
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing Utf8 column: " + columnName;
+                return false;
+            }
+
+            if (column->type_id() != arrow::Type::STRING) {
+                errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
+                    column->type()->ToString().c_str(), columnName.c_str());
+                return false;
+            }
+
+            const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
+            arrow::Status validationStatus = typedColumn.ValidateUTF8();
+            if (!validationStatus.ok()) {
+                errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
+                return false;
             }
         }
 

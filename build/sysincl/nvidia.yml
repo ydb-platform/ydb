@@ -36,13 +36,16 @@
   - cudaProfiler.h
   - cudaTypedefs.h
   - cuda_bf16.h
+  - cuda_bf16.hpp
   - cuda_fp16.h
+  - cuda_fp16.hpp
   - cuda_fp4.h
   - cuda_fp6.h
   - cuda_fp8.h
   - __pstl_algorithm
   - cuda_gl_interop.h
   - cuda_occupancy.h
+  - cuda_pipeline_primitives.h
   - cuda_profiler_api.h
   - cuda_runtime.h:           build/internal/platform/cuda/cuda_runtime_include.h
   - cuda_runtime_api.h
@@ -71,6 +74,7 @@
   - npp.h
   - nppdefs.h
   - nppi.h
+  - nppi_filtering_functions.h
   - npps.h
   - nv/target
   - nvToolsExt.h

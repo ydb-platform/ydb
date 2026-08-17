@@ -65,6 +65,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 requestType,                                                           \
                 YDB_API_DEFAULT_COUNTER_BLOCK(table, methodName),                      \
                 auditMode,                                                             \
+                EEmptyDatabaseMode::EmptyDatabaseForbidden,                            \
                 COMMON,                                                                \
                 ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                    \
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
@@ -91,6 +92,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 requestType,                                                                                                  \
                 YDB_API_DEFAULT_COUNTER_BLOCK(table, methodName),                                                             \
                 auditMode,                                                                                                    \
+                EEmptyDatabaseMode::EmptyDatabaseForbidden,                                                                   \
                 COMMON,                                                                                                       \
                 ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                                                         \
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                                                             \

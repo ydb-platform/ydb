@@ -1,22 +1,24 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
-#include <ydb/library/conclusion/status.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/status.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NOlap {
 
 class TColumnDefaultScalarValue {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, Value);
+
 public:
     TColumnDefaultScalarValue() = default;
 
     TColumnDefaultScalarValue(const std::shared_ptr<arrow::Scalar>& val)
         : Value(val)
     {
-
     }
 
     TString DebugString() const;
@@ -37,4 +39,4 @@ public:
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
 };
 
-}
+}   // namespace NKikimr::NOlap

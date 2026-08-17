@@ -73,11 +73,15 @@ private:
         }
     }
 
-    void HandlePoisonPill(const TEvents::TEvPoisonPill::TPtr& ev,
-                          const TActorContext& ctx)
+    void HandlePoisonPill(
+        const TEvents::TEvPoisonPill::TPtr& ev,
+        const TActorContext& ctx)
     {
-        ctx.Send(ev->Sender, std::make_unique<TEvents::TEvPoisonTaken>(), 0,
-                 ev->Cookie);
+        ctx.Send(
+            ev->Sender,
+            std::make_unique<TEvents::TEvPoisonTaken>(),
+            0,
+            ev->Cookie);
     }
 };
 
@@ -115,8 +119,9 @@ private:
         }
     }
 
-    void HandleBootstrap(const TEvents::TEvBootstrap::TPtr& ev,
-                         const TActorContext& ctx)
+    void HandleBootstrap(
+        const TEvents::TEvBootstrap::TPtr& ev,
+        const TActorContext& ctx)
     {
         Y_UNUSED(ev);
 
@@ -129,8 +134,9 @@ private:
 
         // Give ownership for long time.
         for (ui32 i = 0; i < ChildCount; ++i) {
-            PoisonPillHelper.TakeOwnership(ctx,
-                                           ctx.Register(new TChildActor()));
+            PoisonPillHelper.TakeOwnership(
+                ctx,
+                ctx.Register(new TChildActor()));
         }
     }
 };

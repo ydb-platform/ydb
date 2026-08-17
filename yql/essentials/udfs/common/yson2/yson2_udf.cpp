@@ -8,11 +8,14 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 
 #include <library/cpp/yson_pull/exceptions.h>
 
 #include <util/string/split.h>
 #include <util/generic/overloaded.h>
+
+#include <utility>
 
 using namespace NYql::NUdf;
 using namespace NYql::NDom;
@@ -234,14 +237,14 @@ TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valu
                         values.reserve(size);
                         for (ui32 i = 0U; i < size; ++i) {
                             if (auto converted = Converter(elements[i], valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     } else {
                         const auto it = x.GetListIterator();
                         for (TUnboxedValue v; it.Next(v);) {
                             if (auto converted = Converter(v.Release(), valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     }
@@ -285,7 +288,7 @@ TUnboxedValuePod ConvertToDictImpl(TUnboxedValuePod x, const IValueBuilder* valu
                     const auto it = x.GetDictIterator();
                     for (TUnboxedValue key, payload; it.NextPair(key, payload);) {
                         if (auto converted = Converter(payload, valueBuilder, pos)) {
-                            pairs.emplace_back(std::move(key), std::move(converted));
+                            pairs.emplace_back(std::move(key), converted);
                         }
                     }
                     if (pairs.empty()) {
@@ -789,6 +792,16 @@ SIMPLE_STRICT_UDF(TIsString, bool(TAutoMap<TNodeResource>)) {
     return IsTypeImpl<ENodeType::String>(*args);
 }
 
+SIMPLE_UDF_OPTIONS(TIsUtf8, bool(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonUtf8.MinLangVer);) {
+    Y_UNUSED(valueBuilder);
+    auto x = *args;
+    if (IsNodeType<ENodeType::Attr>(x)) {
+        x = x.GetVariantItem().Release();
+    }
+
+    return TUnboxedValuePod(IsUtf8Node(x));
+}
+
 SIMPLE_STRICT_UDF(TIsInt64, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Int64>(*args);
@@ -838,7 +851,7 @@ namespace {
 
 class TBase: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TBase(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
         : Pos_(pos)
@@ -940,6 +953,12 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[];[[ResourceType;Yson2.Node]];[[[UniversalType]]]]}]])");
+        return Config;
+    }
+
     TFrom(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
         : TBase(pos, typeHelper, shape)
     {
@@ -1018,6 +1037,12 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[1u];[[UniversalType]];[[[ResourceType;Yson2.Node];1u];[[OptionalType;[ResourceType;Yson2.Options]]]]]}]])");
+        return Config;
+    }
+
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
             const auto optionsType = builder.Optional()->Item(builder.Resource(OptionsResourceName)).Build();
@@ -1079,7 +1104,7 @@ public:
 template <typename TYJson, bool DecodeUtf8 = false>
 class TParse: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
 private:
     const TSourcePosition Pos_;
@@ -1095,6 +1120,8 @@ public:
     }
 
     static const TStringRef& Name();
+
+    static const TStringRef& BuildPolyArgs();
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
@@ -1186,7 +1213,7 @@ TUnboxedValue TParse<TJson, false>::Run(const IValueBuilder* valueBuilder, const
 
 template <>
 TUnboxedValue TParse<TJson, true>::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const try {
-    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, true);
+    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, /*decodeUtf8=*/true);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
         UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
@@ -1210,6 +1237,45 @@ template <>
 const TStringRef& TParse<TJson, true>::Name() {
     static auto Name = TStringRef::Of("ParseJsonDecodeUtf8");
     return Name;
+}
+
+template <>
+const TStringRef& TParse<TYson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Yson]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Yson]]}
+         ]};{args=[[DataType;Yson]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, true>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
 }
 
 class TIterate: public TBoxedValue {
@@ -1337,7 +1403,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1391,7 +1458,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1447,8 +1515,8 @@ class TIterate: public TBoxedValue {
 
     class TListValue: public TManagedBoxedValue {
     public:
-        TListValue(const TUnboxedValue& root, const TFields& fields, const IValueBuilder* valueBuilder)
-            : Root_(root)
+        TListValue(TUnboxedValue root, const TFields& fields, const IValueBuilder* valueBuilder)
+            : Root_(std::move(root))
             , Fields_(fields)
             , ValueBuilder_(valueBuilder)
         {
@@ -1543,7 +1611,7 @@ public:
         }
 
         builder.IsStrict();
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));
+        builder.SetMinLangVer(NYql::NFeature::YsonIterate.MinLangVer);
         return true;
     }
 
@@ -1551,123 +1619,79 @@ private:
     const TFields Fields_;
 };
 
-template <ENodeType NodeType, bool IsStrict>
-TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<NodeType>(value)) {
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::List>(value)) {
-        if (!value.IsBoxed()) {
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::Dict>(value)) {
-        if (!value.IsBoxed()) {
-            // it implements empty dict protocol too
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Bool, true>(args[0], "boolean");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Bool, false>(args[0], "boolean");
 }
 
-SIMPLE_UDF_OPTIONS(TAsInt64, i64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsInt64, i64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Int64, true>(args[0], "int64");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Int64, false>(args[0], "int64");
 }
 
-SIMPLE_UDF_OPTIONS(TAsUint64, ui64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsUint64, ui64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Uint64, true>(args[0], "uint64");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Uint64, false>(args[0], "uint64");
 }
 
-SIMPLE_UDF_OPTIONS(TAsDouble, double(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsDouble, double(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Double, true>(args[0], "double");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Double, false>(args[0], "double");
 }
 
-SIMPLE_UDF_OPTIONS(TAsString, char*(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsString, char*(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
-    return AsScalar<ENodeType::String, true>(args[0], "string");
+    return AsString<true>(args[0]);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     Y_UNUSED(valueBuilder);
-    return AsScalar<ENodeType::String, false>(args[0], "string");
+    return AsString<false>(args[0]);
 }
 
-SIMPLE_UDF_OPTIONS(TAsList, TListType<TNodeResource>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsUtf8, TUtf8(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonUtf8.MinLangVer);) {
+    Y_UNUSED(valueBuilder);
+    return AsUtf8<true>(args[0]);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUtf8, TOptional<TUtf8>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonUtf8.MinLangVer);) {
+    Y_UNUSED(valueBuilder);
+    return AsUtf8<false>(args[0]);
+}
+
+SIMPLE_UDF_OPTIONS(TAsList, TListType<TNodeResource>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     return AsList<true>(args[0], valueBuilder);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     return AsList<false>(args[0], valueBuilder);
 }
 
-SIMPLE_UDF_OPTIONS(TAsDict, TDictType(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TAsDict, TDictType(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     return AsDict<true>(args[0], valueBuilder);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::NFeature::YsonConvert.MinLangVer);) {
     return AsDict<false>(args[0], valueBuilder);
 }
 
@@ -1690,6 +1714,7 @@ using TMutNodeMap = THashMap<TUnboxedValue, TMutNode, TStringHash, TStringEquals
 
 struct TMutNode {
     std::variant<TUnboxedValue, TMutNodeList, TMutNodeMap> Storage;
+    TVector<TPair, TStdAllocatorForUdf<TPair>> Attributes;
 
     bool IsInvalidOrDeleted() const {
         auto valuePtr = std::get_if<TUnboxedValue>(&Storage);
@@ -1752,7 +1777,7 @@ struct TMutNode {
 
     TUnboxedValue Freeze(const IValueBuilder* valueBuilder) const {
         // clang-format off
-        return std::visit(TOverloaded{
+        auto ret = std::visit(TOverloaded{
             [](const TUnboxedValue& value) {
                 return value;
             }, [valueBuilder](const TMutNodeList& value) {
@@ -1761,11 +1786,22 @@ struct TMutNode {
                 return FreezeDict(value, valueBuilder);
             }}, Storage);
         // clang-format on
+        if (!Attributes.empty()) {
+            return SetNodeType<ENodeType::Attr>(TUnboxedValuePod(new TAttrNode(std::move(ret), Attributes.data(), Attributes.size())));
+        } else {
+            return ret;
+        }
     }
 
     void MeltDict() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::Dict) {
             throw yexception() << "Expected dict node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1773,7 +1809,8 @@ struct TMutNode {
         Storage = TMutNodeMap();
         auto& map = std::get<TMutNodeMap>(Storage);
         map.reserve(originalValue.GetDictLength());
-        TUnboxedValue k, v;
+        TUnboxedValue k;
+        TUnboxedValue v;
         for (auto it = originalValue.GetDictIterator(); it.NextPair(k, v);) {
             map.emplace(k, v);
         }
@@ -1782,6 +1819,12 @@ struct TMutNode {
     void MeltList() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::List) {
             throw yexception() << "Expected list node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1799,6 +1842,14 @@ struct TMutNode {
         list.reserve(len);
         for (ui64 i = 0; i < len; ++i) {
             list.emplace_back(elements[i]);
+        }
+    }
+
+    void SaveAttributes(const TUnboxedValue& attrNode) {
+        Attributes.reserve(attrNode.GetDictLength());
+        auto it = attrNode.GetDictIterator();
+        for (TUnboxedValue x, y; it.NextPair(x, y);) {
+            Attributes.emplace_back(std::move(x), std::move(y));
         }
     }
 };
@@ -1863,25 +1914,21 @@ public:
         Stack_.pop_back();
     }
 
-    void Down(const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> Down(const TUnboxedValue& keyValue, bool createIfNotExists) {
         auto key = keyValue.AsStringRef();
         if (key.empty()) {
             throw yexception() << "Empty key is not allowed";
         }
 
         char c = key.Data()[0];
-        if (c == '/') {
-            throw yexception() << "Key should be relative";
-        }
-
         if (c == '<' || c == '=' || c == '>') {
-            DownList(key, keyValue, createIfNotExists);
+            return DownList(key, keyValue, createIfNotExists);
         } else {
-            DownDict(key, keyValue, createIfNotExists);
+            return DownDict(key, keyValue, createIfNotExists);
         }
     }
 
-    void DownDict(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> DownDict(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
         TString unescaped;
         if (key.Contains('\\')) {
             unescaped = UnescapeC(key);
@@ -1890,11 +1937,11 @@ public:
 
         auto& node = *Stack_.back().second;
         if (node.IsInvalidOrDeleted() && !createIfNotExists) {
-            throw yexception() << "Current node is invalid or deleted";
+            return "Current node is invalid or deleted";
         }
 
         if (std::holds_alternative<TMutNodeList>(node.Storage)) {
-            throw yexception() << "Can't traverse list by key";
+            return "Can't traverse list by key";
         }
 
         if (!std::holds_alternative<TMutNodeMap>(node.Storage)) {
@@ -1916,21 +1963,23 @@ public:
         } else {
             auto iter = map.find(keyValue);
             if (iter == map.cend()) {
-                throw yexception() << "Key " << key << " not exists";
+                return TStringBuilder() << "Key " << key << " not exists";
             }
 
             Stack_.push_back({keyValue, &iter->second});
         }
+
+        return Nothing();
     }
 
-    void DownList(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+    TMaybe<TString> DownList(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
         auto& node = *Stack_.back().second;
         if (node.IsInvalidOrDeleted() && !createIfNotExists) {
-            throw yexception() << "Current node is invalid or deleted";
+            return "Current node is invalid or deleted";
         }
 
         if (std::holds_alternative<TMutNodeMap>(node.Storage)) {
-            throw yexception() << "Can't traverse dict by index";
+            return "Can't traverse dict by index";
         }
 
         if (!std::holds_alternative<TMutNodeList>(node.Storage)) {
@@ -1945,7 +1994,7 @@ public:
 
         auto compare = key.Data()[0];
         if (compare != '=' && !createIfNotExists) {
-            throw yexception() << "List resize is not allowed";
+            return "List resize is not allowed";
         }
 
         auto indexStr = key.substr(1);
@@ -1963,14 +2012,14 @@ public:
         if (compare == '=') {
             // traverse to the exact index
             if (effectiveIndex >= list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             Stack_.push_back({keyValue, &list[effectiveIndex]});
         } else if (compare == '<') {
             // insert before
             if (effectiveIndex > 0 && effectiveIndex > list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             list.insert(list.begin() + effectiveIndex, TMutNode{.Storage = TUnboxedValuePod::Invalid()});
@@ -1978,7 +2027,7 @@ public:
         } else {
             // insert after
             if (effectiveIndex > 0 && effectiveIndex >= list.size()) {
-                throw yexception() << "Index is bigger than list size";
+                return "Index is bigger than list size";
             }
 
             if (effectiveIndex + 1 < list.size()) {
@@ -1989,6 +2038,8 @@ public:
                 Stack_.push_back({keyValue, &list.back()});
             }
         }
+
+        return Nothing();
     }
 
     bool Exists() const {
@@ -2009,6 +2060,12 @@ public:
         Init();
     }
 
+    explicit TMutNodeBuilder(TUnboxedValuePod value)
+        : TMutNodeBuilder()
+    {
+        Upsert(value);
+    }
+
 private:
     void Init() {
         Stack_.push_back({TUnboxedValue(TUnboxedValuePod::Embedded("")), &Root_});
@@ -2025,84 +2082,86 @@ private:
     TVector<TPathSegment, TStdAllocatorForUdf<TPathSegment>> Stack_;
 };
 
-SIMPLE_UDF_OPTIONS(TMutCreate, TMutNodeLinear(), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutCreate, TMutNodeLinear(), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(args);
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(new TMutNodeBuilder());
 }
 
-SIMPLE_UDF_OPTIONS(TMutFreeze, TNodeResource(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutate, TMutNodeLinear(TNodeResource), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
+    Y_UNUSED(valueBuilder);
+    return TUnboxedValuePod(new TMutNodeBuilder(args[0]));
+}
+
+SIMPLE_UDF_OPTIONS(TMutFreeze, TNodeResource(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     return TMutNodeBuilder::From(args[0]).Freeze(valueBuilder);
 }
 
-SIMPLE_UDF_OPTIONS(TMutUpsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutUpsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Upsert(args[1]);
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutInsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutInsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Insert(args[1]);
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutUpdate, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutUpdate, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Update(args[1]);
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutRemove, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutRemove, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Remove();
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutRewind, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutRewind, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Rewind();
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutUp, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutUp, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
     TMutNodeBuilder::From(args[0]).Up();
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
-    TMutNodeBuilder::From(args[0]).Down(args[1], true);
+    TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/true);
     return args[0];
 }
 
-SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
-    TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
+    if (err) {
+        throw yexception() << *err;
+    }
+
     return args[0];
 }
 
 using TMutTryDownReturn = TTuple<TMutNodeLinear, bool>;
-SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     Y_UNUSED(valueBuilder);
-    bool success = false;
-    try {
-        TMutNodeBuilder::From(args[0]).Down(args[1], false);
-        success = true;
-    } catch (const yexception&)
-    {
-    }
-
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
     items[0] = args[0];
-    items[1] = TUnboxedValuePod(success);
+    items[1] = TUnboxedValuePod(!err.Defined());
     return ret;
 }
 
 using TMutExistsReturn = TTuple<TMutNodeLinear, bool>;
-SIMPLE_UDF_OPTIONS(TMutExists, TMutExistsReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutExists, TMutExistsReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     bool exists = TMutNodeBuilder::From(args[0]).Exists();
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
@@ -2112,7 +2171,7 @@ SIMPLE_UDF_OPTIONS(TMutExists, TMutExistsReturn(TMutNodeLinear), builder.SetMinL
 }
 
 using TMutViewReturn = TTuple<TMutNodeLinear, TOptional<TNodeResource>>;
-SIMPLE_UDF_OPTIONS(TMutView, TMutViewReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_UDF_OPTIONS(TMutView, TMutViewReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::NFeature::YsonMut.MinLangVer);) {
     auto view = TMutNodeBuilder::From(args[0]).View(valueBuilder);
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
@@ -2171,6 +2230,7 @@ SIMPLE_MODULE(TYson2Module,
               TSerializeJson,
               TWithAttributes,
               TIsString,
+              TIsUtf8,
               TIsInt64,
               TIsUint64,
               TIsBool,
@@ -2193,11 +2253,14 @@ SIMPLE_MODULE(TYson2Module,
               TTryAsDouble,
               TAsString,
               TTryAsString,
+              TAsUtf8,
+              TTryAsUtf8,
               TAsList,
               TTryAsList,
               TAsDict,
               TTryAsDict,
               TMutCreate,
+              TMutate,
               TMutFreeze,
               TMutUpsert,
               TMutInsert,

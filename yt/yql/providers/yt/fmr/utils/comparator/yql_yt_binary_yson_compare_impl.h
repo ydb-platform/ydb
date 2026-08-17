@@ -1,35 +1,35 @@
 #pragma once
 
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/zigzag.h>
 
 #include <util/generic/yexception.h>
+#include <util/generic/utility.h>
 #include <util/string/cast.h>
 
 
 #include <cstring>
+#include <variant>
 
 namespace NYql::NFmr {
 
-struct TColumnOffsetRange {
-    ui64 StartOffset = 0;
-    ui64 EndOffset = 0;
+using TSmallKeyValue = std::variant<std::monostate, bool, i64, ui64, double>;
 
-    bool IsValid() const {
-        return EndOffset > StartOffset;
-    }
+TMaybe<TSmallKeyValue> TryExtractSmallYsonValue(TStringBuf ysonData);
+
+struct TExtractedKey {
+    TMaybe<TSmallKeyValue> Small;
+    TStringBuf RawYson;
 };
+
+int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs);
 
 enum class ESortOrder {
     Ascending = 0,
     Descending = 1
 };
-
-// Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
-using TRowIndexMarkup = std::vector<TColumnOffsetRange>;
-
-
 
 struct TYsonReader {
     TStringBuf Data;
@@ -66,12 +66,16 @@ Y_FORCE_INLINE TStringBuf SliceRange(TStringBuf blob, const TColumnOffsetRange& 
     return TStringBuf(blob.data() + r.StartOffset, r.EndOffset - r.StartOffset);
 }
 
+// Compares two markup rows column by column. numColumns limits the comparison to the first N key
+// columns (a prefix); the default compares all key columns. Both rows must be markups of a key that
+// starts with those columns (their offset ranges and sort orders share the same leading prefix).
 int CompareKeyRowsAcrossYsonBlocks(
     TStringBuf lhsBlob,
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlob,
     const TRowIndexMarkup& rhsRow,
-    const std::vector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders,
+    ui64 numColumns = Max<ui64>()
 );
 
 } // namespace NYql::NFmr

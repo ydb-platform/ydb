@@ -784,9 +784,24 @@ public:
         return ParseStringLikeArray<arrow20::StringArray>();
     }
 
+    arrow20::Status Visit(const arrow20::LargeStringType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::LargeStringArray>();
+    }
+
     arrow20::Status Visit(const arrow20::BinaryType& /*type*/) override
     {
         return ParseStringLikeArray<arrow20::BinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::LargeBinaryType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::FixedSizeBinaryType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean type.
@@ -1050,27 +1065,19 @@ private:
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        auto tzIdArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
         for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
                 auto timestamp = timestampArray->Value(rowIndex);
+                auto tzId = tzIdArray->Value(rowIndex);
 
-                std::string_view tzName;
-                if (array->field(1)->type_id() == arrow20::Type::BINARY) {
-                    auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
-                    auto tzValue = tzNameArray->Value(rowIndex);
-                    tzName = std::string_view(tzValue.data(), tzValue.size());
-                } else {
-                    auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
-                    tzName = GetTzName(tzIndexArray->Value(rowIndex));
-                }
-                int tzStringSize = tzName.size() + sizeof(timestamp);
-
+                constexpr int tzStringSize = GetTzStringSize<decltype(timestamp)>();
                 char* buffer = BufferForStringLikeValues_->Preallocate(tzStringSize);
 
                 (*RowValues_)[rowIndex] = MakeUnversionedStringValue(
-                    MakeTzString(timestamp, tzName, buffer, tzStringSize),
+                    MakeTzString(timestamp, tzId, buffer, tzStringSize),
                     ColumnId_);
                 BufferForStringLikeValues_->Advance(tzStringSize);
             }
@@ -1259,10 +1266,28 @@ public:
         return ParseStringLikeArray<arrow20::StringArray>();
     }
 
+    arrow20::Status Visit(const arrow20::LargeStringType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::LargeStringArray>();
+    }
+
     arrow20::Status Visit(const arrow20::BinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseStringLikeArray<arrow20::BinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::LargeBinaryType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::FixedSizeBinaryType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean types.
@@ -1506,21 +1531,14 @@ private:
     {
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        auto tzIdArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             auto timestamp = timestampArray->Value(RowIndex_);
-            std::string_view tzName;
-            if (array->field(1)->type_id() == arrow20::Type::BINARY) {
-                auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
-                auto tzValue = tzNameArray->Value(RowIndex_);
-                tzName = std::string_view(tzValue.data(), tzValue.size());
-            } else {
-                auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
-                tzName = GetTzName(tzIndexArray->Value(RowIndex_));
-            }
+            auto tzId = tzIdArray->Value(RowIndex_);
 
-            Writer_->WriteBinaryString(MakeTzString(timestamp, tzName));
+            Writer_->WriteBinaryString(MakeTzString(timestamp, tzId));
         }
         return arrow20::Status::OK();
     }
@@ -1544,8 +1562,8 @@ private:
                     ThrowOnError(listValue->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow type \"list\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
                 Writer_->WriteItemSeparator();
             }
@@ -1587,8 +1605,8 @@ private:
                     ThrowOnError(keyList->type()->Accept(&keyVisitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow key field of type \"map\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1598,8 +1616,8 @@ private:
                     ThrowOnError(valueList->type()->Accept(&valueVisitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow value field type \"map\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1636,8 +1654,8 @@ private:
             } else {
                 if (std::ssize(structFields) != array->num_fields()) {
                     THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
-                        << TErrorAttribute("arrow_field_count", array->num_fields())
-                        << TErrorAttribute("yt_field_count", std::ssize(structFields));
+                        .With("arrow_field_count", array->num_fields())
+                        .With("yt_field_count", std::ssize(structFields));
                 }
             }
 
@@ -1652,7 +1670,7 @@ private:
                     ThrowOnError(arrowField->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow struct field %Qv", field.Name)
-                        << ex;
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1677,7 +1695,7 @@ private:
             }
             if (array->num_fields() != 1) {
                 THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
-                    << TErrorAttribute("arrow_field_count", array->num_fields());
+                    .With("arrow_field_count", array->num_fields());
             }
 
             const auto& arrowField = array->field(0);
@@ -1686,7 +1704,7 @@ private:
                 ThrowOnError(arrowField->type()->Accept(&visitor));
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Failed to parse arrow struct field for the YT \"optional\" type")
-                    << ex;
+                    .With(ex);
             }
 
             Writer_->WriteItemSeparator();
@@ -1870,13 +1888,22 @@ void PrepareArray(
     const std::shared_ptr<arrow20::Array>& column,
     const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
-    int columnId)
+    int columnId,
+    const std::optional<i64>& maxAllocationBytes)
 {
     if (column->type()->id() == arrow20::Type::DICTIONARY) {
         auto dictionaryArrayColumn = std::static_pointer_cast<arrow20::DictionaryArray>(column);
         auto dictionary = dictionaryArrayColumn->dictionary();
-        TUnversionedRowValues dictionaryValues(dictionary->length());
-        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, schemaField, dictionaryValues, columnId);
+        auto dictionaryLength = dictionary->length();
+        if (maxAllocationBytes &&
+            static_cast<ui64>(dictionaryLength) * sizeof(TUnversionedValue) > static_cast<ui64>(*maxAllocationBytes))
+        {
+            THROW_ERROR_EXCEPTION("Arrow dictionary is too large: %v entries would allocate more than %v bytes",
+                dictionaryLength,
+                *maxAllocationBytes);
+        }
+        TUnversionedRowValues dictionaryValues(dictionaryLength);
+        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, schemaField, dictionaryValues, columnId, maxAllocationBytes);
 
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (dictionaryArrayColumn->IsNull(offset)) {
@@ -1938,8 +1965,9 @@ class TListener
     : public arrow20::ipc::Listener
 {
 public:
-    explicit TListener(IValueConsumer* valueConsumer)
+    explicit TListener(IValueConsumer* valueConsumer, TArrowParserOptions options)
         : Consumer_(valueConsumer)
+        , Options_(std::move(options))
     { }
 
     arrow20::Status OnEOS() override
@@ -1963,6 +1991,21 @@ public:
 
         auto numColumns = batch->num_columns();
         auto numRows = batch->num_rows();
+
+        if (Options_.MaxAllocationBytes) {
+            // Guard against crafted Arrow IPC streams that claim a huge number of rows with
+            // minimal body data (e.g. NullType columns have zero-size bodies).
+            // Note: this is distinct from TLimitingArrowMemoryPool — that pool limits Arrow's
+            // own internal allocations, while rowsValues below is our own allocation via C++ new,
+            // which does not go through Arrow's memory pool.
+            if (static_cast<ui64>(numRows) * static_cast<ui64>(std::max(numColumns, 1)) * sizeof(TUnversionedValue) > static_cast<ui64>(*Options_.MaxAllocationBytes)) {
+                THROW_ERROR_EXCEPTION("Arrow record batch is too large: %v columns x %v rows would allocate more than %v bytes",
+                    numColumns,
+                    numRows,
+                    *Options_.MaxAllocationBytes);
+            }
+        }
+
         std::vector<TUnversionedRowValues> rowsValues(numColumns, TUnversionedRowValues(numRows));
 
         for (int columnIndex = 0; columnIndex < numColumns; ++columnIndex) {
@@ -1984,10 +2027,11 @@ public:
                     column,
                     batch->schema()->field(columnIndex),
                     rowsValues[columnIndex],
-                    columnId);
+                    columnId,
+                    Options_.MaxAllocationBytes);
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Failed to parse column %Qv", columnName)
-                    << ex;
+                    .With(ex);
             }
         }
 
@@ -2013,6 +2057,7 @@ public:
 
 private:
     IValueConsumer* const Consumer_;
+    const TArrowParserOptions Options_;
 
     EListenerState CurrentState_ = EListenerState::InProgress;
 };
@@ -2029,13 +2074,78 @@ std::shared_ptr<arrow20::Buffer> MakeBuffer(const char* data, i64 size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// A crafted Arrow IPC stream can trigger huge internal Arrow allocations (e.g. by declaring
+// an enormous uncompressed buffer size). This pool intercepts Arrow allocations and returns
+// OutOfMemory for oversized requests, which ThrowOnError then converts to a C++ exception.
+// Used in fuzz tests to prevent process kills from libFuzzer's RSS monitor.
+class TLimitingArrowMemoryPool
+    : public arrow20::MemoryPool
+{
+public:
+    explicit TLimitingArrowMemoryPool(int64_t maxSingleAllocationBytes)
+        : MaxSingleAllocationBytes_(maxSingleAllocationBytes)
+    { }
+
+    arrow20::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override
+    {
+        if (size > MaxSingleAllocationBytes_) {
+            return arrow20::Status::OutOfMemory(
+                "Arrow allocation of ", size, " bytes exceeds the limit of ",
+                MaxSingleAllocationBytes_, " bytes");
+        }
+        return arrow20::default_memory_pool()->Allocate(size, alignment, out);
+    }
+
+    arrow20::Status Reallocate(int64_t oldSize, int64_t newSize, int64_t alignment, uint8_t** ptr) override
+    {
+        if (newSize > MaxSingleAllocationBytes_) {
+            return arrow20::Status::OutOfMemory(
+                "Arrow reallocation to ", newSize, " bytes exceeds the limit of ",
+                MaxSingleAllocationBytes_, " bytes");
+        }
+        return arrow20::default_memory_pool()->Reallocate(oldSize, newSize, alignment, ptr);
+    }
+
+    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override
+    {
+        arrow20::default_memory_pool()->Free(buffer, size, alignment);
+    }
+
+    int64_t bytes_allocated() const override
+    {
+        return arrow20::default_memory_pool()->bytes_allocated();
+    }
+
+    int64_t total_bytes_allocated() const override
+    {
+        return arrow20::default_memory_pool()->total_bytes_allocated();
+    }
+
+    int64_t num_allocations() const override
+    {
+        return arrow20::default_memory_pool()->num_allocations();
+    }
+
+    std::string backend_name() const override
+    {
+        return arrow20::default_memory_pool()->backend_name();
+    }
+
+private:
+    const int64_t MaxSingleAllocationBytes_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArrowParser
     : public IParser
 {
 public:
-    explicit TArrowParser(IValueConsumer* valueConsumer)
-        : Listener_(std::make_shared<TListener>(valueConsumer))
-        , Decoder_(std::make_shared<arrow20::ipc::StreamDecoder>(Listener_))
+    explicit TArrowParser(IValueConsumer* valueConsumer, TArrowParserOptions options = {})
+        : Listener_(std::make_shared<TListener>(valueConsumer, options))
+        , Options_(std::move(options))
+        , MemoryPool_(Options_.MaxAllocationBytes.value_or(std::numeric_limits<int64_t>::max()))
+        , Decoder_(MakeDecoder())
     { }
 
     void Read(TStringBuf data) override
@@ -2044,6 +2154,13 @@ public:
         const char* currentPtr = data.data();
         while (restSize > 0) {
             i64 nextRequiredSize = Decoder_->next_required_size();
+            // Normally this cannot happen: next_required_size() is 0 only in EOS state,
+            // but after EOS we reset the decoder above, so it starts fresh with
+            // next_required_size() == sizeof(int32_t). Guard against infinite loop
+            // if Arrow ever returns 0 unexpectedly.
+            if (nextRequiredSize == 0) {
+                THROW_ERROR_EXCEPTION("Arrow stream decoder returned zero next_required_size");
+            }
             auto currentSize = std::min(nextRequiredSize, restSize);
 
             ThrowOnError(Decoder_->Consume(MakeBuffer(currentPtr, currentSize)));
@@ -2055,7 +2172,7 @@ public:
                     break;
 
                 case EListenerState::EOS:
-                    Decoder_ = std::make_shared<arrow20::ipc::StreamDecoder>(Listener_);
+                    Decoder_ = MakeDecoder();
                     Listener_->Reset();
                     break;
 
@@ -2074,14 +2191,31 @@ public:
 
     void Finish() override
     {
+        // TODO(dagorokhov): reject empty (0-byte) input (YT-28650)
         if (LastState_ == EListenerState::InProgress) {
             THROW_ERROR_EXCEPTION("Unexpected end of stream");
         }
     }
 
 private:
-    const std::shared_ptr<TListener> Listener_;
+    std::shared_ptr<arrow20::ipc::StreamDecoder> MakeDecoder()
+    {
+        arrow20::ipc::IpcReadOptions ipcOptions;
+        ipcOptions.memory_pool = &MemoryPool_;
+        if (Options_.MaxAllocationBytes) {
+            // Limit the number of variadic buffers per BinaryView column.
+            // A crafted IPC stream can declare a huge variadic_buffer_count, causing
+            // std::vector<shared_ptr<Buffer>>::resize() to allocate via operator new
+            // (not the memory pool). Cap at MaxAllocationBytes / sizeof(shared_ptr<Buffer>).
+            ipcOptions.max_variadic_buffer_count =
+                *Options_.MaxAllocationBytes / static_cast<int64_t>(sizeof(std::shared_ptr<arrow20::Buffer>));
+        }
+        return std::make_shared<arrow20::ipc::StreamDecoder>(Listener_, ipcOptions);
+    }
 
+    const std::shared_ptr<TListener> Listener_;
+    const TArrowParserOptions Options_;
+    TLimitingArrowMemoryPool MemoryPool_;
     std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
     EListenerState LastState_ = EListenerState::Empty;
 };
@@ -2090,9 +2224,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer)
+std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer, const TArrowParserOptions& options)
 {
-    return std::make_unique<TArrowParser>(consumer);
+    return std::make_unique<TArrowParser>(consumer, std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

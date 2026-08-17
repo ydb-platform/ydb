@@ -5,13 +5,14 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/sliding_window.h>
 
 #include <yt/yt/core/actions/signal.h>
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/compression/public.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>

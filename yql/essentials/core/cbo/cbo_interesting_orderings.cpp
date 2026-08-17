@@ -190,8 +190,8 @@ i64 TFDStorage::FindFDIdx(
     const TJoinColumn& consequentColumn,
     TFunctionalDependency::EType type,
     TTableAliasMap* tableAliases) {
-    auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, false, tableAliases);
-    auto convertedConsequents = ConvertColumnIntoIndexes({consequentColumn}, false, tableAliases);
+    auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, /*createIfNotExists=*/false, tableAliases);
+    auto convertedConsequents = ConvertColumnIntoIndexes({consequentColumn}, /*createIfNotExists=*/false, tableAliases);
 
     if (convertedAntecedent.empty() || convertedConsequents.empty()) {
         return -1;
@@ -246,8 +246,8 @@ std::size_t TFDStorage::AddFD(
     bool alwaysActive,
     TTableAliasMap* tableAliases) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {GetIdxByColumn(antecedentColumn, true, tableAliases)},
-        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
+        .AntecedentItems = {GetIdxByColumn(antecedentColumn, /*createIfNotExists=*/true, tableAliases)},
+        .ConsequentItem = GetIdxByColumn(consequentColumn, /*createIfNotExists=*/true, tableAliases),
         .Type = type,
         .AlwaysActive = alwaysActive};
 
@@ -260,7 +260,7 @@ std::size_t TFDStorage::AddConstant(
     TTableAliasMap* tableAliases) {
     auto fd = TFunctionalDependency{
         .AntecedentItems = {},
-        .ConsequentItem = GetIdxByColumn(constantColumn, true, tableAliases),
+        .ConsequentItem = GetIdxByColumn(constantColumn, /*createIfNotExists=*/true, tableAliases),
         .Type = TFunctionalDependency::EImplication,
         .AlwaysActive = alwaysActive};
 
@@ -273,8 +273,8 @@ std::size_t TFDStorage::AddImplication(
     bool alwaysActive,
     TTableAliasMap* tableAliases) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = ConvertColumnIntoIndexes(antecedentColumns, true, tableAliases),
-        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
+        .AntecedentItems = ConvertColumnIntoIndexes(antecedentColumns, /*createIfNotExists=*/true, tableAliases),
+        .ConsequentItem = GetIdxByColumn(consequentColumn, /*createIfNotExists=*/true, tableAliases),
         .Type = TFunctionalDependency::EImplication,
         .AlwaysActive = alwaysActive};
 
@@ -287,8 +287,8 @@ std::size_t TFDStorage::AddEquivalence(
     bool alwaysActive,
     TTableAliasMap* tableAliases) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {GetIdxByColumn(lhs, true, tableAliases)},
-        .ConsequentItem = GetIdxByColumn(rhs, true, tableAliases),
+        .AntecedentItems = {GetIdxByColumn(lhs, /*createIfNotExists=*/true, tableAliases)},
+        .ConsequentItem = GetIdxByColumn(rhs, /*createIfNotExists=*/true, tableAliases),
         .Type = TFunctionalDependency::EEquivalence,
         .AlwaysActive = alwaysActive};
 
@@ -300,7 +300,7 @@ i64 TFDStorage::FindInterestingOrderingIdx(
     const std::vector<TJoinColumn>& interestingOrdering,
     TOrdering::EType type,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, /*createIfNotExists=*/false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
@@ -362,27 +362,27 @@ void TFDStorage::ApplyNaturalOrderings() {
 std::size_t TFDStorage::FindSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, true, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, /*createIfNotExists=*/false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::FindShuffling(
     const TShuffling& shuffling,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, shuffling.IsNatural, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, /*createIfNotExists=*/false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::AddSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases) {
-    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, true, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, /*isNatural=*/true, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
     const TShuffling& shuffling,
     TTableAliasMap* tableAliases) {
-    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, shuffling.IsNatural, tableAliases);
+    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, /*isNatural=*/true, tableAliases);
 }
 
 std::size_t TFDStorage::AddInterestingOrdering(
@@ -395,7 +395,7 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, true, isNatural, tableAliases);
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, /*createIfNotExists=*/true, isNatural, tableAliases);
     if (items.Items.empty()) {
         return std::numeric_limits<std::size_t>::max();
     }
@@ -416,7 +416,17 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, false, tableAliases);
+    // At the time of writing this, only shuffles and sortings are supported,
+    // both of them are order sensitive, i.e. shuffle (A, B) != (B, A),
+    // the same is also true for sortings (A, B) != (B, A).
+
+    // It's not true, though, for groupings, where (A, B) does equal (B, A).
+    // If groupings are ever added to this enum, we will have to set
+    // isNatural=false for them (as opposed to isNatural=true for sortings and shuffles)
+    // to NOT account for relative order of columns inside the grouping.
+    Y_ENSURE(type == TOrdering::EType::EShuffle || type == TOrdering::EType::ESorting);
+
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, /*createIfNotExists=*/true, /*isNatural=*/true, tableAliases);
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);
@@ -691,7 +701,7 @@ TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(const std::vecto
 
     for (std::size_t fdIdx : fdIdxes) {
         if (FdMapping_[fdIdx] != -1) {
-            fdSet[FdMapping_[fdIdx]] = 1;
+            fdSet[FdMapping_[fdIdx]] = true;
         }
     }
 
@@ -835,8 +845,8 @@ bool TOrderingsStateMachine::TNFSM::TEdge::operator==(const TEdge& other) const 
 
 void TOrderingsStateMachine::TNFSM::AddEdge(std::size_t srcNodeIdx, std::size_t dstNodeIdx, i64 fdIdx) {
     auto newEdge = TNFSM::TEdge(srcNodeIdx, dstNodeIdx, fdIdx);
-    for (std::size_t i = 0; i < Edges_.size(); ++i) {
-        if (Edges_[i] == newEdge) {
+    for (const auto& edge : Edges_) {
+        if (edge == newEdge) {
             return;
         }
     }
@@ -1069,7 +1079,7 @@ void TOrderingsStateMachine::TDFSM::Build(
         for (std::size_t nfsmNodeIdx = 0; nfsmNodeIdx < nfsm.Nodes_.size(); ++nfsmNodeIdx) {
             if (nfsm.Nodes_[nfsmNodeIdx].Ordering == interestingOrderings[i]) {
                 auto nfsmNodes = CollectNodesWithEpsOrFdEdge(nfsm, {i}, fds);
-                InitStateByOrderingIdx_[i] = TInitState{AddNode(std::move(nfsmNodes)), interestingOrderings[i].Items.size()};
+                InitStateByOrderingIdx_[i] = TInitState{.StateIdx = AddNode(nfsmNodes), .ShuffleHashFuncArgsCount = interestingOrderings[i].Items.size()};
             }
         }
     }
@@ -1093,7 +1103,7 @@ void TOrderingsStateMachine::TDFSM::Build(
             }
             AddEdge(nodeIdx, dstNodeIdx, fdIdx);
 
-            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = 1;
+            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = true;
         }
     }
 
@@ -1153,20 +1163,20 @@ void TOrderingsStateMachine::TDFSM::Precompute(
         TransitionMatrix_[edge.SrcNodeIdx][edge.FdIdx] = edge.DstNodeIdx;
     }
 
-    for (std::size_t dfsmNodeIdx = 0; dfsmNodeIdx < Nodes_.size(); ++dfsmNodeIdx) {
-        for (std::size_t nfsmNodeIdx : Nodes_[dfsmNodeIdx].NFSMNodes) {
+    for (auto& node : Nodes_) {
+        for (std::size_t nfsmNodeIdx : node.NFSMNodes) {
             auto interestingOrderIdx = nfsm.Nodes_[nfsmNodeIdx].InterestingOrderingIdx;
             if (interestingOrderIdx == -1) {
                 continue;
             }
 
-            Nodes_[dfsmNodeIdx].InterestingOrderings[interestingOrderIdx] = 1;
+            node.InterestingOrderings[interestingOrderIdx] = true;
         }
     }
 
     for (auto& node : Nodes_) {
         for (auto& nfsmNodeIdx : node.NFSMNodes) {
-            node.NFSMNodesBitset[nfsmNodeIdx] = 1;
+            node.NFSMNodesBitset[nfsmNodeIdx] = true;
         }
     }
 }
@@ -1195,7 +1205,7 @@ std::vector<TFunctionalDependency> TOrderingsStateMachine::PruneFDs(
         }
 
         if (canLeadToInteresting && filteredFds.size() < MaxFDCount) {
-            filteredFds.push_back(std::move(fds[i]));
+            filteredFds.push_back(fds[i]);
             FdMapping_[i] = filteredFds.size() - 1;
         } else {
             FdMapping_[i] = -1;

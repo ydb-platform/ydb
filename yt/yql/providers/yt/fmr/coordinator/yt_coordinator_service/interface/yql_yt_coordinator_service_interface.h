@@ -9,6 +9,7 @@ struct TYtPartitionerSettings {
     ui64 MaxDataWeightPerPart = 0;
     ui64 MaxParts = 0;
     NYT::ETablePartitionMode PartitionMode = NYT::ETablePartitionMode::Unordered;
+    bool AdjustDataWeightPerPartition = false;
 };
 
 class IYtCoordinatorService: public TThrRefBase {

@@ -12,9 +12,9 @@
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -53,16 +53,31 @@ public:
             , Accessors(argsTypes, returnType, *PgBuilder)
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
-            , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider,
-                                                                     originalContext.CountersProvider, originalContext.LogProvider, originalContext.LangVer),
-                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool(), originalContext.NotConsumedLinear)
+            , Ctx(
+                  HolderFactory,
+                  &ValueBuilder, TComputationOptsFull(/*stats=*/nullptr,
+                                                      Alloc.Ref(),
+                                                      TypeEnv,
+                                                      *RandomProvider,
+                                                      *TimeProvider,
+                                                      NUdf::EValidatePolicy::Exception,
+                                                      originalContext.SecureParamsProvider,
+
+                                                      originalContext.CountersProvider,
+                                                      originalContext.LogProvider,
+                                                      originalContext.LangVer,
+                                                      originalContext.GetRuntimeSettingsSharedPtr()),
+
+                  originalContext.Mutables,
+                  *NYql::NUdf::GetYqlMemoryPool(),
+                  originalContext.NotConsumedLinear,
+                  originalContext.GetRuntimeSettingsSharedPtr())
         {
             Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
         }
 
-        ~TKernelState()
-        {
+        ~TKernelState() override {
             Alloc.Acquire();
         }
 
@@ -110,15 +125,15 @@ public:
             return "ScalarApply";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow::compute::ScalarKernel& GetArrowKernel() const override {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const override {
             return ArgsValuesDescr_;
         }
 
-        const IComputationNode* GetArgument(ui32 index) const {
+        const IComputationNode* GetArgument(ui32 index) const override {
             return Parent_->Args_[index];
         }
 
@@ -155,7 +170,7 @@ public:
         }
 
         auto& state = GetState(ctx);
-        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     arrow::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow::MemoryPool& memoryPool,
@@ -276,5 +291,4 @@ IComputationNode* WrapScalarApply(TCallable& callable, const TComputationNodeFac
                                    std::move(args), std::move(lambdaArgs), lambdaRoot);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

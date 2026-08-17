@@ -3,6 +3,7 @@
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/fs.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -43,7 +44,7 @@ std::unique_ptr<TFile> TryOpenFile(const std::string& path)
         }
         THROW_ERROR_EXCEPTION("Error opening %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     // TODO(babenko): migrate to std::string
     return std::make_unique<TFile>(handle.Release(), TString(path));
@@ -277,7 +278,8 @@ public:
         auto bucketPath = GetBucketPath(fileName);
         OwnedBucketNames_.insert(fileName);
 
-        YT_LOG_DEBUG("Bucket created (Name: %v)", fileName);
+        YT_TLOG_DEBUG("Bucket created")
+            .With("Name", fileName);
 
         return New<TFairThrottlerFileIpcBucket>(
             bucketPath,
@@ -301,6 +303,7 @@ private:
     {
         auto openBuckets = std::exchange(OpenBuckets_, {});
 
+        // TODO(babenko): migrate to std::string
         TVector<TString> currentBucketPaths;
         TFsPath{RootPath_ + "/" + BucketsDirName}.ListNames(currentBucketPaths);
         for (const auto& fileName : currentBucketPaths) {
@@ -314,7 +317,8 @@ private:
             try {
                 auto bucketPath = GetBucketPath(fileName);
                 if (TryRemoveOrphanedMemoryRegion(bucketPath)) {
-                    YT_LOG_DEBUG("Orphaned bucket removed (Name: %v)", fileName);
+                    YT_TLOG_DEBUG("Orphaned bucket removed")
+                        .With("Name", fileName);
                     continue;
                 }
 
@@ -323,7 +327,8 @@ private:
                     continue;
                 }
 
-                YT_LOG_DEBUG("Bucket found (Name: %v)", fileName);
+                YT_TLOG_DEBUG("Bucket found")
+                    .With("Name", fileName);
 
                 auto bucket = New<TFairThrottlerFileIpcBucket>(
                     bucketPath,
@@ -331,13 +336,14 @@ private:
                     UseShmem_);
                 EmplaceOrCrash(OpenBuckets_, fileName, bucket);
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Error reloading throttler IPC; ignored");
+                YT_TLOG_DEBUG("Error reloading throttler IPC; ignored")
+                    .With(TError(ex));
                 continue;
             }
         }
     }
 
-    TString GetBucketPath(const std::string& fileName) const
+    std::string GetBucketPath(const std::string& fileName) const
     {
         return RootPath_ + "/" + BucketsDirName + "/" + fileName;
     }

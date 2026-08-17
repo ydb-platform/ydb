@@ -1,7 +1,7 @@
 /* struct module -- pack values into and (out of) bytes objects */
 
 /* New version supporting byte order, alignment and size options,
-   character strings, and unsigned numbers */
+   byte strings, and unsigned numbers */
 
 #ifndef Py_BUILD_CORE_BUILTIN
 #  define Py_BUILD_CORE_MODULE 1
@@ -768,14 +768,13 @@ np_halffloat(_structmodulestate *state, char *p, PyObject *v, const formatdef *f
 static int
 np_float(_structmodulestate *state, char *p, PyObject *v, const formatdef *f)
 {
-    float x = (float)PyFloat_AsDouble(v);
+    double x = PyFloat_AsDouble(v);
     if (x == -1 && PyErr_Occurred()) {
         PyErr_SetString(state->StructError,
                         "required argument is not a float");
         return -1;
     }
-    memcpy(p, (char *)&x, sizeof x);
-    return 0;
+    return PyFloat_Pack4(x, p, PY_LITTLE_ENDIAN);
 }
 
 static int
@@ -1420,11 +1419,11 @@ align(Py_ssize_t size, char c, const formatdef *e)
 /* calculate the size of a format string */
 
 static int
-prepare_s(PyStructObject *self)
+prepare_s(PyStructObject *self, PyObject *format)
 {
     const formatdef *f;
     const formatdef *e;
-    formatcode *codes;
+    formatcode *codes, *codes0;
 
     const char *s;
     const char *fmt;
@@ -1434,8 +1433,8 @@ prepare_s(PyStructObject *self)
 
     _structmodulestate *state = get_struct_state_structinst(self);
 
-    fmt = PyBytes_AS_STRING(self->s_format);
-    if (strlen(fmt) != (size_t)PyBytes_GET_SIZE(self->s_format)) {
+    fmt = PyBytes_AS_STRING(format);
+    if (strlen(fmt) != (size_t)PyBytes_GET_SIZE(format)) {
         PyErr_SetString(state->StructError,
                         "embedded null character");
         return -1;
@@ -1476,9 +1475,23 @@ prepare_s(PyStructObject *self)
 
         switch (c) {
             case 's': /* fall through */
-            case 'p': len++; ncodes++; break;
+            case 'p':
+                if (len == PY_SSIZE_T_MAX) {
+                    goto overflow;
+                }
+                len++;
+                ncodes++;
+                break;
             case 'x': break;
-            default: len += num; if (num) ncodes++; break;
+            default:
+                if (num > PY_SSIZE_T_MAX - len) {
+                    goto overflow;
+                }
+                len += num;
+                if (num) {
+                    ncodes++;
+                }
+                break;
         }
 
         itemsize = e->size;
@@ -1503,13 +1516,7 @@ prepare_s(PyStructObject *self)
         PyErr_NoMemory();
         return -1;
     }
-    /* Free any s_codes value left over from a previous initialization. */
-    if (self->s_codes != NULL)
-        PyMem_Free(self->s_codes);
-    self->s_codes = codes;
-    self->s_size = size;
-    self->s_len = len;
-
+    codes0 = codes;
     s = fmt;
     size = 0;
     while ((c = *s++) != '\0') {
@@ -1548,6 +1555,14 @@ prepare_s(PyStructObject *self)
     codes->offset = size;
     codes->size = 0;
     codes->repeat = 0;
+
+    /* Free any s_codes value left over from a previous initialization. */
+    if (self->s_codes != NULL)
+        PyMem_Free(self->s_codes);
+    self->s_codes = codes0;
+    self->s_size = size;
+    self->s_len = len;
+    Py_XSETREF(self->s_format, Py_NewRef(format));
 
     return 0;
 
@@ -1614,9 +1629,8 @@ Struct___init___impl(PyStructObject *self, PyObject *format)
         return -1;
     }
 
-    Py_SETREF(self->s_format, format);
-
-    ret = prepare_s(self);
+    ret = prepare_s(self, format);
+    Py_DECREF(format);
     return ret;
 }
 
@@ -1744,7 +1758,8 @@ Return a tuple containing unpacked values.
 Values are unpacked according to the format string Struct.format.
 
 The buffer's size in bytes, starting at position offset, must be
-at least Struct.size.
+at least Struct.size.  A negative offset counts from the end of the
+buffer.
 
 See help(struct) for more on format strings.
 [clinic start generated code]*/
@@ -1752,7 +1767,7 @@ See help(struct) for more on format strings.
 static PyObject *
 Struct_unpack_from_impl(PyStructObject *self, Py_buffer *buffer,
                         Py_ssize_t offset)
-/*[clinic end generated code: output=57fac875e0977316 input=cafd4851d473c894]*/
+/*[clinic end generated code: output=57fac875e0977316 input=3451f778ed8a5345]*/
 {
     _structmodulestate *state = get_struct_state_structinst(self);
     ENSURE_STRUCT_IS_READY(self);
@@ -1933,7 +1948,7 @@ Struct_iter_unpack(PyStructObject *self, PyObject *buffer)
  *
  * Takes a struct object, a tuple of arguments, and offset in that tuple of
  * argument for where to start processing the arguments for packing, and a
- * character buffer for writing the packed string.  The caller must insure
+ * character buffer for writing the packed data.  The caller must ensure
  * that the buffer may contain the required length for packing the arguments.
  * 0 is returned on success, 1 is returned if there is an error.
  *
@@ -2071,8 +2086,9 @@ PyDoc_STRVAR(s_pack_into__doc__,
 \n\
 Pack the values v1, v2, ... according to the format string S.format\n\
 and write the packed bytes into the writable buffer buf starting at\n\
-offset.  Note that the offset is a required argument.  See\n\
-help(struct) for more on format strings.");
+offset.  Note that the offset is a required argument.  A negative\n\
+offset counts from the end of the buffer.  See help(struct) for more\n\
+on format strings.");
 
 static PyObject *
 s_pack_into(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
@@ -2188,6 +2204,7 @@ PyDoc_STRVAR(s_sizeof__doc__,
 static PyObject *
 s_sizeof(PyStructObject *self, void *unused)
 {
+    ENSURE_STRUCT_IS_READY(self);
     size_t size = _PyObject_SIZE(Py_TYPE(self)) + sizeof(formatcode);
     for (formatcode *code = self->s_codes; code->fmtdef != NULL; code++) {
         size += sizeof(formatcode);
@@ -2198,6 +2215,7 @@ s_sizeof(PyStructObject *self, void *unused)
 static PyObject *
 s_repr(PyStructObject *self)
 {
+    ENSURE_STRUCT_IS_READY(self);
     PyObject* fmt = PyUnicode_FromStringAndSize(
         PyBytes_AS_STRING(self->s_format), PyBytes_GET_SIZE(self->s_format));
     if (fmt == NULL) {
@@ -2271,7 +2289,8 @@ static PyType_Spec PyStructType_spec = {
 static int
 cache_struct_converter(PyObject *module, PyObject *fmt, PyStructObject **ptr)
 {
-    PyObject * s_object;
+    PyObject *s_object;
+    PyObject *key;
     _structmodulestate *state = get_struct_state(module);
 
     if (fmt == NULL) {
@@ -2279,24 +2298,41 @@ cache_struct_converter(PyObject *module, PyObject *fmt, PyStructObject **ptr)
         return 1;
     }
 
-    if (PyDict_GetItemRef(state->cache, fmt, &s_object) < 0) {
+    /* Use a str cache key: an equal str and bytes would collide and be
+       compared, raising BytesWarning under -bb. */
+    if (PyBytes_Check(fmt)) {
+        key = PyUnicode_DecodeASCII(PyBytes_AS_STRING(fmt),
+                                    PyBytes_GET_SIZE(fmt), "surrogateescape");
+        if (key == NULL) {
+            return 0;
+        }
+    }
+    else {
+        key = Py_NewRef(fmt);
+    }
+
+    if (PyDict_GetItemRef(state->cache, key, &s_object) < 0) {
+        Py_DECREF(key);
         return 0;
     }
     if (s_object != NULL) {
+        Py_DECREF(key);
         *ptr = (PyStructObject *)s_object;
         return Py_CLEANUP_SUPPORTED;
     }
 
-    s_object = PyObject_CallOneArg(state->PyStructType, fmt);
+    s_object = PyObject_CallOneArg(state->PyStructType, key);
     if (s_object != NULL) {
         if (PyDict_GET_SIZE(state->cache) >= MAXCACHE)
             PyDict_Clear(state->cache);
         /* Attempt to cache the result */
-        if (PyDict_SetItem(state->cache, fmt, s_object) == -1)
+        if (PyDict_SetItem(state->cache, key, s_object) == -1)
             PyErr_Clear();
+        Py_DECREF(key);
         *ptr = (PyStructObject *)s_object;
         return Py_CLEANUP_SUPPORTED;
     }
+    Py_DECREF(key);
     return 0;
 }
 
@@ -2362,8 +2398,8 @@ PyDoc_STRVAR(pack_into_doc,
 \n\
 Pack the values v1, v2, ... according to the format string and write\n\
 the packed bytes into the writable buffer buf starting at offset.  Note\n\
-that the offset is a required argument.  See help(struct) for more\n\
-on format strings.");
+that the offset is a required argument.  A negative offset counts from\n\
+the end of the buffer.  See help(struct) for more on format strings.");
 
 static PyObject *
 pack_into(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
@@ -2417,6 +2453,7 @@ unpack_from
 Return a tuple containing values unpacked according to the format string.
 
 The buffer's size, minus offset, must be at least calcsize(format).
+A negative offset counts from the end of the buffer.
 
 See help(struct) for more on format strings.
 [clinic start generated code]*/
@@ -2424,7 +2461,7 @@ See help(struct) for more on format strings.
 static PyObject *
 unpack_from_impl(PyObject *module, PyStructObject *s_object,
                  Py_buffer *buffer, Py_ssize_t offset)
-/*[clinic end generated code: output=1042631674c6e0d3 input=6e80a5398e985025]*/
+/*[clinic end generated code: output=1042631674c6e0d3 input=e383ecb97728be2b]*/
 {
     return Struct_unpack_from_impl(s_object, buffer, offset);
 }
@@ -2468,8 +2505,8 @@ static struct PyMethodDef module_functions[] = {
 
 PyDoc_STRVAR(module_doc,
 "Functions to convert between Python values and C structs.\n\
-Python bytes objects are used to hold the data representing the C struct\n\
-and also as format strings (explained below) to describe the layout of data\n\
+Python bytes objects are used to hold the data representing the C struct.\n\
+The format string (explained below) describes the layout of data\n\
 in the C struct.\n\
 \n\
 The optional first format char indicates byte order, size and alignment:\n\
@@ -2479,18 +2516,17 @@ The optional first format char indicates byte order, size and alignment:\n\
   >: big-endian, std. size & alignment\n\
   !: same as >\n\
 \n\
-The remaining chars indicate types of args and must match exactly;\n\
+The remaining characters indicate types of args and must match exactly;\n\
 these can be preceded by a decimal repeat count:\n\
-  x: pad byte (no data); c:char; b:signed byte; B:unsigned byte;\n\
-  ?:_Bool; h:short; H:unsigned short; i:int; I:unsigned int;\n\
-  l:long; L:unsigned long; f:float; d:double; e:half-float.\n\
+  x: pad byte (no data); c: char; b: signed byte; B: unsigned byte;\n\
+  ?: _Bool; h: short; H: unsigned short; i: int; I: unsigned int;\n\
+  l: long; L: unsigned long; q: long long; Q: unsigned long long;\n\
+  f: float; d: double; e: half-float;\n\
 Special cases (preceding decimal count indicates length):\n\
-  s:string (array of char); p: pascal string (with count byte).\n\
+  s: byte string (array of char); p: Pascal string (with count byte).\n\
 Special cases (only available in native format):\n\
-  n:ssize_t; N:size_t;\n\
-  P:an integer type that is wide enough to hold a pointer.\n\
-Special case (not in native mode unless 'long long' in platform C):\n\
-  q:long long; Q:unsigned long long\n\
+  n: ssize_t; N: size_t;\n\
+  P: an integer type that is wide enough to hold a pointer.\n\
 Whitespace between formats is ignored.\n\
 \n\
 The variable struct.error is an exception raised on errors.\n");

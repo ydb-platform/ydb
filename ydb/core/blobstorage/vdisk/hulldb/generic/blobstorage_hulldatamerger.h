@@ -13,7 +13,7 @@ namespace NKikimr {
     public:
         struct TCollectTask {
             TDiskBlobMerger BlobMerger; // base blob for compaction (obtained from in-memory records)
-            std::vector<std::tuple<TDiskPart, ui8>> Reads; // a set of extra reads _of distinct parts, not blobs_
+            std::vector<std::tuple<TDiskPart, ui8, bool>> Reads; // a set of extra reads _of distinct parts, not blobs_
 
             void Clear() {
                 BlobMerger.Clear();
@@ -200,13 +200,13 @@ namespace NKikimr {
                         if (part.InMemData) { // prefer in-memory data if we have options
                             merger.Add(TDiskBlob(part.InMemData, partMask, GType, fullId));
                         } else if (!part.SmallBlobPart.Empty()) {
-                            CollectTask.Reads.emplace_back(part.SmallBlobPart, partIdx);
+                            CollectTask.Reads.emplace_back(part.SmallBlobPart, partIdx, false);
                         } else if (!part.HugeBlob.Empty()) { // dropping this huge part after compaction
                             ui32 offset = 0;
                             TDiskBlob::DeriveBlobHeaderMode(partSize, part.HugeBlob.Size, &offset);
                             const TDiskPart location(part.HugeBlob.ChunkIdx, part.HugeBlob.Offset + offset,
                                 part.HugeBlob.Size - offset);
-                            CollectTask.Reads.emplace_back(location, partIdx);
+                            CollectTask.Reads.emplace_back(location, partIdx, true);
                             DeletedHugeBlobs.push_back(part.HugeBlob);
                         } else { // add metadata part to merger
                             merger.AddPart(TRope(), GType, TLogoBlobID(fullId, partIdx + 1));
@@ -345,7 +345,7 @@ namespace NKikimr {
                 Parts[partIdx] = {};
             }
 
-            auto pred = [&](const std::tuple<TDiskPart, ui8>& x) { return partsToRemove.Get(std::get<1>(x)); };
+            auto pred = [&](const std::tuple<TDiskPart, ui8, bool>& x) { return partsToRemove.Get(std::get<1>(x)); };
             CollectTask.Reads.erase(std::remove_if(CollectTask.Reads.begin(), CollectTask.Reads.end(), pred),
                 CollectTask.Reads.end());
 

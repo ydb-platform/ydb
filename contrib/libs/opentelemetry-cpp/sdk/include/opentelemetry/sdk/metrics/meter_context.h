@@ -58,6 +58,8 @@ public:
    * Initialize a new meter provider
    * @param views The views to be configured with meter context.
    * @param resource  The resource for this meter context.
+   * @param meter_configurator A scope configurator defining the behavior of a meter associated with
+   * this meter context.
    */
   MeterContext(
       std::unique_ptr<ViewRegistry> views = std::unique_ptr<ViewRegistry>(new ViewRegistry()),
@@ -128,6 +130,8 @@ public:
 
   /**
    * Attaches a View to list of configured Views for this Meter context.
+   * @param instrument_selector The instrument selector for this view.
+   * @param meter_selector The meter selector for this view.
    * @param view The Views for this meter context. This
    * must not be a nullptr.
    *

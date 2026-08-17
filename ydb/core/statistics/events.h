@@ -3,9 +3,12 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/analyze_operation.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <variant>
 
 
 namespace NKikimr {
@@ -36,7 +39,7 @@ struct TStatTableSummary {
     std::optional<NKikimrStat::TTableSummaryStatistics> Data;
 };
 
-// NB: enum values are serialized into the .metadata/_statistics table.
+// NB: enum values are serialized into the .metadata/statistics_v2 table.
 enum class EStatType {
     // Simple table statistics calculated by aggregating shard statistics reports
     // (row count may be incorrect if the table is not fully compacted as it counts all row versions).
@@ -51,9 +54,35 @@ enum class EStatType {
     TABLE_SUMMARY = 4,
 };
 
+// Absent for SIMPLE/TABLE_SUMMARY stats;
+// a single column tag (most stat types)
+// an ordered column-tag tuple (multi-column stats).
+class TColumnTags {
+public:
+    TColumnTags() = default;
+    TColumnTags(ui32 tag) : Tags(tag) {}
+    TColumnTags(std::vector<ui32> tags) : Tags(std::move(tags)) {}
+
+    // The single column tag, or nullopt if unset or multi-column.
+    std::optional<ui32> AsSingle() const {
+        if (const auto* tag = std::get_if<ui32>(&Tags)) {
+            return *tag;
+        }
+        return std::nullopt;
+    }
+
+    // The multi-column tuple, or nullptr if unset or single-column.
+    const std::vector<ui32>* AsMulti() const {
+        return std::get_if<std::vector<ui32>>(&Tags);
+    }
+
+private:
+    std::variant<std::monostate, ui32, std::vector<ui32>> Tags;
+};
+
 struct TRequest {
     TPathId PathId;
-    std::optional<ui32> ColumnTag; // not used for SIMPLE or TABLE_SUMMARY stats
+    TColumnTags ColumnTags;
 };
 
 struct TResponse {
@@ -72,12 +101,21 @@ struct TStatisticsItem {
             std::optional<ui32> columnTag,
             EStatType type,
             TString data)
-        : ColumnTag(columnTag)
+        : ColumnTags(columnTag ? TColumnTags(*columnTag) : TColumnTags())
         , Type(type)
         , Data(std::move(data))
     {}
 
-    std::optional<ui32> ColumnTag;
+    TStatisticsItem(
+            std::vector<ui32> columnTags,
+            EStatType type,
+            TString data)
+        : ColumnTags(std::move(columnTags))
+        , Type(type)
+        , Data(std::move(data))
+    {}
+
+    TColumnTags ColumnTags;
     EStatType Type;
     TString Data;
 };
@@ -113,47 +151,33 @@ struct TEvStatistics {
         EvAnalyzeStatus,
         EvAnalyzeStatusResponse,
 
-        EvAnalyzeShard,
-        EvAnalyzeShardResponse,
+        EvAnalyzeShard, // deprecated (old aggregation tree, kept for enum value stability)
+        EvAnalyzeShardResponse, // deprecated
 
-        EvStatisticsRequest,
-        EvStatisticsResponse,
+        EvStatisticsRequest, // deprecated
+        EvStatisticsResponse, // deprecated
 
-        EvAggregateStatistics,
-        EvAggregateStatisticsResponse,
-        EvAggregateKeepAlive,
-        EvAggregateKeepAliveAck,
+        EvAggregateStatistics, // deprecated
+        EvAggregateStatisticsResponse, // deprecated
+        EvAggregateKeepAlive, // deprecated
+        EvAggregateKeepAliveAck, // deprecated
 
         EvAnalyzeActorResult,
 
         EvAnalyzeCancel,
 
+        EvAnalyzeOpListRequest,
+        EvAnalyzeOpListResponse,
+        EvAnalyzeOpGetRequest,
+        EvAnalyzeOpGetResponse,
+        EvAnalyzeOpCancelRequest,
+        EvAnalyzeOpCancelResponse,
+        EvAnalyzeOpForgetRequest,
+        EvAnalyzeOpForgetResponse,
+        EvAnalyzeActorProgress,
+
         EvEnd
     };
-
-    struct TEvAggregateKeepAlive : public TEventPB<
-        TEvAggregateKeepAlive,
-        NKikimrStat::TEvAggregateKeepAlive,
-        EvAggregateKeepAlive>
-    {};
-
-    struct TEvAggregateKeepAliveAck : public TEventPB<
-        TEvAggregateKeepAliveAck,
-        NKikimrStat::TEvAggregateKeepAliveAck,
-        EvAggregateKeepAliveAck>
-    {};
-
-    struct TEvAggregateStatistics : public TEventPB<
-        TEvAggregateStatistics,
-        NKikimrStat::TEvAggregateStatistics,
-        EvAggregateStatistics>
-    {};
-
-    struct TEvAggregateStatisticsResponse : public TEventPB<
-        TEvAggregateStatisticsResponse,
-        NKikimrStat::TEvAggregateStatisticsResponse,
-        EvAggregateStatisticsResponse>
-    {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
         TString Database;
@@ -296,30 +320,6 @@ struct TEvStatistics {
         EvAnalyzeCancel>
     {};
 
-    struct TEvAnalyzeShard : public TEventPB<
-        TEvAnalyzeShard,
-        NKikimrStat::TEvAnalyzeShard,
-        EvAnalyzeShard>
-    {};
-
-    struct TEvAnalyzeShardResponse : public TEventPB<
-        TEvAnalyzeShardResponse,
-        NKikimrStat::TEvAnalyzeShardResponse,
-        EvAnalyzeShardResponse>
-    {};
-
-    struct TEvStatisticsRequest : public TEventPB<
-        TEvStatisticsRequest,
-        NKikimrStat::TEvStatisticsRequest,
-        EvStatisticsRequest>
-    {};
-
-    struct TEvStatisticsResponse : public TEventPB<
-        TEvStatisticsResponse,
-        NKikimrStat::TEvStatisticsResponse,
-        EvStatisticsResponse>
-    {};
-
     struct TEvAnalyzeActorResult : public TEventLocal<
         TEvAnalyzeActorResult, EvAnalyzeActorResult>
     {
@@ -340,6 +340,93 @@ struct TEvStatistics {
         {}
 
         explicit TEvAnalyzeActorResult(EStatus status) : Status(status), Final(true) {}
+    };
+
+    struct TEvAnalyzeOpListRequest : public TEventPB<
+        TEvAnalyzeOpListRequest,
+        NKikimrAnalyzeOp::TEvListRequest,
+        EvAnalyzeOpListRequest>
+    {
+        TEvAnalyzeOpListRequest() = default;
+        explicit TEvAnalyzeOpListRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+
+    struct TEvAnalyzeOpListResponse : public TEventPB<
+        TEvAnalyzeOpListResponse,
+        NKikimrAnalyzeOp::TEvListResponse,
+        EvAnalyzeOpListResponse>
+    {};
+
+    struct TEvAnalyzeOpGetRequest : public TEventPB<
+        TEvAnalyzeOpGetRequest,
+        NKikimrAnalyzeOp::TEvGetRequest,
+        EvAnalyzeOpGetRequest>
+    {
+        TEvAnalyzeOpGetRequest() = default;
+        TEvAnalyzeOpGetRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpGetResponse : public TEventPB<
+        TEvAnalyzeOpGetResponse,
+        NKikimrAnalyzeOp::TEvGetResponse,
+        EvAnalyzeOpGetResponse>
+    {};
+
+    struct TEvAnalyzeOpCancelRequest : public TEventPB<
+        TEvAnalyzeOpCancelRequest,
+        NKikimrAnalyzeOp::TEvCancelRequest,
+        EvAnalyzeOpCancelRequest>
+    {
+        TEvAnalyzeOpCancelRequest() = default;
+        TEvAnalyzeOpCancelRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpCancelResponse : public TEventPB<
+        TEvAnalyzeOpCancelResponse,
+        NKikimrAnalyzeOp::TEvCancelResponse,
+        EvAnalyzeOpCancelResponse>
+    {};
+
+    struct TEvAnalyzeOpForgetRequest : public TEventPB<
+        TEvAnalyzeOpForgetRequest,
+        NKikimrAnalyzeOp::TEvForgetRequest,
+        EvAnalyzeOpForgetRequest>
+    {
+        TEvAnalyzeOpForgetRequest() = default;
+        TEvAnalyzeOpForgetRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpForgetResponse : public TEventPB<
+        TEvAnalyzeOpForgetResponse,
+        NKikimrAnalyzeOp::TEvForgetResponse,
+        EvAnalyzeOpForgetResponse>
+    {};
+
+    struct TEvAnalyzeActorProgress : public TEventLocal<TEvAnalyzeActorProgress, EvAnalyzeActorProgress> {
+        TString OperationId;   // binary ULID
+        TPathId PathId;
+        ui32 ShardsTotal = 0;
+        ui32 ShardsDone  = 0;
+
+        TEvAnalyzeActorProgress(TString operationId, TPathId pathId, ui32 shardsTotal, ui32 shardsDone)
+            : OperationId(std::move(operationId))
+            , PathId(pathId)
+            , ShardsTotal(shardsTotal)
+            , ShardsDone(shardsDone)
+        {}
     };
 };
 

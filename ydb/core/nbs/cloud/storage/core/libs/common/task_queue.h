@@ -20,8 +20,7 @@ struct ITask
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename F>
-class TFutureTask final
-    : public ITask
+class TFutureTask final: public ITask
 {
 public:
     using TResult = NThreading::TFutureType<TFunctionResult<F>>;
@@ -45,8 +44,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename F>
-class TSimpleTask final
-    : public ITask
+class TSimpleTask final: public ITask
 {
 private:
     F Func;
@@ -64,8 +62,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct ITaskQueue
-    : public IStartable
+struct ITaskQueue: public IStartable
 {
     virtual ~ITaskQueue() = default;
 

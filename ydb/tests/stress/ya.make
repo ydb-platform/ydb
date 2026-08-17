@@ -2,16 +2,24 @@ RECURSE(
     backup
     cdc
     common
+    compare_index_performance
     ctas
+    federated_queries
+    fulltext_workload
     kafka
+    kafka_serverless
     kv
     kv_volume
+    kv_volume_tool
     log
+    min_max_workload
     mixedpy
+    nfs_backups
     node_broker
     olap_workload
     oltp_workload
     reconfig_state_storage_workload
+    remove_storage_groups
     result_set_format
     s3_backups
     scheme_board
@@ -19,10 +27,15 @@ RECURSE(
     show_create/table
     simple_queue
     statistics_workload
+    system_tablet_backup
     testshard_workload
     topic
+    topic_balancing
     topic_kafka
+    sqs_topic
     transfer
+    vector_workload
     viewer
     streaming
+    tpcc
 )

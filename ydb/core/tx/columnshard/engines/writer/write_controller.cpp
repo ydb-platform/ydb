@@ -1,4 +1,5 @@
 #include "write_controller.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NColumnShard {
@@ -22,4 +23,4 @@ NKikimr::NOlap::TBlobWriteInfo& IWriteController::AddWriteTask(NOlap::TBlobWrite
     return WriteTasks.back();
 }
 
-}
+}   // namespace NKikimr::NColumnShard

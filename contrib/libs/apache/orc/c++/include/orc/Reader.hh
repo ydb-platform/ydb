@@ -32,6 +32,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace orc {
@@ -388,6 +389,41 @@ namespace orc {
      * Whether reader throws or returns null when value overflows for schema evolution.
      */
     bool getThrowOnSchemaEvolutionOverflow() const;
+
+    /**
+     * Set whether to enable async I/O prefetch of next stripe.
+     */
+    RowReaderOptions& setEnableAsyncPrefetch(bool enable);
+
+    /**
+     * Whether to enable async I/O prefetch of next stripe.
+     */
+    bool getEnableAsyncPrefetch() const;
+
+    /**
+     * Set the number of stripes to look ahead for small stripe prefetch.
+     */
+    RowReaderOptions& setSmallStripeLookAheadLimit(uint64_t numStripes);
+
+    /**
+     * Get the number of stripes to look ahead for small stripe prefetch.
+     */
+    uint64_t getSmallStripeLookAheadLimit() const;
+
+    /**
+     * Set the maximum dictionary size threshold for evaluation.
+     *
+     * Dictionaries with more entries than this threshold will not be evaluated.
+     * 0 to disable dictionary filtering.
+     *
+     * Defaults to 0.
+     */
+    RowReaderOptions& setDictionaryFilteringSizeThreshold(uint32_t threshold);
+
+    /**
+     * Get the dictionary filtering size threshold.
+     */
+    uint32_t getDictionaryFilteringSizeThreshold() const;
   };
 
   class RowReader;
@@ -660,6 +696,16 @@ namespace orc {
      */
     virtual void preBuffer(const std::vector<uint32_t>& stripes,
                            const std::list<uint64_t>& includeTypes) = 0;
+
+    /**
+     * Calculate prefetch ranges by selected stripes and columns.
+     * It is thread safe and does not cache data.
+     * @param stripes the stripes to prefetch
+     * @param includeTypes the types to prefetch
+     * @return prefetch ranges as offset/length pairs
+     */
+    virtual std::vector<std::pair<uint64_t, uint64_t>> preBufferRange(
+        const std::vector<uint32_t>& stripes, const std::list<uint64_t>& includeTypes) = 0;
 
     /**
      * Release cached entries whose right boundary is less than or equal to the given boundary.

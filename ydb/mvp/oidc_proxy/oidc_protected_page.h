@@ -1,6 +1,7 @@
 #pragma once
 
 #include "extension_manager.h"
+#include <ydb/mvp/core/mvp_log.h>
 
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -11,7 +12,9 @@
 
 namespace NMVP::NOIDC {
 
-class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
+class THandlerSessionServiceCheck
+    : public NActors::TActorBootstrapped<THandlerSessionServiceCheck>
+    , protected TMvpLogContextProvider {
 protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
 

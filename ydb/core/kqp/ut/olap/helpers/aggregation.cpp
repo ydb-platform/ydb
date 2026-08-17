@@ -6,6 +6,14 @@
 
 namespace NKikimr::NKqp {
 
+bool CheckOperatorPresentInAst(const std::string_view ast, const std::string_view operatorName) {
+    return std::ranges::any_of(
+        operatorName | std::views::split('|'),
+        [&ast](auto&& tok) {
+            return !tok.empty() && ast.find(std::string_view(tok.data(), tok.size())) != std::string::npos;
+        });
+}
+
 void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("SIMPLE");
     TKikimrRunner kikimr(settings);

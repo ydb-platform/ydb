@@ -20,6 +20,7 @@ SRCS(
     api/distributed_file_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
+    api/not_implemented_client.cpp
     api/operation_client.cpp
     api/security_client.cpp
     api/table_client.cpp
@@ -70,6 +71,7 @@ SRCS(
 
     election/public.cpp
 
+    hive/cluster_directory.cpp
     hive/config.cpp
     hive/timestamp_map.cpp
 
@@ -165,6 +167,7 @@ SRCS(
     table_client/record_helpers.cpp
 
     tablet_client/config.cpp
+    tablet_client/index_info.cpp
     tablet_client/watermark_runtime_data.cpp
     tablet_client/table_mount_cache_detail.cpp
     tablet_client/table_mount_cache.cpp

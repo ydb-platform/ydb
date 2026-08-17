@@ -1,4 +1,4 @@
-from yatest.common.network import PortManager
+from library.python.port_manager import PortManager
 import yql_utils
 
 port_manager = None

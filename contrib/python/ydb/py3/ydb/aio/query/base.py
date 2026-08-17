@@ -2,9 +2,12 @@ from .. import _utilities
 
 
 class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
-    def __init__(self, it, wrapper, on_error=None):
+    """Async ExecuteQuery result stream."""
+
+    def __init__(self, it, wrapper, on_error=None, on_finish=None):
         super().__init__(it, wrapper)
         self._on_error = on_error
+        self._on_finish = on_finish
 
     async def __aenter__(self) -> "AsyncResponseContextIterator":
         return self
@@ -12,12 +15,41 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
     async def _next(self):
         try:
             return await super()._next()
-        except Exception as e:
+        except StopAsyncIteration:
+            # Normal stream termination is not an error and must not invalidate
+            # the session.
+            self._call_on_finish()
+            raise
+        except BaseException as e:
+            # BaseException (not Exception) because asyncio.CancelledError
+            # inherits from BaseException in Python 3.8+. A stream interrupted
+            # by a cancel must also be reported to _on_error so the session can
+            # be invalidated; otherwise the next caller that picks this session
+            # out of the pool races the undrained stream and the server can
+            # reply with SessionBusy.
             if self._on_error:
                 self._on_error(e)
-            raise e
+            self._call_on_finish(e)
+            raise
+
+    def _call_on_finish(self, exception=None):
+        if self._on_finish is not None:
+            self._on_finish(exception)
+            self._on_finish = None
+
+    def __del__(self):
+        self._call_on_finish()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        #  To close stream on YDB it is necessary to scroll through it to the end
-        async for _ in self:
+        #  To close stream on YDB it is necessary to scroll through it to the end.
+        # Errors that happen during the cleanup drain have already been reported
+        # to _on_error inside _next, so swallow them here — re-raising from
+        # __aexit__ would mask whatever exception is already propagating out of
+        # the `async with` body and would leave callers (e.g. the tx __aexit__)
+        # unable to run their own cleanup (rollback).
+        try:
+            async for _ in self:
+                pass
+        except BaseException:
             pass
+        self._call_on_finish()

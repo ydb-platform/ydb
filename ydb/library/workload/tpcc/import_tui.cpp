@@ -120,6 +120,35 @@ Element TImportTui::BuildUpperPart() {
         }
     }
 
+    if (Config.Compact) {
+        for (const auto& compactionState: DataToDisplay.ImportState.CompactionStates) {
+            float ratio = static_cast<float>(compactionState.Progress / 100.0);
+
+            std::stringstream indexSs;
+            indexSs << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+
+            indexElements.push_back(
+                hbox({
+                    text("  [ compaction " + compactionState.Table + " ] "),
+                    gauge(ratio) | flex,
+                    text(" " + indexSs.str())
+                })
+            );
+        }
+        for (size_t i = DataToDisplay.ImportState.CompactionStates.size(); i < INDEX_COUNT + TPCC_TABLES.size(); ++i) {
+            std::stringstream indexSs;
+            indexSs << std::fixed << std::setprecision(1) << 0.f << "%";
+            TString tableName = i < TPCC_TABLES.size() ? TPCC_TABLES[i] : ("index " + ToString(i - TPCC_TABLES.size()));
+            indexElements.push_back(
+                hbox({
+                    text("  [ compaction " + tableName + " ] "),
+                    gauge(0.f) | flex,
+                    text(" " + indexSs.str())
+                })
+            );
+        }
+    }
+
     auto indicesRow = window(text(indexText), vbox(indexElements));
 
     auto layout = vbox({

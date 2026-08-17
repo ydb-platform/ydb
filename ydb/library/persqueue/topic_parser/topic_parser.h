@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -37,7 +38,7 @@ TString MakeConsumerPath(const TString& consumer);
     if (!Valid) {                         \
         return TString();                 \
     } else {                              \
-        Y_VERIFY_S(!result.empty(), OriginalTopic.c_str());        \
+        AFL_ENSURE(!result.empty())("original_topic", OriginalTopic); \
         return result;                    \
     }
 
@@ -121,14 +122,14 @@ public:
     }
 
     void RestorePrimaryPath() {
-        Y_ABORT_UNLESS(!OriginalPath.empty());
+        AFL_ENSURE(!OriginalPath.empty())("original_path", OriginalPath)("primary_path", PrimaryPath);
         PrimaryPath = OriginalPath;
         OriginalPath.clear();
     }
 
     // Only for control plane
     const TString& GetFullModernName() const {
-        Y_ABORT_UNLESS(!FullModernName.empty());
+        AFL_ENSURE(!FullModernName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
         return FullModernName;
     }
 

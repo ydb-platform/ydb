@@ -25,7 +25,13 @@ class MeterContext;
 class CollectorHandle
 {
 public:
-  CollectorHandle()          = default;
+  CollectorHandle() = default;
+
+  CollectorHandle(const CollectorHandle &)            = delete;
+  CollectorHandle(CollectorHandle &&)                 = delete;
+  CollectorHandle &operator=(const CollectorHandle &) = delete;
+  CollectorHandle &operator=(CollectorHandle &&)      = delete;
+
   virtual ~CollectorHandle() = default;
 
   virtual AggregationTemporality GetAggregationTemporality(
@@ -44,6 +50,11 @@ public:
   MetricCollector(MeterContext *context,
                   std::shared_ptr<MetricReader> metric_reader,
                   std::unique_ptr<MetricFilter> metric_filter = nullptr);
+
+  MetricCollector(const MetricCollector &)            = delete;
+  MetricCollector(MetricCollector &&)                 = delete;
+  MetricCollector &operator=(const MetricCollector &) = delete;
+  MetricCollector &operator=(MetricCollector &&)      = delete;
 
   ~MetricCollector() override = default;
 

@@ -8,15 +8,19 @@ TChunkKeeperData::TChunkKeeperData(const NKikimrVDiskData::TChunkKeeperEntryPoin
         ui32 chunkIdx = chunk.GetChunkIdx();
         ui32 subsystem = chunk.GetSubsystem();
         Y_VERIFY_DEBUG_S(Chunks.find(chunkIdx) == Chunks.end(), "Double ownership detected, ChunkIdx# " <<
-                chunkIdx << " Subsystem# " << subsystem << " another Subsystem# " << Chunks[chunkIdx]);
+                chunkIdx << " Subsystem# " << subsystem << " another Subsystem# " << Chunks[chunkIdx].Subsystem);
 
-        Chunks[chunkIdx] = subsystem;
+        Chunks[chunkIdx] = TChunkRecord{
+            .ChunkIdx = chunkIdx,
+            .Subsystem = subsystem,
+            .ShredRequested = false,
+        };
         ChunksBySubsystem[subsystem].insert(chunkIdx);
     }
 }
 
 void TChunkKeeperData::GetOwnedChunks(TSet<ui32>& chunks, const TString& logPrefix) {
-    for (const auto& [chunkIdx, subsystem] : Chunks) {
+    for (const auto& [chunkIdx, chunkRecord] : Chunks) {
         auto [_, inserted] = chunks.insert(chunkIdx);
         Y_VERIFY_S(inserted, logPrefix << "Double chunk ownership detected, ChunkIdx# " << chunkIdx);
     }
@@ -30,8 +34,8 @@ void TChunkKeeperData::GetOwnedChunks(TSet<ui32>& chunks, const TString& logPref
             auto it = Chunks.find(chunkIdx);
             Y_VERIFY_S(it != Chunks.end(), logPrefix << "Inconsistent ChunksBySubsystem, ChunkIdx# " << chunkIdx <<
                     " Subsystem# " << subsystem);
-            Y_VERIFY_S(it->second == subsystem, logPrefix << "Inconsistent ChunksBySubsystem, ChunkIdx# " << chunkIdx <<
-                    " Subsystem# " << subsystem << " another Subsystem# " << it->second);
+            Y_VERIFY_S(it->second.Subsystem == subsystem, logPrefix << "Inconsistent ChunksBySubsystem, ChunkIdx# " << chunkIdx <<
+                    " Subsystem# " << subsystem << " another Subsystem# " << it->second.Subsystem);
         }
     }
     Y_VERIFY_S(totalAllocatedChunks == Chunks.size(), logPrefix << "Missing chunks in ChunksBySubsystem");

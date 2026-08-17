@@ -7,6 +7,11 @@ ADDINCL(
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     datastreams_ut.cpp
@@ -15,9 +20,11 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/core/security/certificate_check/test_utils
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/datastreams

@@ -93,13 +93,16 @@ bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TStr
     const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
 {
     TAstParseResult res;
-    if (alias.EndsWith(".sql")) {
+    if (alias.EndsWith(".yqls")) {
+        res = ParseAst(script, /*externalPool=*/nullptr, alias);
+    } else if (alias.EndsWith(".sql") || alias.EndsWith(".yql")) {
         NSQLTranslation::TTranslationSettings translationSettings;
         translationSettings.SyntaxVersion = 1;
         translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         res = NSQLTranslation::SqlToYql(translators, script, translationSettings);
     } else {
-        res = ParseAst(script, nullptr, alias);
+        ctx.AddError(TIssue({}, TStringBuilder() << "Can't infer syntax from alias: " << alias));
+        return false;
     }
     if (!res.IsOk()) {
         for (const auto& originalError : res.Issues) {
@@ -136,7 +139,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const std::function<const TExportTable*(const TString&)>& module2ExportTable)
 {
-    TNodeOnNodeOwnedMap clones, replaces;
+    TNodeOnNodeOwnedMap clones;
+    TNodeOnNodeOwnedMap replaces;
     for (const auto& lib : libs) {
         for (const auto& import : lib.second.Imports) {
             if (import.first->Dead()) {
@@ -165,7 +169,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             }
 
             if (const auto ex = exportTable->Symbols().find(import.second.second); exportTable->Symbols().cend() != ex) {
-                replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, true, false) : ex->second;
+                replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, /*internStrings=*/true, /*copyTypes=*/false) : ex->second;
             } else {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
                     TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));

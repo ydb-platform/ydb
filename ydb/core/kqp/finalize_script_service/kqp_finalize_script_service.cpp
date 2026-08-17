@@ -10,6 +10,8 @@
 
 #include <queue>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -19,23 +21,17 @@ class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptSe
 
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        bool enableBackgroundLeaseChecks,
-        TDuration leaseCheckStartupTimeout)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
-        , EnableBackgroundLeaseChecks(enableBackgroundLeaseChecks)
-        , LeaseCheckStartupTimeout(leaseCheckStartupTimeout)
-        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
+        , FederatedQuerySetup(federatedQuerySetup)
+        , EnableBackgroundLeaseChecks(FederatedQuerySetup && FederatedQuerySetup->ScriptExecutionSettings.EnableBackgroundLeaseChecks)
+        , LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-
-        if (FederatedQuerySetupFactory) {
-            FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        }
 
         Become(&TKqpFinalizeScriptService::MainState);
 
@@ -122,7 +118,9 @@ private:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, got undelivered to scheme cache: " << ev->Get()->Reason);
+        YDB_LOG_WARN("Failed to check script execution tables existence, got undelivered to scheme",
+            {"logPrefix", LogPrefix()},
+            {"cache", ev->Get()->Reason});
         Retry();
     }
 
@@ -134,7 +132,10 @@ private:
 
         for (const auto& result : request.ResultSet) {
             if (result.Status != EStatus::Ok) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, scheme status: " << result.Status << ", path: " << JoinPath(result.Path));
+                YDB_LOG_WARN("Failed to check script execution tables existence, scheme",
+                    {"logPrefix", LogPrefix()},
+                    {"status", result.Status},
+                    {"path", JoinPath(result.Path)});
             }
 
             switch (result.Status) {
@@ -145,7 +146,9 @@ private:
                 case EStatus::RedirectLookupError:
                 case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script execution table " << JoinPath(result.Path) << " not found");
+                    YDB_LOG_DEBUG("Script execution table not found",
+                        {"logPrefix", LogPrefix()},
+                        {"tablePath", JoinPath(result.Path)});
                     return;
                 case EStatus::LookupError:
                 case EStatus::TableCreationNotComplete:
@@ -156,7 +159,8 @@ private:
             }
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script execution background checks");
+        YDB_LOG_DEBUG("Start script execution background checks",
+            {"logPrefix", LogPrefix()});
         StartScriptExecutionBackgroundChecks();
     }
 
@@ -177,7 +181,8 @@ private:
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, retry limit exceeded");
+            YDB_LOG_ERROR("Failed to check script execution tables existence, retry limit exceeded",
+                {"logPrefix", LogPrefix()});
         }
     }
 
@@ -188,12 +193,11 @@ private:
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const bool EnableBackgroundLeaseChecks = true;
     const TDuration LeaseCheckStartupTimeout;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     TRetryPolicy::IRetryState::TPtr RetryState;  // Used for check script execution tables existence
     TActorId ScriptExecutionLeaseCheckActor;
 
@@ -207,11 +211,9 @@ private:
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    bool enableBackgroundLeaseChecks,
-    TDuration leaseCheckStartupTimeout) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory), enableBackgroundLeaseChecks, leaseCheckStartupTimeout);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
+    return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

@@ -74,6 +74,10 @@ public:
                     return nullptr;
                 }
 
+                if (node->Child(0)->IsCallable(NNodes::TCoCons::CallableName())) {
+                    return node;
+                }
+
                 if (!node->Child(0)->IsCallable(NNodes::TCoRead::CallableName())) {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), TStringBuilder() << "Expected Read!"));
                     return nullptr;

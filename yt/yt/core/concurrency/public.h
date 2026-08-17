@@ -56,9 +56,15 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareThreadPool)
 DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
 DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
+//! Waiting strategy for #WaitFor / #WaitUntilSet.
+/*!
+ *  SuspendFiber yields the current fiber; it is universal — outside a fiber context it
+ *  transparently falls back to a blocking wait on the current thread.
+ *  BlockThread always blocks the current thread.
+ */
 DEFINE_ENUM(EWaitForStrategy,
-    (WaitFor)
-    (Get)
+    (SuspendFiber)
+    (BlockThread)
 );
 
 class TAsyncSemaphore;
@@ -70,8 +76,6 @@ DEFINE_ENUM(EExecutionStackKind,
 );
 
 constexpr auto DefaultExecutionStackKind = EExecutionStackKind::Small;
-
-class TExecutionStack;
 
 template <class TSignature>
 class TCoroutine;
@@ -131,6 +135,8 @@ class TPropagatingStorage;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
 
+// UDFs importing core yt headers cannot compile if a dynamically initialized and
+// destroyed global object, such as inline const std::string, is present.
 extern const TFairShareThreadPoolTag DefaultExecutionTag;
 
 ////////////////////////////////////////////////////////////////////////////////

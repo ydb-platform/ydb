@@ -5,12 +5,14 @@
     "endpointPrefix":"elasticmapreduce",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceAbbreviation":"Amazon EMR",
     "serviceFullName":"Amazon EMR",
     "serviceId":"EMR",
     "signatureVersion":"v4",
     "targetPrefix":"ElasticMapReduce",
-    "uid":"elasticmapreduce-2009-03-31"
+    "uid":"elasticmapreduce-2009-03-31",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AddInstanceFleet":{
@@ -80,6 +82,20 @@
         {"shape":"InvalidRequestException"}
       ],
       "documentation":"<p>Cancels a pending step or steps in a running cluster. Available only in Amazon EMR versions 4.8.0 and later, excluding version 5.0.0. A maximum of 256 steps are allowed in each CancelSteps request. CancelSteps is idempotent but asynchronous; it does not guarantee that a step will be canceled, even if the request is successfully submitted. When you use Amazon EMR releases 5.28.0 and later, you can cancel steps that are in a <code>PENDING</code> or <code>RUNNING</code> state. In earlier versions of Amazon EMR, you can only cancel steps that are in a <code>PENDING</code> state. </p>"
+    },
+    "CreatePersistentAppUI":{
+      "name":"CreatePersistentAppUI",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreatePersistentAppUIInput"},
+      "output":{"shape":"CreatePersistentAppUIOutput"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"InvalidRequestException"}
+      ],
+      "documentation":"<p>Creates a persistent application user interface.</p>"
     },
     "CreateSecurityConfiguration":{
       "name":"CreateSecurityConfiguration",
@@ -204,6 +220,20 @@
       ],
       "documentation":"<p>Provides details of a notebook execution.</p>"
     },
+    "DescribePersistentAppUI":{
+      "name":"DescribePersistentAppUI",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribePersistentAppUIInput"},
+      "output":{"shape":"DescribePersistentAppUIOutput"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"InvalidRequestException"}
+      ],
+      "documentation":"<p>Describes a persistent application user interface.</p>"
+    },
     "DescribeReleaseLabel":{
       "name":"DescribeReleaseLabel",
       "http":{
@@ -307,6 +337,34 @@
       "input":{"shape":"GetManagedScalingPolicyInput"},
       "output":{"shape":"GetManagedScalingPolicyOutput"},
       "documentation":"<p>Fetches the attached managed scaling policy for an Amazon EMR cluster. </p>"
+    },
+    "GetOnClusterAppUIPresignedURL":{
+      "name":"GetOnClusterAppUIPresignedURL",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetOnClusterAppUIPresignedURLInput"},
+      "output":{"shape":"GetOnClusterAppUIPresignedURLOutput"},
+      "errors":[
+        {"shape":"InternalServerError"},
+        {"shape":"InvalidRequestException"}
+      ],
+      "documentation":"<p>The presigned URL properties for the cluster's application user interface.</p>"
+    },
+    "GetPersistentAppUIPresignedURL":{
+      "name":"GetPersistentAppUIPresignedURL",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetPersistentAppUIPresignedURLInput"},
+      "output":{"shape":"GetPersistentAppUIPresignedURLOutput"},
+      "errors":[
+        {"shape":"InternalServerError"},
+        {"shape":"InvalidRequestException"}
+      ],
+      "documentation":"<p>The presigned URL properties for the cluster's application user interface.</p>"
     },
     "GetStudioSessionMapping":{
       "name":"GetStudioSessionMapping",
@@ -876,8 +934,7 @@
     },
     "AddTagsOutput":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>This output indicates the result of adding tags to a resource.</p>"
     },
     "AdjustmentType":{
@@ -1199,6 +1256,33 @@
       },
       "documentation":"<p>The definition of a CloudWatch metric alarm, which determines when an automatic scaling activity is triggered. When the defined alarm conditions are satisfied, scaling activity begins.</p>"
     },
+    "CloudWatchLogConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies if CloudWatch logging is enabled.</p>"
+        },
+        "LogGroupName":{
+          "shape":"XmlString",
+          "documentation":"<p>The name of the CloudWatch log group where logs are published.</p>"
+        },
+        "LogStreamNamePrefix":{
+          "shape":"XmlString",
+          "documentation":"<p>The prefix of the log stream name.</p>"
+        },
+        "EncryptionKeyArn":{
+          "shape":"XmlString",
+          "documentation":"<p>The ARN of the encryption key used to encrypt the logs.</p>"
+        },
+        "LogTypes":{
+          "shape":"LogTypesMap",
+          "documentation":"<p>A map of log types to file names for publishing logs to the standard output or standard error streams for CloudWatch. Valid log types include STEP_LOGS, SPARK_DRIVER, and SPARK_EXECUTOR. Valid file names for each type include STDOUT and STDERR.</p>"
+        }
+      },
+      "documentation":"<p>Holds CloudWatch log configuration settings and metadata that specify settings like log files to monitor and where to send them.</p>"
+    },
     "Cluster":{
       "type":"structure",
       "members":{
@@ -1337,6 +1421,14 @@
         "EbsRootVolumeThroughput":{
           "shape":"Integer",
           "documentation":"<p>The throughput, in MiB/s, of the Amazon EBS root device volume of the Linux AMI that is used for each Amazon EC2 instance. Available in Amazon EMR releases 6.15.0 and later.</p>"
+        },
+        "ExtendedSupport":{
+          "shape":"BooleanObject",
+          "documentation":"<p>Reserved.</p>"
+        },
+        "MonitoringConfiguration":{
+          "shape":"MonitoringConfiguration",
+          "documentation":"<p>Contains Cloudwatch log configuration metadata and settings.</p>"
         }
       },
       "documentation":"<p>The detailed description of the cluster.</p>"
@@ -1551,6 +1643,45 @@
       "type":"list",
       "member":{"shape":"Configuration"}
     },
+    "CreatePersistentAppUIInput":{
+      "type":"structure",
+      "required":["TargetResourceArn"],
+      "members":{
+        "TargetResourceArn":{
+          "shape":"ArnType",
+          "documentation":"<p>The unique Amazon Resource Name (ARN) of the target resource.</p>"
+        },
+        "EMRContainersConfig":{
+          "shape":"EMRContainersConfig",
+          "documentation":"<p>The EMR containers configuration.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags for the persistent application user interface.</p>"
+        },
+        "XReferer":{
+          "shape":"String",
+          "documentation":"<p>The cross reference for the persistent application user interface.</p>"
+        },
+        "ProfilerType":{
+          "shape":"ProfilerType",
+          "documentation":"<p>The profiler type for the persistent application user interface.</p>"
+        }
+      }
+    },
+    "CreatePersistentAppUIOutput":{
+      "type":"structure",
+      "members":{
+        "PersistentAppUIId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The persistent application user interface identifier.</p>"
+        },
+        "RuntimeRoleEnabledCluster":{
+          "shape":"Boolean",
+          "documentation":"<p>Represents if the EMR on EC2 cluster that the persisent application user interface is created for is a runtime role enabled cluster or not.</p>"
+        }
+      }
+    },
     "CreateSecurityConfigurationInput":{
       "type":"structure",
       "required":[
@@ -1735,8 +1866,7 @@
     },
     "DeleteSecurityConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteStudioInput":{
       "type":"structure",
@@ -1842,6 +1972,25 @@
         "NotebookExecution":{
           "shape":"NotebookExecution",
           "documentation":"<p>Properties of the notebook execution.</p>"
+        }
+      }
+    },
+    "DescribePersistentAppUIInput":{
+      "type":"structure",
+      "required":["PersistentAppUIId"],
+      "members":{
+        "PersistentAppUIId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The identifier for the persistent application user interface.</p>"
+        }
+      }
+    },
+    "DescribePersistentAppUIOutput":{
+      "type":"structure",
+      "members":{
+        "PersistentAppUI":{
+          "shape":"PersistentAppUI",
+          "documentation":"<p>The persistent application user interface.</p>"
         }
       }
     },
@@ -1965,6 +2114,16 @@
       "type":"list",
       "member":{"shape":"InstanceId"}
     },
+    "EMRContainersConfig":{
+      "type":"structure",
+      "members":{
+        "JobRunId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The Job run ID for the container configuration.</p>"
+        }
+      },
+      "documentation":"<p>The EMR container configuration.</p>"
+    },
     "EbsBlockDevice":{
       "type":"structure",
       "members":{
@@ -2011,7 +2170,7 @@
         },
         "EbsOptimized":{
           "shape":"BooleanObject",
-          "documentation":"<p>Indicates whether an Amazon EBS volume is EBS-optimized.</p>"
+          "documentation":"<p>Indicates whether an Amazon EBS volume is EBS-optimized. The default is false. You should explicitly set this value to true to enable the Amazon EBS-optimized setting for an EC2 instance.</p>"
         }
       },
       "documentation":"<p>The Amazon EBS configuration of a cluster instance.</p>"
@@ -2188,8 +2347,7 @@
     },
     "GetBlockPublicAccessConfigurationInput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetBlockPublicAccessConfigurationOutput":{
       "type":"structure",
@@ -2251,6 +2409,84 @@
         "ManagedScalingPolicy":{
           "shape":"ManagedScalingPolicy",
           "documentation":"<p>Specifies the managed scaling policy that is attached to an Amazon EMR cluster. </p>"
+        }
+      }
+    },
+    "GetOnClusterAppUIPresignedURLInput":{
+      "type":"structure",
+      "required":["ClusterId"],
+      "members":{
+        "ClusterId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The cluster ID associated with the cluster's application user interface presigned URL.</p>"
+        },
+        "OnClusterAppUIType":{
+          "shape":"OnClusterAppUIType",
+          "documentation":"<p>The application UI type associated with the cluster's application user interface presigned URL.</p>"
+        },
+        "ApplicationId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The application ID associated with the cluster's application user interface presigned URL.</p>"
+        },
+        "DryRun":{
+          "shape":"BooleanObject",
+          "documentation":"<p>Determines if the user interface presigned URL is for a dry run.</p>"
+        },
+        "ExecutionRoleArn":{
+          "shape":"ArnType",
+          "documentation":"<p>The execution role ARN associated with the cluster's application user interface presigned URL.</p>"
+        }
+      }
+    },
+    "GetOnClusterAppUIPresignedURLOutput":{
+      "type":"structure",
+      "members":{
+        "PresignedURLReady":{
+          "shape":"Boolean",
+          "documentation":"<p>Used to determine if the presigned URL is ready.</p>"
+        },
+        "PresignedURL":{
+          "shape":"XmlString",
+          "documentation":"<p>The cluster's generated presigned URL.</p>"
+        }
+      }
+    },
+    "GetPersistentAppUIPresignedURLInput":{
+      "type":"structure",
+      "required":["PersistentAppUIId"],
+      "members":{
+        "PersistentAppUIId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The persistent application user interface ID associated with the presigned URL.</p>"
+        },
+        "PersistentAppUIType":{
+          "shape":"PersistentAppUIType",
+          "documentation":"<p>The persistent application user interface type associated with the presigned URL.</p>"
+        },
+        "ApplicationId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The application ID associated with the presigned URL.</p>"
+        },
+        "AuthProxyCall":{
+          "shape":"BooleanObject",
+          "documentation":"<p>A boolean that represents if the caller is an authentication proxy call.</p>"
+        },
+        "ExecutionRoleArn":{
+          "shape":"ArnType",
+          "documentation":"<p>The execution role ARN associated with the presigned URL.</p>"
+        }
+      }
+    },
+    "GetPersistentAppUIPresignedURLOutput":{
+      "type":"structure",
+      "members":{
+        "PresignedURLReady":{
+          "shape":"Boolean",
+          "documentation":"<p>Used to determine if the presigned URL is ready.</p>"
+        },
+        "PresignedURL":{
+          "shape":"XmlString",
+          "documentation":"<p>The returned presigned URL.</p>"
         }
       }
     },
@@ -2460,6 +2696,10 @@
         "ResizeSpecifications":{
           "shape":"InstanceFleetResizingSpecifications",
           "documentation":"<p>The resize specification for the instance fleet.</p>"
+        },
+        "Context":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>Reserved.</p>"
         }
       },
       "documentation":"<p>Describes an instance fleet, which is a group of Amazon EC2 instances that host a particular node type (master, core, or task) in an Amazon EMR cluster. Instance fleets can consist of a mix of instance types and On-Demand and Spot Instances, which are provisioned to meet a defined target capacity. </p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions.</p> </note>"
@@ -2495,6 +2735,10 @@
         "ResizeSpecifications":{
           "shape":"InstanceFleetResizingSpecifications",
           "documentation":"<p>The resize specification for the instance fleet.</p>"
+        },
+        "Context":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>Reserved.</p>"
         }
       },
       "documentation":"<p>The configuration that defines an instance fleet.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions.</p> </note>"
@@ -2527,6 +2771,14 @@
         "ResizeSpecifications":{
           "shape":"InstanceFleetResizingSpecifications",
           "documentation":"<p>The resize specification for the instance fleet.</p>"
+        },
+        "InstanceTypeConfigs":{
+          "shape":"InstanceTypeConfigList",
+          "documentation":"<p>An array of InstanceTypeConfig objects that specify how Amazon EMR provisions Amazon EC2 instances when it fulfills On-Demand and Spot capacities. For more information, see <a href=\"https://docs.aws.amazon.com/emr/latest/APIReference/API_InstanceTypeConfig.html\">InstanceTypeConfig</a>.</p>"
+        },
+        "Context":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>Reserved.</p>"
         }
       },
       "documentation":"<p>Configuration parameters for an instance fleet modification request.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions.</p> </note>"
@@ -2536,25 +2788,25 @@
       "members":{
         "SpotSpecification":{
           "shape":"SpotProvisioningSpecification",
-          "documentation":"<p>The launch specification for Spot instances in the fleet, which determines the defined duration, provisioning timeout behavior, and allocation strategy.</p>"
+          "documentation":"<p>The launch specification for Spot instances in the fleet, which determines the allocation strategy, defined duration, and provisioning timeout behavior.</p>"
         },
         "OnDemandSpecification":{
           "shape":"OnDemandProvisioningSpecification",
-          "documentation":"<p> The launch specification for On-Demand Instances in the instance fleet, which determines the allocation strategy. </p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions. On-Demand Instances allocation strategy is available in Amazon EMR releases 5.12.1 and later.</p> </note>"
+          "documentation":"<p> The launch specification for On-Demand Instances in the instance fleet, which determines the allocation strategy and capacity reservation options.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions. On-Demand Instances allocation strategy is available in Amazon EMR releases 5.12.1 and later.</p> </note>"
         }
       },
-      "documentation":"<p>The launch specification for Spot Instances in the fleet, which determines the defined duration, provisioning timeout behavior, and allocation strategy.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions. On-Demand and Spot instance allocation strategies are available in Amazon EMR releases 5.12.1 and later.</p> </note>"
+      "documentation":"<p>The launch specification for On-Demand and Spot Instances in the fleet.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions. On-Demand and Spot instance allocation strategies are available in Amazon EMR releases 5.12.1 and later.</p> </note>"
     },
     "InstanceFleetResizingSpecifications":{
       "type":"structure",
       "members":{
         "SpotResizeSpecification":{
           "shape":"SpotResizingSpecification",
-          "documentation":"<p>The resize specification for Spot Instances in the instance fleet, which contains the resize timeout period. </p>"
+          "documentation":"<p>The resize specification for Spot Instances in the instance fleet, which contains the allocation strategy and the resize timeout period. </p>"
         },
         "OnDemandResizeSpecification":{
           "shape":"OnDemandResizingSpecification",
-          "documentation":"<p>The resize specification for On-Demand Instances in the instance fleet, which contains the resize timeout period. </p>"
+          "documentation":"<p>The resize specification for On-Demand Instances in the instance fleet, which contains the allocation strategy, capacity reservation options, and the resize timeout period. </p>"
         }
       },
       "documentation":"<p>The resize specification for On-Demand and Spot Instances in the fleet.</p>"
@@ -2566,6 +2818,7 @@
         "BOOTSTRAPPING",
         "RUNNING",
         "RESIZING",
+        "RECONFIGURING",
         "SUSPENDED",
         "TERMINATING",
         "TERMINATED"
@@ -2659,7 +2912,7 @@
         },
         "BidPrice":{
           "shape":"String",
-          "documentation":"<p>If specified, indicates that the instance group uses Spot Instances. This is the maximum price you are willing to pay for Spot Instances. Specify <code>OnDemandPrice</code> to set the amount equal to the On-Demand price, or specify an amount in USD.</p>"
+          "documentation":"<p>The bid price for each Amazon EC2 Spot Instance type as defined by <code>InstanceType</code>. Expressed in USD. If neither <code>BidPrice</code> nor <code>BidPriceAsPercentageOfOnDemandPrice</code> is provided, <code>BidPriceAsPercentageOfOnDemandPrice</code> defaults to 100%.</p>"
         },
         "InstanceType":{
           "shape":"InstanceType",
@@ -2738,7 +2991,7 @@
         },
         "BidPrice":{
           "shape":"XmlStringMaxLen256",
-          "documentation":"<p>If specified, indicates that the instance group uses Spot Instances. This is the maximum price you are willing to pay for Spot Instances. Specify <code>OnDemandPrice</code> to set the amount equal to the On-Demand price, or specify an amount in USD.</p>"
+          "documentation":"<p>The bid price for each Amazon EC2 Spot Instance type as defined by <code>InstanceType</code>. Expressed in USD. If neither <code>BidPrice</code> nor <code>BidPriceAsPercentageOfOnDemandPrice</code> is provided, <code>BidPriceAsPercentageOfOnDemandPrice</code> defaults to 100%.</p>"
         },
         "InstanceType":{
           "shape":"InstanceType",
@@ -2801,7 +3054,7 @@
         },
         "BidPrice":{
           "shape":"XmlStringMaxLen256",
-          "documentation":"<p>If specified, indicates that the instance group uses Spot Instances. This is the maximum price you are willing to pay for Spot Instances. Specify <code>OnDemandPrice</code> to set the amount equal to the On-Demand price, or specify an amount in USD.</p>"
+          "documentation":"<p>The bid price for each Amazon EC2 Spot Instance type as defined by <code>InstanceType</code>. Expressed in USD. If neither <code>BidPrice</code> nor <code>BidPriceAsPercentageOfOnDemandPrice</code> is provided, <code>BidPriceAsPercentageOfOnDemandPrice</code> defaults to 100%.</p>"
         },
         "InstanceType":{
           "shape":"InstanceType",
@@ -3123,6 +3376,10 @@
         "CustomAmiId":{
           "shape":"XmlStringMaxLen256",
           "documentation":"<p>The custom AMI ID to use for the instance type.</p>"
+        },
+        "Priority":{
+          "shape":"NonNegativeDouble",
+          "documentation":"<p>The priority at which Amazon EMR launches the Amazon EC2 instances with this instance type. Priority starts at 0, which is the highest priority. Amazon EMR considers the highest priority first.</p>"
         }
       },
       "documentation":"<p>An instance type configuration for each instance type in an instance fleet, which determines the Amazon EC2 instances Amazon EMR attempts to provision to fulfill On-Demand and Spot target capacities. When you use an allocation strategy, you can include a maximum of 30 instance type configurations for a fleet. For more information about how to use an allocation strategy, see <a href=\"https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-fleet.html\">Configure Instance Fleets</a>. Without an allocation strategy, you may specify a maximum of five instance type configurations for a fleet.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions.</p> </note>"
@@ -3144,7 +3401,7 @@
         },
         "BidPrice":{
           "shape":"XmlStringMaxLen256",
-          "documentation":"<p>The bid price for each Amazon EC2 Spot Instance type as defined by <code>InstanceType</code>. Expressed in USD.</p>"
+          "documentation":"<p>The bid price for each Amazon EC2 Spot Instance type as defined by <code>InstanceType</code>. Expressed in USD. If neither <code>BidPrice</code> nor <code>BidPriceAsPercentageOfOnDemandPrice</code> is provided, <code>BidPriceAsPercentageOfOnDemandPrice</code> defaults to 100%.</p>"
         },
         "BidPriceAsPercentageOfOnDemandPrice":{
           "shape":"NonNegativeDouble",
@@ -3165,6 +3422,10 @@
         "CustomAmiId":{
           "shape":"XmlStringMaxLen256",
           "documentation":"<p>The custom AMI ID to use for the instance type.</p>"
+        },
+        "Priority":{
+          "shape":"NonNegativeDouble",
+          "documentation":"<p>The priority at which Amazon EMR launches the Amazon EC2 instances with this instance type. Priority starts at 0, which is the highest priority. Amazon EMR considers the highest priority first.</p>"
         }
       },
       "documentation":"<p>The configuration specification for each instance type in an instance fleet.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions.</p> </note>"
@@ -3176,8 +3437,7 @@
     "Integer":{"type":"integer"},
     "InternalServerError":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Indicates that an error occurred while processing the request and that the request was not completed.</p>",
       "exception":true
     },
@@ -3909,6 +4169,11 @@
         }
       }
     },
+    "LogTypesMap":{
+      "type":"map",
+      "key":{"shape":"XmlString"},
+      "value":{"shape":"XmlStringList"}
+    },
     "Long":{"type":"long"},
     "ManagedScalingPolicy":{
       "type":"structure",
@@ -3916,6 +4181,14 @@
         "ComputeLimits":{
           "shape":"ComputeLimits",
           "documentation":"<p>The Amazon EC2 unit limits for a managed scaling policy. The managed scaling activity of a cluster is not allowed to go above or below these limits. The limit only applies to the core and task nodes. The master node cannot be scaled after initial configuration.</p>"
+        },
+        "UtilizationPerformanceIndex":{
+          "shape":"UtilizationPerformanceIndexInteger",
+          "documentation":"<p>An integer value that represents an advanced scaling strategy. Setting a higher value optimizes for performance. Setting a lower value optimizes for resource conservation. Setting the value to 50 balances performance and resource conservation. Possible values are 1, 25, 50, 75, and 100.</p>"
+        },
+        "ScalingStrategy":{
+          "shape":"ScalingStrategy",
+          "documentation":"<p>Determines whether a custom scaling utilization performance index can be set. Possible values include <i>ADVANCED</i> or <i>DEFAULT</i>.</p>"
         }
       },
       "documentation":"<p> Managed scaling policy for an Amazon EMR cluster. The policy specifies the limits for resources that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration. </p>"
@@ -3962,6 +4235,10 @@
         "StepConcurrencyLevel":{
           "shape":"Integer",
           "documentation":"<p>The number of steps that can be executed concurrently. You can specify a minimum of 1 step and a maximum of 256 steps. We recommend that you do not change this parameter while steps are running or the <code>ActionOnFailure</code> setting may not behave as expected. For more information see <a>Step$ActionOnFailure</a>.</p>"
+        },
+        "ExtendedSupport":{
+          "shape":"BooleanObject",
+          "documentation":"<p>Reserved.</p>"
         }
       }
     },
@@ -3971,6 +4248,10 @@
         "StepConcurrencyLevel":{
           "shape":"Integer",
           "documentation":"<p>The number of steps that can be executed concurrently.</p>"
+        },
+        "ExtendedSupport":{
+          "shape":"BooleanObject",
+          "documentation":"<p>Reserved.</p>"
         }
       }
     },
@@ -4004,6 +4285,16 @@
         }
       },
       "documentation":"<p>Change the size of some instance groups.</p>"
+    },
+    "MonitoringConfiguration":{
+      "type":"structure",
+      "members":{
+        "CloudWatchLogConfiguration":{
+          "shape":"CloudWatchLogConfiguration",
+          "documentation":"<p>CloudWatch log configuration settings and metadata that specify settings like log files to monitor and where to send them.</p>"
+        }
+      },
+      "documentation":"<p>Contains CloudWatch log configuration metadata and settings.</p>"
     },
     "NewSupportedProductsList":{
       "type":"list",
@@ -4186,6 +4477,17 @@
       "type":"list",
       "member":{"shape":"OSRelease"}
     },
+    "OnClusterAppUIType":{
+      "type":"string",
+      "enum":[
+        "SparkHistoryServer",
+        "YarnTimelineService",
+        "TezUI",
+        "ApplicationMaster",
+        "JobHistoryServer",
+        "ResourceManager"
+      ]
+    },
     "OnDemandCapacityReservationOptions":{
       "type":"structure",
       "members":{
@@ -4217,7 +4519,10 @@
     },
     "OnDemandProvisioningAllocationStrategy":{
       "type":"string",
-      "enum":["lowest-price"]
+      "enum":[
+        "lowest-price",
+        "prioritized"
+      ]
     },
     "OnDemandProvisioningSpecification":{
       "type":"structure",
@@ -4225,7 +4530,7 @@
       "members":{
         "AllocationStrategy":{
           "shape":"OnDemandProvisioningAllocationStrategy",
-          "documentation":"<p>Specifies the strategy to use in launching On-Demand instance fleets. Currently, the only option is <code>lowest-price</code> (the default), which launches the lowest price first.</p>"
+          "documentation":"<p>Specifies the strategy to use in launching On-Demand instance fleets. Available options are <code>lowest-price</code> and <code>prioritized</code>. <code>lowest-price</code> specifies to launch the instances with the lowest price first, and <code>prioritized</code> specifies that Amazon EMR should launch the instances with the highest priority first. The default is <code>lowest-price</code>.</p>"
         },
         "CapacityReservationOptions":{
           "shape":"OnDemandCapacityReservationOptions",
@@ -4236,12 +4541,16 @@
     },
     "OnDemandResizingSpecification":{
       "type":"structure",
-      "required":["TimeoutDurationMinutes"],
       "members":{
         "TimeoutDurationMinutes":{
           "shape":"WholeNumber",
           "documentation":"<p>On-Demand resize timeout in minutes. If On-Demand Instances are not provisioned within this time, the resize workflow stops. The minimum value is 5 minutes, and the maximum value is 10,080 minutes (7 days). The timeout applies to all resize workflows on the Instance Fleet. The resize could be triggered by Amazon EMR Managed Scaling or by the customer (via Amazon EMR Console, Amazon EMR CLI modify-instance-fleet or Amazon EMR SDK ModifyInstanceFleet API) or by Amazon EMR due to Amazon EC2 Spot Reclamation.</p>"
-        }
+        },
+        "AllocationStrategy":{
+          "shape":"OnDemandProvisioningAllocationStrategy",
+          "documentation":"<p>Specifies the allocation strategy to use to launch On-Demand instances during a resize. The default is <code>lowest-price</code>.</p>"
+        },
+        "CapacityReservationOptions":{"shape":"OnDemandCapacityReservationOptions"}
       },
       "documentation":"<p>The resize specification for On-Demand Instances in the instance fleet, which contains the resize timeout period. </p>"
     },
@@ -4281,6 +4590,56 @@
         }
       },
       "documentation":"<p>The Amazon S3 location that stores the notebook execution output.</p>"
+    },
+    "PersistentAppUI":{
+      "type":"structure",
+      "members":{
+        "PersistentAppUIId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The identifier for the persistent application user interface object.</p>"
+        },
+        "PersistentAppUITypeList":{
+          "shape":"PersistentAppUITypeList",
+          "documentation":"<p>The type list for the persistent application user interface object. Valid values include SHS, YTS, or TEZ.</p>"
+        },
+        "PersistentAppUIStatus":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The status for the persistent application user interface object.</p>"
+        },
+        "AuthorId":{
+          "shape":"XmlStringMaxLen256",
+          "documentation":"<p>The author ID for the persistent application user interface object.</p>"
+        },
+        "CreationTime":{
+          "shape":"Date",
+          "documentation":"<p>The creation date and time for the persistent application user interface object.</p>"
+        },
+        "LastModifiedTime":{
+          "shape":"Date",
+          "documentation":"<p>The date and time the persistent application user interface object was last changed.</p>"
+        },
+        "LastStateChangeReason":{
+          "shape":"XmlString",
+          "documentation":"<p>The reason the persistent application user interface object was last changed.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>A collection of tags for the persistent application user interface object.</p>"
+        }
+      },
+      "documentation":"<p>Holds persistent application user interface information. Applications installed on the Amazon EMR cluster publish user interfaces as web sites to monitor cluster activity.</p>"
+    },
+    "PersistentAppUIType":{
+      "type":"string",
+      "enum":[
+        "SHS",
+        "TEZ",
+        "YTS"
+      ]
+    },
+    "PersistentAppUITypeList":{
+      "type":"list",
+      "member":{"shape":"PersistentAppUIType"}
     },
     "PlacementGroupConfig":{
       "type":"structure",
@@ -4348,6 +4707,14 @@
       "type":"list",
       "member":{"shape":"PortRange"}
     },
+    "ProfilerType":{
+      "type":"string",
+      "enum":[
+        "SHS",
+        "TEZUI",
+        "YTS"
+      ]
+    },
     "PutAutoScalingPolicyInput":{
       "type":"structure",
       "required":[
@@ -4407,8 +4774,7 @@
     },
     "PutAutoTerminationPolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "PutBlockPublicAccessConfigurationInput":{
       "type":"structure",
@@ -4422,8 +4788,7 @@
     },
     "PutBlockPublicAccessConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "PutManagedScalingPolicyInput":{
       "type":"structure",
@@ -4444,8 +4809,7 @@
     },
     "PutManagedScalingPolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ReconfigurationType":{
       "type":"string",
@@ -4487,8 +4851,7 @@
     },
     "RemoveAutoScalingPolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RemoveAutoTerminationPolicyInput":{
       "type":"structure",
@@ -4502,8 +4865,7 @@
     },
     "RemoveAutoTerminationPolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RemoveManagedScalingPolicyInput":{
       "type":"structure",
@@ -4517,8 +4879,7 @@
     },
     "RemoveManagedScalingPolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RemoveTagsInput":{
       "type":"structure",
@@ -4540,8 +4901,7 @@
     },
     "RemoveTagsOutput":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>This output indicates the result of removing tags from the resource.</p>"
     },
     "RepoUpgradeOnBoot":{
@@ -4679,6 +5039,14 @@
         "EbsRootVolumeThroughput":{
           "shape":"Integer",
           "documentation":"<p>The throughput, in MiB/s, of the Amazon EBS root device volume of the Linux AMI that is used for each Amazon EC2 instance. Available in Amazon EMR releases 6.15.0 and later.</p>"
+        },
+        "ExtendedSupport":{
+          "shape":"BooleanObject",
+          "documentation":"<p>Reserved.</p>"
+        },
+        "MonitoringConfiguration":{
+          "shape":"MonitoringConfiguration",
+          "documentation":"<p>Contains CloudWatch log configuration metadata and settings.</p>"
         }
       },
       "documentation":"<p> Input to the <a>RunJobFlow</a> operation. </p>"
@@ -4696,6 +5064,20 @@
         }
       },
       "documentation":"<p> The result of the <a>RunJobFlow</a> operation. </p>"
+    },
+    "S3MonitoringConfiguration":{
+      "type":"structure",
+      "members":{
+        "LogUri":{
+          "shape":"XmlString",
+          "documentation":"<p>The Amazon S3 destination URI for log publishing.</p>"
+        },
+        "EncryptionKeyArn":{
+          "shape":"XmlString",
+          "documentation":"<p>The KMS key ARN to encrypt the logs published to the given Amazon S3 destination.</p>"
+        }
+      },
+      "documentation":"<p>The Amazon S3 configuration for monitoring log publishing. You can configure your step to send log information to Amazon S3. When it's specified, it takes precedence over the cluster's logging configuration. If you don't specify this configuration entirely, or omit individual fields, EMR falls back to cluster-level logging behavior.</p>"
     },
     "ScaleDownBehavior":{
       "type":"string",
@@ -4767,6 +5149,13 @@
     "ScalingRuleList":{
       "type":"list",
       "member":{"shape":"ScalingRule"}
+    },
+    "ScalingStrategy":{
+      "type":"string",
+      "enum":[
+        "DEFAULT",
+        "ADVANCED"
+      ]
     },
     "ScalingTrigger":{
       "type":"structure",
@@ -5011,7 +5400,8 @@
         "capacity-optimized",
         "price-capacity-optimized",
         "lowest-price",
-        "diversified"
+        "diversified",
+        "capacity-optimized-prioritized"
       ]
     },
     "SpotProvisioningSpecification":{
@@ -5035,7 +5425,7 @@
         },
         "AllocationStrategy":{
           "shape":"SpotProvisioningAllocationStrategy",
-          "documentation":"<p>Specifies one of the following strategies to launch Spot Instance fleets: <code>price-capacity-optimized</code>, <code>capacity-optimized</code>, <code>lowest-price</code>, or <code>diversified</code>. For more information on the provisioning strategies, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-fleet-allocation-strategy.html\">Allocation strategies for Spot Instances</a> in the <i>Amazon EC2 User Guide for Linux Instances</i>.</p> <note> <p>When you launch a Spot Instance fleet with the old console, it automatically launches with the <code>capacity-optimized</code> strategy. You can't change the allocation strategy from the old console.</p> </note>"
+          "documentation":"<p>Specifies one of the following strategies to launch Spot Instance fleets: <code>capacity-optimized</code>, <code>price-capacity-optimized</code>, <code>lowest-price</code>, or <code>diversified</code>, and <code>capacity-optimized-prioritized</code>. For more information on the provisioning strategies, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-fleet-allocation-strategy.html\">Allocation strategies for Spot Instances</a> in the <i>Amazon EC2 User Guide for Linux Instances</i>.</p> <note> <p>When you launch a Spot Instance fleet with the old console, it automatically launches with the <code>capacity-optimized</code> strategy. You can't change the allocation strategy from the old console.</p> </note>"
         }
       },
       "documentation":"<p>The launch specification for Spot Instances in the instance fleet, which determines the defined duration, provisioning timeout behavior, and allocation strategy.</p> <note> <p>The instance fleet configuration is available only in Amazon EMR releases 4.8.0 and later, excluding 5.0.x versions. Spot Instance allocation strategy is available in Amazon EMR releases 5.12.1 and later.</p> </note> <note> <p>Spot Instances with a defined duration (also known as Spot blocks) are no longer available to new customers from July 1, 2021. For customers who have previously used the feature, we will continue to support Spot Instances with a defined duration until December 31, 2022. </p> </note>"
@@ -5049,11 +5439,14 @@
     },
     "SpotResizingSpecification":{
       "type":"structure",
-      "required":["TimeoutDurationMinutes"],
       "members":{
         "TimeoutDurationMinutes":{
           "shape":"WholeNumber",
           "documentation":"<p>Spot resize timeout in minutes. If Spot Instances are not provisioned within this time, the resize workflow will stop provisioning of Spot instances. Minimum value is 5 minutes and maximum value is 10,080 minutes (7 days). The timeout applies to all resize workflows on the Instance Fleet. The resize could be triggered by Amazon EMR Managed Scaling or by the customer (via Amazon EMR Console, Amazon EMR CLI modify-instance-fleet or Amazon EMR SDK ModifyInstanceFleet API) or by Amazon EMR due to Amazon EC2 Spot Reclamation.</p>"
+        },
+        "AllocationStrategy":{
+          "shape":"SpotProvisioningAllocationStrategy",
+          "documentation":"<p>Specifies the allocation strategy to use to launch Spot instances during a resize. If you run Amazon EMR releases 6.9.0 or higher, the default is <code>price-capacity-optimized</code>. If you run Amazon EMR releases 6.8.0 or lower, the default is <code>capacity-optimized</code>.</p>"
         }
       },
       "documentation":"<p>The resize specification for Spot Instances in the instance fleet, which contains the resize timeout period. </p>"
@@ -5160,6 +5553,14 @@
         "ExecutionRoleArn":{
           "shape":"OptionalArnType",
           "documentation":"<p>The Amazon Resource Name (ARN) of the runtime role for a step on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: <code>arn:partition:service:region:account:resource</code>. </p> <p>For example, <code>arn:aws:IAM::1234567890:role/ReadOnly</code> is a correctly formatted runtime role ARN.</p>"
+        },
+        "LogUri":{
+          "shape":"String",
+          "documentation":"<p>The Amazon S3 destination URI for log publishing.</p>"
+        },
+        "EncryptionKeyArn":{
+          "shape":"String",
+          "documentation":"<p>The KMS key ARN to encrypt the logs published to the given Amazon S3 destination.</p>"
         }
       },
       "documentation":"<p>This represents a step in a cluster.</p>"
@@ -5189,6 +5590,10 @@
         "HadoopJarStep":{
           "shape":"HadoopJarStepConfig",
           "documentation":"<p>The JAR file used for the step.</p>"
+        },
+        "StepMonitoringConfiguration":{
+          "shape":"StepMonitoringConfiguration",
+          "documentation":"<p>Object that holds configuration properties for logging.</p>"
         }
       },
       "documentation":"<p>Specification for a cluster (job flow) step.</p>"
@@ -5265,6 +5670,16 @@
     "StepIdsList":{
       "type":"list",
       "member":{"shape":"XmlStringMaxLen256"}
+    },
+    "StepMonitoringConfiguration":{
+      "type":"structure",
+      "members":{
+        "S3MonitoringConfiguration":{
+          "shape":"S3MonitoringConfiguration",
+          "documentation":"<p>The Amazon S3 configuration for monitoring log publishing. You can configure your step to send log information to Amazon S3. When it's specified, it takes precedence over the cluster's logging configuration. If you don't specify this configuration entirely, or omit individual fields, EMR falls back to cluster-level logging behavior. </p>"
+        }
+      },
+      "documentation":"<p>Object that holds configuration properties for logging.</p>"
     },
     "StepState":{
       "type":"string",
@@ -5344,6 +5759,14 @@
         "Status":{
           "shape":"StepStatus",
           "documentation":"<p>The current execution status details of the cluster step.</p>"
+        },
+        "LogUri":{
+          "shape":"String",
+          "documentation":"<p>The Amazon S3 destination URI for log publishing.</p>"
+        },
+        "EncryptionKeyArn":{
+          "shape":"String",
+          "documentation":"<p>The KMS key ARN to encrypt the logs published to the given Amazon S3 destination.</p>"
         }
       },
       "documentation":"<p>The summary of the cluster step.</p>"
@@ -5739,6 +6162,11 @@
       },
       "documentation":"<p>The username and password that you use to connect to cluster endpoints.</p>",
       "sensitive":true
+    },
+    "UtilizationPerformanceIndexInteger":{
+      "type":"integer",
+      "max":100,
+      "min":1
     },
     "VolumeSpecification":{
       "type":"structure",

@@ -3,10 +3,16 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
 
+namespace NKikimr::NMiniKQL {
+
+namespace {
+
+using NTest::TSingularVoid;
 // XXX: Emulate type transformations similar to the one made by
 // type annotation and compilation phases. As a result, the name
 // (i.e. "UDF") of callable type is lost. Hence, the type resolved
@@ -14,12 +20,13 @@ namespace NMiniKQL {
 // compilation) differs from the type, resolved for the underline
 // function at runtime.
 template <typename TUdf>
-static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
-                           const TTypeEnvironment& env)
+TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
+                    const TTypeEnvironment& env)
 {
-    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, env,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings();
+    TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, *runtimeSettings, env,
                                              new TTypeInfoHelper(),
-                                             "", nullptr, NYql::NUdf::TSourcePosition());
+                                             "", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition());
 
     // Obtain the callable type of the particular UDF.
     TFunctionTypeInfo funcInfo;
@@ -85,8 +92,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -129,8 +136,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -191,8 +198,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -252,15 +259,15 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TRunConfigUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TRunConfigUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph on the setup with TRunConfig implementation.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto upvalue = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("is alive");
-    const auto userType = pb.NewTupleType({pb.NewTupleType({strType}),
+    const auto strType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
+    const auto upvalue = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary"));
+    const auto value = NTest::ConvertValueToLiteralNode(pb, TStringBuf("is alive"));
+    const auto userType = pb.NewTupleType({NTest::ConvertToMinikqlType<std::tuple<TStringBuf>>(pb),
                                            pb.NewEmptyStructType(),
                                            pb.NewEmptyTupleType()});
 
@@ -276,7 +283,7 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TCurryingUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TCurryingUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
 
     // Move the graph from the one setup to another as a
@@ -286,12 +293,7 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
 
     // Run the graph on the setup with TCurrying implementation.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
@@ -299,21 +301,21 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TCurryingUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TCurryingUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph on the setup with TRunConfig implementation.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto upvalue = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto optional = pb.NewOptional(pb.NewDataLiteral(true));
-    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("is alive");
-    const auto userType = pb.NewTupleType({pb.NewTupleType({strType}),
+    const auto strType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
+    const auto upvalue = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary"));
+    const auto optional = NTest::ConvertValueToLiteralNode(pb, TMaybe<bool>{true});
+    const auto value = NTest::ConvertValueToLiteralNode(pb, TStringBuf("is alive"));
+    const auto userType = pb.NewTupleType({NTest::ConvertToMinikqlType<std::tuple<TStringBuf>>(pb),
                                            pb.NewEmptyStructType(),
                                            pb.NewEmptyTupleType()});
 
     const auto udfType = TweakUdfType<TCurrying>("Test", userType, *compileSetup.Env);
-    const auto udf = pb.TypedUdf("TestModule.Test", udfType, pb.NewVoid(), userType);
+    const auto udf = pb.TypedUdf("TestModule.Test", udfType, NTest::ConvertValueToLiteralNode(pb, TSingularVoid{}), userType);
     const auto closure = pb.Apply(udf, {upvalue, optional});
 
     const auto list = pb.NewList(strType, {value});
@@ -325,7 +327,7 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TRunConfigUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TRunConfigUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -334,12 +336,7 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
 
     // Run the graph on the setup with TCurrying implementation.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(OldToIncremental) {
@@ -347,19 +344,16 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TOldUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TOldUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the old setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -368,7 +362,7 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -377,12 +371,7 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
 
     // Run the graph, using the incremental setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(IncrementalToOld) {
@@ -390,19 +379,16 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the incremental setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -411,7 +397,7 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TOldUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TOldUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -420,12 +406,7 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
 
     // Run the graph, using the old setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(IncrementalToNew) {
@@ -433,19 +414,16 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the incremental setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -454,7 +432,7 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TNewUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TNewUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -463,12 +441,7 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
 
     // Run the graph, using the new setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(NewToIncremental) {
@@ -476,22 +449,16 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TNewUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TNewUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the new setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto optType = pb.NewOptionalType(strType);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
-    const auto arg4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("still");
-    const auto opt4 = pb.NewOptional(arg4);
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf, TMaybe<TStringBuf>>{"Canary", "is", "alive", TMaybe<TStringBuf>{"still"}});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType, optType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3, opt4})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf, TMaybe<TStringBuf>>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2), pb.Nth(args, 3)});
     });
@@ -500,7 +467,7 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -509,12 +476,7 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
 
     // Run the graph, using the incremental setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is still alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is still alive"});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLUdfTest)
 
@@ -522,8 +484,6 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
 // call of the Datetime::Format UDF with the basic date resource
 // parameter against the underline function, expecting the
 // extended date resource as an argument.
-
-namespace {
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
@@ -555,11 +515,11 @@ const TStorage& Reference(const TValue& value) {
     return *reinterpret_cast<const TStorage*>(value.GetRawPtr());
 }
 
-static TRuntimeNode NewDateTimeNode(const NYql::NUdf::TStringRef& dateLiteral,
-                                    const TTypeEnvironment& env)
+TRuntimeNode NewDateTimeNode(const NYql::NUdf::TStringRef& dateLiteral,
+                             const TTypeEnvironment& env)
 {
     const auto dtval = ValueFromString(NYql::NUdf::EDataSlot::Datetime, dateLiteral);
-    return TRuntimeNode(BuildDataLiteral(dtval, NUdf::TDataType<NYql::NUdf::TDatetime>::Id, env), true);
+    return TRuntimeNode(BuildDataLiteral(dtval, NUdf::TDataType<NYql::NUdf::TDatetime>::Id, env), /*isImmediate=*/true);
 }
 
 template <enum EBuilds Build, bool LoweredRuntimeVersion>
@@ -569,8 +529,8 @@ class TTestDateTime2Format: public NYql::NUdf::TBoxedValue {
 
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Format");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Format");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -634,7 +594,7 @@ private:
     class TTestDateTime2Formatter: public NYql::NUdf::TBoxedValue {
     public:
         TTestDateTime2Formatter(NYql::NUdf::TUnboxedValue format, bool alwaysWriteFractionalSeconds)
-            : Format_(format)
+            : Format_(std::move(format))
         {
             UNIT_ASSERT(!alwaysWriteFractionalSeconds);
         }
@@ -668,8 +628,8 @@ template <bool LoweredRuntimeVersion>
 class TTestDateTime2Convert: public NYql::NUdf::TBoxedValue {
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Convert");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Convert");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -717,8 +677,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Split");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Split");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -781,7 +741,7 @@ SIMPLE_MODULE(TTestC2DateTime2Module, TTestDateTime2Format<EBuilds::C, false>,
               TTestDateTime2Split)
 
 template <bool LLVM, class TCompileModule, class TRunModule>
-static void TestDateTimeFormat() {
+void TestDateTimeFormat() {
     // Create the test setup, using compileModule implementation
     // for DateTime2 UDF.
     TVector<TUdfModuleInfo> modules;
@@ -792,7 +752,7 @@ static void TestDateTimeFormat() {
     // Build the graph, using the compileModule setup.
     const auto dttype = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto dtnode = NewDateTimeNode("2009-09-01T15:37:19Z", *compileSetup.Env);
-    const auto format = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary is alive");
+    const auto format = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary is alive"));
 
     // Build the runtime node for formatter (i.e. DateTime2.Format
     // resulting closure), considering its declared signature.
@@ -828,12 +788,7 @@ static void TestDateTimeFormat() {
 
     // Run the graph, using the runModule setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive: 1/9/2009 15:37:19.");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive: 1/9/2009 15:37:19."});
 }
 
 } // namespace
@@ -888,5 +843,4 @@ Y_UNIT_TEST_LLVM(C2toC1) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLDatetimeFormatTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

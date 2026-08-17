@@ -5,6 +5,8 @@
 
 #include <library/cpp/protobuf/yql/descriptor.h>
 
+#include <utility>
+
 using namespace NKikimr::NUdf;
 using namespace NProtoBuf;
 
@@ -13,7 +15,7 @@ class TDynamicProtoValue: public TProtobufValue {
 public:
     TDynamicProtoValue(const TProtoInfo& info, TDynamicInfoRef dyn)
         : TProtobufValue(info)
-        , Dynamic_(dyn)
+        , Dynamic_(std::move(dyn))
     {
         Y_ASSERT(Dynamic_ != nullptr);
     }
@@ -30,7 +32,7 @@ class TDynamicProtoSerialize: public TProtobufSerialize {
 public:
     TDynamicProtoSerialize(const TProtoInfo& info, TDynamicInfoRef dyn)
         : TProtobufSerialize(info)
-        , Dynamic_(dyn)
+        , Dynamic_(std::move(dyn))
     {
         Y_ASSERT(Dynamic_ != nullptr);
     }
@@ -72,10 +74,23 @@ public:
     void CleanupOnTerminate() const final {
     }
 
+    static void AddFunc(IFunctionsSink& sink, TStringBuf name, bool isTypeAware = false, TStringBuf polyArgs = {}) {
+        auto f = sink.Add(name);
+        if (isTypeAware) {
+            f->SetTypeAwareness();
+            if (polyArgs) {
+                f->SetPolyArgs(polyArgs);
+            }
+        }
+    }
+
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        sink.Add(TStringRef::Of("Parse"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("TryParse"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
+        AddFunc(sink, "Parse", /*isTypeAware=*/true,
+                R"([[[];{type=["CallableType";[];[["UniversalStructType"]];[[["DataType";"String"];1u]]]}]])");
+        AddFunc(sink, "TryParse", /*isTypeAware=*/true,
+                R"([[[];{type=["CallableType";[];[["OptionalType";["UniversalStructType"]]];[[["DataType";"String"];1u]]]}]])");
+        AddFunc(sink, "Serialize", /*isTypeAware=*/true,
+                R"([[[];{type=["CallableType";[];[["DataType";"String"]];[[["UniversalStructType"];1u]]]}]])");
     }
 
     void BuildFunctionTypeInfo(
@@ -97,7 +112,7 @@ public:
                            builder, &typeInfo,
                            EProtoStringYqlType::Bytes,
                            dyn->GetSyntaxAware(),
-                           false,
+                           /*useJsonName=*/false,
                            dyn->GetYtMode());
 
             auto stringType = builder.SimpleType<char*>();

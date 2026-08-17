@@ -273,25 +273,25 @@ namespace NKikimr::NAutoConfigInitializer {
             ioExecutor->SetThreads(config->HasForceIOPoolThreads() ? config->GetForceIOPoolThreads() : 1);
             ioExecutor->SetName("IO");
 
-            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread, i16 maxThreads) {
+            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread) {
                 executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
                 executor->SetThreads(hasSharedThread);
-                executor->SetMaxThreads(maxThreads);
+                executor->SetMaxThreads(hasSharedThread);
                 executor->SetName(name);
                 executor->SetPriority(priority);
                 executor->SetSpinThreshold(0);
                 executor->SetHasSharedThread(hasSharedThread);
             };
 
-            assignPool(systemExecutor, "System", 30, cpuCount >= 3, cpuCount);
-            assignPool(userExecutor, "User", 20, cpuCount >= 2, cpuCount);
-            assignPool(batchExecutor, "Batch", 10, false, 1);
-            assignPool(icExecutor, "IC", 40, true, cpuCount);
+            assignPool(systemExecutor, "System", 30, cpuCount >= 3);
+            assignPool(userExecutor, "User", 20, cpuCount >= 2);
+            assignPool(batchExecutor, "Batch", 10, false);
+            assignPool(icExecutor, "IC", 40, true);
 
-            batchExecutor->SetForcedForeignSlots(1);
-            userExecutor->SetForcedForeignSlots(2);
-            icExecutor->SetForcedForeignSlots(2);
-            systemExecutor->SetForcedForeignSlots(2);
+            batchExecutor->SetForcedForeignSlots(0);
+            userExecutor->SetForcedForeignSlots(cpuCount - 1);
+            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
 
             if (cpuCount >= 2) {
                 userExecutor->AddAdjacentPools(2);

@@ -53,9 +53,11 @@ public:
 
 void Bootstrap(const NActors::TActorContext& ctx);
 
-
-TStringBuilder LogPrefix() const {
-    return TStringBuilder() << "KafkaListGroupsActor{DatabasePath=" << DatabasePath << "}: ";
+NStructuredLog::TStructuredMessage LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "KafkaListGroupsActor"},
+        {"selfId", SelfId()},
+        {"databasePath", DatabasePath});
 }
 
 private:
@@ -78,6 +80,7 @@ private:
     TListGroupsResponseData ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response);
 
     TString GetYqlWithTableNames(const TString& templateStr);
+    TString GetMetadataDatabasePath() const;
     TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
     NYdb::TParams BuildSelectParams();
     std::shared_ptr<TListGroupsResponseData> BuildResponse(TListGroupsResponseData responseData);

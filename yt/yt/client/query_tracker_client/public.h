@@ -28,7 +28,6 @@ DEFINE_STRING_SERIALIZABLE_ENUM(EQueryEngine,
     (Chyt)
     (Mock)
     (Spyt)
-    (SpytConnect)
 );
 
 DEFINE_STRING_SERIALIZABLE_ENUM(EQueryState,

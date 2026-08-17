@@ -57,6 +57,7 @@ constexpr ui64 SmallDiskSizeLogBoundary = 200ull * (1 << 30);
 constexpr ui64 TinyDiskSizeLogBoundary = 8ull * (1 << 30);
 constexpr i64 MaxCommonLogChunks = 200; // default, can also be set from ICB
 constexpr i64 CommonStaticLogChunks = 70; // default, can also be set from ICB
+constexpr ui32 StaticGroupChunkReservePerMille = 500; // default, can also be set from ICB
 constexpr i64 TinyDiskMaxCommonLogChunks = 20;
 constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 
@@ -653,13 +654,6 @@ enum EFormatFlags {
     FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
 };
 
-struct TPersistentBufferFormat {
-    ui32 MaxChunks = 256;
-    ui32 InitChunks = 4;
-    ui32 MaxInMemoryCache = 128 << 20; // 128 MiB
-    ui32 MaxChunkRestoreInflight = 8;
-};
-
 struct TDiskFormat {
     ui64 Version;
     ui64 DiskSize;
@@ -992,6 +986,8 @@ struct TDiskFormat {
         return DiskSize < SmallDiskSizeBoundary;
     }
 };
+
+static_assert(sizeof(TDiskFormat) >= MagicIncompleteFormatSize, "Magic format should be less or equal than TDiskFormat");
 
 union TDiskFormatSector {
     TDiskFormat Format;

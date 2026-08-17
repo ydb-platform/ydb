@@ -16,18 +16,6 @@
 
 using namespace NYdb;
 
-#ifdef _linux_
-#include <sys/vfs.h>
-#include <sys/statfs.h>
-#include <linux/magic.h>
-
-extern "C" int statfs(const char* path, struct statfs* buf) {
-    (void)path;
-    buf->f_type = NFS_SUPER_MAGIC;
-    return 0;
-}
-#endif
-
 class TFsBackupParamsValidationTestFixture : public NUnitTest::TBaseFixture {
 public:
     static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(
@@ -166,6 +154,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         // Test that base_path must be absolute
         NExport::TExportToFsSettings settings = MakeExportSettings("");
         settings.BasePath("relative/path");
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(),
@@ -189,6 +178,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
     Y_UNIT_TEST(InvalidCompression) {
         // Test that compression codec must be valid
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
         settings.Compression("invalid-codec");
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
@@ -223,6 +213,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
     Y_UNIT_TEST(InvalidCompressionLevel) {
         // Test that compression level must be in valid range [1, 22]
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
 
         // Level too high
         settings.Compression("zstd-100");
@@ -333,6 +324,27 @@ Y_UNIT_TEST_SUITE_F(FsBackupEncryptionParamsValidationTestFeatureDisabled, TFsBa
             "Source path is not supported in current configuration",
             res.Status().GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(NoItemsExport) {
+        NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT(!res.Status().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(res.Status().GetIssues().ToString(),
+            "Exporting without explicitly specified items is not supported in current configuration");
+    }
+
+    Y_UNIT_TEST(ItemWithoutDestinationPath) {
+        NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", ""});  // No destination_path
+
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT(!res.Status().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(res.Status().GetIssues().ToString(),
+            "destination_path must be specified for item \"/Root/FsExportParamsValidation/dir1/Table1\" in current configuration");
+    }
 }
 
 // Import validation tests
@@ -355,7 +367,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         // Test that base_path must be absolute for import
         NImport::TImportFromFsSettings settings = MakeImportSettings("");
         settings.BasePath("relative/path");
-        settings.AppendItem({"table1", "/Root/Restored/table1"});  // Add item to pass items validation
+        settings.AppendItem({"table1", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(),
@@ -387,7 +399,20 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
-            "Empty item is not allowed",
+            "Empty import item was specified",
+            res.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(NoItemsWithoutSchemaMapping) {
+        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
+
+        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(),
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
+            "No items to import",
             res.Status().GetIssues().ToString());
     }
 }

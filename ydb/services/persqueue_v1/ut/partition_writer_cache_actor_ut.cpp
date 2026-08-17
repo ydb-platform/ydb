@@ -1,9 +1,5 @@
 #include "partition_writer_cache_actor_fixture.h"
 
-#include <ydb/core/persqueue/writer/writer.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <memory>
 
 namespace NKikimr::NPersQueueTests {

@@ -9,7 +9,6 @@
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/services/ydb/ydb_keys_ut.h>
 
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 
@@ -32,11 +31,8 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 
 static constexpr const ui64 FAKE_SERVERLESS_KAFKA_PROXY_PORT = 19092;
 
-struct WithSslAndAuth: TKikimrTestSettings {
-    static constexpr bool SSL = true;
-    static constexpr bool AUTH = true;
-};
-using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
+
+using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 
 struct TTestServerSettings {
     const TString KafkaApiMode = "1";
@@ -46,6 +42,8 @@ struct TTestServerSettings {
     bool EnableAutoConsumerCreation = true;
     bool EnableQuoting = true;
     bool CheckACL = false;
+    bool HideAuthenticationFailureReasons = false;
+    bool EnableKafkaServerlessTransactions = false;
 };
 
 template <class TKikimr, bool secure>
@@ -56,7 +54,8 @@ public:
     TTestServer(const TTestServerSettings& settings);
 
     TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
-                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true, bool checkACL = false);
+                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true,
+                bool checkACL = false, bool EnableKafkaServerlessTransactions = false);
 
 public:
     std::unique_ptr<TKikimr> KikimrServer;
@@ -64,6 +63,7 @@ public:
     THolder<TTempFileHandle> MeteringFile;
 
     TTicketParserAccessServiceMock accessServiceMock;
+    TTicketParserAccessServiceMockV2 accessServiceMockV2;
     std::unique_ptr<grpc::Server> AccessServer;
 };
 

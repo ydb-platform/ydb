@@ -3,12 +3,8 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_indexes_multishard_ut.cpp
@@ -31,7 +27,11 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    common
+    compact
     fulltext
+    hybrid
+    json
     prefixed_vector
     vector
 )

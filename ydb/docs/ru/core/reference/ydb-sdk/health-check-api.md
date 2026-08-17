@@ -16,11 +16,48 @@
 
   Вызов метода `SelfCheck`:
 
-  ```c++
-  auto settings = TSelfCheckSettings();
+  ```cpp
+  auto settings =  NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
+
+- Go
+
+  Функциональность на данный момент не поддерживается
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+  Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 
@@ -56,13 +93,43 @@
 
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Go
+
+  Функциональность на данный момент не поддерживается
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 
@@ -74,7 +141,7 @@
 
 ## Структура ответа {#response-structure}
 
-Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) в Git репозитории {{ ydb-short-name }}.
+Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) в Git репозитории {{ ydb-short-name }}.
 В результате вызова этого метода будет возвращена следующая структура:
 
 ```protobuf
@@ -113,7 +180,7 @@ message IssueLog {
 | `issue_log.reason` | Набор элементов, каждый из которых описывает причину проблемы в системе на определённом уровне. |
 | `issue_log.type` | Категория проблемы. Каждый тип находится на определённом уровне и связан с другими через [жёсткую иерархию](#issues-hierarchy) (как показано на изображении выше). |
 | `issue_log.level` | [Глубина вложенности](#issues-hierarchy) проблемы. |
-| `database_status` | Если в настройках задан параметр `verbose`, то поле `database_status` будет заполнено. Оно предоставляет сводку общего состояния базы данных и используется для быстрой оценки состояния базы данных и выявления серьёзных проблем на высоком уровне. [Пример](#example-verbose). Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) в Git репозитории {{ ydb-short-name }}. |
+| `database_status` | Если в настройках задан параметр `verbose`, то поле `database_status` будет заполнено. Оно предоставляет сводку общего состояния базы данных и используется для быстрой оценки состояния базы данных и выявления серьёзных проблем на высоком уровне. [Пример](#example-verbose). Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) в Git репозитории {{ ydb-short-name }}. |
 | `location` | Содержит информацию о хосте, на котором был вызван сервис `HealthCheck`. |
 
 ### Иерархия проблем {#issues-hierarchy}
@@ -128,9 +195,9 @@ message IssueLog {
 
 ### Результат проверки базы данных {#selfcheck-result}
 
-Наиболее общий статус базы данных может принимать следующие значения:
+Наиболее общий статус базы данных `self_check_result` может принимать следующие значения:
 
-| Поле | Описание |
+| Значение | Описание |
 |:----|:----|
 | `GOOD` | Проблем не обнаружено. |
 | `DEGRADED` | Обнаружена деградация одной из систем базы данных, но база данных всё ещё функционирует (например, допустимая потеря диска). |
@@ -139,9 +206,9 @@ message IssueLog {
 
 #### Статус проблемы {#issue-status}
 
-Статус (серьёзность) текущей проблемы:
+Статус (серьёзность) текущей проблемы `issue_log.status`:
 
-| Поле | Описание |
+| Значение | Описание |
 |:----|:----|
 | `GREY` | Обнаружена деградация одной из систем базы данных, но база данных всё ещё функционирует (например, допустимая потеря диска). |
 | `GREEN` | Проблем не обнаружено. |

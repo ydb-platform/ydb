@@ -291,9 +291,9 @@ void FillUserDataTableFromFileSystem(const TString& aliasPrefix, const TString& 
 
     TDirIterator dir(path);
 
-    for (auto it = dir.begin(); it != dir.end(); ++it) {
-        if (FTS_F == it->fts_info) {
-            TString filePath = it->fts_path;
+    for (const auto& it : dir) {
+        if (FTS_F == it.fts_info) {
+            TString filePath = it.fts_path;
             if (!filePath.empty()) {
                 auto ptr = &*filePath.begin();
                 for (size_t i = 0; i < filePath.size(); ++i) {

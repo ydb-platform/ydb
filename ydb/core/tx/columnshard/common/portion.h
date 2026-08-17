@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NPortion {
 // NOTE: These values are persisted in LocalDB so they must be stable
-enum EProduced : ui32 {
+enum EProduced: ui32 {
     UNSPECIFIED = 0,
     INSERTED,
     COMPACTED,
@@ -37,12 +37,14 @@ public:
     TPortionInfoForCompaction(const ui64 totalBlobBytes, const NArrow::TSimpleRow& firstPK, const NArrow::TSimpleRow& lastPK)
         : TotalBlobBytes(totalBlobBytes)
         , FirstPK(firstPK)
-        , LastPK(lastPK) {
+        , LastPK(lastPK)
+    {
     }
 
     const NArrow::TSimpleRow& GetFirstPK() const {
         return FirstPK;
     }
+
     const NArrow::TSimpleRow& GetLastPK() const {
         return LastPK;
     }

@@ -1,16 +1,19 @@
 #pragma once
 
 #include "fulltext_workload_params.h"
+#include "markov_model_evaluator.h"
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
+
+#include <atomic>
+#include <random>
 
 namespace NYdbWorkload {
 
-    enum class EFulltextWorkloadType {
-        Select
-    };
+    class TFulltextQualityEvaluator;
 
     class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {
     public:
@@ -26,10 +29,17 @@ namespace NYdbWorkload {
 
     private:
         TQueryInfoList Select();
-        void LoadQueries();
+        TQueryInfoList Upsert();
+        void LoadQueries(const TString& queryTable);
+        void LoadUpsertQueries();
 
         TVector<TString> Queries;
-        size_t CurrentIndex = 0;
+        std::atomic<size_t> CurrentIndex = 0;
+
+        TVector<TString> UpsertData;
+        std::atomic<size_t> UpsertCurrentIndex = 0;
+
+        TMaybe<TMarkovModelEvaluator> Evaluator;
     };
 
 } // namespace NYdbWorkload

@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes {
 
 TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByColumns::DoBuildIndexOptional(
@@ -14,12 +16,16 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
     for (auto&& i : ColumnIds) {
         auto it = data.find(i);
         if (it == data.end()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "index_data_absent")("column_id", i)("index_name", GetIndexName())(
-                "index_id", GetIndexId());
+            YDB_LOG_WARN("",
+                {"event", "index_data_absent"},
+                {"columnId", i},
+                {"indexName", GetIndexName()},
+                {"indexId", GetIndexId()});
             // Possible situation during a merge operation when a column is added to the table in the new schema
             // indexData can't be empty in this case, because merger saves it, so set it to 0 (skip all values)
             TString indexData(1, '\0');
-            return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>({ std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) });
+            return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>(
+                { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) });
         }
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }

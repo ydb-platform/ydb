@@ -13,6 +13,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace NKikimr {
@@ -50,17 +51,21 @@ public:
 
 class TSystemMmap {
 public:
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
+    void* Mmap(size_t size);
+    int Munmap(void* addr, size_t size) noexcept;
+
+    static TSystemMmap& GetInstance();
 };
 
 class TFakeMmap {
 public:
-    static std::function<void*(size_t size)> OnMmap;
-    static std::function<void(void* addr, size_t size)> OnMunmap;
+    std::function<void*(size_t size)> OnMmap;
+    std::function<void(void* addr, size_t size)> OnMunmap;
 
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
+    void* Mmap(size_t size);
+    int Munmap(void* addr, size_t size) noexcept;
+
+    static TFakeMmap& GetInstance();
 };
 
 template <typename TMmap = TSystemMmap>
@@ -71,8 +76,8 @@ public:
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
-                                  const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
-        : Counters_(counters)
+                                  TAlignedPagePoolCounters counters = TAlignedPagePoolCounters())
+        : Counters_(std::move(counters))
         , DebugInfo_(location)
     {
         if (Counters_.PoolsCntr) {

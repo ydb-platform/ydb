@@ -13,6 +13,7 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
@@ -28,14 +29,15 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 class TMon {
 public:
     enum class EAuthMode {
-        Disabled,      // Don't check authorization
-        Enforce,       // Check authorization in monitoring layer
-        ExtractOnly    // Extract token only, check authorization in handler
+        Disabled, // Don't check authorization.
+        Enforce,  // Check authorization in monitoring layer.
+        Relaxed,  // Extract token if available and pass it to handlers or downstream code.
+                  // Do not enforce monitoring AllowedSIDs or reject on auth-RPC failure here.
     };
 
-    using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
+    using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event)>;
 
-    static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::THttpIncomingRequest* request);
+    static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event);
 
     struct TConfig {
         ui16 Port = 0;
@@ -50,6 +52,7 @@ public:
         TString CertificateFile; // certificate file path in PEM format (OpenSSL feature: may optionally contain both certificate chain and private key in the same PEM file if PrivateKeyFile is not set)
         TString PrivateKeyFile; // private key file path for the certificate in PEM format
         TString CaFile; // CA certificate file path for verifying client certificates (mTLS)
+        bool ClientCertificateRequired = false;
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;

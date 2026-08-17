@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/scheduler_queue.h>
 #include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/thread_context.h>
+#include <ydb/library/actors/core/execution_stats.h>
+#include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/should_continue.h>
@@ -106,6 +109,10 @@ class TTestActorSystem {
         std::unique_ptr<TActorSystem> ActorSystem;
         std::unique_ptr<TMailboxTable> MailboxTable;
         std::unique_ptr<TExecutorThread> ExecutorThread;
+        IExecutorPool* ExecutorPool = nullptr;
+        std::unique_ptr<TExecutorThreadStats> ExecutorThreadStats;
+        std::unique_ptr<TExecutionStats> ExecutionStats;
+        std::unique_ptr<TThreadContext> ThreadContext;
         std::unordered_map<ui32, TActorId> InterconnectProxy;
         TTestSchedulerThread *SchedulerThread;
         ui32 NextHint = 1;
@@ -307,7 +314,7 @@ public:
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
 #if !defined(_msan_enabled_)
-        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool(/*emulateRegistration=*/true);
         setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
 #endif
 
@@ -328,6 +335,14 @@ public:
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
+        info.ExecutorPool = pool;
+
+        info.ExecutorThreadStats = std::make_unique<TExecutorThreadStats>();
+        info.ExecutionStats = std::make_unique<TExecutionStats>();
+        info.ExecutionStats->Switch(info.ExecutorThreadStats.get());
+        info.ThreadContext = std::make_unique<TThreadContext>(
+            info.ExecutorThread->GetWorkerId(), info.ExecutorPool, nullptr);
+        info.ThreadContext->ExecutionStats = info.ExecutionStats.get();
     }
 
     void StartNode(ui32 nodeId) {
@@ -713,11 +728,31 @@ public:
             }
         }
         if (actor) {
+            struct TThreadContextGuard {
+                TThreadContext* Previous = TlsThreadContext;
+
+                explicit TThreadContextGuard(TThreadContext* current) {
+                    TlsThreadContext = current;
+                }
+
+                ~TThreadContextGuard() {
+                    TlsThreadContext = Previous;
+                }
+            };
+
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
             // adjust clock for correct operation
             info->SchedulerThread->AdjustClock(Clock);
+
+            const auto nowTs = GetCycleCountFast();
+            TThreadContext* threadCtx = info->ThreadContext.get();
+            threadCtx->SetMailboxScheduledTimestampTs(nowTs);
+            threadCtx->SetEventEnqueuedTimestampTs(nowTs);
+            threadCtx->SetActivationTimeUs(0);
+            threadCtx->SetEventDeliveryTimeUs(0);
+            TThreadContextGuard threadContextGuard(threadCtx);
 
             // allocate context and store its reference in TLS
             TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);

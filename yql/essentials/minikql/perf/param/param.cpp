@@ -5,8 +5,6 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <util/datetime/cputimer.h>
-
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;
@@ -33,7 +31,7 @@ int main(int, char**) {
         auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
         TBindTerminator terminator(graph->GetTerminator());
 
-        auto param = graph->GetEntryPoint(0, false);
+        auto param = graph->GetEntryPoint(0, /*require=*/false);
         auto& ctx = graph->GetContext();
 
         TSimpleTimer timer;

@@ -3,6 +3,7 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/async_stream_pipe.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/stream/mem.h>
 
@@ -11,22 +12,17 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetString(const TSharedRef& sharedRef)
+std::string GetString(const TSharedRef& sharedRef)
 {
-    return TString(sharedRef.Begin(), sharedRef.Size());
+    return std::string(sharedRef.Begin(), sharedRef.Size());
 }
 
 TSharedRef ReadAlreadySetValue(const IAsyncZeroCopyInputStreamPtr& input)
 {
-
     auto result = input->Read();
-    {
-        EXPECT_TRUE(result.IsSet());
-        // We can't use ASSERT_ in non-void functions (check gtest FAQ)
-        // so we use TryGet() here in order to avoid hanging and make test crash.
-        EXPECT_TRUE(result.TryGet()->IsOK());
-    }
-    return result.TryGet()->Value();
+    EXPECT_TRUE(result.IsSet());
+    EXPECT_TRUE(result.GetOrCrash().IsOK());
+    return result.GetOrCrash().Value();
 }
 
 TEST(TAsyncOutputStreamTest, Simple)
@@ -34,13 +30,13 @@ TEST(TAsyncOutputStreamTest, Simple)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult = asyncWriter->Write(TSharedRef::FromString("foo"));
+    auto writeResult = asyncWriter->Write(TSharedRef::FromString(std::string("foo")));
     ASSERT_FALSE(writeResult.IsSet());
 
     auto readResult1 = ReadAlreadySetValue(pipe);
     ASSERT_EQ(GetString(readResult1), "foo");
     ASSERT_TRUE(writeResult.IsSet());
-    ASSERT_TRUE(writeResult.Get().IsOK());
+    ASSERT_TRUE(WaitForFast(writeResult).IsOK());
 
     auto closeResult = asyncWriter->Close();
     ASSERT_TRUE(writeResult.IsSet());
@@ -54,9 +50,9 @@ TEST(TAsyncOutputStreamTest, MultipleWrites)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString("foo"));
-    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString("bar"));
-    auto writeResult3 = asyncWriter->Write(TSharedRef::FromString("baz"));
+    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(std::string("foo")));
+    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(std::string("bar")));
+    auto writeResult3 = asyncWriter->Write(TSharedRef::FromString(std::string("baz")));
     auto closeResult = asyncWriter->Close();
 
     ASSERT_FALSE(writeResult1.IsSet());
@@ -83,10 +79,11 @@ TEST(TAsyncOutputStreamTest, MultipleWrites)
     ASSERT_TRUE(writeResult1.IsSet());
     ASSERT_TRUE(writeResult2.IsSet());
     ASSERT_TRUE(writeResult3.IsSet());
-    ASSERT_TRUE(closeResult.IsSet());
+    ASSERT_FALSE(closeResult.IsSet());
 
     auto readResult4 = ReadAlreadySetValue(pipe);
     ASSERT_FALSE(readResult4);
+    ASSERT_TRUE(closeResult.IsSet());
 }
 
 TEST(TAsyncOutputStreamTest, TestEmptyString)
@@ -94,8 +91,8 @@ TEST(TAsyncOutputStreamTest, TestEmptyString)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(""));
-    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(""));
+    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(std::string("")));
+    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(std::string("")));
     auto closeResult = asyncWriter->Close();
 
     auto readResult1 = ReadAlreadySetValue(pipe);
@@ -138,7 +135,7 @@ private:
 //! over a small block size async input stream to provoke a stack overflow.
 TEST(TIAsyncZeroCopyInputStreamTest, NoStackOverflow)
 {
-    TString buf(512_KB, 'a');
+    std::string buf(512_KB, 'a');
     TMemoryInput memoryInput(buf.data(), buf.size());
     TMaxBlockSizeInputStream maxBlockSizeInputStream(&memoryInput, 1);
     auto asyncInputStream = CreateAsyncAdapter(&maxBlockSizeInputStream);

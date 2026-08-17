@@ -2,6 +2,9 @@
 
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
@@ -720,8 +723,6 @@ public:
     }
 
     void AddRow(TConstArrayRef<TCell> row) {
-        AFL_ENSURE(row.size() == ColumnCount);
-
         const i64 newMemory = EstimateSize(row);
         const i64 newMemorySerialized = newMemory + GetCellHeaderSize() * ColumnCount;
         if (Batches.empty() || (MaxBytesPerBatch && newMemorySerialized + Batches.back()->GetMemorySerialized() > *MaxBytesPerBatch)) {
@@ -827,6 +828,61 @@ private:
     const std::vector<ui32> ReadIndex;
     TRowsBatcher RowBatcher;
 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+};
+
+class TStructOfRowsDataBatcher : public IDataBatcher {
+public:
+    TStructOfRowsDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> newColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> oldColumns,
+        std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        : NewColumns(BuildColumns(newColumns))
+        , OldColumns(BuildColumns(oldColumns))
+        , WriteIndex(std::move(writeIndex))
+        , RowBatcher(NewColumns.size() + OldColumns.size(), std::nullopt, alloc)
+        , Alloc(std::move(alloc)) {
+    }
+
+    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+        TRowBuilder rowBuilder(NewColumns.size() + OldColumns.size());
+        data.ForEachRow([&](const auto& row) {
+            auto newStruct = row.GetElement(0);
+            auto oldStruct = row.GetElement(1);
+            for (size_t i = 0; i < NewColumns.size(); ++i) {
+                rowBuilder.AddCell(
+                    WriteIndex[i],
+                    NewColumns[i].PType,
+                    newStruct.GetElement(i),
+                    NewColumns[i].PTypeMod);
+            }
+            for (size_t i = 0; i < OldColumns.size(); ++i) {
+                rowBuilder.AddCell(
+                    NewColumns.size() + i,
+                    OldColumns[i].PType,
+                    oldStruct.GetElement(i),
+                    OldColumns[i].PTypeMod);
+            }
+            auto cells = rowBuilder.BuildCells();
+            AFL_ENSURE(cells.size() == NewColumns.size() + OldColumns.size());
+            RowBatcher.AddRow(cells);
+        });
+    }
+
+    i64 GetMemory() const override {
+        return RowBatcher.GetMemory();
+    }
+
+    IDataBatchPtr Build() override {
+        return RowBatcher.Flush(true);
+    }
+
+private:
+    const TVector<TSysTables::TTableColumnInfo> NewColumns;
+    const TVector<TSysTables::TTableColumnInfo> OldColumns;
+    const std::vector<ui32> WriteIndex;
+    TRowsBatcher RowBatcher;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
@@ -988,7 +1044,7 @@ public:
     TDataBatchProjection(
         TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-            : Indexes(indexes)
+            : Indexes(indexes.begin(), indexes.end())
             , Alloc(std::move(alloc))
             , RowBatcher(Indexes.size(), std::nullopt, Alloc) {
     }
@@ -1009,9 +1065,197 @@ public:
     }
 
 private:
-    TConstArrayRef<ui32> Indexes;
+    TVector<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;
+};
+
+template<class TDocId>
+class TFulltextTokenizeProjection : public IFulltextTokenizeProjection {
+public:
+    TFulltextTokenizeProjection(
+        TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+        ui32 dataColumnCount,
+        bool withFreq,
+        bool added,
+        const Ydb::Table::FulltextIndexSettings& settings,
+        TConstArrayRef<ui32> indexes,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        : DataColumnCount(dataColumnCount)
+        , PrefixSize(columnTypes.size() - 2 - dataColumnCount)
+        , TextTypeId(columnTypes.at(PrefixSize).GetTypeId())
+        , WithFreq(withFreq)
+        , Added(added)
+        , Indexes(indexes.begin(), indexes.end())
+        , Alloc(std::move(alloc))
+        , RowBatcher(PrefixSize + 5, std::nullopt, Alloc)
+        , DocsBatcher(Added ? 2 + DataColumnCount : 1, std::nullopt, Alloc)
+        , DictBatcher(2, std::nullopt, Alloc)
+        , StatsBatcher(3, std::nullopt, Alloc) {
+        AFL_ENSURE(Indexes.size() == columnTypes.size());
+        // Settings/Analyzers are required for fulltext indexes, but not for json
+        AFL_ENSURE(settings.columns_size() == 1 ||
+            TextTypeId == NScheme::NTypeIds::Json ||
+            TextTypeId == NScheme::NTypeIds::JsonDocument);
+        if (settings.columns_size() == 1) {
+            Analyzers = settings.columns().at(0).analyzers();
+        }
+    }
+
+    void AddRow(TConstArrayRef<TCell> row) override {
+        TVector<TCell> prefixCells(PrefixSize);
+        for (ui32 i = 0; i < PrefixSize; i++) {
+            prefixCells[i] = row[Indexes[i]];
+        }
+        ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
+        auto text = row[Indexes[PrefixSize]].AsBuf();
+        TVector<TString> tokens;
+        switch (TextTypeId) {
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::Utf8:
+                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                break;
+            case NScheme::NTypeIds::Json: {
+                TString error;
+                tokens = NJsonIndex::TokenizeJson(text, error);
+                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                break;
+            }
+            case NScheme::NTypeIds::JsonDocument:
+                tokens = NJsonIndex::TokenizeBinaryJson(text);
+                break;
+            default:
+                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
+        }
+        auto& prefixTokens = TokenLists[TSerializedCellVec::Serialize(prefixCells)];
+        ui32 docLength = 0;
+        for (auto& token: tokens) {
+            prefixTokens[token][docId]++;
+            docLength++;
+        }
+        DocCount++;
+        TotalDocLength += docLength;
+        if (WithFreq) {
+            // indexImplDocsTable columns: document ID, __ydb_length, data columns
+            TVector<TCell> docsCells(Added ? 2 + DataColumnCount : 1);
+            docsCells[0] = TCell::Make(docId);
+            if (Added) {
+                docsCells[1] = TCell::Make(docLength);
+                for (ui32 i = 0; i < DataColumnCount; i++) {
+                    docsCells[2 + i] = row[Indexes[PrefixSize + 2 + i]];
+                }
+            }
+            DocsBatcher.AddRow(docsCells);
+        }
+    }
+
+    IDataBatchPtr Flush() override {
+        for (auto& [prefix, prefixTokens]: TokenLists) {
+            FlushPrefix(prefix, prefixTokens);
+        }
+        TokenLists.clear();
+        if (WithFreq) {
+            // indexImplStatsTable columns: __ydb_id (always ui32 0), __ydb_doc_count, __ydb_total_doc_length
+            TVector<TCell> statsCells(3);
+            statsCells[0] = TCell::Make((ui32)0);
+            statsCells[1] = TCell::Make(Added ? DocCount : -DocCount);
+            statsCells[2] = TCell::Make(Added ? TotalDocLength : -TotalDocLength);
+            StatsBatcher.AddRow(statsCells);
+        }
+        auto result = RowBatcher.Flush(true);
+        YQL_ENSURE(RowBatcher.IsEmpty());
+        return result;
+    }
+
+    void FlushPrefix(const TString& prefix, const THashMap<TString, THashMap<ui64, ui32>>& tokenLists) {
+        TVector<TStringBuf> sortedTokens;
+        for (const auto& [token, docFreqs]: tokenLists) {
+            sortedTokens.push_back(token);
+        }
+        std::sort(sortedTokens.begin(), sortedTokens.end());
+        // Fixed column order: <prefix columns>, __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+        auto prefixCells = TSerializedCellVec(prefix);
+        TVector<TCell> cells(PrefixSize + 5);
+        for (size_t i = 0; i < PrefixSize; i++) {
+            cells[i] = prefixCells.GetCells().at(i);
+        }
+        cells[PrefixSize + 3] = TCell::Make(Added);
+        // indexImplDictTable columns: __ydb_token, __ydb_freq
+        TVector<TCell> dictCells(2);
+        NFulltext::TDeltaWriter wr;
+        for (const auto& token: sortedTokens) {
+            const auto& docFreqs = tokenLists.at(token);
+            TVector<ui64> docIds;
+            ui64 totalFreq = 0;
+            for (const auto& [docId, freq]: docFreqs) {
+                docIds.push_back(docId);
+                totalFreq++;
+            }
+            std::sort(docIds.begin(), docIds.end(), [](ui64 a, ui64 b) {
+                return (TDocId)a < TDocId(b);
+            });
+            wr.Reset(WithFreq, std::is_signed<TDocId>::value);
+            if (WithFreq) {
+                for (const auto& docId: docIds) {
+                    wr.Add(docId, docFreqs.at(docId));
+                }
+            } else {
+                for (const auto& docId: docIds) {
+                    wr.Add(docId, 1);
+                }
+            }
+            cells[PrefixSize + 0] = TCell(token);
+            cells[PrefixSize + 1] = TCell::Make(Gen);
+            cells[PrefixSize + 2] = TCell::Make((TDocId)wr.GetMaxId());
+            cells[PrefixSize + 4] = TCell(TConstArrayRef<const char>((const char*)wr.GetBuf().data(), wr.GetBuf().size()));
+            RowBatcher.AddRow(cells);
+            if (WithFreq) {
+                dictCells[0] = TCell(token);
+                dictCells[1] = TCell::Make(Added ? totalFreq : -totalFreq);
+                DictBatcher.AddRow(dictCells);
+            }
+        }
+    }
+
+    IDataBatchPtr FlushDocs() override {
+        auto result = DocsBatcher.Flush(true);
+        YQL_ENSURE(DocsBatcher.IsEmpty());
+        return result;
+    }
+
+    IDataBatchPtr FlushDict() override {
+        auto result = DictBatcher.Flush(true);
+        YQL_ENSURE(DictBatcher.IsEmpty());
+        return result;
+    }
+
+    IDataBatchPtr FlushStats() override {
+        auto result = StatsBatcher.Flush(true);
+        YQL_ENSURE(StatsBatcher.IsEmpty());
+        return result;
+    }
+
+    void SetGen(NTableIndex::NFulltext::TGen gen) override {
+        Gen = gen;
+    }
+
+private:
+    NTableIndex::NFulltext::TGen Gen = 0;
+    ui32 DataColumnCount = 0;
+    ui32 PrefixSize = 0;
+    NScheme::TTypeId TextTypeId = 0;
+    ui64 TotalDocLength = 0;
+    ui64 DocCount = 0;
+    bool WithFreq = false;
+    bool Added = false;
+    Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
+    THashMap<TString, THashMap<TString, THashMap<ui64, ui32>>> TokenLists;
+    TVector<ui32> Indexes;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    TRowsBatcher RowBatcher;
+    TRowsBatcher DocsBatcher;
+    TRowsBatcher DictBatcher;
+    TRowsBatcher StatsBatcher;
 };
 
 }
@@ -1020,6 +1264,14 @@ IRowsBatcherPtr CreateRowsBatcher(
         size_t columnsCount,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TRowsBatcherProxy>(columnsCount, std::move(alloc));
+}
+
+IDataBatcherPtr CreateStructOfRowsDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+        std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return IDataBatcherPtr(MakeIntrusive<TStructOfRowsDataBatcher>(columns, lookupColumns, std::move(writeIndex), std::move(alloc)));
 }
 
 std::vector<ui32> CreateMapping(
@@ -1091,11 +1343,35 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         indexes, std::move(alloc));
 }
 
-std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
+IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
+    TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
+    bool withFreq,
+    bool added,
+    const Ydb::Table::FulltextIndexSettings& settings,
+    TConstArrayRef<ui32> indexes,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    // columnTypes: <prefix columns>, text, id, <optional data columns>
+    AFL_ENSURE(columnTypes.size() >= 2 + dataColumnCount);
+    const ui32 prefixSize = columnTypes.size() - 2 - dataColumnCount;
+    switch (columnTypes[prefixSize + 1].GetTypeId()) {
+    case NScheme::NTypeIds::Uint64:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui64>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Uint32:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int64:
+        return MakeIntrusive<TFulltextTokenizeProjection<i64>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int32:
+        return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
+    }
+    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId());
+}
+
+std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {
     auto* data = dynamic_cast<TRowBatch*>(batch.Get());
     AFL_ENSURE(data);
     const auto& batchRows = data->GetRows();
-    return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
+    return std::vector<TConstArrayRef<TCell>>(batchRows.begin() + offset, batchRows.end());
 }
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
@@ -1524,13 +1800,13 @@ public:
     }
 
     void OnPartitioningChanged(
-        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+        const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
         Partitioning = partitioning;
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                *Partitioning,
+                Partitioning->GetTablePartitioning(),
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1598,7 +1874,7 @@ public:
 
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                *Partitioning,
+                Partitioning->GetTablePartitioning(),
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1926,7 +2202,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     std::optional<bool> IsOlap;
 };
 

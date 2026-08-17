@@ -5,7 +5,7 @@
 #elif defined(__powerpc__)
 #include "elf_powerpc.h"
 #elif defined(__i386__) || defined(__x86_64__)
-#error unavailable for x86
+#include "elf_x86.h"
 #else
 #error unexpected
 #endif

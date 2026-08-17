@@ -32,6 +32,21 @@ generic:
     AssertYamlThrows(yaml, errorPart);
 }
 
+TMvpStartupOptions MakeOptsFromTokenFileConfig(const TString& tokenFileProto,
+                                               const TString& tokenFileName)
+{
+    TTempFileHandle tmpToken = MakeTestFile(tokenFileProto, tokenFileName, ".pb.txt");
+    TTempFileHandle tmpYaml = MakeTestFile(TStringBuilder() << R"(
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    token_file: )" << tmpToken.Name() << "\n",
+        "mvp_startup_options_validation",
+        ".yaml");
+    const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+    return MakeOpts(argv);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMvpStartupOptionsValidation) {
@@ -169,5 +184,70 @@ generic:
       access_service_type: "yandex_v2"
 )",
             "auth.tokens.access_service_type must match access_service_type");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithSecretAndSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+  Secret: "inline-secret"
+  SecretFile: "/tmp/secret.txt"
+}
+)pb",
+            "mvp_validation_secret_and_secret_file",
+            "must not set both secret and secret_file");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithoutSecretAndSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+}
+)pb",
+            "mvp_validation_secret_missing",
+            "requires either secret or secret_file");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithUnreadableSecretFileThrows) {
+        AssertTokenFileConfigThrows(R"pb(
+AccessServiceType: nebius_v1
+SecretInfo {
+  Name: "secret-name"
+  SecretFile: "/definitely/not/existing/secret.txt"
+}
+)pb",
+            "mvp_validation_secret_unreadable",
+            "unable to read secret_file for secret_info 'secret-name'");
+    }
+
+    Y_UNIT_TEST(SecretInfoWithWhitespaceSecretFileThrows) {
+        TTempFileHandle secretFile = MakeTestFile("   \n\t  ", "mvp_validation_empty_secret", ".txt");
+        AssertTokenFileConfigThrows(TStringBuilder()
+                << "AccessServiceType: nebius_v1\n"
+                << "SecretInfo {\n"
+                << "  Name: \"secret-name\"\n"
+                << "  SecretFile: \"" << secretFile.Name() << "\"\n"
+                << "}\n",
+            "mvp_validation_secret_empty_after_strip",
+            "resolved to empty secret");
+    }
+
+    Y_UNIT_TEST(SecretInfoFromSecretFileIsNormalized) {
+        TTempFileHandle secretFile = MakeTestFile("  normalized-secret \n", "mvp_validation_secret_normalize", ".txt");
+        TMvpStartupOptions opts = MakeOptsFromTokenFileConfig(TStringBuilder()
+                << "AccessServiceType: nebius_v1\n"
+                << "SecretInfo {\n"
+                << "  Name: \"secret-name\"\n"
+                << "  SecretFile: \"" << secretFile.Name() << "\"\n"
+                << "}\n",
+            "mvp_validation_secret_normalize");
+
+        UNIT_ASSERT_VALUES_EQUAL(opts.Tokens.SecretInfoSize(), 1);
+        const auto& secretInfo = opts.Tokens.GetSecretInfo(0);
+        UNIT_ASSERT_VALUES_EQUAL(secretInfo.GetName(), "secret-name");
+        UNIT_ASSERT_VALUES_EQUAL(secretInfo.GetSecret(), "normalized-secret");
+        UNIT_ASSERT(secretInfo.GetSecretFile().empty());
     }
 }

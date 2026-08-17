@@ -5,18 +5,19 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 namespace NKikimr::NOlap {
-    
+
 class TActivityChecker {
 private:
     TAtomicCounter ActiveFlag;
     TString ErrorMessage;
     TMutex Mutex;
-    
+
 public:
     TActivityChecker()
         : ActiveFlag(1)
-    {}
-    
+    {
+    }
+
     void StopWriting(const TString& errorMessage) {
         {
             TGuard<TMutex> guard(Mutex);
@@ -24,7 +25,7 @@ public:
         }
         ActiveFlag = 0;
     }
-    
+
     const TString GetErrorMessage() const {
         TGuard<TMutex> guard(Mutex);
         return ErrorMessage;
@@ -75,7 +76,8 @@ public:
 
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
-        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot, const std::optional<ui64>& lockId, const std::optional<NKikimrDataEvents::ELockMode>& lockMode,
+        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot,
+        const std::optional<ui64>& lockId, const std::optional<NKikimrDataEvents::ELockMode>& lockMode,
         const std::shared_ptr<TActivityChecker>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
         const bool isBulk)
         : TabletId(tabletId)

@@ -382,6 +382,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 | Один или два аргумента - имя файла и опциональный URL | — | Статическая |
 
 Интерпретировать указанный приложенный файл как библиотеку, из которой можно делать [IMPORT](export_import.md). Тип синтаксиса библиотеки определяется по расширению файла:
+
 * `.sql` для YQL диалекта SQL <span style="color: green;">(рекомендуется)</span>;
 * `.yql` для [s-expressions](/docs/s_expressions).
 
@@ -492,7 +493,7 @@ SELECT $foo;
 
 ### `ydb.OptimizerHints` {#optimizerhints}
 
-Значение прагмы описано в [отдельном разделе](../../../dev/query-hints.md).
+Значение прагмы описано в [отдельном разделе](../../../dev/query-execution-optimization/query-hints.md).
 {% if tech %}
 
 ### `kikimr.IsolationLevel`

@@ -3,16 +3,16 @@
 #include "counters.h"
 #include "utils.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/utils/config.h>
-#include <ydb/core/fq/libs/control_plane_proxy/utils/logs.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
+
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -66,7 +66,8 @@ public:
 
 public:
     void Bootstrap() {
-        CPP_LOG_T("Request actor. Actor id: " << SelfId());
+        YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Request actor. Actor",
+            {"id", SelfId()});
         Become(&TRequestActor::StateFunc,
                Config.RequestTimeout,
                new NActors::TEvents::TEvWakeup());
@@ -99,7 +100,8 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("Request timeout. " << NKikimr::SecureDebugString(RequestProxy->Get()->Request));
+        YDB_LOG_DEBUG_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Request timeout",
+            {"request", NKikimr::SecureDebugString(RequestProxy->Get()->Request)});
         NYql::TIssues issues;
         NYql::TIssue issue =
             MakeErrorIssue(TIssuesIds::TIMEOUT,
@@ -249,8 +251,8 @@ public:
         if (auto quotaIt = RequestProxy->Get()->Quotas->find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != RequestProxy->Get()->Quotas->end()) {
             const double cloudLimit = static_cast<double>(quotaIt->second.Limit.Value *
                                                           10); // percent -> milliseconds
-            CPP_LOG_T("Create rate limiter resource for cloud with limit " << cloudLimit
-                                                                           << "ms");
+            YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Create rate limiter resource for cloud with limit ms",
+                {"cloudLimit", cloudLimit});
             RateLimiterCreationInProgress = true;
             RateLimiterCounters->InFly->Inc();
             StartRateLimiterCreation = TInstant::Now();
@@ -264,7 +266,8 @@ public:
                                TStringBuilder() << "CPU quota for cloud \"" << RequestProxy->Get()->CloudId
                                                 << "\" was not found");
             issues.AddIssue(issue);
-            CPP_LOG_W("Failed to get cpu quota for cloud " << RequestProxy->Get()->CloudId);
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Failed to get cpu quota for cloud",
+                {"cloudId", RequestProxy->Get()->CloudId});
             ReplyWithError(issues);
         }
     }
@@ -273,8 +276,8 @@ public:
         RateLimiterCreationInProgress = false;
         RateLimiterCounters->InFly->Dec();
         RateLimiterCounters->LatencyMs->Collect((TInstant::Now() - StartRateLimiterCreation).MilliSeconds());
-        CPP_LOG_D(
-            "Create response from rate limiter service. Success: " << ev->Get()->Success);
+        YDB_LOG_DEBUG_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Create response from rate limiter service",
+            {"success", ev->Get()->Success});
         if (ev->Get()->Success) {
             RateLimiterCounters->Ok->Inc();
             QuoterResourceCreated = true;

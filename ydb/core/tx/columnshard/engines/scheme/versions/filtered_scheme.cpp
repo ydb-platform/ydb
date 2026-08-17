@@ -1,11 +1,12 @@
 #include "filtered_scheme.h"
-#include <util/string/join.h>
 
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end())) {
+    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end()))
+{
 }
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds)
@@ -77,10 +78,9 @@ ui64 TFilteredSnapshotSchema::GetVersion() const {
 
 TString TFilteredSnapshotSchema::DoDebugString() const {
     return TStringBuilder() << "("
-        << "original=" << OriginalSnapshot->DebugString() << ";"
-        << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
-        << ")"
-        ;
+                            << "original=" << OriginalSnapshot->DebugString() << ";"
+                            << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
+                            << ")";
 }
 
 NJson::TJsonValue TFilteredSnapshotSchema::DoDebugJson() const {
@@ -92,4 +92,4 @@ NJson::TJsonValue TFilteredSnapshotSchema::DoDebugJson() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap

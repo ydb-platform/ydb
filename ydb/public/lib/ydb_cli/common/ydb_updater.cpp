@@ -88,8 +88,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
-    Cout << "Downloading binary from url " << downloadUrl << Endl;
-
     TBytesProgressBar progressBar;
     TDownloadResult downloadResult = DownloadFile(
         downloadUrl,
@@ -108,7 +106,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
-    Cout << "Downloaded to " << tmpPathToBinary.GetPath() << Endl;
 
 #ifndef _win32_
     int chmodResult = Chmod(tmpPathToBinary.GetPath().data(), MODE0777);
@@ -118,8 +115,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
 #endif
 
-    // Check new binary
-    Cout << "Checking downloaded binary by calling 'version' command..." << Endl;
     TShellCommand checkCmd(TStringBuilder() << tmpPathToBinary.GetPath() << " version");
     checkCmd.Run().Wait();
     if (checkCmd.GetExitCode() != 0) {
@@ -127,7 +122,8 @@ int TYdbUpdater::Update(bool forceUpdate) {
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
-    Cout << checkCmd.GetOutput();
+
+    TString versionOutput = StripString(checkCmd.GetOutput());
 
     TFsPath fsPathToBinary(GetExecPath());
 #ifdef _win32_
@@ -135,13 +131,14 @@ int TYdbUpdater::Update(bool forceUpdate) {
     binaryNameOld.Fix();
     binaryNameOld.DeleteIfExists();
     fsPathToBinary.RenameTo(binaryNameOld);
-    Cout << "Old binary renamed to " << binaryNameOld.GetPath() << Endl;
 #else
     fsPathToBinary.DeleteIfExists();
-    Cout << "Old binary removed" << Endl;
 #endif
     tmpPathToBinary.RenameTo(fsPathToBinary);
-    Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
+
+    TStringBuf version = versionOutput;
+    version.SkipPrefix("YDB CLI ");
+    Cerr << "YDB CLI successfully updated to version " << version << "." << Endl;
 
     return EXIT_SUCCESS;
 }

@@ -1,4 +1,3 @@
-/* postgres can not */
 USE plato;
 
 $list = (select item FROM (select AsList('foo', 'bar', 'baz', 'quux', 'bat') as `list`) FLATTEN BY `list` as item);

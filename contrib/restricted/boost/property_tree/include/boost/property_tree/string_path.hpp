@@ -74,9 +74,9 @@ namespace boost { namespace property_tree
     /// If instantiated with std::string and id_translator\<std::string\>,
     /// it accepts paths of the form "one.two.three.four".
     ///
-    /// @tparam String Any Sequence. If the sequence does not support random-
-    ///                access iteration, concatenation of paths assumes that
-    ///                insertions at the end preserve iterator validity.
+    /// @tparam String Any Sequence. If the sequence does not support
+    ///                random-access iteration, concatenation of paths assumes
+    ///                that insertions at the end preserve iterator validity.
     /// @tparam Translator A translator with internal_type == String.
     template <typename String, typename Translator>
     class string_path
@@ -98,8 +98,8 @@ namespace boost { namespace property_tree
         string_path(const String &value, char_type separator = char_type('.'),
                     Translator tr = Translator());
         /// Create a path by parsing the given string.
-        /// @param value A zero-terminated array of values. Only use if zero-
-        ///              termination makes sense for your type, and your
+        /// @param value A zero-terminated array of values. Only use if
+        ///              zero-termination makes sense for your type, and your
         ///              sequence supports construction from it. Intended for
         ///              string literals.
         /// @param separator The separator used in parsing. Defaults to '.'.

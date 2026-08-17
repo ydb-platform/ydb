@@ -426,7 +426,7 @@ private:
     TMap<ui32, TScanData> Scans;
 };
 
-TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, bool& inputConsumed);
+TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, ui64& inputsConsumed);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

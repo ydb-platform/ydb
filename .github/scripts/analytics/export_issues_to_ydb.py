@@ -8,35 +8,76 @@ import json
 import argparse
 from datetime import datetime, timezone, timedelta
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ydb_wrapper import YDBWrapper
 
-# Configuration
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
+ISSUES_PAGE_SIZE = 50  # smaller pages → smaller GraphQL payloads (avoids truncated JSON)
+
 
 # YDB configuration is now handled by ydb_wrapper
 
+_RETRYABLE_GITHUB_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+_GITHUB_QUERY_MAX_RETRIES = 8
+_GITHUB_QUERY_INITIAL_BACKOFF_SEC = 2.0
+_GITHUB_QUERY_TIMEOUT_SEC = 120
+
+
+def _github_query_retry_wait(attempt: int, backoff: float, reason: str) -> float:
+    print(f"{reason}, retry {attempt + 1}/{_GITHUB_QUERY_MAX_RETRIES} in {backoff:.0f}s...")
+    time.sleep(backoff)
+    return min(backoff * 2, 60)
+
+
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
-    """Execute GraphQL query against GitHub API"""
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-    HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    
-    request = requests.post(
-        'https://api.github.com/graphql', 
-        json={'query': query, 'variables': variables}, 
-        headers=HEADERS
-    )
-    
-    if request.status_code == 200:
-        response = request.json()
-        if 'errors' in response:
-            for error in response['errors']:
-                print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-                raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-        return response
-    else:
+    """Execute GraphQL query against GitHub API (retries transient 5xx/429 and truncated JSON)."""
+    github_token = os.environ["GITHUB_TOKEN"]
+    headers = {"Authorization": f"Bearer {github_token}", "Content-Type": "application/json"}
+    payload = {'query': query, 'variables': variables}
+
+    backoff = _GITHUB_QUERY_INITIAL_BACKOFF_SEC
+    for attempt in range(_GITHUB_QUERY_MAX_RETRIES + 1):
+        try:
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json=payload,
+                headers=headers,
+                timeout=_GITHUB_QUERY_TIMEOUT_SEC,
+            )
+        except requests.RequestException as exc:
+            if attempt >= _GITHUB_QUERY_MAX_RETRIES:
+                raise
+            backoff = _github_query_retry_wait(
+                attempt, backoff, f"GitHub API request error ({exc})"
+            )
+            continue
+
+        if request.status_code == 200:
+            try:
+                response = request.json()
+            except ValueError as exc:
+                if attempt >= _GITHUB_QUERY_MAX_RETRIES:
+                    raise
+                backoff = _github_query_retry_wait(
+                    attempt,
+                    backoff,
+                    f"GitHub API truncated/invalid JSON ({exc})",
+                )
+                continue
+            if 'errors' in response:
+                for error in response['errors']:
+                    print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+                raise Exception(f"GraphQL Error: {response['errors'][0].get('message', 'Unknown error')}")
+            return response
+
+        if request.status_code in _RETRYABLE_GITHUB_STATUS_CODES and attempt < _GITHUB_QUERY_MAX_RETRIES:
+            backoff = _github_query_retry_wait(
+                attempt, backoff, f"GitHub API {request.status_code}"
+            )
+            continue
+
         raise Exception(f"Query failed with status {request.status_code}: {request.text}")
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
@@ -121,6 +162,35 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             participants(first: 10) {
               totalCount
             }
+            issueType {
+              name
+            }
+            timelineItems(last: 50, itemTypes: [CLOSED_EVENT, REOPENED_EVENT]) {
+              nodes {
+                __typename
+                ... on ClosedEvent {
+                  createdAt
+                  actor {
+                    __typename
+                    login
+                  }
+                }
+                ... on ReopenedEvent {
+                  createdAt
+                }
+              }
+            }
+            projectItems(first: 30) {
+              nodes {
+                id
+                project {
+                  id
+                  number
+                  title
+                  url
+                }
+              }
+            }
           }
         }
       }
@@ -166,7 +236,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     {
       organization(login: "%s") {
         repository(name: "%s") {
-          issues(first: 100, after: %s, orderBy: {field: UPDATED_AT, direction: DESC}%s) {
+          issues(first: %d, after: %s, orderBy: {field: UPDATED_AT, direction: DESC}%s) {
             nodes {
               id
               number
@@ -218,6 +288,35 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               participants(first: 10) {
                 totalCount
               }
+              issueType {
+                name
+              }
+              timelineItems(last: 50, itemTypes: [CLOSED_EVENT, REOPENED_EVENT]) {
+                nodes {
+                  __typename
+                  ... on ClosedEvent {
+                    createdAt
+                    actor {
+                      __typename
+                      login
+                    }
+                  }
+                  ... on ReopenedEvent {
+                    createdAt
+                  }
+                }
+              }
+              projectItems(first: 30) {
+                nodes {
+                  id
+                  project {
+                    id
+                    number
+                    title
+                    url
+                  }
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -231,7 +330,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     
     total_fetched = 0
     while has_next_page:
-        query = repository_issues_query % (org_name, repo_name, end_cursor, since_filter)
+        query = repository_issues_query % (org_name, repo_name, ISSUES_PAGE_SIZE, end_cursor, since_filter)
         result = run_query(query)
         
         if result and 'data' in result:
@@ -408,10 +507,129 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
     except (ValueError, TypeError):
         return None
 
+
+def extract_last_close_actor(issue: Dict[str, Any]) -> Dict[str, Any]:
+    """Who closed the issue — same timeline rule as ``mute.fast_unmute_github.fetch_issue_closers``."""
+    login = ''
+    actor_type = ''
+    event_at = None
+    nodes = (issue.get('timelineItems') or {}).get('nodes') or []
+    for event in reversed(nodes):
+        if not event or event.get('__typename') != 'ClosedEvent':
+            continue
+        actor = event.get('actor') or {}
+        cand_login = actor.get('login') or ''
+        if cand_login:
+            login = cand_login
+            actor_type = actor.get('__typename') or ''
+            event_at = parse_datetime(event.get('createdAt'))
+            break
+    return {'login': login, 'actor_type': actor_type, 'event_at': event_at}
+
+
+def build_open_periods(
+    issue: Dict[str, Any],
+    created_at: Optional[datetime],
+    closed_at: Optional[datetime],
+) -> List[Dict[str, Optional[str]]]:
+    """Build open intervals from GitHub close/reopen timeline events.
+
+    Each period is ``{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"|null}``.
+    ``end`` is the close date (issue is open through end-of-day before ``end``).
+    """
+    if created_at is None:
+        return []
+
+    events: List[tuple[str, datetime]] = []
+    for event in (issue.get('timelineItems') or {}).get('nodes') or []:
+        if not event:
+            continue
+        typename = event.get('__typename') or ''
+        event_at = parse_datetime(event.get('createdAt'))
+        if event_at is None:
+            continue
+        if typename == 'ClosedEvent':
+            events.append(('close', event_at))
+        elif typename == 'ReopenedEvent':
+            events.append(('reopen', event_at))
+
+    events.sort(key=lambda item: item[1])
+
+    periods: List[Dict[str, Optional[str]]] = []
+    open_start = created_at
+    is_open = True
+
+    for kind, event_at in events:
+        if kind == 'close' and is_open:
+            periods.append({
+                'start': open_start.date().isoformat(),
+                'end': event_at.date().isoformat(),
+            })
+            is_open = False
+        elif kind == 'reopen' and not is_open:
+            open_start = event_at
+            is_open = True
+
+    if is_open:
+        end = None
+        if (issue.get('state') or '').upper() == 'CLOSED' and closed_at is not None:
+            end = closed_at.date().isoformat()
+        periods.append({
+            'start': open_start.date().isoformat(),
+            'end': end,
+        })
+
+    return periods
+
+
+def open_period_rows_for_issue(
+    issue_number: int,
+    project_item_id: str,
+    open_periods: List[Dict[str, Optional[str]]],
+    exported_at: datetime,
+) -> List[Dict[str, Any]]:
+    rows = []
+    for idx, period in enumerate(open_periods):
+        period_start = datetime.fromisoformat(period['start']).date()
+        period_end = (
+            datetime.fromisoformat(period['end']).date()
+            if period.get('end')
+            else None
+        )
+        rows.append({
+            'issue_number': issue_number,
+            'project_item_id': project_item_id,
+            'period_index': idx,
+            'period_start': period_start,
+            'period_end': period_end,
+            'exported_at': exported_at,
+        })
+    return rows
+
+
+def projects_for_info_json(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Projects (v2) that contain this issue — id/title from GraphQL ``projectItems``."""
+    out = []
+    for node in (issue.get('projectItems') or {}).get('nodes') or []:
+        proj = node.get('project') or {}
+        pid = proj.get('id')
+        if not pid:
+            continue
+        row = {
+            'project_id': pid,
+            'project_number': proj.get('number'),
+            'title': proj.get('title'),
+            'url': proj.get('url'),
+            'project_item_id': node.get('id'),
+        }
+        out.append(row)
+    return out
+
+
 # --- branch version helpers ---
 def parse_branch(label):
     if label == 'main':
-        return (0, 0, 0, 0, 0)  # main — всегда минимальный
+        return (0, 0, 0, 0, 0)  # main — always minimum
     if label.startswith('prestable-'):
         parts = label.split('-')
         nums = [int(x) for x in parts[1:] if x.isdigit()]
@@ -430,15 +648,15 @@ def parse_branch(label):
         while len(nums) < 3:
             nums.append(0)
         if analytics:
-            # analytics-лейбл: всегда меньше любого stable с числовым патчем, но больше prestable
+            # analytics label: always less than any stable with numeric patch, but greater than prestable
             return (2, *nums, 0)  # analytics = 2
         else:
-            return (3, *nums, 1)  # обычный stable = 3, всегда больше analytics
-    return (-1, 0, 0, 0, 0)  # некорректные/другие — минимальные
+            return (3, *nums, 1)  # regular stable = 3, always greater than analytics
+    return (-1, 0, 0, 0, 0)  # invalid/other — minimum
 
 def get_max_branch(branch_labels):
     best = None
-    best_key = (-2, 0, 0, 0, 0)  # всегда меньше любого корректного branch
+    best_key = (-2, 0, 0, 0, 0)  # always less than any valid branch
     for label in branch_labels:
         key = parse_branch(label)
         if key > best_key:
@@ -446,8 +664,12 @@ def get_max_branch(branch_labels):
             best_key = key
     return best
 
-def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-    """Transform GitHub issues data for YDB storage"""
+
+def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Transform GitHub issues data for YDB storage.
+
+    Returns (issue_records, open_period_rows) for github_data/issues and github_data/issue_open_periods.
+    """
     print("Transforming issues data for YDB...")
     start_time = time.time()
     
@@ -455,6 +677,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         project_fields = {}
     
     transformed_issues = []
+    open_period_rows: List[Dict[str, Any]] = []
     
     for issue in issues:
         # Get project fields for this issue if available
@@ -466,6 +689,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         branch_labels = []
         env = None
         priority = None
+        releaseblocker_state = None
         area = None
         for label in issue.get('labels', {}).get('nodes', []):
             name = label.get('name', '')
@@ -483,14 +707,33 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             # priority detection
             if name.startswith('prio:'):
                 priority = name
+            # release blocker detection
+            if name.startswith('release:'):
+                releaseblocker_state = name
             # area detection
             if name.startswith('area/'):
                 area = name
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None
-        info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority, 'area': area}
-        # Issue type from project fields
-        issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
+        info = {
+            'branch': branch,
+            'max_branch': max_branch,
+            'env': env,
+            'priority': priority,
+            'releaseblocker_state': releaseblocker_state,
+            'area': area,
+        }
+        proj_list = projects_for_info_json(issue)
+        if proj_list:
+            info['projects'] = proj_list
+        # Issue type: GraphQL issueType.name (Bug/Feature/Task), then project field, then label "bug"
+        issue_type = (issue.get('issueType') or {}).get('name')
+        if issue_type is None:
+            issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
+        if issue_type is None:
+            label_names = [lb.get('name', '') for lb in issue.get('labels', {}).get('nodes', [])]
+            if any(n and n.lower() == 'bug' for n in label_names):
+                issue_type = 'Bug'
         
         # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
         state_reason = issue.get('stateReason')
@@ -525,6 +768,19 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         created_at = parse_datetime(issue.get('createdAt'))
         updated_at = parse_datetime(issue.get('updatedAt'))
         closed_at = parse_datetime(issue.get('closedAt'))
+
+        closer = extract_last_close_actor(issue)
+        if closer['login']:
+            info['closed_by_login'] = closer['login']
+        if closer['actor_type']:
+            info['closed_by_typename'] = closer['actor_type']
+        if closer['event_at'] is not None:
+            info['closed_event_at_iso'] = closer['event_at'].isoformat()
+        if closed_at:
+            info['closed_at_iso'] = closed_at.isoformat()
+
+        open_periods = build_open_periods(issue, created_at, closed_at)
+
         now = datetime.now(timezone.utc)
         
         is_in_project = bool(issue_project_fields)
@@ -541,7 +797,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         if closed_at and created_at:
             time_to_close_hours = int((closed_at - created_at).total_seconds() / 3600)
         
-        # Build the record
         issue_record = {
             # Primary identifiers
             'project_item_id': f"repo-{issue.get('number', 0)}",
@@ -596,10 +851,18 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         }
         
         transformed_issues.append(issue_record)
+        open_period_rows.extend(
+            open_period_rows_for_issue(
+                issue_record['issue_number'],
+                issue_record['project_item_id'],
+                open_periods,
+                now,
+            )
+        )
     
     elapsed = time.time() - start_time
-    print(f"Transformed {len(transformed_issues)} issues (took {elapsed:.2f}s)")
-    return transformed_issues
+    print(f"Transformed {len(transformed_issues)} issues, {len(open_period_rows)} open periods (took {elapsed:.2f}s)")
+    return transformed_issues, open_period_rows
 
 def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     """Create issues table in YDB optimized for BI"""
@@ -676,6 +939,80 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     elapsed = time.time() - start_time
     print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
 
+
+def create_issue_open_periods_table(ydb_wrapper: YDBWrapper, table_path: str):
+    """Open/close intervals per issue for timeline and SLA."""
+    print(f"Creating issue open periods table: {table_path}")
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            `issue_number` Uint64 NOT NULL,
+            `project_item_id` Utf8 NOT NULL,
+            `period_index` Uint32 NOT NULL,
+            `period_start` Date NOT NULL,
+            `period_end` Date,
+            `exported_at` Timestamp NOT NULL,
+            PRIMARY KEY (`issue_number`, `project_item_id`, `period_index`)
+        )
+        PARTITION BY HASH(`issue_number`)
+        WITH (
+            STORE = COLUMN,
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+        )
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
+def delete_issue_open_periods(ydb_wrapper: YDBWrapper, table_path: str, issue_numbers: List[int]) -> None:
+    if not issue_numbers:
+        return
+    for issue_number in issue_numbers:
+        query = f"""
+            DECLARE $issue_number AS Uint64;
+            DELETE FROM `{table_path}` WHERE issue_number = $issue_number;
+        """
+        ydb_wrapper.execute_dml(
+            query,
+            {
+                '$issue_number': ydb.TypedValue(
+                    value=int(issue_number),
+                    value_type=ydb.PrimitiveType.Uint64,
+                ),
+            },
+            query_name='delete_issue_open_periods',
+        )
+
+
+def upload_issue_open_periods(
+    ydb_wrapper: YDBWrapper,
+    table_path: str,
+    period_rows: List[Dict[str, Any]],
+    issue_numbers: List[int],
+    batch_size: int = 500,
+) -> None:
+    create_issue_open_periods_table(ydb_wrapper, table_path)
+    delete_issue_open_periods(ydb_wrapper, table_path, issue_numbers)
+    if not period_rows:
+        return
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("period_index", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("period_start", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("period_end", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+    ydb_wrapper.bulk_upsert_batches(
+        table_path,
+        period_rows,
+        column_types,
+        batch_size,
+        query_name='issue_open_periods',
+    )
+    print(f"Uploaded {len(period_rows)} rows to {table_path}")
+
 def main():
     """Main function to export GitHub issues to YDB"""
     parser = argparse.ArgumentParser(description='Export GitHub issues to YDB')
@@ -702,6 +1039,7 @@ def main():
         
         # Get table path from config
         table_path = ydb_wrapper.get_table_path("issues")
+        periods_table_path = ydb_wrapper.get_table_path("issue_open_periods")
         batch_size = 100
         
         try:
@@ -761,7 +1099,7 @@ def main():
                     project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
             
             # Transform issues for YDB
-            transformed_issues = transform_issues_for_ydb(issues, project_fields)
+            transformed_issues, open_period_rows = transform_issues_for_ydb(issues, project_fields)
             
             # Upsert issues in batches using bulk_upsert_batches
             print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
@@ -794,7 +1132,7 @@ def main():
             elif args.issue:
                 print(f"\n=== DEBUG: Issue #{debug_issue_number} not found in transformed_issues ===\n")
             
-            # Подготавливаем column_types один раз
+            # Prepare column_types once
             column_types = (
                 ydb.BulkUpsertColumns()
                 # Primary identifiers
@@ -849,6 +1187,15 @@ def main():
             )
             
             ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
+
+            issue_numbers = [row['issue_number'] for row in transformed_issues]
+            upload_issue_open_periods(
+                ydb_wrapper,
+                periods_table_path,
+                open_period_rows,
+                issue_numbers,
+                batch_size=500,
+            )
             
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")

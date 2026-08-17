@@ -1,6 +1,14 @@
 /*
  * mixed_xor.h
  *
+ * This header declares XOR operations between different Roaring container
+ * types, such as array, bitset, and run containers. These "mixed" routines
+ * handle cases where the two inputs do not share the same representation and
+ * where the most appropriate output representation may depend on the data.
+ *
+ * It includes regular, lazy, and inplace variants so higher-level bitmap code
+ * can choose between fully normalized results and faster deferred-maintenance
+ * paths.
  */
 
 #ifndef INCLUDE_CONTAINERS_MIXED_XOR_H_

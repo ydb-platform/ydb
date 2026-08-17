@@ -14,7 +14,6 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
     static const TString GrpcLoginComponentName = "grpc-login";
 
     auto status = response.operation().status();
-    TString detailed_status;
     TString reason = "";
     if (response.operation().issues_size() > 0) {
         reason = response.operation().issues(0).message();

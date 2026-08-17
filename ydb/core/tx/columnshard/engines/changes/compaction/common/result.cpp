@@ -1,4 +1,5 @@
 #include "result.h"
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NCompaction {
@@ -16,4 +17,4 @@ ui32 TColumnPortionResult::GetRecordsCount() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

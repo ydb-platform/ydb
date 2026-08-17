@@ -1,5 +1,7 @@
 #pragma once
 
+#include "import_counters.h"
+
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/backup/import/session.h>
@@ -27,30 +29,49 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NImport::TSession> ImportSession;
     TActorId ImportActorId;
+
+    TImportCounters Counters;
+    TInstant ReadStartTime;
+    TInstant WriteStartTime;
+    TInstant SaveProgressStartTime;
+    TInstant StageStartTime;
+
+    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
+    static constexpr TDuration WarningInterval = TDuration::Seconds(60);
+    static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
+
     void SwitchStage(const EStage from, const EStage to);
+    static TString StageToString(EStage stage);
 
-  protected:
+    void ScheduleTimeoutCheck();
+    void HandleWakeup();
 
+    void AbortImport(const TString& errorMessage);
+
+    void PassAway() override;
+
+protected:
     virtual void OnSessionStateSaved() override;
 
     virtual void OnTxCompleted(const ui64 /*txId*/) override;
 
     virtual void OnSessionProgressSaved() override;
 
-    virtual void OnBootstrap(const TActorContext & /*ctx*/) override;
-    
+    virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
+
     void Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev);
-    
+
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
 
-  public:
-    TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter> &adapter);
+public:
+    TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter);
 
     STATEFN(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch, Handle);
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+                cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);
             }

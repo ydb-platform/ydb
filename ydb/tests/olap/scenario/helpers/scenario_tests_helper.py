@@ -668,8 +668,15 @@ class ScenarioTestHelper:
                 'table': tablename,
             },
         ):
-            result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
-            return result_set.result_set.rows[0][0]
+            result = self.execute_query(
+                f'SELECT count(*) FROM `{self.get_full_path(tablename)}`',
+                fail_on_error=False,
+                return_error=True,
+                ignore_error={''},
+            )
+            if isinstance(result, ydb.issues.Error):
+                raise result
+            return result[0].rows[0][0]
 
     @allure.step('Describe table {path}')
     def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
@@ -744,6 +751,7 @@ class ScenarioTestHelper:
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
         root_path = self.get_full_path(folder)
+        secret_type = getattr(ydb.SchemeEntryType, 'SECRET', None)
         for e in self.list_path(path, folder):
             if e.is_any_table():
                 self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=5)
@@ -751,23 +759,28 @@ class ScenarioTestHelper:
                 self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=5)
             elif e.is_external_data_source():
                 self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=5)
+            elif secret_type is not None and e.type == secret_type:
+                self.execute_scheme_query(dh.DropSecret(os.path.join(folder, e.name)), retries=5)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),
                     ydb.StatusCode.SUCCESS,
+                    ydb.StatusCode.SCHEME_ERROR,
+                    n_retries=10,
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
 
     def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
         path = table_name if table_name.startswith('/') else self.get_full_path(table_name)
-        query = f'''SELECT * FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
+        query = f'''SELECT SUM(RawBytes) AS RawBytes, SUM(BlobRangeSize) AS BlobRangeSize FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
-        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        result_sets = self.execute_query(query)
         raw_bytes = 0
         bytes = 0
-        for row in result_set.rows:
-            raw_bytes += row["RawBytes"]
-            bytes += row["BlobRangeSize"]
+        for result_set in result_sets:
+            for row in result_set.rows:
+                raw_bytes += row["RawBytes"]
+                bytes += row["BlobRangeSize"]
         return raw_bytes, bytes

@@ -2,7 +2,7 @@
 
 Во время [начального развёртывания](./initial-deployment/index.md) Ansible playbook предоставляет на выбор несколько вариантов, какой именно серверный исполняемый файл {{ ydb-short-name }} (`ydbd`) использовать. В этой статье объясняются доступные варианты изменения [версии](../../../downloads/index.md) кластера после начального развёртывания.
 
-{% include "../_includes/versioning-warning.md" %}
+{% include notitle [versioning-warning](../_includes/versioning-warning.md) %}
 
 ## Обновление исполняемых файлов через Ansible playbook
 

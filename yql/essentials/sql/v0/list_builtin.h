@@ -10,6 +10,8 @@
 #include <util/string/cast.h>
 #include <util/string/util.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
@@ -129,13 +131,13 @@ class TListFoldBuiltin: public TListBuiltin {
 public:
     TListFoldBuiltin(TPosition pos,
                      const TString& opName,
-                     const TString& stateType,
-                     const TString& stateValue,
+                     TString stateType,
+                     TString stateValue,
                      const ui32 argCount,
                      const TVector<TNodePtr>& args)
         : TListBuiltin(pos, opName, args)
-        , StateType_(stateType)
-        , StateValue_(stateValue)
+        , StateType_(std::move(stateType))
+        , StateValue_(std::move(stateValue))
         , ArgCount_(argCount)
     {
     }

@@ -1,5 +1,6 @@
 #include "device_handler.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 
@@ -64,7 +65,7 @@ public:
             ++ReadRequestCount;
             ctx->AddTime(EProcessingStage::Postponed, TDuration::Seconds(1));
 
-            auto startIndex = request->Range.Start;
+            auto startIndex = request->Headers.Range.Start;
             auto guard = request->Sglist.Acquire();
             const auto& dst = guard.Get();
 
@@ -75,7 +76,7 @@ public:
             auto src = SgList;
             src.erase(src.begin(), src.begin() + startIndex);
             auto sz = SgListCopy(src, dst);
-            UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+            UNIT_ASSERT(sz == request->Headers.Range.Size() * BlockSize);
 
             return MakeFuture(TReadBlocksLocalResponse());
         };
@@ -92,7 +93,7 @@ public:
                 {
                     Y_UNUSED(f);
 
-                    auto startIndex = request->Range.Start;
+                    auto startIndex = request->Headers.Range.Start;
                     auto guard = request->Sglist.Acquire();
                     const auto& src = guard.Get();
 
@@ -103,7 +104,8 @@ public:
                     auto dst = SgList;
                     dst.erase(dst.begin(), dst.begin() + startIndex);
                     auto sz = SgListCopy(src, dst);
-                    UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+                    UNIT_ASSERT(
+                        sz == request->Headers.Range.Size() * BlockSize);
 
                     return TWriteBlocksLocalResponse();
                 });
@@ -113,7 +115,7 @@ public:
                 std::shared_ptr<TZeroBlocksLocalRequest> request)
         {
             ++ZeroRequestCount;
-            ZeroedBlocksCount += request->Range.Size();
+            ZeroedBlocksCount += request->Headers.Range.Size();
             ctx->AddTime(EProcessingStage::Postponed, TDuration::Seconds(100));
 
             auto future = WriteTrigger.GetFuture();
@@ -122,15 +124,16 @@ public:
                 {
                     Y_UNUSED(f);
 
-                    auto startIndex = request->Range.Start;
+                    auto startIndex = request->Headers.Range.Start;
                     TSgList src(
-                        request->Range.Size(),
+                        request->Headers.Range.Size(),
                         TBlockDataRef::CreateZeroBlock(BlockSize));
 
                     auto dst = SgList;
                     dst.erase(dst.begin(), dst.begin() + startIndex);
                     auto sz = SgListCopy(src, dst);
-                    UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+                    UNIT_ASSERT(
+                        sz == request->Headers.Range.Size() * BlockSize);
 
                     return TZeroBlocksLocalResponse();
                 });
@@ -138,15 +141,14 @@ public:
 
         auto factory =
             CreateDeviceHandlerFactoryForTesting(maxBlockCount * BlockSize);
-        DeviceHandler = factory->CreateDeviceHandler(
-            TDeviceHandlerParams{
-                .Storage = std::move(testStorage),
-                .DiskId = "disk1",
-                .ClientId = "testClientId",
-                .BlockSize = BlockSize,
-                .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
-                .UnalignedRequestsDisabled = unalignedRequestsDisabled,
-                .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+        DeviceHandler = factory->CreateDeviceHandler(TDeviceHandlerParams{
+            .Storage = std::move(testStorage),
+            .DiskId = "disk1",
+            .ClientId = "testClientId",
+            .BlockSize = BlockSize,
+            .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
+            .UnalignedRequestsDisabled = unalignedRequestsDisabled,
+            .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
     }
 
     TCallContextPtr WriteSectors(ui64 firstSector, ui64 totalSectors, char data)
@@ -367,15 +369,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
 
         auto factory =
             CreateDeviceHandlerFactoryForTesting(blocksCountLimit * blockSize);
-        auto deviceHandler = factory->CreateDeviceHandler(
-            TDeviceHandlerParams{
-                .Storage = storage,
-                .DiskId = diskId,
-                .ClientId = clientId,
-                .BlockSize = blockSize,
-                .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
-                .UnalignedRequestsDisabled = false,
-                .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+        auto deviceHandler = factory->CreateDeviceHandler(TDeviceHandlerParams{
+            .Storage = storage,
+            .DiskId = diskId,
+            .ClientId = clientId,
+            .BlockSize = blockSize,
+            .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
+            .UnalignedRequestsDisabled = false,
+            .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
 
         std::array<bool, deviceBlocksCount> zeroBlocks;
         for (auto& zeroBlock: zeroBlocks) {
@@ -391,13 +392,13 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
-            for (ui32 i = 0; i < request->Range.Size(); ++i) {
-                auto index = request->Range.Start + i;
+            for (ui32 i = 0; i < request->Headers.Range.Size(); ++i) {
+                auto index = request->Headers.Range.Start + i;
                 auto& zeroBlock = zeroBlocks[index];
 
                 UNIT_ASSERT(!zeroBlock);
@@ -441,15 +442,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
 
         auto factory =
             CreateDeviceHandlerFactoryForTesting(blocksCountLimit * blockSize);
-        auto deviceHandler = factory->CreateDeviceHandler(
-            TDeviceHandlerParams{
-                .Storage = storage,
-                .DiskId = diskId,
-                .ClientId = clientId,
-                .BlockSize = blockSize,
-                .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
-                .UnalignedRequestsDisabled = false,
-                .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+        auto deviceHandler = factory->CreateDeviceHandler(TDeviceHandlerParams{
+            .Storage = storage,
+            .DiskId = diskId,
+            .ClientId = clientId,
+            .BlockSize = blockSize,
+            .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
+            .UnalignedRequestsDisabled = false,
+            .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
 
         std::array<bool, deviceBlocksCount> zeroBlocks;
         for (auto& zeroBlock: zeroBlocks) {
@@ -488,15 +488,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
         auto storage = std::make_shared<TTestStorage>();
 
         auto factory = CreateDefaultDeviceHandlerFactory();
-        auto deviceHandler = factory->CreateDeviceHandler(
-            TDeviceHandlerParams{
-                .Storage = storage,
-                .DiskId = diskId,
-                .ClientId = clientId,
-                .BlockSize = blockSize,
-                .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
-                .UnalignedRequestsDisabled = true,
-                .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+        auto deviceHandler = factory->CreateDeviceHandler(TDeviceHandlerParams{
+            .Storage = storage,
+            .DiskId = diskId,
+            .ClientId = clientId,
+            .BlockSize = blockSize,
+            .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
+            .UnalignedRequestsDisabled = true,
+            .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
 
         ui32 startIndex = 42;
         ui32 blocksCount = 17;
@@ -511,8 +510,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TReadBlocksLocalResponse>();
         };
@@ -536,8 +535,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TWriteBlocksLocalResponse>();
         };
@@ -560,8 +559,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TZeroBlocksLocalResponse>();
         };
@@ -730,15 +729,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
 
         auto factory =
             CreateDeviceHandlerFactoryForTesting(blocksCountLimit * blockSize);
-        auto deviceHandler = factory->CreateDeviceHandler(
-            TDeviceHandlerParams{
-                .Storage = storage,
-                .DiskId = diskId,
-                .ClientId = clientId,
-                .BlockSize = blockSize,
-                .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
-                .UnalignedRequestsDisabled = unalignedRequestDisabled,
-                .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+        auto deviceHandler = factory->CreateDeviceHandler(TDeviceHandlerParams{
+            .Storage = storage,
+            .DiskId = diskId,
+            .ClientId = clientId,
+            .BlockSize = blockSize,
+            .MaxZeroBlocksSubRequestSize = maxZeroBlocksSubRequestSize,
+            .UnalignedRequestsDisabled = unalignedRequestDisabled,
+            .StorageMediaKind = NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
 
         storage->ZeroBlocksLocalHandler =
             [&](TCallContextPtr callContext,
@@ -747,17 +745,17 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TSgList src(
-                request->Range.Size(),
+                request->Headers.Range.Size(),
                 TBlockDataRef(zeroBlock.data(), zeroBlock.size()));
 
             TBlockDataRef dst(
-                device.data() + request->Range.Start * blockSize,
+                device.data() + request->Headers.Range.Start * blockSize,
                 src.size() * blockSize);
 
             auto bytesCount = SgListCopy(src, dst);
@@ -773,14 +771,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TBlockDataRef dst(
-                device.data() + request->Range.Start * blockSize,
-                request->Range.Size() * blockSize);
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
 
             auto guard = request->Sglist.Acquire();
             UNIT_ASSERT(guard);
@@ -798,14 +796,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TBlockDataRef src(
-                device.data() + request->Range.Start * blockSize,
-                request->Range.Size() * blockSize);
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
 
             TReadBlocksLocalResponse response;
 
@@ -1008,6 +1006,172 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             ctx2->Time(EProcessingStage::Postponed) > TDuration::Seconds(11));
         UNIT_ASSERT(
             ctx3->Time(EProcessingStage::Postponed) > TDuration::Seconds(11));
+    }
+
+    Y_UNIT_TEST(ShouldHandleFioStyleUnalignedWrites)
+    {
+        // Simulates the user-reported fio command which used to fail with EIO:
+        //   sudo fio --name=unaligned --filename=/dev/<device> --direct=1 \
+        //            --rw=write --ioengine=libaio --bs=4k --offset=1024 \
+        //            --size=8k
+        // The command issues two 4KiB writes at byte offsets 1024 and 5120.
+        // Both writes are unaligned with respect to the 4KiB block size of
+        // the device. The device handler must execute the read-modify-write
+        // sequence and complete the writes successfully, preserving the
+        // bytes outside the modified ranges.
+        const auto diskId = "disk1";
+        const auto clientId = "testClientId";
+        const ui32 blockSize = DefaultBlockSize;
+        const ui64 deviceBlocksCount = 4;
+        const ui64 deviceSize = deviceBlocksCount * blockSize;
+
+        const char initialByte = char(0xCD);
+        TString device(deviceSize, initialByte);
+
+        auto storage = std::make_shared<TTestStorage>();
+
+        storage->ReadBlocksLocalHandler =
+            [&](TCallContextPtr callContext,
+                std::shared_ptr<TReadBlocksLocalRequest> request)
+        {
+            Y_UNUSED(callContext);
+
+            UNIT_ASSERT_VALUES_EQUAL(clientId, request->Headers.ClientId);
+            UNIT_ASSERT(
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
+                deviceBlocksCount);
+
+            TBlockDataRef src(
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
+
+            {
+                auto guard = request->Sglist.Acquire();
+                UNIT_ASSERT(guard);
+
+                auto bytesCount = SgListCopy(src, guard.Get());
+                UNIT_ASSERT_VALUES_EQUAL(src.Size(), bytesCount);
+            }
+
+            // Mirror the real partition's read executor, which closes the
+            // request's Sglist after handling the read. The unaligned device
+            // handler must keep the user's Sglist usable for the follow-up
+            // modify-and-write step regardless of this.
+            request->Sglist.Close();
+
+            return MakeFuture(TReadBlocksLocalResponse());
+        };
+
+        storage->WriteBlocksLocalHandler =
+            [&](TCallContextPtr callContext,
+                std::shared_ptr<TWriteBlocksLocalRequest> request)
+        {
+            Y_UNUSED(callContext);
+
+            UNIT_ASSERT_VALUES_EQUAL(clientId, request->Headers.ClientId);
+            UNIT_ASSERT(
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
+                deviceBlocksCount);
+
+            TBlockDataRef dst(
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
+
+            {
+                auto guard = request->Sglist.Acquire();
+                UNIT_ASSERT(guard);
+
+                // The aligned backend must only ever receive sglists whose
+                // buffers are a multiple of the block size.
+                for (const auto& buffer: guard.Get()) {
+                    UNIT_ASSERT_VALUES_EQUAL(0u, buffer.Size() % blockSize);
+                }
+
+                auto bytesCount = SgListCopy(guard.Get(), dst);
+                UNIT_ASSERT_VALUES_EQUAL(dst.Size(), bytesCount);
+            }
+
+            // Mirror the real partition's write executor, which closes the
+            // request's Sglist after handling the write.
+            request->Sglist.Close();
+
+            return MakeFuture(TWriteBlocksLocalResponse());
+        };
+
+        auto deviceHandler =
+            CreateDefaultDeviceHandlerFactory()->CreateDeviceHandler(
+                TDeviceHandlerParams{
+                    .Storage = storage,
+                    .DiskId = diskId,
+                    .ClientId = clientId,
+                    .BlockSize = blockSize,
+                    .MaxZeroBlocksSubRequestSize = 0,
+                    .UnalignedRequestsDisabled = false,
+                    .StorageMediaKind =
+                        NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+
+        auto doWrite = [&](ui64 offset, ui64 length, char data)
+        {
+            // Use a single contiguous buffer as fio does with direct IO.
+            TString buffer(length, data);
+            TSgList sgList{{buffer.data(), buffer.size()}};
+
+            auto future = deviceHandler->Write(
+                MakeIntrusive<TCallContext>(),
+                offset,
+                length,
+                TGuardedSgList(std::move(sgList)));
+
+            const auto& response = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(
+                !HasError(response.Error),
+                FormatError(response.Error));
+        };
+
+        // Two 4KiB writes at byte offsets 1024 and 5120.
+        const ui64 firstOffset = 1024;
+        const ui64 secondOffset = firstOffset + blockSize;
+        doWrite(firstOffset, blockSize, 'a');
+        doWrite(secondOffset, blockSize, 'b');
+
+        // Verify the resulting on-device contents:
+        //   bytes [0, 1024)              -> untouched (initialByte)
+        //   bytes [1024, 5120)           -> 'a'
+        //   bytes [5120, 9216)           -> 'b'
+        //   bytes [9216, deviceSize)     -> untouched (initialByte)
+        for (ui64 i = 0; i < deviceSize; ++i) {
+            char expected = initialByte;
+            if (i >= firstOffset && i < firstOffset + blockSize) {
+                expected = 'a';
+            } else if (i >= secondOffset && i < secondOffset + blockSize) {
+                expected = 'b';
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(expected, device[i], i);
+        }
+
+        // Read the previously written region back via the device handler to
+        // confirm that an unaligned read returns the same bytes that were
+        // written.
+        TString readBuffer(2 * blockSize, char(0));
+        TSgList readSgList{{readBuffer.data(), readBuffer.size()}};
+        auto readFuture = deviceHandler->Read(
+            MakeIntrusive<TCallContext>(),
+            firstOffset,
+            2 * blockSize,
+            TGuardedSgList(std::move(readSgList)),
+            {});
+
+        const auto& readResponse = readFuture.GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(
+            !HasError(readResponse.Error),
+            FormatError(readResponse.Error));
+
+        for (ui64 i = 0; i < blockSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C('a', readBuffer[i], i);
+        }
+        for (ui64 i = blockSize; i < 2 * blockSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C('b', readBuffer[i], i);
+        }
     }
 
     Y_UNIT_TEST(ShouldNotOverflowStack)

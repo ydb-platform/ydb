@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 try:
-    from tree_sitter import Language, Node, Parser, Query, Tree
+    from tree_sitter import Language, Node, Parser, Query, QueryCursor, Tree
 
     TREE_SITTER = True
 except ImportError:
     TREE_SITTER = False
 
 
-from textual._tree_sitter import BUILTIN_LANGUAGES
 from textual.document._document import Document, EditResult, Location, _utf8_encode
+
+_UINT32_MAX = 0xFFFFFFFF
 
 
 class SyntaxAwareDocumentError(Exception):
@@ -17,59 +18,30 @@ class SyntaxAwareDocumentError(Exception):
 
 
 class SyntaxAwareDocument(Document):
-    """A wrapper around a Document which also maintains a tree-sitter syntax
+    """A subclass of Document which also maintains a tree-sitter syntax
     tree when the document is edited.
-
-    The primary reason for this split is actually to keep tree-sitter stuff separate,
-    since it isn't supported in Python 3.7. By having the tree-sitter code
-    isolated in this subclass, it makes it easier to conditionally import. However,
-    it does come with other design flaws (e.g. Document is required to have methods
-    which only really make sense on SyntaxAwareDocument).
-
-    If you're reading this and Python 3.7 is no longer supported by Textual,
-    consider merging this subclass into the `Document` superclass.
     """
 
     def __init__(
         self,
         text: str,
-        language: str | Language,
+        language: Language,
     ):
         """Construct a SyntaxAwareDocument.
 
         Args:
             text: The initial text contained in the document.
-            language: The language to use. You can pass a string to use a supported
-                language, or pass in your own tree-sitter `Language` object.
+            language: The tree-sitter language to use.
         """
 
         if not TREE_SITTER:
-            raise RuntimeError("SyntaxAwareDocument unavailable.")
+            raise RuntimeError(
+                "SyntaxAwareDocument unavailable - tree-sitter is not installed."
+            )
 
         super().__init__(text)
-        self.language: Language | None = None
-        """The tree-sitter Language or None if tree-sitter is unavailable."""
-
-        self._parser: Parser | None = None
-
-        from textual._tree_sitter import get_language
-
-        # If the language is `None`, then avoid doing any parsing related stuff.
-        if isinstance(language, str):
-            if language not in BUILTIN_LANGUAGES:
-                raise SyntaxAwareDocumentError(f"Invalid language {language!r}")
-            # If tree-sitter-languages is not installed properly, get_language
-            # and get_parser may raise an OSError when unable to load their
-            # resources
-
-            try:
-                self.language = get_language(language)
-            except OSError as e:
-                raise SyntaxAwareDocumentError(
-                    f"Could not find binaries for {language!r}"
-                ) from e
-        else:
-            self.language = language
+        self.language: Language = language
+        """The tree-sitter Language."""
 
         self._parser = Parser(self.language)
         """The tree-sitter Parser or None if tree-sitter is unavailable."""
@@ -90,17 +62,7 @@ class SyntaxAwareDocument(Document):
         Returns:
             The prepared query.
         """
-        if not TREE_SITTER:
-            raise SyntaxAwareDocumentError(
-                "Couldn't prepare query - tree-sitter is not available on this architecture."
-            )
-
-        if self.language is None:
-            raise SyntaxAwareDocumentError(
-                "Couldn't prepare query - no language assigned."
-            )
-
-        return self.language.query(query)
+        return Query(self.language, query)
 
     def query_syntax_tree(
         self,
@@ -122,19 +84,17 @@ class SyntaxAwareDocument(Document):
         Returns:
             A tuple containing the nodes and text captured by the query.
         """
+        cursor = QueryCursor(query)
 
-        if not TREE_SITTER:
-            raise SyntaxAwareDocumentError(
-                "tree-sitter is not available on this architecture."
-            )
+        if start_point is not None or end_point is not None:
+            if start_point is None:
+                start_point = (0, 0)
+            if end_point is None:
+                end_point = (_UINT32_MAX, _UINT32_MAX)
 
-        captures_kwargs = {}
-        if start_point is not None:
-            captures_kwargs["start_point"] = start_point
-        if end_point is not None:
-            captures_kwargs["end_point"] = end_point
+            cursor.set_point_range(start_point, end_point)
 
-        captures = query.captures(self._syntax_tree.root_node, **captures_kwargs)
+        captures = cursor.captures(self._syntax_tree.root_node)
         return captures
 
     def replace_range(self, start: Location, end: Location, text: str) -> EditResult:

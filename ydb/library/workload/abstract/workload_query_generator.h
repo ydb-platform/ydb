@@ -149,6 +149,7 @@ public:
         TString CommandName;
         TString Description;
         EKind Kind;
+        TVector<TString> Aliases;
     };
 public:
     virtual ~IWorkloadQueryGenerator() = default;

@@ -58,6 +58,7 @@ class TJsonStorageStats : public TViewerPipeClient {
     TSubDomainKey SubDomainKey;
     std::vector<TString> Paths;
     EGroupBy GroupBy = EGroupBy::Path;
+    bool UseHiveTablets = false;
     std::unordered_set<TString> StoragePoolNames;
     NKikimrSysView::TStoragePoolEntry StaticStoragePool;
     std::unordered_map<TStoragePoolId, const NKikimrSysView::TStoragePoolEntry&> StoragePools;
@@ -66,6 +67,7 @@ class TJsonStorageStats : public TViewerPipeClient {
     TRequestResponse<TEvSysView::TEvGetGroupsResponse> GroupsResponse;
     TRequestResponse<TEvSysView::TEvGetStoragePoolsResponse> PoolsResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
+    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveInfo>> HiveInfoResponse;
     std::unordered_map<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> SchemeShardResult;
     std::unordered_map<TGroupId, std::vector<TActorId>> GroupToVDiskActorId;
     std::unordered_map<TNodeId, std::vector<TActorId>> NodeToVDiskActorId;
@@ -73,6 +75,7 @@ class TJsonStorageStats : public TViewerPipeClient {
     std::unordered_map<TActorId, size_t> VDiskRequestIndex;
     std::unordered_map<TTabletId, TTabletStorageInfo> TabletStorageInfo;
     std::unordered_map<TString, TPathStorageInfo> PathStorageInfo;
+    std::vector<TString> Problems;
 
 public:
     TJsonStorageStats(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -118,6 +121,15 @@ public:
         }
     }
 
+    void AddProblem(const TString& problem) {
+        for (const auto& p : Problems) {
+            if (p == problem) {
+                return;
+            }
+        }
+        Problems.push_back(problem);
+    }
+
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
@@ -161,6 +173,7 @@ public:
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid group_by value"));
             }
         }
+        UseHiveTablets = FromStringWithDefault<bool>(Params.Get("use_hive_tablets"), false);
         if (Paths.empty() && GroupBy == EGroupBy::Path) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No path specified"));
         }
@@ -195,10 +208,43 @@ public:
             RequestSchemeShard(MakeFullPath(path));
         }
         if (Paths.empty() && GroupBy == EGroupBy::TabletType) {
-            RequestTabletInfo();
+            if (UseHiveTablets) {
+                RequestHiveTabletInfo();
+            } else {
+                RequestTabletInfo();
+            }
         }
         ProcessResponses(); // for cached responses
         Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
+    }
+
+    void RequestHiveTabletInfo() {
+        std::vector<TTabletId> hiveIds;
+        if (AppData()->DomainsInfo) {
+            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            if (rootHiveId) {
+                hiveIds.push_back(rootHiveId);
+            }
+        }
+        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            const auto& resultSet = DatabaseNavigateResponse->Get()->Request->ResultSet;
+            if (!resultSet.empty()) {
+                const auto& entry = resultSet.front();
+                if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
+                    hiveIds.push_back(entry.DomainInfo->Params.GetHive());
+                }
+            }
+        }
+        std::ranges::sort(hiveIds);
+        auto duplicates = std::ranges::unique(hiveIds);
+        hiveIds.erase(duplicates.begin(), duplicates.end());
+        for (TTabletId hiveId : hiveIds) {
+            auto request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
+            if (SubDomainKey) {
+                request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(SubDomainKey);
+            }
+            HiveInfoResponse.emplace(hiveId, MakeRequestToTablet<TEvHive::TEvResponseHiveInfo>(hiveId, request.release(), hiveId));
+        }
     }
 
     void RequestTabletInfo() {
@@ -417,10 +463,18 @@ public:
                 for (const auto& vdiskActorId : vdiskActorIds) {
                     size_t requestIndex = VDiskRequests.size();
                     if (VDiskRequestIndex.emplace(vdiskActorId, requestIndex).second) {
-                        VDiskRequests.emplace_back(MakeRequest<TEvGetLogoBlobIndexStatResponse>(vdiskActorId, new TEvGetLogoBlobIndexStatRequest(), 0, requestIndex), groupId);
+                        VDiskRequests.emplace_back(MakeRequest<TEvGetLogoBlobIndexStatResponse>(vdiskActorId, new TEvGetLogoBlobIndexStatRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, requestIndex), groupId);
                     }
                 }
             }
+        }
+    }
+
+    void ProcessHiveInfo(const TEvHive::TEvResponseHiveInfo& hiveInfo) {
+        for (const auto& tabletInfo : hiveInfo.Record.GetTablets()) {
+            TTabletId tabletId = tabletInfo.GetTabletID();
+            auto& tabletStorageInfo = TabletStorageInfo[tabletId];
+            tabletStorageInfo.Type = tabletInfo.GetTabletType();
         }
     }
 
@@ -444,6 +498,7 @@ public:
             hFunc(TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(TEvGetLogoBlobIndexStatResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
+            hFunc(TEvHive::TEvResponseHiveInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
@@ -491,6 +546,18 @@ public:
             }
         } else {
             AddEvent("Unknown TEvGetLogoBlobIndexStatResponse");
+        }
+    }
+
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+        auto it = HiveInfoResponse.find(ev->Cookie);
+        if (it != HiveInfoResponse.end()) {
+            if (it->second.Set(std::move(ev))) {
+                ProcessHiveInfo(it->second.GetRef());
+                RequestDone();
+            }
+        } else {
+            AddEvent("Unknown TEvResponseHiveInfo");
         }
     }
 
@@ -544,14 +611,49 @@ public:
         }
     }
 
+    void HandleHiveError(TTabletId hiveId, const TString& error) {
+        auto it = HiveInfoResponse.find(hiveId);
+        if (it != HiveInfoResponse.end()) {
+            if (it->second.Error(error)) {
+                RequestDone();
+            }
+        } else {
+            AddEvent("Unknown Hive request error");
+        }
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         static const TString error = "Undelivered";
-        TNodeId nodeId = ev.Get()->Cookie;
-        HandleNodeError(nodeId, error);
+        AddProblem("data-incomplete");
+        switch (ev->Get()->SourceType) {
+            case TEvBlobStorage::EvGetLogoBlobIndexStatRequest: {
+                size_t requestIndex = ev->Cookie;
+                if (requestIndex < VDiskRequests.size()) {
+                    if (VDiskRequests[requestIndex].VDiskRequest.Error(error)) {
+                        RequestDone();
+                    }
+                } else {
+                    AddEvent("Unknown TEvUndelivered VDisk request");
+                }
+                break;
+            }
+            case TEvHive::EvRequestHiveInfo: {
+                TTabletId hiveId = ev->Cookie;
+                HandleHiveError(hiveId, error);
+                break;
+            }
+            case TEvWhiteboard::EvTabletStateRequest:
+            default: {
+                TNodeId nodeId = ev->Cookie;
+                HandleNodeError(nodeId, error);
+                break;
+            }
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         static const TString error = "NodeDisconnected";
+        AddProblem("data-incomplete");
         TNodeId nodeId = ev->Get()->NodeId;
         HandleNodeError(nodeId, error);
     }
@@ -561,18 +663,30 @@ public:
         bool returnGroups = FromStringWithDefault<bool>(Params.Get("groups"), returnEverything);
         bool returnTablets = FromStringWithDefault<bool>(Params.Get("tablets"), returnEverything);
         bool returnMedia = FromStringWithDefault<bool>(Params.Get("media"), returnEverything);
+        bool debug = FromStringWithDefault<bool>(Params.Get("debug"), false);
         NJson::TJsonValue json;
+        if (!Problems.empty()) {
+            NJson::TJsonValue& jsonProblems(json["Problems"]);
+            jsonProblems.SetType(NJson::JSON_ARRAY);
+            for (const auto& problem : Problems) {
+                jsonProblems.AppendValue(problem);
+            }
+        }
         if (GroupBy == EGroupBy::TabletType) {
             NJson::TJsonValue& jsonTablets(json["Tablets"]);
             if (returnTablets) {
                 jsonTablets.SetType(NJson::JSON_ARRAY);
             }
             std::map<TTabletTypes::EType, TTabletStorageInfo> tabletTypeAccumulated;
+            std::map<TTabletTypes::EType, std::vector<TTabletId>> tabletIdsByType;
             for (const auto& [tabletId, tabletStorageInfo] : TabletStorageInfo) {
                 auto& typeAccumulated = tabletTypeAccumulated[tabletStorageInfo.Type];
                 typeAccumulated.TabletCount += 1;
                 typeAccumulated.DataSize += tabletStorageInfo.DataSize;
                 typeAccumulated.IndexSize += tabletStorageInfo.IndexSize;
+                if (debug) {
+                    tabletIdsByType[tabletStorageInfo.Type].push_back(tabletId);
+                }
                 for (const auto& [groupId, groupStorageInfo] : tabletStorageInfo.Groups) {
                     typeAccumulated.Groups[groupId].StorageSize += groupStorageInfo.StorageSize;
                     typeAccumulated.Groups[groupId].StorageCount += groupStorageInfo.StorageCount;
@@ -617,6 +731,15 @@ public:
                 jsonTablet["StorageCount"] = tabletStorageCount;
                 if (tabletStorageInfo.TabletCount) {
                     jsonTablet["TabletCount"] = tabletStorageInfo.TabletCount;
+                }
+                if (debug) {
+                    NJson::TJsonValue& jsonTabletIds(jsonTablet["TabletIds"]);
+                    jsonTabletIds.SetType(NJson::JSON_ARRAY);
+                    auto& tabletIds = tabletIdsByType[tabletType];
+                    std::ranges::sort(tabletIds);
+                    for (TTabletId tabletId : tabletIds) {
+                        jsonTabletIds.AppendValue(TStringBuilder() << tabletId);
+                    }
                 }
                 NJson::TJsonValue& jsonMedia(jsonTablet["Media"]);
                 if (returnMedia) {
@@ -768,7 +891,16 @@ public:
             .Description = "return media kind info",
             .Type = "boolean",
         });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TEvDescribeSchemeInfo>());
+        yaml.AddParameter({
+            .Name = "use_hive_tablets",
+            .Description = "use Hive instead of whiteboard to collect tablets",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "debug",
+            .Description = "return tablet ids for group_by=tablet_type",
+            .Type = "boolean",
+        });
         return yaml;
     }
 };

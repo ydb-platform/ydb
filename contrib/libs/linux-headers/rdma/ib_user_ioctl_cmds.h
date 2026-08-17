@@ -37,9 +37,6 @@
 #define UVERBS_ID_NS_MASK 0xF000
 #define UVERBS_ID_NS_SHIFT 12
 
-#define UVERBS_UDATA_DRIVER_DATA_NS	1
-#define UVERBS_UDATA_DRIVER_DATA_FLAG	(1UL << UVERBS_ID_NS_SHIFT)
-
 enum uverbs_default_objects {
 	UVERBS_OBJECT_DEVICE, /* No instances of DEVICE are allowed */
 	UVERBS_OBJECT_PD,
@@ -61,8 +58,10 @@ enum uverbs_default_objects {
 };
 
 enum {
-	UVERBS_ATTR_UHW_IN = UVERBS_UDATA_DRIVER_DATA_FLAG,
+	UVERBS_ID_DRIVER_NS = 1UL << UVERBS_ID_NS_SHIFT,
+	UVERBS_ATTR_UHW_IN = UVERBS_ID_DRIVER_NS,
 	UVERBS_ATTR_UHW_OUT,
+	UVERBS_ID_DRIVER_NS_WITH_UHW,
 };
 
 enum uverbs_methods_device {
@@ -89,6 +88,7 @@ enum uverbs_attrs_query_port_cmd_attr_ids {
 enum uverbs_attrs_get_context_attr_ids {
 	UVERBS_ATTR_GET_CONTEXT_NUM_COMP_VECTORS,
 	UVERBS_ATTR_GET_CONTEXT_CORE_SUPPORT,
+	UVERBS_ATTR_GET_CONTEXT_FD_ARR,
 };
 
 enum uverbs_attrs_query_context_attr_ids {

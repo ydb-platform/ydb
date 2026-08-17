@@ -8,12 +8,34 @@ import time
 import abc
 import socket
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
+from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.tests.tools.nemesis.library.base import AbstractMonitoredNemesis
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 
 
 logger = logging.getLogger("bridge_pile")
 logger.info("=== BRIDGE_PILE.PY LOADED ===")
+
+VALID_FAILOVER_STATES = {PileState.PRIMARY, PileState.SYNCHRONIZED, PileState.NOT_SYNCHRONIZED}
+VALID_REJOIN_STATES = {PileState.DISCONNECTED}
+HEALTHY_STATES = {PileState.PRIMARY, PileState.SYNCHRONIZED}
+
+DEFAULT_POLL_INTERVAL = 60
+DEFAULT_POLL_TIMEOUT = 1200
+
+PILE_STATE_NAMES = {
+    PileState.UNSPECIFIED: "UNSPECIFIED",
+    PileState.PRIMARY: "PRIMARY",
+    PileState.PROMOTED: "PROMOTED",
+    PileState.SYNCHRONIZED: "SYNCHRONIZED",
+    PileState.NOT_SYNCHRONIZED: "NOT_SYNCHRONIZED",
+    PileState.SUSPENDED: "SUSPENDED",
+    PileState.DISCONNECTED: "DISCONNECTED",
+}
+
+
+def get_pile_state_name(state):
+    return PILE_STATE_NAMES.get(state, f"UNKNOWN({state})")
 
 
 class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
@@ -137,6 +159,47 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         """Subclass-specific fault injection - to be overridden by subclasses."""
         pass
 
+    def _get_pile_state(self, pile_name, bridge_client):
+        pile_states = bridge_client.per_pile_state
+        if pile_states is None:
+            return None
+        for pile in pile_states:
+            if pile.pile_name == pile_name:
+                return pile.state
+        return None
+
+    def _validate_pile_state_for_failover(self, pile_name, bridge_client):
+        current_state = self._get_pile_state(pile_name, bridge_client)
+        if current_state is None:
+            self.logger.warning("Could not determine state for pile %s, proceeding anyway", pile_name)
+            return True
+
+        state_name = get_pile_state_name(current_state)
+        if current_state in VALID_FAILOVER_STATES:
+            self.logger.info("Pile %s is in state %s, valid for failover", pile_name, state_name)
+            return True
+        else:
+            self.logger.warning("Pile %s is in state %s, NOT valid for failover (expected one of: %s)",
+                                pile_name, state_name,
+                                [get_pile_state_name(s) for s in VALID_FAILOVER_STATES])
+            return False
+
+    def _validate_pile_state_for_rejoin(self, pile_name, bridge_client):
+        current_state = self._get_pile_state(pile_name, bridge_client)
+        if current_state is None:
+            self.logger.warning("Could not determine state for pile %s, proceeding anyway", pile_name)
+            return True
+
+        state_name = get_pile_state_name(current_state)
+        if current_state in VALID_REJOIN_STATES:
+            self.logger.info("Pile %s is in state %s, valid for rejoin", pile_name, state_name)
+            return True
+        else:
+            self.logger.warning("Pile %s is in state %s, NOT valid for rejoin (expected one of: %s)",
+                                pile_name, state_name,
+                                [get_pile_state_name(s) for s in VALID_REJOIN_STATES])
+            return False
+
     def _manage_bridge_state(self):
         """Handle bridge state changes common to all bridge pile nemesis."""
         self.logger.info("Current pile being affected: %d", self._current_pile_id)
@@ -151,9 +214,17 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             self.logger.error("Could not find another pile for bridge operations")
             raise Exception("Could not find another pile for bridge operations")
 
-        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
+        pile_states = self._bridge_clients[another_pile_id].per_pile_state
+        self.logger.info("Current bridge state: %s",
+                         [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
+
         # Convert pile ID to pile name for bridge operations
         pile_name = self._pile_id_to_name[self._current_pile_id]
+
+        if not self._validate_pile_state_for_failover(pile_name, self._bridge_clients[another_pile_id]):
+            self.logger.warning("Skipping failover for pile %s due to invalid state", pile_name)
+            return
+
         self.logger.info("OPERATION: failover (pile_id=%d, pile_name=%s)", self._current_pile_id, pile_name)
         result = self._bridge_clients[another_pile_id].failover(pile_name)
 
@@ -202,16 +273,70 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             self.logger.error("Could not find another pile for bridge restoration operations")
             raise Exception("Could not find another pile for bridge restoration operations")
 
-        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
+        pile_states = self._bridge_clients[another_pile_id].per_pile_state
+        self.logger.info("Current bridge state: %s",
+                         [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
+
         # Convert pile ID to pile name for bridge operations
         pile_name = self._pile_id_to_name[self._current_pile_id]
+
+        if not self._validate_pile_state_for_rejoin(pile_name, self._bridge_clients[another_pile_id]):
+            self.logger.warning("Skipping rejoin for pile %s due to invalid state (pile may already be joined)",
+                                pile_name)
+            return
+
         self.logger.info("OPERATION: rejoin for pile %d (pile_name=%s)", self._current_pile_id, pile_name)
         result = self._bridge_clients[another_pile_id].rejoin(pile_name)
         if not result:
             self.logger.error("Failed to rejoin pile %d", self._current_pile_id)
             raise Exception("Failed to rejoin pile")
 
-        self.logger.info("Bridge state restored successfully")
+        self.logger.info("Bridge state restored, waiting for all piles to become healthy")
+        self._wait_for_healthy_piles(another_pile_id)
+
+    def _wait_for_healthy_piles(self, bridge_client_pile_id,
+                                poll_interval=DEFAULT_POLL_INTERVAL,
+                                poll_timeout=DEFAULT_POLL_TIMEOUT):
+        """
+        Poll until all piles are in a healthy state (PRIMARY or SYNCHRONIZED).
+
+        Args:
+            bridge_client_pile_id: Pile ID whose bridge client to use for querying state.
+            poll_interval: Seconds between polling attempts.
+            poll_timeout: Maximum seconds to wait before giving up.
+
+        Raises:
+            Exception: If piles do not reach healthy state within the timeout.
+        """
+        bridge_client = self._bridge_clients[bridge_client_pile_id]
+        deadline = time.time() + poll_timeout
+
+        while True:
+            pile_states = bridge_client.per_pile_state
+            if pile_states is None:
+                self.logger.warning("Could not retrieve pile states, will retry")
+            else:
+                state_summary = [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states]
+                all_healthy = all(p.state in HEALTHY_STATES for p in pile_states)
+
+                if all_healthy:
+                    self.logger.info("All piles are healthy: %s", state_summary)
+                    return
+
+                self.logger.info("Waiting for piles to become healthy: %s", state_summary)
+
+            if time.time() >= deadline:
+                self.logger.error(
+                    "Timed out after %ds waiting for all piles to reach healthy state "
+                    "(PRIMARY or SYNCHRONIZED). Last observed states: %s",
+                    poll_timeout,
+                    [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown"
+                )
+                raise Exception(
+                    "Timed out waiting for all piles to reach healthy state (PRIMARY or SYNCHRONIZED)"
+                )
+
+            time.sleep(poll_interval)
 
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
@@ -423,7 +548,6 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
 
 
 def bridge_pile_nemesis_list(cluster):
-    # Для функций модуля используем глобальный логгер
     logger = logging.getLogger("bridge_pile")
     logger.info("=== BRIDGE_PILE_NEMESIS_LIST CALLED ===")
     logger.info("Creating bridge pile nemesis list")

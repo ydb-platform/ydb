@@ -61,10 +61,12 @@ static constexpr const char *kUrlFragment = "url.fragment";
   value @code REDACTED @endcode:
   <ul>
     <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  AWSAccessKeyId @endcode</a></li> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Credential @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Security-Token @endcode</a></li> <li><a
   href="https://learn.microsoft.com/azure/storage/common/storage-sas-overview#sas-token">@code sig
   @endcode</a></li> <li><a
   href="https://cloud.google.com/storage/docs/access-control/signed-urls">@code X-Goog-Signature
@@ -72,6 +74,16 @@ static constexpr const char *kUrlFragment = "url.fragment";
   </ul>
   <p>
   This list is subject to change over time.
+  <p>
+  Matching of query parameter keys against the sensitive list SHOULD be case-sensitive.
+  <p>
+
+  Instrumentation MAY provide a way to override this list via declarative configuration.
+  If so, it SHOULD use the @code sensitive_query_parameters @endcode property
+  (an array of case-sensitive strings with minimum items 0) under
+  @code .instrumentation/development.general.sanitization.url @endcode.
+  This list is a full override of the default sensitive query parameter keys,
+  it is not a list of keys in addition to the defaults.
   <p>
   When a query string value is redacted, the query string key SHOULD still be preserved, e.g.
   @code https://www.example.com/path?color=blue&sig=REDACTED @endcode.
@@ -111,10 +123,12 @@ static constexpr const char *kUrlPort = "url.port";
 
   Query string values for the following keys SHOULD be redacted by default and replaced by the value
   @code REDACTED @endcode: <ul> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  AWSAccessKeyId @endcode</a></li> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Credential @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Security-Token @endcode</a></li> <li><a
   href="https://learn.microsoft.com/azure/storage/common/storage-sas-overview#sas-token">@code sig
   @endcode</a></li> <li><a
   href="https://cloud.google.com/storage/docs/access-control/signed-urls">@code X-Goog-Signature
@@ -122,6 +136,15 @@ static constexpr const char *kUrlPort = "url.port";
   </ul>
   <p>
   This list is subject to change over time.
+  <p>
+  Matching of query parameter keys against the sensitive list SHOULD be case-sensitive.
+  <p>
+  Instrumentation MAY provide a way to override this list via declarative configuration.
+  If so, it SHOULD use the @code sensitive_query_parameters @endcode property
+  (an array of case-sensitive strings with minimum items 0) under
+  @code .instrumentation/development.general.sanitization.url @endcode.
+  This list is a full override of the default sensitive query parameter keys,
+  it is not a list of keys in addition to the defaults.
   <p>
   When a query string value is redacted, the query string key SHOULD still be preserved, e.g.
   @code q=OpenTelemetry&sig=REDACTED @endcode.

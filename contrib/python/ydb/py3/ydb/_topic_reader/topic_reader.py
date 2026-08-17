@@ -57,7 +57,12 @@ class PublicReaderSettings:
     update_token_interval: Union[int, float] = 3600
     event_handler: Optional[EventHandler] = None
 
+    buffer_release_threshold: float = 0.5
+    """Min fraction of buffer_size_bytes to accumulate before sending a new ReadRequest (0.0 = immediately after every batch)."""
+
     def __post_init__(self):
+        if not (0.0 <= self.buffer_release_threshold <= 1.0):
+            raise ValueError("buffer_release_threshold must be in [0.0, 1.0], got %s" % self.buffer_release_threshold)
         # check possible create init message
         _ = self._init_message()
 

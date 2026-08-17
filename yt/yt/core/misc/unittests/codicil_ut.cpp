@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/codicil_guarded_invoker.h>
@@ -39,14 +40,30 @@ TEST(TCodicilTest, CodicilGuardedInvoker)
     const auto codicil = std::string("codicil");
     auto actionQueue = New<TActionQueue>("ActionQueue");
     auto invoker = CreateCodicilGuardedInvoker(actionQueue->GetInvoker(), codicil);
-    BIND([&] {
+    WaitFor(BIND([&] {
         EXPECT_EQ(BuildCodicils(), (std::vector{codicil}));
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         EXPECT_EQ(BuildCodicils(), (std::vector{codicil}));
     })
         .AsyncVia(invoker)
-        .Run()
-        .Get();
+        .Run())
+        .ThrowOnError();
+    actionQueue->Shutdown();
+}
+
+TEST(TCodicilTest, CodicilGuardedInvokerCurrentInvoker)
+{
+    auto actionQueue = New<TActionQueue>("ActionQueue");
+    auto invoker = CreateCodicilGuardedInvoker(actionQueue->GetInvoker(), "codicil");
+    WaitFor(BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The invoker must remain current across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
     actionQueue->Shutdown();
 }
 

@@ -1,4 +1,4 @@
-# Data migrations
+# Schema migrations
 
 | Environment | Instruction |
 | --- | --- |

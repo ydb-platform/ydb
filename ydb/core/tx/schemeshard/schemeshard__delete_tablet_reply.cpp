@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard__shred_manager.h>
+#include <ydb/core/tx/schemeshard/schemeshard__tenant_shred_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -122,6 +122,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Sub(1);
                 break;
+            case ETabletType::TestShard:
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
+                break;
             default:
                 Y_FAIL_S("Unknown TabletType"
                          << ", ShardIdx " << ShardIdx
@@ -188,7 +191,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
-            if (Self->EnableShred && Self->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+            if (Self->EnableShred && Self->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
                 Self->Execute(Self->CreateTxCancelShredShards({ShardIdx}));
             }
         }

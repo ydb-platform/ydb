@@ -77,8 +77,9 @@ ui16 GetTag(const std::string_view& columnName, const std::vector<TColumnDesc>& 
 
 TTableInfo PrepareTable(
         TTestEnv& env, const TString& databaseName, const TString& tableName,
-        const std::vector<TColumnDesc>& columns = GetColumns()) {
-    auto info = CreateColumnTable(env, databaseName, tableName, 4, columns);
+        const std::vector<TColumnDesc>& columns = GetColumns(),
+        size_t shardCount = 4) {
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount, columns);
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, columns);
     return info;
 }
@@ -132,6 +133,53 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(StablePickleManyTypes) {
+        TTestEnv env(1, 1);
+        CreateDatabase(env, "Database");
+
+        auto col = [](NScheme::TTypeId type, TStringBuf value) {
+            return TPickleColumnValue{.Type = type, .Value = TString(value)};
+        };
+
+        std::vector<TPickleColumnValue> columns = {
+            col(NScheme::NTypeIds::Bool, "true"),
+            col(NScheme::NTypeIds::Int8, "-8"),
+            col(NScheme::NTypeIds::Uint8, "200"),
+            col(NScheme::NTypeIds::Int16, "-16000"),
+            col(NScheme::NTypeIds::Uint16, "60000"),
+            col(NScheme::NTypeIds::Int32, "-100000"),
+            col(NScheme::NTypeIds::Uint32, "100000"),
+            col(NScheme::NTypeIds::Int64, "-5000000000"),
+            col(NScheme::NTypeIds::Uint64, "5000000000"),
+            col(NScheme::NTypeIds::Float, "1.5"),
+            col(NScheme::NTypeIds::Double, "2.25"),
+            col(NScheme::NTypeIds::String, "hello"),
+            col(NScheme::NTypeIds::Utf8, "мир"),
+            col(NScheme::NTypeIds::Yson, "[1;2]"),
+            col(NScheme::NTypeIds::Json, "{\"a\":1}"),
+            col(NScheme::NTypeIds::JsonDocument, "{\"b\":2}"),
+            col(NScheme::NTypeIds::Uuid, "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
+            col(NScheme::NTypeIds::DyNumber, "-10.23"),
+            col(NScheme::NTypeIds::Date, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval, "P1D"),
+            col(NScheme::NTypeIds::Date32, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime64, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp64, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval64, "P1D"),
+            TPickleColumnValue{.Type = NScheme::NTypeIds::Decimal, .Value = "11.3",
+                .DecimalPrecision = 5, .DecimalScale = 2},
+        };
+
+        // The whole heterogeneous tuple at once...
+        CheckStablePickleTupleMatchesYql(env, columns);
+        // ...and each column individually, to localize any per-type mismatch.
+        for (const auto& c : columns) {
+            CheckStablePickleTupleMatchesYql(env, {c});
+        }
+    }
+
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
         TTestEnv env(1, 3);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -148,6 +196,40 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         ValidateCountMinSketch(runtime, table1.PathId);
         ValidateCountMinSketch(runtime, table2.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchManyNodes) {
+        TTestEnv env(1, 3);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database", 3);
+        const auto tableInfo = PrepareTable(env, "Database", "Table1", GetColumns(), /*shardCount=*/8);
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchNestedTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "subdir/Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
     }
 
     Y_UNIT_TEST(SimpleColumnStatistics) {
@@ -191,8 +273,18 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
                 "NearNumericLimits",
             });
 
-        UNIT_ASSERT(!responses.at(0).Success);
         UNIT_ASSERT(!responses.at(1).Success);
+
+        {
+            // Basic column
+            const auto& resp = responses.at(0);
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Uint64);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<ui64>(5), 1);
+        }
 
         {
             // LowCardinalityInt column

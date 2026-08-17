@@ -1,9 +1,60 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/library/actors/core/events.h>
 
 #include "blob_depot_test_functions.h"
 
 using namespace NKikimr::NBlobDepot;
+
+namespace {
+
+std::optional<ui64> TryGetBlobDepotTabletId(TEnvironmentSetup& env, ui32 groupId) {
+    const NKikimrBlobStorage::TBaseConfig baseConfig = env.FetchBaseConfig();
+    for (const auto& group : baseConfig.GetGroup()) {
+        if (group.GetGroupId() != groupId) {
+            continue;
+        }
+        const ui64 depotTabletId = group.GetVirtualGroupInfo().GetBlobDepotId();
+        if (depotTabletId) {
+            return depotTabletId;
+        }
+    }
+    return std::nullopt;
+}
+
+void SetAllNodesBlobDepotMaxLoadedTrashRecords(TEnvironmentSetup& env, ui64 limit) {
+    for (const ui32 node : env.Runtime->GetNodes()) {
+        TControlBoard::SetValue(limit,
+            env.Runtime->GetNode(node)->AppData->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+    }
+}
+
+void RebootBlobDepotTablet(TEnvironmentSetup& env, ui64 blobDepotTabletId) {
+    auto& runtime = *env.Runtime;
+    const TActorId sender = runtime.AllocateEdgeActor(1);
+
+    auto* poison = new NActors::TEvents::TEvPoison();
+    auto* nested = new IEventHandle(TActorId(), sender, poison);
+    runtime.Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(blobDepotTabletId, nested, {},
+                 TEvTabletResolver::TEvForward::EActor::Tablet)),
+        sender.NodeId());
+
+    {
+        auto forwardResult = env.WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
+        UNIT_ASSERT(forwardResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(forwardResult->Get()->Status, NKikimrProto::OK, forwardResult->Get()->ToString());
+    }
+
+    env.Sim(TDuration::Seconds(5));
+    runtime.Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(blobDepotTabletId, TActorId())), sender.NodeId());
+    env.Sim(TDuration::MilliSeconds(100));
+    runtime.DestroyActor(sender);
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepot) {
     void LoadSeed(ui32& seed) {
@@ -110,6 +161,117 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicCollectGarbage(tenv, 100, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(CollectGarbageAfterMaxGenerationBlock) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+        const ui64 tabletId = 100;
+        const ui32 channel = 0;
+        auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+
+        SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
+        auto blockResult = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(blockResult->Get()->Status, NKikimrProto::OK);
+
+        SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), channel,
+            true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+        auto collectResult = CaptureTEvCollectGarbageResult(env, sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK, collectResult->Get()->ToString());
+    }
+
+    Y_UNIT_TEST(TrashBatchReloadAfterRestartWithTinyLimit) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+
+        std::vector<TBlobInfo> blobs;
+        constexpr ui64 tabletId = 100;
+        const ui64 tablet2 = tabletId + 1;
+        TBSState state;
+        state[tabletId];
+        state[tablet2];
+
+        for (ui32 i = 0; i < 10; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 1, 1, i + 1, 0));
+        }
+        for (ui32 i = 10; i < 20; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 1, 1, i + 1, (i % 2)));
+        }
+        for (ui32 i = 0; i < 10; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 1, 2, i + 1, 0));
+        }
+        for (ui32 i = 0; i < 10; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 1, 3 + i, 1, 0));
+        }
+        for (ui32 i = 0; i < 5; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tablet2, 1, 1, 1 + i, 0));
+        }
+        for (ui32 i = 0; i < 5; ++i) {
+            blobs.push_back(TBlobInfo(tenv.DataGen(100), tablet2, 1, 2 + i, 1, 0));
+        }
+
+        for (auto& blob : blobs) {
+            VerifiedPut(env, nodeId, groupId, blob, state);
+        }
+
+        ui32 gen = 2;
+        ui32 perGenCtr = 1;
+
+        VerifiedCollectGarbage(env, nodeId, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 2, nullptr, nullptr, false,
+            false, blobs, state);
+
+        SetAllNodesBlobDepotMaxLoadedTrashRecords(env, 1);
+
+        const auto blobDepotTabletId = TryGetBlobDepotTabletId(env, groupId);
+        UNIT_ASSERT_C(blobDepotTabletId.has_value(), "blob depot virtual group must report BlobDepotId in base config");
+
+        RebootBlobDepotTablet(env, *blobDepotTabletId);
+
+        VerifiedGet(env, nodeId, groupId, blobs[1], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[2], false, false, std::nullopt, state);
+
+        VerifiedGet(env, nodeId, groupId, blobs[20], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[30], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[31], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[40], false, false, std::nullopt, state);
+
+        VerifiedCollectGarbage(env, nodeId, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 1, nullptr, nullptr, false, false, blobs, state);
+
+        {
+            TBlobInfo blob(tenv.DataGen(100), tabletId, 99, 1, 1, 0);
+            VerifiedPut(env, nodeId, groupId, blob, state);
+            blobs.push_back(blob);
+        }
+
+        VerifiedCollectGarbage(env, nodeId, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 3, nullptr, nullptr, false, true, blobs, state);
+
+        {
+            TBlobInfo blob(tenv.DataGen(100), tabletId, 99, 1, 3, 0);
+            VerifiedPut(env, nodeId, groupId, blob, state);
+            blobs.push_back(blob);
+        }
+        VerifiedRange(env, nodeId, groupId, tabletId, blobs[1].Id, blobs[1].Id, false, false, blobs, state);
+
+        VerifiedGet(env, nodeId, groupId, blobs[1], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[2], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[3], false, false, std::nullopt, state);
+
+        VerifiedGet(env, nodeId, groupId, blobs[20], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[30], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[31], false, false, std::nullopt, state);
+        VerifiedGet(env, nodeId, groupId, blobs[40], false, false, std::nullopt, state);
+
+        VerifiedCollectGarbage(env, nodeId, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 1, nullptr, nullptr, false, true, blobs, state);
+    }
+
     Y_UNIT_TEST(VerifiedRandom) {
         ui32 seed;
         LoadSeed(seed);
@@ -153,5 +315,53 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         TestBasicCheckIntegrity(tenv, 1, tenv.RegularGroups[0]);
         TestBasicCheckIntegrity(tenv, 1, tenv.BlobDepot);
+    }
+
+    // The agent does not forward the write, it re-originates it under a blob id of its own, so
+    // every field the underlying group needs has to be copied across by hand. Without that a system
+    // tablet writing through a virtual group reaches the disks as user data.
+    Y_UNIT_TEST(DataKindSurvivesTheAgent) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+        auto& env = *tenv.Env;
+
+        ui64 tabletId = 100500;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            const TString data = TStringBuilder() << "data_" << static_cast<int>(dataKind);
+
+            // Both the original write into the virtual group and the one the agent relays into a
+            // real group carry this exact buffer, so matching on it picks up both hops.
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                    auto *put = ev->Get<TEvBlobStorage::TEvPut>();
+                    if (put->Buffer.ConvertToString() == data) {
+                        seen.push_back(put->DataKind);
+                    }
+                }
+                return true;
+            };
+
+            const TLogoBlobID id(tabletId++, 1, 1, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = id,
+                    .Buffer = TRope(data),
+                    .Deadline = TInstant::Max(),
+                    .DataKind = dataKind,
+                }));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(seen.size() >= 2, "the agent did not relay the write, nothing was proven");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+        }
     }
 }

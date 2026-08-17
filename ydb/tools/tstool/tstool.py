@@ -1,6 +1,7 @@
 from argparse import ArgumentParser, FileType
 from ydb.core.protos.grpc_pb2_grpc import TGRpcServerStub
-from ydb.core.protos.msgbus_pb2 import THiveCreateTablet, TTestShardControlRequest
+from ydb.core.protos.msgbus_pb2 import THiveCreateTablet
+from ydb.core.protos.test_shard_control_pb2 import TTestShardControlRequest
 from ydb.core.protos.tablet_pb2 import TTabletTypes
 from ydb.core.protos.base_pb2 import EReplyStatus
 from google.protobuf import text_format

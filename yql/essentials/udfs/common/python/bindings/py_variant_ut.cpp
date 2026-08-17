@@ -22,7 +22,8 @@ Y_UNIT_TEST(FromPyWithIndex) {
 Y_UNIT_TEST(FromPyWithName) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     NUdf::TType* personType = engine.GetTypeBuilder().Struct()->AddField<ui32>("age", &ageIdx).AddField<char*>("name", &nameIdx).Build();
 
     NUdf::TType* variantType = engine.GetTypeBuilder()
@@ -67,7 +68,8 @@ Y_UNIT_TEST(ToPyWithIndex) {
 Y_UNIT_TEST(ToPyWithName) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     NUdf::TType* personType = engine.GetTypeBuilder().Struct()->AddField<ui32>("age", &ageIdx).AddField<NUdf::TUtf8>("name", &nameIdx).Build();
 
     NUdf::TType* variantType = engine.GetTypeBuilder()

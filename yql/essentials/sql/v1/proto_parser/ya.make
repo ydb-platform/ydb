@@ -9,6 +9,9 @@ PEERDIR(
 SRCS(
     parse_tree.cpp
     proto_parser.cpp
+    reflection.cpp
+    statement.cpp
+    token.cpp
 )
 
 END()
@@ -17,3 +20,5 @@ RECURSE(
     antlr4
     antlr4_ansi
 )
+
+RECURSE_FOR_TESTS(ut)

@@ -1,5 +1,6 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/digest/murmur.h>
@@ -247,7 +248,7 @@ SIMPLE_STRICT_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
     Argon2->Hash(reinterpret_cast<const ui8*>(inputRef.Data()), inputRef.Size(),
                  reinterpret_cast<const ui8*>(saltRef.Data()), saltRef.Size(),
                  out.data(), OutSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(out.data()), OutSize));
 }
 
 SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), 1) {
@@ -270,7 +271,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<
     std::array<ui8, OutSize> out;
     blake2b->Update(inputRef.Data(), inputRef.Size());
     blake2b->Final(out.data(), OutSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(out.data()), OutSize));
 }
 
 SIMPLE_STRICT_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {
@@ -394,7 +395,7 @@ SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3));) {
+SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::NFeature::Sha512.MinLangVer);) {
     const auto& inputRef = args[0].AsStringRef();
     SHA512_CTX sha;
     SHA512_Init(&sha);

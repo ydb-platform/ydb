@@ -253,37 +253,30 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     bool logGraph = true
 ) {
     TJoinHypergraph<TNodeSet> graph{};
+
+    auto logHypergraph = [&graph, logGraph](const char* name) {
+        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+            YQL_CLOG(TRACE, CoreDq) << name << ": ";
+            YQL_CLOG(TRACE, CoreDq) << graph.String();
+        }
+    };
+
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     TVector<typename TJoinHypergraph<TNodeSet>::TEdge> crossJoins;
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes, crossJoins);
+    logHypergraph("Hypergraph build");
 
-    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-        YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
-        YQL_CLOG(TRACE, CoreDq) << graph.String();
-    }
+    TTransitiveClosureConstructor transitiveClosure(graph);
+    transitiveClosure.Construct();
+    logHypergraph("Hypergraph after transitive closure");
+
+    AddCrossJoins(graph, crossJoins);
+    logHypergraph("Hypergraph after cross joins");
 
     if (!hints.JoinOrderHints->Hints.empty()) {
         TJoinOrderHintsApplier joinHints(graph);
         joinHints.Apply(*hints.JoinOrderHints);
-        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-            YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
-            YQL_CLOG(TRACE, CoreDq) << graph.String();
-        }
-    }
-
-    TTransitiveClosureConstructor transitveClosure(graph);
-    transitveClosure.Construct();
-
-    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
-        YQL_CLOG(TRACE, CoreDq) << graph.String();
-    }
-
-    AddCrossJoins(graph, crossJoins);
-
-    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after adding cross joins: ";
-        YQL_CLOG(TRACE, CoreDq) << graph.String();
+        logHypergraph("Hypergraph after hints");
     }
 
     return graph;

@@ -1,6 +1,12 @@
 #include "ut_utils.h"
 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/library/security/util.h>
+
 #include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TICKET_PARSER
 
 namespace NMonitoring::NTests {
 
@@ -11,7 +17,19 @@ const TString TEST_MON_PATH = "test_mon";
 const TString TEST_RESPONSE = "Test actor";
 const TString AUTHORIZATION_HEADER = "Authorization";
 const TString VALID_TOKEN = "Bearer token";
+const TString ROOT_TOKEN = "root@builtin";
 const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS = {"group_name"};
+
+void GrantConnect(Tests::TClient& client) {
+    client.CreateUser("/Root", "username", "password");
+    client.GrantConnect("username");
+
+    const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+        { "folder_id", "test_folder_id" },
+        { "database_id", "test_database_id" },
+    });
+    UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+}
 
 void TTestActorPage::Bootstrap() {
     Become(&TTestActorPage::StateWork);
@@ -65,8 +83,15 @@ TFakeTicketParserActor::TFakeTicketParserActor(TVector<TString> groupSIDs)
 {}
 
 void TFakeTicketParserActor::Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+    YDB_LOG_INFO("Ticket parser: got TEvAuthorizeTicket",
+        {"event", ev->Get()->Ticket},
+        {"database", ev->Get()->Database},
+        {"entries", ev->Get()->Entries.size()});
     ++AuthorizeTicketRequests;
+
+    if (ev->Get()->Ticket == ROOT_TOKEN) {
+        return Success(ev);
+    }
 
     if (ev->Get()->Database != "/Root") {
         Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
@@ -114,20 +139,27 @@ void TFakeTicketParserActor::Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev,
     TEvTicketParser::TError err;
     err.Retryable = false;
     err.Message = message ? message : "Test error";
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
-        "Send TEvAuthorizeTicketResult: " << err.Message);
+    YDB_LOG_INFO("Send",
+        {"TEvAuthorizeTicketResult", err.Message});
     Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
 }
 
 void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
     ++AuthorizeTicketSuccesses;
     NACLib::TUserToken::TUserTokenInitFields args;
-    args.UserSID = "username";
-    args.GroupSIDs = GroupSIDs;
+    if (ev->Get()->Ticket == ROOT_TOKEN) {
+        args.UserSID = ROOT_TOKEN;
+    } else {
+        args.UserSID = "username";
+        args.GroupSIDs = GroupSIDs;
+    }
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+    userToken->SetSanitizedToken(NKikimr::SanitizeTicket(ev->Get()->Ticket));
+    if (ev->Get()->Ticket != ROOT_TOKEN) {
+        userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
+    }
     userToken->SaveSerializationInfo();
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
-        "Send TEvAuthorizeTicketResult success");
+    YDB_LOG_INFO("Send TEvAuthorizeTicketResult success");
     Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
 }
 

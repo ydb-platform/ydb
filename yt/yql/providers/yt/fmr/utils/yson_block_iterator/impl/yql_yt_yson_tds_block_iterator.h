@@ -2,16 +2,20 @@
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface/yql_yt_yson_block_iterator.h>
 
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
+#include <library/cpp/threading/future/future.h>
+#include <deque>
+
 namespace NYql::NFmr {
 
-class TTDSBlockIterator final: public IBlockIterator {
+class TTableDataServiceBlockIterator final: public IBlockIterator {
 public:
-    using TPtr = TIntrusivePtr<TTDSBlockIterator>;
+    using TPtr = TIntrusivePtr<TTableDataServiceBlockIterator>;
 
-    TTDSBlockIterator(
+    TTableDataServiceBlockIterator(
         TString tableId,
         std::vector<TTableRange> tableRanges,
         ITableDataService::TPtr tableDataService,
@@ -20,18 +24,36 @@ public:
         std::vector<TString> neededColumns,
         TString serializedColumnGroupsSpec = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
+        TMaybe<bool> isLastRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
-        TMaybe<TString> lastRowKeys = Nothing()
-
+        TMaybe<TString> lastRowKeys = Nothing(),
+        ui64 readAheadChunks = 4,
+        // How many leading keyColumns actually define a reduce group (e.g. _yql_key_hash +
+        // reduceBy, excluding a join's _yql_sort tiebreaker). Boundary comparisons stop after
+        // this many columns instead of running to the end of keyColumns - see the comment on
+        // CompareRowToBoundaryPrefix for why relying on the boundary blob happening to omit
+        // trailing columns is not safe. Defaults to comparing every column in keyColumns, which
+        // is correct whenever keyColumns has no trailing tiebreaker (e.g. non-reduce contexts).
+        TMaybe<size_t> numBoundaryKeyColumns = Nothing()
     );
 
-    ~TTDSBlockIterator() final;
+    ~TTableDataServiceBlockIterator() final;
 
     bool NextBlock(TIndexedBlock& out) final;
+
+    std::vector<ESortOrder> GetSortOrder() final;
 
 private:
     void SetMinChunkInNewRange();
     bool RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const;
+    static TString FindGroupForColumn(const TString& col, const TParsedColumnGroupSpec& spec);
+
+    struct TPrefetchEntry {
+        std::vector<NThreading::TFuture<TMaybe<TString>>> Futures;
+    };
+
+    bool TrySchedulePrefetch();
+    void FillPrefetchQueue();
 
 private:
     const TString TableId_;
@@ -45,9 +67,20 @@ private:
     ui64 CurrentRange_ = 0;
     ui64 CurrentChunk_ = 0;
 
-    TMaybe<TFmrTableKeysBoundary> FirstBound_;
-    TMaybe<TFmrTableKeysBoundary> LastBound_;
-    TMaybe<bool> IsFirstBoundInclusive_;
+    // Separate cursors for prefetch
+    ui64 PrefetchRange_ = 0;
+    ui64 PrefetchChunk_ = 0;
+
+    TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
+    TMaybe<TFmrTableKeysBoundary> LastBoundary_;
+    bool IsFirstBoundInclusive_ = true;
+    bool IsLastBoundInclusive_ = true;
+
+    std::vector<TString> GroupNamesToRead_;
+
+    ui64 ReadAheadChunks_ = 4;
+    const size_t NumBoundaryKeyColumns_;
+    std::deque<TPrefetchEntry> PrefetchQueue_;
 };
 
 } // namespace NYql::NFmr

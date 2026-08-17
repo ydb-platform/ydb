@@ -1,10 +1,11 @@
 UNITTEST()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(300)
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -16,6 +17,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    blob_checker.cpp
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp
@@ -31,7 +33,7 @@ SRCS(
     gc_quorum_3dc.cpp
     get.cpp
     get_block.cpp
-    group_reconfiguration.cpp
+    group_mapping.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -39,20 +41,23 @@ SRCS(
     mirror3of4.cpp
     monitoring.cpp
     multiget.cpp
+    node_warden_cache.cpp
     patch.cpp
     recovery.cpp
-    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    select_groups.cpp
     self_heal.cpp
     shred.cpp
     snapshots.cpp
     space_check.cpp
+    space_data_kind.cpp
     sync.cpp
     validation.cpp
-    vdisk_internals.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
+    pdisk_status_flags.cpp
+    retro_tracing.cpp
 )
 
 PEERDIR(
@@ -62,6 +67,8 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
+    ydb/core/blobstorage/vdisk/synclog
+    ydb/core/mind/bscontroller
 )
 
 END()
@@ -71,12 +78,14 @@ RECURSE_FOR_TESTS(
     ut_blob_depot
     ut_blob_depot_fat
     ut_bridge
+    ut_bsc_migration
     ut_check_integrity
     ut_comp_defrag
     ut_ddisk
     ut_donor
-    ut_group_reconfiguration
+    ut_group_mapping
     ut_huge
+    ut_startup_brokers
     ut_read_only_vdisk
     ut_osiris
     ut_phantom_blobs
@@ -84,9 +93,13 @@ RECURSE_FOR_TESTS(
     ut_scrub
     ut_statestorage
     ut_vdisk_restart
+    ut_race
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk
     ut_cluster_balancing
     ut_move_pdisk
+    ut_vdisk_internals
+    ut_checksumming
+    ut_oos
 )

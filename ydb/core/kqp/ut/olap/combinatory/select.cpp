@@ -25,7 +25,11 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
     if (Compare) {
         Cerr << "COMPARE: " << Compare << Endl;
         Cerr << "OUTPUT: " << output << Endl;
-        CompareYson(output, Compare);
+        if (CompareUnordered) {
+            CompareYsonUnordered(Compare, output);
+        } else {
+            CompareYson(Compare, output);
+        }
     } else {
         Cerr << "OUTPUT: " << output << Endl;
     }
@@ -58,7 +62,12 @@ TConclusionStatus TSelectCommand::DoDeserializeProperties(const TPropertiesColle
     if (!Command) {
         return TConclusionStatus::Fail("cannot use select with empty command");
     }
-    Compare = props.GetOptional("EXPECTED").value_or("");
+    if (auto expectedUnordered = props.GetOptional("EXPECTED_UNORDERED")) {
+        Compare = *expectedUnordered;
+        CompareUnordered = true;
+    } else {
+        Compare = props.GetOptional("EXPECTED").value_or("");
+    }
     if (auto indexChecker = props.GetOptional("IDX_ND_SKIP_APPROVE")) {
         auto idxExpectations = StringSplitter(*indexChecker).SplitBySet(" ,.;").SkipEmpty().ToList<TString>();
         AFL_VERIFY(idxExpectations.size() == 3)("size", idxExpectations.size())("string", indexChecker);

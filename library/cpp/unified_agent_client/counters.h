@@ -31,6 +31,7 @@ namespace NUnifiedAgent {
         NMonitoring::TDeprecatedCounter& GrpcInflightBytes;
         NMonitoring::TDeprecatedCounter& GrpcCalls;
         NMonitoring::TDeprecatedCounter& GrpcCallsInitialized;
+        NMonitoring::TDeprecatedCounter& GrpcCallsClosedByInactivity;
         NMonitoring::TDeprecatedCounter& DroppedMessages;
         NMonitoring::TDeprecatedCounter& DroppedBytes;
         NMonitoring::TDeprecatedCounter& ErrorsCount;

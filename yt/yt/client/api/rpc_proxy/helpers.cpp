@@ -52,10 +52,19 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ThrowUnimplemented(const TString& method)
+void ThrowUnimplemented(const std::string& method)
 {
     THROW_ERROR_EXCEPTION("%Qv method is not implemented in RPC proxy",
         method);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetControlMultiplexingBandIfEnabled(NRpc::TClientRequest& req, const TConnectionConfigPtr& config)
+{
+    if (config->EnableControlMultiplexingBand) {
+        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -569,26 +578,26 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         auto [v1Type, v1Required] = CastToV1Type(columnType);
         if (protoSchema.has_required() && protoSchema.required() != v1Required) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"required\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("required", protoSchema.required());
+                .With("type_v3", ToString(*columnType))
+                .With("required", protoSchema.required());
         }
         if (protoSchema.has_logical_type() && v1Type != FromProto<ESimpleLogicalValueType>(protoSchema.logical_type())) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
+                .With("type_v3", ToString(*columnType))
+                .With("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
         }
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
-            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
+                .With("type_v3", ToString(*columnType))
+                .With("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
         auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
-                << TErrorAttribute("logical_type", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+                .With("logical_type", ToString(*columnType))
+                .With("type", protoSchema.type());
         }
     } else if (protoSchema.has_type()) {
         columnType = MakeLogicalType(GetLogicalType(physicalType), protoSchema.required());
@@ -1289,7 +1298,7 @@ void ToProto(
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 
-    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimate, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1309,7 +1318,7 @@ void FromProto(
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 
-    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimate);
 }
 
 void ToProto(
@@ -1345,7 +1354,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<std::string>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -1505,8 +1514,6 @@ void FromProto(
     query->FinishTime = YT_OPTIONAL_FROM_PROTO(protoQuery, finish_time, TInstant);
     if (protoQuery.has_settings()) {
         query->Settings = TYsonString(protoQuery.settings());
-    } else {
-        query->Settings = TYsonString{};
     }
     query->User = YT_OPTIONAL_FROM_PROTO(protoQuery, user);
     query->AccessControlObject = YT_OPTIONAL_FROM_PROTO(protoQuery, access_control_object);
@@ -1515,19 +1522,13 @@ void FromProto(
     query->ResultCount = YT_OPTIONAL_FROM_PROTO(protoQuery, result_count);
     if (protoQuery.has_progress()) {
         query->Progress = TYsonString(protoQuery.progress());
-    } else {
-        query->Progress = TYsonString{};
     }
     query->Error = YT_APPLY_PROTO_OPTIONAL(protoQuery, error, FromProto<TError>);
     if (protoQuery.has_annotations()) {
         query->Annotations = TYsonString(protoQuery.annotations());
-    } else {
-        query->Annotations = TYsonString{};
     }
     if (protoQuery.has_other_attributes()) {
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
-    } else if (query->OtherAttributes) {
-        query->OtherAttributes->Clear();
     }
     if (protoQuery.has_secrets()) {
         query->Secrets = TYsonString(protoQuery.secrets());
@@ -1929,8 +1930,6 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
         case NQueryTrackerClient::EQueryEngine::Mock:
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
-            return NProto::EQueryEngine::QE_SPYT;
-        case NQueryTrackerClient::EQueryEngine::SpytConnect:
             return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();
@@ -2459,7 +2458,8 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
-            code == NChaosClient::EErrorCode::ShortcutRevoked;
+            code == NChaosClient::EErrorCode::ShortcutRevoked ||
+            code == NChaosClient::EErrorCode::ChaosCellIsNotEnabled;
     }));
 }
 
@@ -2733,11 +2733,11 @@ TIntrusivePtr<NApi::IRowset<TTypeErasedRow>> DeserializeRowset(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
 {
-    auto valueToRank = [&] (const TString& value) -> size_t {
+    auto valueToRank = [&] (const std::string& value) -> size_t {
         for (size_t index = 0; index < regexes.size(); ++index) {
-            if (NRe2::TRe2::FullMatch(NRe2::StringPiece(value), *regexes[index])) {
+            if (NRe2::TRe2::FullMatch(re2::StringPiece(value), *regexes[index])) {
                 return index;
             }
         }

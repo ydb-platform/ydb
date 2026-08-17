@@ -11,4 +11,4 @@ TSplitterCounters::TSplitterCounters(const TCommonCountersOwner& owner)
 {
 }
 
-}
+}   // namespace NKikimr::NColumnShard

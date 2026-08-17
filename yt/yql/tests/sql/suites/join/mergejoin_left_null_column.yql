@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 PRAGMA yt.JoinMergeTablesLimit="10";
 PRAGMA yt.JoinAllowColumnRenames="true";
 PRAGMA yt.JoinMergeUnsortedFactor="5.0";

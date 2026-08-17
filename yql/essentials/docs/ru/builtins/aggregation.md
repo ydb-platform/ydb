@@ -20,6 +20,12 @@ COUNT(T?)->Uint64
 
 Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. А модификатор [DISTINCT](../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
 #### Примеры
 
 ```yql
@@ -49,6 +55,12 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
 #### Примеры
 
 ```yql
@@ -76,6 +88,12 @@ SUM(Decimal(N, M)?)->Decimal(35, M)?
 SELECT SUM(value) FROM my_table;
 ```
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `WidenIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
 ## AVG {#avg}
 
 #### Сигнатура
@@ -91,6 +109,12 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 В качестве аргумента допустимо произвольное вычислимое выражение с числовым результатом или типом `Interval`.
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
+
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<T, Uint64>`
+- **Result**: `T`
 
 #### Примеры
 
@@ -111,6 +135,12 @@ COUNT_IF(Bool?)->Uint64
 Значение `NULL` приравнивается к `false` (в случае, если тип аргумента `Bool?`).
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
+
+#### Типы
+
+- **Item**: `Bool`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
 
 #### Примеры
 
@@ -140,6 +170,20 @@ AVG_IF(Double?, Bool?)->Double?
 Сумма или арифметическое среднее, но только для строк, удовлетворяющих условию, переданному вторым аргументом.
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
+
+NB. `WidenStateIntegral(T) = if (T is Interval) then Decimal(35, 0) else WidenIntegral(T)`
+
+#### Типы SumIf
+
+- **Item**: `T`
+- **SerializedState**: `WidenStateIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Типы AvgIf
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<WidenStateIntegral(T), Uint64>`
+- **Result**: `WidenIntegral(T)`
 
 #### Примеры
 
@@ -175,6 +219,12 @@ SOME(T)->T?
 
 Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
 #### Примеры
 
 ```yql
@@ -209,6 +259,12 @@ HLL(T)->Uint64?
 Выбор точности позволяет разменивать дополнительное потребление вычислительных ресурсов и оперативной памяти на уменьшение погрешности.
 
 На данный момент все три функции являются алиасами, но в будущем `CountDistinctEstimate` может начать использовать другой алгоритм.
+
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `Uint64`
 
 #### Примеры
 
@@ -246,6 +302,12 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 Чтобы получить список нескольких значений с одной строки, важно *НЕ* использовать функцию `AGGREGATE_LIST` несколько раз, а сложить все нужные значения в контейнер, например через [AsList](basic.md#aslist) или [AsTuple](basic.md#astuple) и передать этот контейнер в один вызов `AGGREGATE_LIST`.
 
 Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/group_by.md).
+
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `List<T>`
+- **Result**: `List<T>`
 
 #### Примеры
 
@@ -308,6 +370,18 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа.
 
+#### Типы без limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<T1, T2>`
+- **Result**: `T1`
+
+#### Типы с limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<List<T1>, T2>`
+- **Result**: `List<T1>`
+
 #### Примеры
 
 ```yql
@@ -341,6 +415,12 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 Вернуть список максимальных/минимальных значений выражения. Первый аргумент - выражение, второй - ограничение на количество элементов.
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, List<T>>`
+- **Result**: `List<T>`
+
 #### Примеры
 
 ```yql
@@ -372,6 +452,12 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 Вернуть список значений первого аргумента для строк с максимальными/минимальными значениями второго аргумента. Третий аргумент - ограничение на количество элементов в списке.
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа. Ограничение на количество элементов в этом случае передаётся вторым аргументом при создании фабрики.
+
+#### Типы
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<Uint32, List<Tuple<T2, T1>>>`
+- **Result**: `List<T1>`
 
 #### Примеры
 
@@ -414,6 +500,12 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 1. Для `TOPFREQ` — желаемое число элементов в результате. `MODE` является алиасом к `TOPFREQ` с 1 в этом аргументе. У `TOPFREQ` по умолчанию тоже 1.
 2. Число элементов в используемом буфере, что позволяет разменивать потребление памяти на точность. По умолчанию 100.
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, Uint32, List<Tuple<Uint64, T>>>`
+- **Result**: `List<Struct<Frequency: Uint64, Value: T>>`
+
 #### Примеры
 
 ```yql
@@ -453,6 +545,12 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 Если все переданные значения — `NULL`, возвращает `NULL`.
 
+#### Типы
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Double, Double, Double>`
+- **Result**: `Double`
+
 #### Примеры
 
 ```yql
@@ -481,6 +579,18 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 В отличие от большинства других агрегатных функций не пропускают `NULL`, а считают его за 0.
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из двух значений.
+
+#### Типы CORRELATION
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Типы COVARIANCE
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double>`
+- **Result**: `Double`
 
 #### Примеры
 
@@ -523,6 +633,12 @@ MEDIAN(T, [ List<Double> ])->List<T>
 В качестве второго аргумента можно использовать либо один `Double` (значение перцентиля), либо сразу несколько значений перцентиля в виде `Tuple`/`Struct`/`List`.
 
 Значения прецентиля должны лежать в диапазоне от 0.0 до 1.0 включительно.
+
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `T`, `Tuple<T, ...>`, `Struct<name1: T, ...>` или `List<T>` в зависимости от второго аргумента
 
 #### Примеры
 
@@ -620,6 +736,12 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../syntax/group_by.md).
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и веса.
+
+#### Типы
+
+- **Item**: `Double`
+- **SerializedState**: `String`
+- **Result**: `HistogramStruct`
 
 #### Примеры
 
@@ -736,6 +858,12 @@ BOOL_XOR(Bool?)->Bool?
 
 Для агрегации с пропуском `NULL`-ов можно использовать функции `MIN`/`MAX` или `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
+#### Типы
+
+- **Item**: `Bool`
+- **SerializedState**: `Bool`
+- **Result**: `Bool`
+
 #### Примеры
 
 ```yql
@@ -764,6 +892,12 @@ FROM AS_TABLE($data);
 ## BIT_AND, BIT_OR и BIT_XOR {#bit-and-or-xor}
 
 Применение соответствующей битовой операции ко всем значениям числовой колонки или выражения.
+
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
 
 #### Примеры
 
@@ -828,6 +962,17 @@ RANDOM_VALUE(T?)->Optional<T>
 
 {% endnote %}
 
+#### Типы RANDOM_SAMPLE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `List<T>`
+
+#### Типы RANDOM_VALUE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `T`
 
 #### Примеры
 

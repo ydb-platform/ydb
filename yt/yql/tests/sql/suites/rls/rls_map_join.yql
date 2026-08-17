@@ -1,0 +1,9 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+pragma yt.MapJoinLimit="1m";
+
+select a.*
+from plato.Input as a
+cross join plato.Input as b

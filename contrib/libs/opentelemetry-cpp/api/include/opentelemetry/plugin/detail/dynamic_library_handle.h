@@ -14,7 +14,12 @@ namespace plugin
 class DynamicLibraryHandle
 {
 public:
-  virtual ~DynamicLibraryHandle() = default;
+  DynamicLibraryHandle()                                        = default;
+  DynamicLibraryHandle(const DynamicLibraryHandle &)            = delete;
+  DynamicLibraryHandle(DynamicLibraryHandle &&)                 = delete;
+  DynamicLibraryHandle &operator=(const DynamicLibraryHandle &) = delete;
+  DynamicLibraryHandle &operator=(DynamicLibraryHandle &&)      = delete;
+  virtual ~DynamicLibraryHandle()                               = default;
 };
 }  // namespace plugin
 OPENTELEMETRY_END_NAMESPACE

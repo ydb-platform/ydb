@@ -38,6 +38,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HEALTH
+
 static decltype(auto) make_vslot_tuple(const NKikimrBlobStorage::TVSlotId& id) {
     return std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
 }
@@ -56,10 +58,6 @@ struct std::hash<NKikimrBlobStorage::TVSlotId> {
         return std::hash<decltype(tp)>()(tp);
     }
 };
-
-#define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr::NHealthCheck {
 
@@ -801,6 +799,7 @@ public:
 
     TDuration Timeout = TDuration::MilliSeconds(HealthCheckConfig.GetTimeout());
     bool ReturnHints = false;
+    bool ReturnStorageHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() const {
@@ -813,6 +812,7 @@ public:
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
         ReturnHints = Request->Request.return_hints() && IsSpecificDatabaseFilter();
+        ReturnStorageHints = Request->Request.return_hints();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
@@ -922,7 +922,8 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
-                        BLOG_D("Requesting whiteboard for group " << groupId);
+                        YDB_LOG_DEBUG("Requesting whiteboard for group",
+                            {"groupId", groupId});
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1006,12 +1007,15 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
-        BLOG_TRACE("RequestDone(" << name << "): remaining " << Requests);
+        YDB_LOG_TRACE("RequestDone",
+            {"name", name},
+            {"remainingRequests", Requests});
         if (Requests == 0) {
             ReplyAndPassAway();
         }
         if (Requests < 0) {
-            BLOG_CRIT("Requests < 0 in RequestDone(" << name << ")");
+            YDB_LOG_CRIT("Requests < 0 in RequestDone",
+                {"name", name});
         }
     }
 
@@ -1198,6 +1202,7 @@ public:
                 NKikimrWhiteboard::TVDiskStateInfo::kPDiskIdFieldNumber,
                 NKikimrWhiteboard::TVDiskStateInfo::kVDiskStateFieldNumber,
                 NKikimrWhiteboard::TVDiskStateInfo::kReplicatedFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber,
                 NKikimrWhiteboard::TVDiskStateInfo::kDiskSpaceFieldNumber,
         };
     }
@@ -1762,7 +1767,8 @@ public:
                 }
             }
         } else {
-            BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
+            YDB_LOG_DEBUG("TEvNavigateKeySetResult",
+                {"error", response.GetError()});
             if (response.GetError() == "PathErrorUnknown") {
                 auto result = MakeHolder<TEvSelfCheckResult>();
                 result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_UNSPECIFIED);
@@ -2578,25 +2584,6 @@ public:
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 
-    static Ydb::Monitoring::StatusFlag::Status GetFlagFromBSPDiskSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E flag) {
-        switch (flag) {
-            case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:
-            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:
-                return Ydb::Monitoring::StatusFlag::GREEN;
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:
-            case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:
-                return Ydb::Monitoring::StatusFlag::YELLOW;
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:
-            case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:
-            case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:
-                return Ydb::Monitoring::StatusFlag::ORANGE;
-            case NKikimrBlobStorage::TPDiskSpaceColor::RED:
-                return Ydb::Monitoring::StatusFlag::RED;
-            default:
-                return Ydb::Monitoring::StatusFlag::UNSPECIFIED;
-        }
-    }
-
     static Ydb::Monitoring::StatusFlag::Status GetFlagFromWhiteboardFlag(NKikimrWhiteboard::EFlag flag) {
         switch (flag) {
             case NKikimrWhiteboard::EFlag::Green:
@@ -2610,6 +2597,21 @@ public:
             default:
                 return Ydb::Monitoring::StatusFlag::UNSPECIFIED;
         }
+    }
+
+    static bool IsPhantomOnly(const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo) {
+        return vDiskInfo.HasDetailedReplicationStatus()
+            && vDiskInfo.GetDetailedReplicationStatus() == NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+    }
+
+    static bool IsPhantomOnly(const NKikimrSysView::TVSlotEntry* vSlot) {
+        return vSlot->GetInfo().HasPhantomOnly() && vSlot->GetInfo().GetPhantomOnly();
+    }
+
+    static void ReportPhantomOnlyHint(TSelfCheckContext& context) {
+        TSelfCheckContext hintContext(&context, "HINT-PHANTOM-ONLY-VDISK");
+        hintContext.ReportStatus(Ydb::Monitoring::StatusFlag::UNSPECIFIED,
+            "Only phantom blobs remain to replicate");
     }
 
     void FillVDiskStatus(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
@@ -2676,6 +2678,9 @@ public:
                 break;
             }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
+                if (ReturnStorageHints && IsPhantomOnly(vSlot)) {
+                    ReportPhantomOnlyHint(context);
+                }
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
@@ -2816,6 +2821,9 @@ public:
 
         if (!vDiskInfo.GetReplicated()) {
             context.IssueRecords.clear();
+            if (ReturnStorageHints && IsPhantomOnly(vDiskInfo)) {
+                ReportPhantomOnlyHint(context);
+            }
             context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
@@ -2934,7 +2942,7 @@ public:
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
-        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
             const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
             const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(pileId)->Name;
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
@@ -2971,7 +2979,9 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
+        YDB_LOG_DEBUG("Group status",
+            {"groupId", groupId},
+            {"status", context.GetOverallStatus()});
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 
@@ -3562,6 +3572,7 @@ public:
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;
+            auto statusBefore = currentContext->OverallStatus;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
                 TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
@@ -3583,6 +3594,7 @@ public:
                     ++badRings;
                 }
             }
+            currentContext->OverallStatus = statusBefore;
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
             } else if (badRings > 1) {
@@ -3594,6 +3606,9 @@ public:
         MergeRecords(ssContext.IssueRecords);
         context.UpdateMaxStatus(ssContext.GetOverallStatus());
         context.AddIssues(ssContext.IssueRecords);
+        if (ssContext.GetOverallStatus() >= Ydb::Monitoring::StatusFlag::BLUE) {
+            context.HasDegraded = true;
+        }
     }
 
     void FillResult(TOverallStateContext context) {
@@ -3716,7 +3731,7 @@ public:
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
-        if (NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
             const auto& selfPileName = NodeWardenStorageConfig->Get()->BridgeInfo->SelfNodePile->Name;
             result.mutable_location()->mutable_pile()->set_name(selfPileName);
         }

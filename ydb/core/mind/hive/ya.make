@@ -29,9 +29,11 @@ SRCS(
     metrics.h
     monitoring.cpp
     monitoring.h
+    move_data_actor.cpp
     node_info.cpp
     node_info.h
     object_distribution.h
+    outgoing_requests.h
     reassign_actor.cpp
     sequencer.cpp
     sequencer.h
@@ -76,6 +78,7 @@ SRCS(
     tx__seize_tablets.cpp
     tx__seize_tablets_reply.cpp
     tx__set_down.cpp
+    tx__shrink_pool.cpp
     tx__resume_tablet.cpp
     tx__start_tablet.cpp
     tx__status.cpp
@@ -98,6 +101,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base
@@ -116,4 +120,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_manual
 )

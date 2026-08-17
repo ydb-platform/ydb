@@ -3,6 +3,9 @@
 #include "kqp_info_unit.h"
 #include "kqp_rbo_context.h"
 #include "kqp_plan_props.h"
+
+#include <optional>
+
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 
@@ -29,8 +32,12 @@ class TExpression {
     ~TExpression() = default;
 
     // Split a conjunct into a vector of expressions. If the is no conjunction at the top level,
-    // just return a vector with this node. Handles pg conversions as well
+    // just return a vector with this node.
     TVector<TExpression> SplitConjunct() const;
+
+    // Split a disjunct into a vector of expressions. If the is no disjunction at the top level,
+    // just return a vector with this node.
+    TVector<TExpression> SplitDisjunct() const;
 
     // Check if the expression is just getting a single column from a tuple
     bool IsColumnAccess() const;
@@ -41,11 +48,14 @@ class TExpression {
     // Check if the expression is a cast
     bool IsCast() const;
 
-    // Check is the expression can be folded
-    bool IsConstantExpr() const;
+    // Check if this is a potential equi-join condition
+    bool MaybeEquiJoinCondition() const;
 
-    // Check if this is a potential join condition
-    bool MaybeJoinCondition(bool includeExpressions = false) const;
+    // Check if this is a potential equi-join condition over simple expressions
+    bool MaybeExprEquiJoinCondition() const;
+
+    // Check if this is a potential comparison of a column with a constant
+    bool MaybeConstantCondition() const;
 
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
@@ -57,7 +67,7 @@ class TExpression {
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
     // If the result list of column references is not empty and plan properties are not set in the expression,
     // an exception will be thrown
-    TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+    const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
@@ -65,24 +75,36 @@ class TExpression {
     // Apply a generic replace map to the lambda of the expression
     TExpression ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const;
 
+    // Extract common conjuncts from OR branches.
+    std::optional<TExpression> TryExtractCommonConjuncts() const;
+
     // Remove a cast from the expression
     TExpression PruneCast() const;
 
     // Produce a pretty string for this expression
     TString ToString() const;
 
+    // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
+    TString ToExplainString() const;
+
     TExprNode::TPtr Node;
     TExprContext* Ctx;
     TPlanProps* PlanProps;
+
+  private:
+    bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
+
+    mutable std::optional<TVector<TInfoUnit>> InputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+
 };
 
 /**
  * Model a generic potential join condition
  */
-class TJoinCondition {
+class TEquiJoinCondition {
   public:
 
-    TJoinCondition(const TExpression& expr);
+    TEquiJoinCondition(const TExpression& expr);
 
     // In case this is a simple predicate that contains a single column reference on each side, return left column
     TInfoUnit GetLeftIU() const;
@@ -98,7 +120,6 @@ class TJoinCondition {
     TVector<TInfoUnit> RightIUs;
 
     bool IncludesExpressions = true;
-    bool EquiJoin = false;
 };
 
 // Create an expression that accesses a single column
@@ -113,6 +134,9 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 // Make a conjunction from a list of conjuncts. Expression context and plan properies will be extracted
 // from one of the conjuncts.
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
+
+// Negate a predicate
+TExpression MakeNegation(const TExpression& expr);
 
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);

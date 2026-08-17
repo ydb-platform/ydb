@@ -61,14 +61,15 @@ class BridgeKiKiMRTest(object):
         cls.bridge_client = BridgeClient(host, grpc_port)
         cls.secondary_bridge_client = BridgeClient(cls.cluster.nodes[2].host, cls.cluster.nodes[2].port)
         cls.bridge_client.set_auth_token('root@builtin')
+        cls.secondary_bridge_client.set_auth_token('root@builtin')
 
     @classmethod
     def teardown_class(cls):
         cls.bridge_client.close()
         cls.cluster.stop()
 
-    def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS):
-        response = client.update_cluster_state(updates)
+    def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS, quorum_piles=None):
+        response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
         self.logger.debug("Update cluster state response: %s", response)
         assert_that(response.operation.status, is_(expected_status))
         if expected_status == StatusIds.SUCCESS:
@@ -93,6 +94,14 @@ class BridgeKiKiMRTest(object):
         assert_that(len(actual_states), is_(len(expected_states)))
         return result
 
+    def get_cluster_state_and_check_any(self, client, expected_states_variants):
+        result = self.get_cluster_state(client)
+        actual_states = {s.pile_name: s.state for s in result.pile_states}
+        for expected_states in expected_states_variants:
+            if actual_states == expected_states:
+                return result
+        assert False, f"Actual states {actual_states} do not match any of {expected_states_variants}"
+
     def wait_for_cluster_state(self, client, expected_states, timeout_seconds=5):
         start_time = time.time()
         last_exception = None
@@ -104,6 +113,18 @@ class BridgeKiKiMRTest(object):
                 last_exception = e
                 time.sleep(0.5)
         raise AssertionError(f"Cluster state did not reach expected state in {timeout_seconds}s") from last_exception
+
+    def wait_for_cluster_state_any(self, client, expected_states_variants, timeout_seconds=5):
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout_seconds:
+            try:
+                self.get_cluster_state_and_check_any(client, expected_states_variants)
+                return
+            except AssertionError as e:
+                last_exception = e
+                time.sleep(0.5)
+        raise AssertionError(f"Cluster state did not reach any expected state in {timeout_seconds}s") from last_exception
 
     @staticmethod
     def check_states(result, expected_states):

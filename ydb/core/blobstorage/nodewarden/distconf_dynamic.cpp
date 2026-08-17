@@ -18,7 +18,7 @@ namespace NKikimr::NStorage {
             ConnectedToStaticNode = *nodeId;
             TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe,
                 IEventHandle::FlagSubscribeOnSession, MakeBlobStorageNodeWardenID(ConnectedToStaticNode), SelfId(),
-                nullptr, 0));
+                nullptr, ++StaticNodeSubscriptionCookie));
         } else if (timestamp != TMonotonic::Max()) {
             if (!ReconnectScheduled) {
                 TActivationContext::Schedule(timestamp, new IEventHandle(TEvPrivate::EvReconnect, 0, SelfId(), {}, nullptr, 0));
@@ -33,14 +33,16 @@ namespace NKikimr::NStorage {
         ConnectToStaticNode();
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeConnected(ui32 nodeId, TActorId sessionId) {
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
-        Y_ABORT_UNLESS(!StaticNodeSessionId);
-        StaticNodeSessionId = sessionId;
+    void TDistributedConfigKeeper::OnStaticNodeConnected(ui32 nodeId, TActorId sessionId, ui64 cookie) {
+        if (cookie == StaticNodeSubscriptionCookie) {
+            Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
+            Y_ABORT_UNLESS(!StaticNodeSessionId);
+            StaticNodeSessionId = sessionId;
+        }
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId) {
-        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && StaticNodeSessionId != sessionId)) {
+    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && sessionId != StaticNodeSessionId) || cookie != StaticNodeSubscriptionCookie) {
             return; // possible race with unsubscription
         }
         ConnectedToStaticNode = 0;

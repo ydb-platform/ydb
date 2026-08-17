@@ -6,7 +6,10 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_client/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+
+#include <memory>
+#include <mutex>
 
 namespace NYdb::inline Dev {
 
@@ -38,8 +41,15 @@ public:
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
+    void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    NThreading::TFuture<void> GetCredentialsReady() const;
+    std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    std::shared_ptr<grpc::CallCredentials> GetCallCredentials() const;
+#endif
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void PostToResponseQueue(TPostTaskCb&& f) override;
 
     void AddCb(TCb&& cb, ENotifyType type);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
@@ -47,27 +57,37 @@ public:
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     std::string GetEndpoint() const;
-    void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
+    bool AreClientTlsCredentialsValid() const;
+    const std::string& GetClientTlsValidationDetail() const;
 
     const std::string Database;
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    std::shared_ptr<grpc::CallCredentials> CallCredentials;
-#endif
     // Status of last discovery call, used in sync mode, coresponding mutex
     std::shared_mutex LastDiscoveryStatusRWLock;
     TPlainStatus LastDiscoveryStatus;
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
+
+private:
+    struct TCredentials {
+        std::shared_ptr<ICredentialsProvider> Provider;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+        std::shared_ptr<grpc::CallCredentials> CallCredentials;
+#endif
+    };
+
+    TCredentials Credentials;
+    mutable std::once_flag ClientTlsValidationOnceFlag_;
+    mutable bool ClientTlsCredentialsValid_ = true;
+    mutable std::string ClientTlsValidationDetail_;
 };
 
 // Tracker allows to get driver state by database and credentials
@@ -88,20 +108,24 @@ class TDbDriverStateTracker {
     };
 public:
     TDbDriverStateTracker(IInternalClient* client);
+    using TNotificationCbRunner = std::function<NThreading::TFuture<void>(TDbDriverState::TCb& cb)>;
+
     TDbDriverState::TPtr GetDriverState(
-        std::string database,
-        std::string DiscoveryEndpoint,
+        const std::string& database,
+        const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
     NThreading::TFuture<void> SendNotification(
-        TDbDriverState::ENotifyType type);
+        TDbDriverState::ENotifyType type,
+        TNotificationCbRunner cbRunner = {});
     void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
     IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
     std::shared_mutex Lock_;
+    std::condition_variable_any Notify_;
 };
 
 using TDbDriverStatePtr = TDbDriverState::TPtr;

@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_FRONT_09162005_0343)
+#ifndef FUSION_FRONT_09162005_0343
 #define FUSION_FRONT_09162005_0343
 
 #include <boost/fusion/support/config.hpp>

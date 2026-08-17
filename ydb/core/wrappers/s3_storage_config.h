@@ -4,10 +4,13 @@
 
 #include "abstract.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/events.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h>
 
@@ -28,6 +31,7 @@ private:
     const Aws::Auth::AWSCredentials Credentials;
     YDB_READONLY(Aws::S3::Model::StorageClass, StorageClass, Aws::S3::Model::StorageClass::STANDARD);
     YDB_READONLY(bool, UseVirtualAddressing, true);
+    NMonitoring::TDynamicCounterPtr Counters;
 
     static Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings);
@@ -53,11 +57,11 @@ public:
         return Config;
     }
 
-    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings);
-    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings);
-    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings);
-    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings);
-    TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials, const Aws::Client::ClientConfiguration& config, const TString& bucket, bool useVirtualAddressing = true, Aws::S3::Model::StorageClass storageClass = Aws::S3::Model::StorageClass::STANDARD);
+    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
+    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
+    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
+    TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
+    TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials, const Aws::Client::ClientConfiguration& config, const TString& bucket, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters, bool useVirtualAddressing = true, Aws::S3::Model::StorageClass storageClass = Aws::S3::Model::StorageClass::STANDARD);
 };
 
 } // NKikimr::NWrappers::NExternalStorage

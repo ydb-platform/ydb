@@ -399,8 +399,7 @@ public:
             | EYtSettingType::UserSchema
             | EYtSettingType::UserColumns
             | EYtSettingType::StatColumns
-            | EYtSettingType::SysColumns
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::SysColumns;
         if (!ValidateSettings(*input.Ref().Child(TYtSection::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -744,6 +743,14 @@ public:
                         }
                     }
 
+                    if (auto reserved = FindReservedColumnName(GetSeqItemType(*table.Ref().GetTypeAnn()), *State_)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(table.Pos()), TStringBuilder()
+                            << "Cannot read table " << TString{tableName}.Quote() << ": column "
+                            << TString{*reserved}.Quote() << " has reserved prefix "
+                            << TString{SystemMemberPrefix}.Quote()));
+                        return TStatus::Error;
+                    }
+
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous) || !tableName.StartsWith("tmp/")) {
@@ -882,7 +889,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -917,7 +924,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtBlockTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -1032,9 +1039,15 @@ public:
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            bool isUniversal;
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1, isUniversal);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
         }
 

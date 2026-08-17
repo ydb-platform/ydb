@@ -27,7 +27,7 @@ WHERE
             AND
             cd_education_status == '4 yr Degree'
             AND
-            ss_sales_price BETWEEN 100.00 AND 150.00
+            ss_sales_price BETWEEN $to_decimal(100) AND $to_decimal(150)
         )
         OR
         (
@@ -37,7 +37,7 @@ WHERE
             AND
             cd_education_status == 'Primary'
             AND
-            ss_sales_price BETWEEN 50.00 AND 100.00
+            ss_sales_price BETWEEN $to_decimal(50) AND $to_decimal(100)
         )
         OR
         (
@@ -47,7 +47,7 @@ WHERE
             AND
             cd_education_status == 'Advanced Degree'
             AND
-            ss_sales_price BETWEEN 150.00 AND 200.00
+            ss_sales_price BETWEEN $to_decimal(150) AND $to_decimal(200)
         )
     )
     AND
@@ -58,7 +58,7 @@ WHERE
             ca_country == 'United States'
             AND
             ca_state IN ('KY', 'GA', 'NM')
-            AND ss_net_profit BETWEEN 0 AND 2000
+            AND ss_net_profit BETWEEN $to_decimal(0) AND $to_decimal(2000)
         )
         OR
         (
@@ -67,7 +67,7 @@ WHERE
             ca_country == 'United States'
             AND
             ca_state IN ('MT', 'OR', 'IN')
-            AND ss_net_profit BETWEEN 150 AND 3000
+            AND ss_net_profit BETWEEN $to_decimal(150) AND $to_decimal(3000)
         )
         OR
         (
@@ -76,7 +76,7 @@ WHERE
             ca_country == 'United States'
             AND
             ca_state IN ('WI', 'MO', 'WV')
-            AND ss_net_profit BETWEEN 50 AND 25000
+            AND ss_net_profit BETWEEN $to_decimal(50) AND $to_decimal(25000)
         )
     )
 ;

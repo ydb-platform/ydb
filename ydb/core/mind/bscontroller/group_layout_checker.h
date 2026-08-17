@@ -83,31 +83,8 @@ namespace NKikimr::NBsController {
                 , Device(device)
             {}
 
-            TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLocation& location, TPDiskId pdiskId, const TGroupGeometryInfo& geom) {
-                TStringStream realmGroup, realm, domain, device;
-                ui32 deviceLevelEnd = TNodeLocation::TKeys::E::Unit + 1;
-                const std::pair<int, TStringStream*> levels[] = {
-                    {geom.GetRealmLevelBegin(), &realmGroup},
-                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelBegin()), &realm},
-                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd()), &domain},
-                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd(), deviceLevelEnd), &device}
-                };
-                auto addLevel = [&](int key, const TString& value) {
-                    for (const auto& [reference, stream] : levels) {
-                        if (key < reference) {
-                            Save(stream, std::make_tuple(key, value));
-                        }
-                    }
-                };
-                for (const auto& [key, value] : location.GetItems()) {
-                    addLevel(key, value);
-                }
-                addLevel(255, pdiskId.ToString()); // ephemeral level to distinguish between PDisks on the same node
-                RealmGroup = mapper(realmGroup.Str());
-                Realm = mapper(realm.Str());
-                Domain = mapper(domain.Str());
-                Device = mapper(device.Str());
-            }
+            TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLocation& location, const std::optional<TString>& diskScope,
+                    TPDiskId pdiskId, const TGroupGeometryInfo& geom);
 
             TString ToString() const {
                 return TStringBuilder() << "{" << RealmGroup << "." << Realm << "." << Domain << "." << Device << "}";
@@ -168,10 +145,12 @@ namespace NKikimr::NBsController {
             THashMap<TEntityId, ui32> NumDisksPerRealmGroup;
 
             TStackVec<ui32, 4> NumDisksInRealm;
+            TStackVec<ui32, 4> NumDecommittedDisksInRealm;
             TStackVec<THashMap<TEntityId, ui32>, 4> NumDisksPerRealm;
             THashMap<TEntityId, ui32> NumDisksPerRealmTotal;
 
             TStackVec<ui32, 32> NumDisksInDomain;
+            TStackVec<ui32, 32> NumDecommittedDisksInDomain;
             TStackVec<THashMap<TEntityId, ui32>, 32> NumDisksPerDomain;
             THashMap<TEntityId, ui32> NumDisksPerDomainTotal;
 
@@ -182,42 +161,49 @@ namespace NKikimr::NBsController {
             TGroupLayout(const TBlobStorageGroupInfo::TTopology& topology)
                 : Topology(topology)
                 , NumDisksInRealm(Topology.GetTotalFailRealmsNum())
+                , NumDecommittedDisksInRealm(Topology.GetTotalFailRealmsNum())
                 , NumDisksPerRealm(Topology.GetTotalFailRealmsNum())
                 , NumDisksInDomain(Topology.GetTotalFailDomainsNum())
+                , NumDecommittedDisksInDomain(Topology.GetTotalFailDomainsNum())
                 , NumDisksPerDomain(Topology.GetTotalFailDomainsNum())
             {}
 
-            void UpdateDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber, ui32 value) {
+            void UpdateDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber, ui32 value, bool decommitted) {
                 NumDisks += value;
                 const ui32 z = NumDisksPerRealmGroup[pos.RealmGroup] += value;
                 const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNumber);
                 const ui32 x1 = NumDisksInRealm[vdisk.FailRealm] += value;
                 const ui32 x2 = NumDisksPerRealm[vdisk.FailRealm][pos.Realm] += value;
                 const ui32 x3 = NumDisksPerRealmTotal[pos.Realm] += value;
+                NumDecommittedDisksInRealm[vdisk.FailRealm] += value * decommitted;
                 const ui32 domainIdx = Topology.GetFailDomainOrderNumber(vdisk);
                 const ui32 y1 = NumDisksInDomain[domainIdx] += value;
                 const ui32 y2 = NumDisksPerDomain[domainIdx][pos.Domain] += value;
                 const ui32 y3 = NumDisksPerDomainTotal[pos.Domain] += value;
+                NumDecommittedDisksInDomain[vdisk.FailDomain] += value * decommitted;
 
                 NumDisksPerDevice[pos.Device] += value;
 
                 Correct = Correct && x1 == x2 && x2 == x3 && y1 == y2 && y2 == y3 && z == NumDisks;
             }
 
-            void AddDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
-                UpdateDisk(pos, orderNumber, 1);
+            void AddDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber, bool decommitted) {
+                UpdateDisk(pos, orderNumber, 1, decommitted);
             }
 
-            void RemoveDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
-                UpdateDisk(pos, orderNumber, Max<ui32>());
+            void RemoveDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber, bool decommitted) {
+                UpdateDisk(pos, orderNumber, Max<ui32>(), decommitted);
             }
 
-            TScore GetCandidateScore(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
+            TScore GetCandidateScore(const TPDiskLayoutPosition& pos, ui32 orderNumber, bool decommitted) {
                 const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNumber);
                 const ui32 domainIdx = Topology.GetFailDomainOrderNumber(vdisk);
 
                 const auto& disksPerRealm = NumDisksPerRealm[vdisk.FailRealm][pos.Realm];
                 const auto& disksPerDomain = NumDisksPerDomain[domainIdx][pos.Domain];
+
+                const ui32 otherDecommittedInRealm = NumDecommittedDisksInRealm[vdisk.FailRealm] - decommitted;
+                const ui32 otherDecommittedInDomain = NumDecommittedDisksInDomain[domainIdx] - decommitted;
 
                 const ui32 disksOnDevice = NumDisksPerDevice[pos.Device];
 
@@ -226,15 +212,15 @@ namespace NKikimr::NBsController {
                     .DomainInterlace = NumDisksPerDomainTotal[pos.Domain] - disksPerDomain,
                     .DeviceInterlace = disksOnDevice,
                     .RealmGroupScatter = NumDisks - NumDisksPerRealmGroup[pos.RealmGroup],
-                    .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - disksPerRealm,
-                    .DomainScatter = NumDisksInDomain[domainIdx] - disksPerDomain,
+                    .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - disksPerRealm - otherDecommittedInRealm,
+                    .DomainScatter = NumDisksInDomain[domainIdx] - disksPerDomain - otherDecommittedInDomain,
                 };
             }
 
-            TScore GetExcludedDiskScore(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
-                RemoveDisk(pos, orderNumber);
-                const TScore score = GetCandidateScore(pos, orderNumber);
-                AddDisk(pos, orderNumber);
+            TScore GetExcludedDiskScore(const TPDiskLayoutPosition& pos, ui32 orderNumber, bool decommitted) {
+                RemoveDisk(pos, orderNumber, decommitted);
+                const TScore score = GetCandidateScore(pos, orderNumber, decommitted);
+                AddDisk(pos, orderNumber, decommitted);
                 return score;
             }
 

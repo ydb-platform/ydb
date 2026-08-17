@@ -1,0 +1,6 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+/* custom error: Table Input on cluster plato has row level security. Please enable pragma yt.OmitInaccessibleRows. */
+
+select * from plato.Input;

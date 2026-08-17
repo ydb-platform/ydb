@@ -21,7 +21,10 @@ namespace error
 
 /**
   A message providing more detail about an error in human-readable form.
-  <p>
+
+  @deprecated
+  {"note": "Use domain-specific error message attribute. For example, use @code
+  feature_flag.error.message @endcode for feature flag errors.", "reason": "obsoleted"} <p>
   @code error.message @endcode should provide additional context and detail about an error.
   It is NOT RECOMMENDED to duplicate the value of @code error.type @endcode in @code error.message
   @endcode. It is also NOT RECOMMENDED to duplicate the value of @code exception.message @endcode in
@@ -29,7 +32,7 @@ namespace error
   @code error.message @endcode is NOT RECOMMENDED for metrics or spans due to its unbounded
   cardinality and overlap with span status.
  */
-static constexpr const char *kErrorMessage = "error.message";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kErrorMessage = "error.message";
 
 /**
   Describes a class of error the operation ended with.
@@ -38,6 +41,12 @@ static constexpr const char *kErrorMessage = "error.message";
   <p>
   When @code error.type @endcode is set to a type (e.g., an exception type), its
   canonical class name identifying the type within the artifact SHOULD be used.
+  <p>
+  If the recorded error type is a wrapper that is not meaningful for
+  failure classification, instrumentation MAY use the type of the inner
+  error instead. For example, in Go, errors created with @code fmt.Errorf @endcode
+  using @code %w @endcode MAY be unwrapped when the wrapper type does not help
+  classify the failure.
   <p>
   Instrumentations SHOULD document the list of errors they report.
   <p>

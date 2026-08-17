@@ -37,9 +37,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
         runtime.SetDispatchedEventsLimit(100'000'000'000);
 
         for (auto userId : xrange(usersTotal)) {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user" + std::to_string(userId), "password" + std::to_string(userId));
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user" + std::to_string(userId), MakeTestPasswordHashes("password" + std::to_string(userId)).HashedPassword);
         }
-        auto resultLogin = Login(runtime, "user0", "password0");
+        auto resultLogin = Login(runtime, "user0", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("password0").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         
         {
@@ -84,7 +85,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
 
         {
             TLogStopwatch stopwatch(TStringBuilder() << "Created single user userx");
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "userx", "passwordX");
+            const auto userxHashes = MakeTestPasswordHashes("passwordX");
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "userx", userxHashes.HashedPassword);
         }
 
         {

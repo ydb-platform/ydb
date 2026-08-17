@@ -17,10 +17,17 @@
 #include "opentelemetry/sdk/configuration/boolean_array_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/boolean_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/cardinality_limits_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_always_off_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_always_on_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_parent_threshold_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_probability_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_rule_based_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_sampler_configuration.h"
 #include "opentelemetry/sdk/configuration/configuration.h"
 #include "opentelemetry/sdk/configuration/console_log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/console_push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/console_span_exporter_configuration.h"
+#include "opentelemetry/sdk/configuration/container_resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/default_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/default_histogram_aggregation.h"
 #include "opentelemetry/sdk/configuration/distribution_configuration.h"
@@ -36,10 +43,12 @@
 #include "opentelemetry/sdk/configuration/extension_metric_producer_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_pull_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_push_metric_exporter_configuration.h"
+#include "opentelemetry/sdk/configuration/extension_resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_sampler_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_span_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_span_processor_configuration.h"
 #include "opentelemetry/sdk/configuration/headers_configuration.h"
+#include "opentelemetry/sdk/configuration/host_resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/include_exclude_configuration.h"
 #include "opentelemetry/sdk/configuration/instrument_type.h"
 #include "opentelemetry/sdk/configuration/integer_array_attribute_value_configuration.h"
@@ -50,7 +59,9 @@
 #include "opentelemetry/sdk/configuration/log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_limits_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_processor_configuration.h"
+#include "opentelemetry/sdk/configuration/logger_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/logger_provider_configuration.h"
+#include "opentelemetry/sdk/configuration/meter_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/meter_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_producer_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_reader_configuration.h"
@@ -67,13 +78,17 @@
 #include "opentelemetry/sdk/configuration/otlp_http_span_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/parent_based_sampler_configuration.h"
 #include "opentelemetry/sdk/configuration/periodic_metric_reader_configuration.h"
+#include "opentelemetry/sdk/configuration/process_resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/prometheus_pull_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/propagator_configuration.h"
 #include "opentelemetry/sdk/configuration/pull_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/pull_metric_reader_configuration.h"
 #include "opentelemetry/sdk/configuration/push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/resource_configuration.h"
+#include "opentelemetry/sdk/configuration/resource_detection_configuration.h"
+#include "opentelemetry/sdk/configuration/resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/service_resource_detector_configuration.h"
 #include "opentelemetry/sdk/configuration/severity_number.h"
 #include "opentelemetry/sdk/configuration/simple_log_record_processor_configuration.h"
 #include "opentelemetry/sdk/configuration/simple_span_processor_configuration.h"
@@ -86,6 +101,7 @@
 #include "opentelemetry/sdk/configuration/sum_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/temporality_preference.h"
 #include "opentelemetry/sdk/configuration/trace_id_ratio_based_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/tracer_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/tracer_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/translation_strategy.h"
 #include "opentelemetry/sdk/configuration/view_configuration.h"
@@ -162,6 +178,15 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<LoggerProviderConfiguration> ParseLoggerProviderConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  LoggerConfigConfiguration ParseLoggerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  LoggerMatcherAndConfigConfiguration ParseLoggerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<LoggerConfiguratorConfiguration> ParseLoggerConfiguratorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   DefaultHistogramAggregation ParseDefaultHistogramAggregation(
@@ -266,6 +291,15 @@ public:
   std::unique_ptr<MeterProviderConfiguration> ParseMeterProviderConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  MeterConfigConfiguration ParseMeterConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  MeterMatcherAndConfigConfiguration ParseMeterMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<MeterConfiguratorConfiguration> ParseMeterConfiguratorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   std::unique_ptr<PropagatorConfiguration> ParsePropagatorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
@@ -289,6 +323,42 @@ public:
       size_t depth) const;
 
   std::unique_ptr<TraceIdRatioBasedSamplerConfiguration> ParseTraceIdRatioBasedSamplerConfiguration(
+      const std::unique_ptr<DocumentNode> &node,
+      size_t depth) const;
+
+  std::unique_ptr<ComposableAlwaysOffSamplerConfiguration>
+  ParseComposableAlwaysOffSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                               size_t depth) const;
+
+  std::unique_ptr<ComposableAlwaysOnSamplerConfiguration>
+  ParseComposableAlwaysOnSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                              size_t depth) const;
+
+  std::unique_ptr<ComposableProbabilitySamplerConfiguration>
+  ParseComposableProbabilitySamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                 size_t depth) const;
+
+  std::unique_ptr<ComposableParentThresholdSamplerConfiguration>
+  ParseComposableParentThresholdSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                     size_t depth) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleAttributeValuesConfiguration>
+  ParseComposableRuleBasedSamplerRuleAttributeValuesConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleAttributePatternsConfiguration>
+  ParseComposableRuleBasedSamplerRuleAttributePatternsConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleConfiguration>
+  ParseComposableRuleBasedSamplerRuleConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                   size_t depth) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerConfiguration>
+  ParseComposableRuleBasedSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                               size_t depth) const;
+
+  std::unique_ptr<ComposableSamplerConfiguration> ParseComposableSamplerConfiguration(
       const std::unique_ptr<DocumentNode> &node,
       size_t depth) const;
 
@@ -336,6 +406,15 @@ public:
   std::unique_ptr<TracerProviderConfiguration> ParseTracerProviderConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  TracerConfigConfiguration ParseTracerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  TracerMatcherAndConfigConfiguration ParseTracerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<TracerConfiguratorConfiguration> ParseTracerConfiguratorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   std::unique_ptr<StringAttributeValueConfiguration> ParseStringAttributeValueConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
@@ -363,6 +442,28 @@ public:
   std::unique_ptr<AttributesConfiguration> ParseAttributesConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  std::unique_ptr<ContainerResourceDetectorConfiguration>
+  ParseContainerResourceDetectorConfiguration(const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<HostResourceDetectorConfiguration> ParseHostResourceDetectorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ProcessResourceDetectorConfiguration> ParseProcessResourceDetectorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ServiceResourceDetectorConfiguration> ParseServiceResourceDetectorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ExtensionResourceDetectorConfiguration>
+  ParseResourceDetectorExtensionConfiguration(const std::string &name,
+                                              std::unique_ptr<DocumentNode> node) const;
+
+  std::unique_ptr<ResourceDetectorConfiguration> ParseResourceDetectorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ResourceDetectionConfiguration> ParseResourceDetectionConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   std::unique_ptr<ResourceConfiguration> ParseResourceConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
@@ -373,8 +474,8 @@ public:
 
 private:
   std::string version_;
-  int version_major_;
-  int version_minor_;
+  int version_major_{};
+  int version_minor_{};
 };
 
 }  // namespace configuration

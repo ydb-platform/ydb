@@ -38,7 +38,7 @@ public:
     // Synchronous intefrace
     virtual void PwriteSync(const void *data, ui64 size, ui64 offset, TReqId reqId, NWilson::TTraceId *traceId) = 0;
     virtual void PreadSync(void *data, ui32 size, ui64 offset, TReqId reqId, NWilson::TTraceId *traceId) = 0;
-    virtual void TrimSync(ui32 size, ui64 offset) = 0;
+    virtual void TrimSync(ui64 size, ui64 offset) = 0;
 
     // Asynchronous intefrace
     virtual void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction,
@@ -52,7 +52,7 @@ public:
     virtual void FlushAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
     virtual void NoopAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
     virtual void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId reqId) = 0;
-    virtual void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) = 0;
+    virtual void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) = 0;
 
     // Control methods
     virtual bool GetIsTrimEnabled() = 0;

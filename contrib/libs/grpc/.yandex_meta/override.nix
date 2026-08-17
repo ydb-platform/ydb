@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.54.3";
+  version = "1.60.2";
   pname = "grpc";
   src = fetchFromGitHub {
     owner = "grpc";
     repo = "grpc";
     rev = "v${version}";
-    hash = "sha256-UdQrBTNNfpoFYN6O92aUMhZEdfZZ3hqLp4lJMPjy7tM=";
+    hash = "sha256-gYL84LJr858P6qTKa6EXxK9DjTM0FbGkFFMt+y1ALGs=";
     fetchSubmodules = true;
   };
 
@@ -30,7 +30,6 @@ pkgs: attrs: with pkgs; rec {
     # Building gRPC test takes too long.
     # We do not need them in Arcadia, hence there is no sense to build them under nix
     "-DgRPC_BUILD_TESTS=OFF"
-    "-DgRPC_BUILD_CSHARP_EXT=OFF"
     "-DgRPC_BACKWARDS_COMPATIBILITY_MODE=OFF"
     "-DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF"
     "-DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF"

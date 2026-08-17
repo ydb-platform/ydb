@@ -27,6 +27,7 @@
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/port.h"
 
 namespace grpc_event_engine {
 namespace experimental {
@@ -67,11 +68,39 @@ void WindowsEventEngineListener::SinglePortSocketListener::
 
 // ---- SinglePortSocketListener ----
 
+// TODO(hork): This may be refactored to share with posix engine.
+void UnlinkIfUnixDomainSocket(
+    const EventEngine::ResolvedAddress& resolved_addr) {
+#ifdef GRPC_HAVE_UNIX_SOCKET
+  if (resolved_addr.address()->sa_family != AF_UNIX) {
+    return;
+  }
+  struct sockaddr_un* un = reinterpret_cast<struct sockaddr_un*>(
+      const_cast<sockaddr*>(resolved_addr.address()));
+  // There is nothing to unlink for an abstract unix socket.
+  if (un->sun_path[0] == '\0' && un->sun_path[1] != '\0') {
+    return;
+  }
+  // For windows we need to remove the file instead of unlink.
+  DWORD attr = ::GetFileAttributesA(un->sun_path);
+  if (attr == INVALID_FILE_ATTRIBUTES) {
+    return;
+  }
+  if (attr & FILE_ATTRIBUTE_DIRECTORY || attr & FILE_ATTRIBUTE_READONLY) {
+    return;
+  }
+  ::DeleteFileA(un->sun_path);
+#else
+  (void)resolved_addr;
+#endif
+}
+
 WindowsEventEngineListener::SinglePortSocketListener::
     ~SinglePortSocketListener() {
   grpc_core::MutexLock lock(&io_state_->mu);
   io_state_->listener_socket->Shutdown(DEBUG_LOCATION,
                                        "~SinglePortSocketListener");
+  UnlinkIfUnixDomainSocket(listener_sockname());
   GRPC_EVENT_ENGINE_TRACE("~SinglePortSocketListener::%p", this);
 }
 
@@ -109,7 +138,11 @@ y_absl::Status WindowsEventEngineListener::SinglePortSocketListener::Start() {
 
 y_absl::Status
 WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
-  SOCKET accept_socket = WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
+  const EventEngine::ResolvedAddress addr = listener_sockname();
+  const int addr_family =
+      (addr.address()->sa_family == AF_UNIX) ? AF_UNIX : AF_INET6;
+  const int protocol = addr_family == AF_UNIX ? 0 : IPPROTO_TCP;
+  SOCKET accept_socket = WSASocket(addr_family, SOCK_STREAM, protocol, NULL, 0,
                                    IOCP::GetDefaultSocketFlags());
   if (accept_socket == INVALID_SOCKET) {
     return GRPC_WSA_ERROR(WSAGetLastError(), "WSASocket");
@@ -118,10 +151,17 @@ WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
     if (accept_socket != INVALID_SOCKET) closesocket(accept_socket);
     return error;
   };
-  auto error = PrepareSocket(accept_socket);
+  y_absl::Status error;
+  if (addr_family == AF_UNIX) {
+    error = SetSocketNonBlock(accept_socket);
+  } else {
+    error = PrepareSocket(accept_socket);
+  }
   if (!error.ok()) return fail(error);
   // Start the "accept" asynchronously.
-  DWORD addrlen = sizeof(sockaddr_in6) + 16;
+  io_state_->listener_socket->NotifyOnRead(&io_state_->on_accept_cb);
+  DWORD addrlen =
+      sizeof(addresses_) / 2;  // half of the buffer is for remote addr.
   DWORD bytes_received = 0;
   int success =
       AcceptEx(io_state_->listener_socket->raw_socket(), accept_socket,
@@ -132,13 +172,11 @@ WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
   if (success != 0) {
     int last_error = WSAGetLastError();
     if (last_error != ERROR_IO_PENDING) {
+      io_state_->listener_socket->UnregisterReadCallback();
       return fail(GRPC_WSA_ERROR(last_error, "AcceptEx"));
     }
   }
-  // We're ready to do the accept. Calling NotifyOnRead may immediately process
-  // an accept that happened in the meantime.
   io_state_->accept_socket = accept_socket;
-  io_state_->listener_socket->NotifyOnRead(&io_state_->on_accept_cb);
   GRPC_EVENT_ENGINE_TRACE(
       "SinglePortSocketListener::%p listening. listener_socket::%p", this,
       io_state_->listener_socket.get());
@@ -201,7 +239,7 @@ void WindowsEventEngineListener::SinglePortSocketListener::
       peer_address, listener_->iocp_->Watch(io_state_->accept_socket),
       listener_->memory_allocator_factory_->CreateMemoryAllocator(
           y_absl::StrFormat("listener endpoint %s", peer_name)),
-      listener_->config_, listener_->executor_, listener_->engine_);
+      listener_->config_, listener_->thread_pool_, listener_->engine_);
   listener_->accept_cb_(
       std::move(endpoint),
       listener_->memory_allocator_factory_->CreateMemoryAllocator(
@@ -239,8 +277,14 @@ WindowsEventEngineListener::SinglePortSocketListener::PrepareListenerSocket(
     if (sock != INVALID_SOCKET) closesocket(sock);
     return error;
   };
-  auto error = PrepareSocket(sock);
+  y_absl::Status error;
+  if (addr.address()->sa_family == AF_UNIX) {
+    error = SetSocketNonBlock(sock);
+  } else {
+    error = PrepareSocket(sock);
+  }
   if (!error.ok()) return fail(error);
+  UnlinkIfUnixDomainSocket(addr);
   if (bind(sock, addr.address(), addr.size()) == SOCKET_ERROR) {
     return fail(GRPC_WSA_ERROR(WSAGetLastError(), "bind"));
   }
@@ -265,12 +309,12 @@ WindowsEventEngineListener::WindowsEventEngineListener(
     IOCP* iocp, AcceptCallback accept_cb,
     y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,
     std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory,
-    std::shared_ptr<EventEngine> engine, Executor* executor,
+    std::shared_ptr<EventEngine> engine, ThreadPool* thread_pool,
     const EndpointConfig& config)
     : iocp_(iocp),
       config_(config),
       engine_(std::move(engine)),
-      executor_(executor),
+      thread_pool_(thread_pool),
       memory_allocator_factory_(std::move(memory_allocator_factory)),
       accept_cb_(std::move(accept_cb)),
       on_shutdown_(std::move(on_shutdown)) {}
@@ -314,7 +358,10 @@ y_absl::StatusOr<int> WindowsEventEngineListener::Bind(
     out_addr = ResolvedAddressMakeWild6(out_port);
   }
   // open the socket
-  SOCKET sock = WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, nullptr, 0,
+  const int addr_family =
+      (out_addr.address()->sa_family == AF_UNIX) ? AF_UNIX : AF_INET6;
+  const int protocol = addr_family == AF_UNIX ? 0 : IPPROTO_TCP;
+  SOCKET sock = WSASocket(addr_family, SOCK_STREAM, protocol, nullptr, 0,
                           IOCP::GetDefaultSocketFlags());
   if (sock == INVALID_SOCKET) {
     auto error = GRPC_WSA_ERROR(WSAGetLastError(), "WSASocket");

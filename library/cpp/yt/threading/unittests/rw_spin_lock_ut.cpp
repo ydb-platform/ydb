@@ -17,7 +17,7 @@ TEST(TReaderWriterSpinLockTest, WriterPriority)
     std::latch latch(readerThreads + 1);
     std::atomic<size_t> finishedCount = {0};
 
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
 
     volatile std::atomic<ui32> x = {0};
 
@@ -51,7 +51,7 @@ TEST(TReaderWriterSpinLockTest, WriterPriority)
 
 TEST(TReaderWriterSpinLockDeathTest, ReaderReentrance)
 {
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
 
     EXPECT_DEBUG_DEATH({
         auto guard1 = ReaderGuard(lock);
@@ -61,7 +61,7 @@ TEST(TReaderWriterSpinLockDeathTest, ReaderReentrance)
 
 TEST(TReaderWriterSpinLockDeathTest, MixedReentrance)
 {
-    NDetail::TCheckedReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(NDetail::TCheckedReaderWriterSpinLock, lock);
 
     EXPECT_DEATH({
         auto guard1 = ReaderGuard(lock);
@@ -71,7 +71,7 @@ TEST(TReaderWriterSpinLockDeathTest, MixedReentrance)
 
 TEST(TReaderWriterSpinLockDeathTest, TryReaderReentrance)
 {
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
 
     EXPECT_DEBUG_DEATH({
         auto guard = ReaderGuard(lock);
@@ -81,7 +81,7 @@ TEST(TReaderWriterSpinLockDeathTest, TryReaderReentrance)
 
 TEST(TReaderWriterSpinLockDeathTest, TryWriterReentrance)
 {
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
 
     EXPECT_DEBUG_DEATH({
         auto guard = WriterGuard(lock);
@@ -91,7 +91,7 @@ TEST(TReaderWriterSpinLockDeathTest, TryWriterReentrance)
 
 TEST(TReaderWriterSpinLockDeathTest, ReleaseUnacquiredLock)
 {
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
 
     EXPECT_DEBUG_DEATH({
         lock.ReleaseReader();

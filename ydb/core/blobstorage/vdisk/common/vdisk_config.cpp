@@ -38,7 +38,10 @@ namespace NKikimr {
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
-        HullCompFreeSpaceThreshold = 2.0;
+        HullCompFreeSpaceThresholdPerMille = 2000; // default ratio is 2x
+        HullCompEmergencyMaxSsts = 8; // 0 disables Emergency
+        HullCompEmergencyChunkReserve = 1;
+        HullCompEmergencyEnableAtColor = 15; // LIGHT_YELLOW
         FreshCompMaxInFlightWrites = 10;
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
@@ -67,7 +70,7 @@ namespace NKikimr {
         SyncLogAdvisedIndexedBlockSize = ui32(1) << ui32(20);       // 1 MB
         SyncLogMaxMemAmount = ui64(64) << ui64(20);                 // 64 MB
 
-        MaxSyncLogChunkSize = ui32(16) << ui32(10);                 // 32 Kb
+        MaxSyncDataCutterChunkSize = ui32(256) << ui32(10);         // 256 Kb
 
         ReplTimeInterval = TDuration::Seconds(60);                  // 60 seconds
         ReplRequestTimeout = TDuration::Seconds(10);                // 10 seconds
@@ -125,7 +128,7 @@ namespace NKikimr {
 
         MaxResponseSize = ui32(8) << ui32(20);                      // 8 MB
         DskTrackerInterval = TDuration::Seconds(1);
-        WhiteboardUpdateInterval = TDuration::Seconds(1);
+        StatsUpdateInterval = TDuration::Seconds(1);
         EnableVDiskCooldownTimeout = false;
 
 #ifdef NDEBUG

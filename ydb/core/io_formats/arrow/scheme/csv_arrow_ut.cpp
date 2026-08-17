@@ -1,7 +1,10 @@
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <array>
 
 namespace NKikimr::NFormats {
 
@@ -75,6 +78,12 @@ TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colum
     }
 
     return TestReadSingleBatch(*reader, columns, data, numRows);
+}
+
+TString ParseUuidBytes(TStringBuf value) {
+    std::array<ui16, 8> uuid;
+    UNIT_ASSERT(NUuid::ParseUuidToArray(value, uuid.data(), value.size() == 32));
+    return TString(reinterpret_cast<const char*>(uuid.data()), sizeof(uuid));
 }
 
 }
@@ -345,6 +354,48 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
                 UNIT_ASSERT(i != 2 || utf8Column.IsNull(i));
             }
         }
+    }
+
+    Y_UNIT_TEST(Uuid) {
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns = {
+            {"uuid", NScheme::TTypeInfo(NScheme::NTypeIds::Uuid)}
+        };
+
+        const TString uuid = "65df1ec1-a97d-47b2-ae56-3c023da6ee8c";
+        const TString shortUuid = "65df1ec1a97d47b2ae563c023da6ee8c";
+
+        auto reader = TArrowCSVScheme::Create(columns, false);
+        UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
+        reader->SetNullValue("NULL");
+
+        TString errorMessage;
+        auto batch = reader->ReadSingleBatch(uuid + "\n" + shortUuid + "\nNULL\n", errorMessage);
+        UNIT_ASSERT_C(batch, errorMessage);
+        UNIT_ASSERT_C(errorMessage.empty(), errorMessage);
+
+        auto column = batch->GetColumnByName("uuid");
+        UNIT_ASSERT(column);
+        UNIT_ASSERT_EQUAL(static_cast<int>(column->type()->id()), static_cast<int>(arrow::Type::FIXED_SIZE_BINARY));
+
+        auto uuidColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        UNIT_ASSERT_VALUES_EQUAL(uuidColumn->length(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(uuidColumn->GetString(0), ParseUuidBytes(uuid));
+        UNIT_ASSERT_VALUES_EQUAL(uuidColumn->GetString(1), ParseUuidBytes(shortUuid));
+        UNIT_ASSERT(uuidColumn->IsNull(2));
+    }
+
+    Y_UNIT_TEST(UuidInvalidString) {
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns = {
+            {"uuid", NScheme::TTypeInfo(NScheme::NTypeIds::Uuid)}
+        };
+
+        auto reader = TArrowCSVScheme::Create(columns, false);
+        UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
+
+        TString errorMessage;
+        auto batch = reader->ReadSingleBatch("not-a-uuid\n", errorMessage);
+        UNIT_ASSERT(!batch);
+        UNIT_ASSERT_STRING_CONTAINS(errorMessage, "Failed to convert string 'not-a-uuid' to Uuid");
     }
 #if 0
     Y_UNIT_TEST(Dates) {

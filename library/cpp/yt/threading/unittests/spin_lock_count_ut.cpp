@@ -15,7 +15,7 @@ namespace {
 TEST(TSpinLockCountTest, SpinLock)
 {
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
-    TSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
     auto guard = Guard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
     guard.Release();
@@ -25,7 +25,7 @@ TEST(TSpinLockCountTest, SpinLock)
 TEST(TSpinLockCountTest, RecursiveSpinLock)
 {
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
-    TRecursiveSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TRecursiveSpinLock, lock);
     auto guard1 = Guard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
     auto guard2 = Guard(lock);
@@ -39,7 +39,7 @@ TEST(TSpinLockCountTest, RecursiveSpinLock)
 TEST(TSpinLockCountTest, ForkAwareSpinLock)
 {
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
-    TForkAwareSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, lock);
     auto guard = Guard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
     guard.Release();
@@ -49,7 +49,7 @@ TEST(TSpinLockCountTest, ForkAwareSpinLock)
 TEST(TSpinLockCountTest, RWSpinLock)
 {
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
-    TReaderWriterSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, lock);
     auto readerGuard = ReaderGuard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
     readerGuard.Release();

@@ -40,6 +40,23 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -78,6 +95,27 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                  "modified_at",
+                  TableTtl.TtlUnit.SECONDS,
+                  3600
+          ));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
@@ -108,6 +146,26 @@
   ```
 
 {% endif %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Go
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -160,6 +218,58 @@
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  TTL для таблицы задаётся в `TableDescription` при создании. Проверить настройки можно через `describeTable`.
+
+  ```java
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableDescription;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+  import tech.ydb.table.values.PrimitiveType;
+
+  public class TtlCreateTableExample {
+
+      private static final String TABLE_NAME = "mytable";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+
+              TableDescription description = TableDescription.newBuilder()
+                      .addNullableColumn("id", PrimitiveType.Uint64)
+                      .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+                      .setPrimaryKey("id")
+                      .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+                      .build();
+
+              retryCtx.supplyStatus(session -> session.createTable(tablePath, description))
+                      .join().expectSuccess("create table failed");
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
+  ```
+
 {% endlist %}
 
 ## Выключение TTL {#disable}
@@ -194,6 +304,23 @@
 
   ```python
   session.alter_table('mytable', drop_ttl_settings=True)
+  ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.notSet());
+
+  session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
 {% endlist %}
@@ -232,5 +359,42 @@
   ttl = desc.ttl_settings
   ```
 
-{% endlist %}
+- C#
 
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+
+  public class TtlDescribeExample {
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/mytable";
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+
+              System.out.println("TTL enabled: " + ttl.isEnabled());
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
+  ```
+
+{% endlist %}

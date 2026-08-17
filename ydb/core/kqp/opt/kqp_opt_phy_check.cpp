@@ -1,7 +1,11 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -9,7 +13,11 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
 using TStatus = IGraphTransformer::TStatus;
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(
@@ -123,37 +131,38 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                             auto stageParentsIt = parentsMap.find(stage.Raw());
                             YQL_ENSURE(stageParentsIt != parentsMap.end());
                             if (stageParentsIt->second.size() != 1) {
-                                bool hasOutput = false;
-                                bool hasEffect = false;
+                                bool hasTableEffect = false;
                                 for (const auto& parent : stageParentsIt->second) {
                                     YQL_ENSURE(TExprBase(parent).Maybe<TDqOutput>()
                                             || TExprBase(parent).Maybe<TKqpSinkEffect>());
-                                    if (TExprBase(parent).Maybe<TDqOutput>()) {
-                                        YQL_ENSURE(!hasOutput, "Stage #" << PrintKqpStageOnly(stage, ctx)
-                                            << " has multiple outputs");
-                                        hasOutput = true;
-                                    } else {
-                                        YQL_ENSURE(!hasEffect, "Stage #" << PrintKqpStageOnly(stage, ctx)
-                                            << " has multiple effects");
-                                        hasEffect = true;
+                                   if (auto sinkEffect = TExprBase(parent).Maybe<TKqpSinkEffect>()) {
+                                        YQL_ENSURE(stage.Outputs(), "Stage #" << PrintKqpStageOnly(stage, ctx)
+                                            << " has no outputs");
+                                        const auto outputs = stage.Outputs().Cast();
+                                        const size_t sinkIndex = FromString<size_t>(sinkEffect.Cast().SinkIndex().Value());
+                                        AFL_ENSURE(sinkIndex < outputs.Size());
+                                        const auto dqSink = outputs.Item(sinkIndex).Maybe<TDqSink>();
+                                        if (dqSink && dqSink.Cast().Settings().Maybe<TKqpTableSinkSettings>()) {
+                                            YQL_ENSURE(!hasTableEffect, "Stage #" << PrintKqpStageOnly(stage, ctx)
+                                                << " has multiple table effects");
+                                            hasTableEffect = true;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    if (!kqpCtx->Config->GetEnableIndexStreamWrite()) {
-                        if (const auto outputs = stage.Outputs()) {
-                            for (const auto& output : outputs.Cast()) {
-                                const auto outputIndex = FromString<ui32>(output.Index().Value());
-                                if (usedOutputs.Test(outputIndex)) {
-                                    hasMultipleConsumers = true;
-                                    YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
-                                        << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
-                                    return false;
-                                }
-                                usedOutputs.Set(outputIndex);
+                    if (const auto outputs = stage.Outputs()) {
+                        for (const auto& output : outputs.Cast()) {
+                            const auto outputIndex = FromString<ui32>(output.Index().Value());
+                            if (usedOutputs.Test(outputIndex) && !kqpCtx->Config->GetEnableIndexStreamWrite()) {
+                                hasMultipleConsumers = true;
+                                YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
+                                    << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
+                                return false;
                             }
+                            usedOutputs.Set(outputIndex);
                         }
                     }
 

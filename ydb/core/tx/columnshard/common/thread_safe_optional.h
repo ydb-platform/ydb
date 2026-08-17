@@ -12,12 +12,12 @@ private:
     alignas(T) unsigned char Storage[sizeof(T)];
     std::atomic<bool> Defined{ false };
 
-    T *Ptr() {
-        return reinterpret_cast<T *>(&Storage[0]);
+    T* Ptr() {
+        return reinterpret_cast<T*>(&Storage[0]);
     }
 
-    const T *Ptr() const {
-        return reinterpret_cast<const T *>(&Storage[0]);
+    const T* Ptr() const {
+        return reinterpret_cast<const T*>(&Storage[0]);
     }
 
 public:

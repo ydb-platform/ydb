@@ -22,8 +22,11 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <util/stream/length.h>
+
+#include <utility>
 
 namespace NYql {
 
@@ -89,7 +92,7 @@ public:
                         .Build();
 
         bool hasNonDeterministicFunctions;
-        auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, nullptr, hasNonDeterministicFunctions);
+        auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, /*typeAnnotator=*/nullptr, hasNonDeterministicFunctions);
         if (status.Level == IGraphTransformer::TStatus::Error) {
             return SyncStatus(status);
         }
@@ -107,7 +110,7 @@ public:
         }
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
+        NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, /*enableRaw=*/false);
         writer.OnBeginMap();
         if (NCommon::HasResOrPullOption(*input, "type")) {
             writer.OnKeyedItem("Type");
@@ -116,7 +119,7 @@ public:
 
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), State_->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, false, State_->Types->LangVer);
+        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, /*voidWithEffects=*/false, State_->Types->LangVer);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
         NCommon::TMkqlBuildContext mkqlCtx(compiler, pgmBuilder, ctx);
@@ -135,14 +138,40 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
-        TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,
-                                            State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
-                                            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
+        THashMap<TString, TString> secureParams;
+        State_->Types->Credentials->ForEach([&secureParams](const TString& name, const TCredential& cred) {
+            secureParams[TString("token:") + name] = cred.Content;
+        });
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(secureParams);
+
+        TComputationPatternOpts patternOpts(alloc.Ref(),
+                                            env,
+                                            compFactory,
+                                            State_->FunctionRegistry,
+                                            State_->Types->ValidateMode,
+                                            NUdf::EValidatePolicy::Exception,
+                                            State_->Types->OptLLVM.GetOrElse(TString()),
+                                            EGraphPerProcess::Multi,
+                                            /*stats=*/nullptr,
+                                            /*countersProvider=*/nullptr,
+                                            secureParamsProvider.get(),
+                                            logProvider.Get(),
+                                            State_->Types->LangVer,
+                                            State_->Types->RuntimeSettings);
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
-        const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
-                                               *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-                                               NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
+
+        const TComputationOptsFull computeOpts(/*stats=*/nullptr,
+                                               alloc.Ref(),
+                                               env,
+                                               *State_->Types->RandomProvider,
+                                               *State_->Types->TimeProvider,
+                                               NUdf::EValidatePolicy::Exception,
+                                               secureParamsProvider.get(),
+                                               /*countersProvider=*/nullptr,
+                                               logProvider.Get(),
+                                               State_->Types->LangVer,
+                                               State_->Types->RuntimeSettings);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
@@ -153,7 +182,7 @@ public:
         TString data;
         TStringOutput dataOut(data);
         TCountingOutput dataCountingOut(&dataOut);
-        NYson::TYsonWriter dataWriter(&dataCountingOut, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
+        NYson::TYsonWriter dataWriter(&dataCountingOut, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, /*enableRaw=*/false);
         YQL_ENSURE(type->IsStream());
         auto itemType = AS_TYPE(TStreamType, type)->GetItemType();
         if (isList) {
@@ -183,7 +212,7 @@ public:
         } else {
             NUdf::TUnboxedValue item;
             YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Ok);
-            NCommon::WriteYsonValue(dataWriter, item, itemType, nullptr);
+            NCommon::WriteYsonValue(dataWriter, item, itemType, /*structPositions=*/nullptr);
             YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Finish);
         }
 
@@ -213,8 +242,8 @@ private:
         explorer.Walk(root.GetNode(), env.GetNodeStack());
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
-                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);
-        program = LiteralPropagationOptimization(program, env, true);
+                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, /*inPlace=*/true, wereChanges);
+        program = LiteralPropagationOptimization(program, env, /*inPlace=*/true);
         return program;
     }
 
@@ -228,8 +257,8 @@ THolder<TExecTransformerBase> CreatePureDataSourceExecTransformer(const TPureSta
 
 class TPureProvider: public TDataProviderBase {
 public:
-    explicit TPureProvider(const TPureState::TPtr& state)
-        : State_(state)
+    explicit TPureProvider(TPureState::TPtr state)
+        : State_(std::move(state))
         , ExecTransformer_([this]() { return CreatePureDataSourceExecTransformer(State_); })
     {
     }

@@ -15,6 +15,7 @@ public:
     virtual void AddOperationFuture(const NThreading::TFuture<NCommon::TOperationResult>& future) = 0;
     virtual bool Seal() = 0;
     virtual bool IsReady() const = 0;
+    virtual void Reset() = 0;
 };
 
 IYtFullCapture::TPtr CreateYtFullCapture();

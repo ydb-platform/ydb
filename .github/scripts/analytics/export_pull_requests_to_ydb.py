@@ -270,7 +270,7 @@ def fetch_repository_pull_requests(
         else:
             # No break: full page was within range
             total = len(prs)
-            # Вычисляем диапазон дат для собранных PR
+            # Compute date range for fetched PRs
             if prs:
                 dates = [parse_datetime(pr.get('updatedAt')) for pr in prs if pr.get('updatedAt')]
                 dates = [d for d in dates if d is not None]

@@ -7,8 +7,6 @@
 
 namespace NYql::NFmr {
 
-using TOperationPartitions = std::vector<TTaskParams>;
-
 struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
@@ -24,7 +22,7 @@ struct THeartbeatResponse {
 };
 
 struct TStartOperationRequest {
-    ETaskType TaskType;
+    EOperationType OperationType;
     TOperationParams OperationParams;
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
@@ -34,14 +32,17 @@ struct TStartOperationRequest {
     std::vector<TFileInfo> Files = {};
     std::vector<TYtResourceInfo> YtResources = {};
     std::vector<TFmrResourceOperationInfo> FmrResources = {};
+    TMaybe<TYtResourceInfo> FmrJob;
 };
 
 struct TStartOperationResponse {
     EOperationStatus Status;
     TString OperationId;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TPrepareOperationRequest {
+    EOperationType OperationType;
     TOperationParams OperationParams;
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
     TMaybe<NYT::TNode> FmrOperationSpec;
@@ -50,10 +51,22 @@ struct TPrepareOperationRequest {
 struct TPrepareOperationResponse {
     TString PartitionId;
     ui64 TasksNum;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TGetOperationRequest {
     TString OperationId;
+};
+
+struct TJobCounters {
+    ui64 Total = 0;
+    ui64 Pending = 0;
+    ui64 Running = 0;
+    ui64 Completed = 0;
+    ui64 Failed = 0;
+    ui64 Lost = 0;
+
+    bool operator==(const TJobCounters&) const = default;
 };
 
 struct TGetOperationResponse {
@@ -61,6 +74,7 @@ struct TGetOperationResponse {
     std::vector<TFmrError> ErrorMessages = {};
     std::vector<TTableStats> OutputTablesStats = {};
     std::vector<TString> OperationResultsYson = {};
+    TJobCounters JobCounters = {};
 };
 
 struct TDeleteOperationRequest {
@@ -116,10 +130,30 @@ struct TPingSessionResponse {
     bool Success;
 };
 
-enum class EPartitionType {
-    UnorderedPartition,
-    OrderedPartition,
-    SortedPartition
+struct TOperationIdWithStatus {
+    TString OperationId;
+    EOperationStatus Status;
+    std::vector<TFmrError> ErrorMessages = {};
+};
+
+struct TWaitForOperationsRequest {
+    std::vector<TString> OperationIds;
+    TDuration Timeout;
+};
+
+struct TWaitForOperationsResponse {
+    // Non-empty when at least one operation reached a terminal state before the timeout;
+    // empty when the timeout elapsed with no operation finishing.
+    std::vector<TOperationIdWithStatus> FinalizedOperations;
+};
+
+struct TWaitForTasksRequest {
+    ui64 AvailableSlots = 0; // must be > 0
+    TDuration Timeout;
+};
+
+struct TWaitForTasksResponse {
+    ui64 AvailableTasksCount = 0; // informational
 };
 
 class IFmrCoordinator: public TThrRefBase {
@@ -149,6 +183,10 @@ public:
     virtual NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) = 0;
 
     virtual NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) = 0;
+
+    virtual NThreading::TFuture<TWaitForOperationsResponse> WaitForOperations(const TWaitForOperationsRequest& request) = 0;
+
+    virtual NThreading::TFuture<TWaitForTasksResponse> WaitForTasks(const TWaitForTasksRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

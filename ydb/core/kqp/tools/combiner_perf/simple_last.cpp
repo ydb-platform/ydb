@@ -54,7 +54,7 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM, Spilling>& setup, std::sha
     */
     const auto pgmReturn = pb.FromFlow(WideLastCombiner<Spilling>(
         pb,
-        pb.ToFlow(TRuntimeNode(streamCallable, false)),
+        pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; }, // extractor
         [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; }, // init
         [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {

@@ -10,5 +10,6 @@
 #include <boost/system/error_code.hpp>
 #include <boost/system/system_error.hpp>
 #include <boost/system/result.hpp>
+#include <boost/system/unwrap_and_invoke.hpp>
 
 #endif // #ifndef BOOST_SYSTEM_HPP_INCLUDED

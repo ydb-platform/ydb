@@ -448,7 +448,7 @@ private:
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error validating field %Qv",
                 GetDescription(fieldId))
-                << ex;
+                .With(ex);
         }
         Cursor_.Next();
     }
@@ -605,7 +605,7 @@ public:
 
     bool OnDouble(double value) final
     {
-        if (Y_UNLIKELY(std::isinf(value))) {
+        if (std::isinf(value)) [[unlikely]] {
             ythrow TJsonException() << "infinite values are not allowed";
         }
         return true;

@@ -7,39 +7,7 @@
 
 namespace NYql::NDecimal {
 
-static const TUint128 Ten(10U);
-
-TUint128 GetDivider(ui8 scale) {
-    if (scale > MaxPrecision) {
-        return Inf();
-    }
-
-    TUint128 d(1U);
-    while (scale--) {
-        d *= Ten;
-    }
-    return d;
-}
-
-bool IsError(TInt128 v) {
-    return v > Nan() || v < -Inf();
-}
-
-bool IsNan(TInt128 v) {
-    return v == Nan();
-}
-
-bool IsInf(TInt128 v) {
-    return v == Inf() || v == -Inf();
-}
-
-bool IsNormal(TInt128 v) {
-    return v < Inf() && v > -Inf();
-}
-
-bool IsComparable(TInt128 v) {
-    return v <= Inf() && v >= -Inf();
-}
+static constexpr TUint128 Ten(10U);
 
 const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     if (!precision || precision > MaxPrecision || scale > precision) {
@@ -251,7 +219,8 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
                 return Err();
             }
 
-            const int p = precision, s = int(scale) + exp;
+            const int p = precision;
+            const int s = int(scale) + exp;
 
             const auto r = exp > 0 ? FromString(str.Head(len), precision, std::min(s, p)) : FromString(str.Head(len), std::min(p - exp, int(MaxPrecision)), std::max(s, 0));
 
@@ -382,7 +351,8 @@ namespace {
 using TInt256 = TWide<TInt128, TInt128, TUint128>;
 
 TInt128 Normalize(const TInt256& v) {
-    static const TInt256 PInf256(+Inf()), NInf256(-Inf());
+    static const TInt256 PInf256(+Inf());
+    static const TInt256 NInf256(-Inf());
 
     if (v > PInf256) {
         return +Inf();

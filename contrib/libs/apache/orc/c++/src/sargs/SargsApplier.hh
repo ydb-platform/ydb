@@ -19,25 +19,24 @@
 #ifndef ORC_SARGSAPPLIER_HH
 #define ORC_SARGSAPPLIER_HH
 
-#include <orc/Common.hh>
+#include "SchemaEvolution.hh"
 #include "orc/BloomFilter.hh"
+#include "orc/Common.hh"
 #include "orc/Reader.hh"
 #include "orc/Type.hh"
-#include "wrap/orc-proto-wrapper.hh"
-
 #include "sargs/SearchArgument.hh"
-
-#include "SchemaEvolution.hh"
 
 #include <unordered_map>
 
 namespace orc {
 
+  struct StringDictionary;
+
   class SargsApplier {
    public:
     SargsApplier(const Type& type, const SearchArgument* searchArgument, uint64_t rowIndexStride,
-                 WriterVersion writerVersion, ReaderMetrics* metrics,
-                 const SchemaEvolution* schemaEvolution = nullptr);
+                 WriterVersion writerVersion, size_t dictionaryFilteringSizeThreshold,
+                 ReaderMetrics* metrics, const SchemaEvolution* schemaEvolution);
 
     /**
      * Evaluate search argument on file statistics
@@ -59,6 +58,18 @@ namespace orc {
      */
     bool evaluateStripeStatistics(const proto::StripeStatistics& stripeStats,
                                   uint64_t stripeRowGroupCount);
+
+    /**
+     * Evaluate search argument on column dictionaries (only IN expressions)
+     * If dictionary entries don't satisfy the sargs,
+     * the EvaluatedRowGroupCount of Reader Metrics will be updated.
+     * Otherwise, Reader Metrics will not be updated and
+     * will require further evaluation.
+     * @param dictionaries map from column ID to StringDictionary
+     * @return true if any dictionary entry satisfies the sargs
+     */
+    bool evaluateColumnDictionaries(
+        const std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>>& dictionaries);
 
     /**
      * TODO: use proto::RowIndex and proto::BloomFilter to do the evaluation
@@ -114,10 +125,28 @@ namespace orc {
       }
     }
 
+    /**
+     * Get list of column IDs that have IN expressions for dictionary filtering
+     */
+    const std::vector<uint64_t>& getColumnsWithInExpressions() const {
+      return columnsWithInExpr_;
+    }
+
+    /**
+     * Get the dictionary filtering size threshold
+     */
+    size_t getDictionaryFilteringSizeThreshold() const {
+      return dictionaryFilteringSizeThreshold_;
+    }
+
    private:
     // evaluate column statistics in the form of protobuf::RepeatedPtrField
     typedef ::google::protobuf::RepeatedPtrField<proto::ColumnStatistics> PbColumnStatistics;
     bool evaluateColumnStatistics(const PbColumnStatistics& colStats) const;
+
+    // Helper method to evaluate IN expression against a dictionary
+    TruthValue evaluateDictionaryForColumn(const StringDictionary& dictionary,
+                                           const PredicateLeaf& leaf) const;
 
     friend class TestSargsApplier_findColumnTest_Test;
     friend class TestSargsApplier_findArrayColumnTest_Test;
@@ -128,10 +157,13 @@ namespace orc {
     const Type& type_;
     const SearchArgument* searchArgument_;
     const SchemaEvolution* schemaEvolution_;
-    uint64_t rowIndexStride_;
-    WriterVersion writerVersion_;
+    const uint64_t rowIndexStride_;
+    const WriterVersion writerVersion_;
+    const uint32_t dictionaryFilteringSizeThreshold_;
     // column ids for each predicate leaf in the search argument
     std::vector<uint64_t> filterColumns_;
+    // column ids that have IN expressions for dictionary filtering
+    std::vector<uint64_t> columnsWithInExpr_;
 
     // Map from RowGroup index to the next skipped row of the selected range it
     // locates. If the RowGroup is not selected, set the value to 0.

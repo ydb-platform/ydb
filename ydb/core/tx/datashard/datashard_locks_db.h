@@ -12,6 +12,7 @@ private:
 public:
     using TBase::TBase;
 
+    void PersistLockCounter(ui64 lockId, ui64 counter) override;
     void PersistRemoveLock(ui64 lockId) override;
     bool MayAddLock(ui64 lockId) override;
 };

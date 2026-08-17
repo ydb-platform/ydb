@@ -1,6 +1,6 @@
 # Начало работы с {{ ydb-short-name }} в {{ k8s }}
 
-Развертывание {{ ydb-short-name }} в {{ k8s }} — это простой способ установки и эксплуатации {{ ydb-short-name }} кластера. С {{ k8s }} вы можете использовать универсальный подход к управлению приложением в любом облачном провайдере. Это руководство содержит инструкции для развертывания {{ ydb-short-name }} в [AWS EKS](https://aws.amazon.com/ru/eks/) or [{{ managed-k8s-full-name}}](https://cloud.yandex.ru/services/managed-kubernetes).
+Развертывание {{ ydb-short-name }} в {{ k8s }} — это простой способ установки и эксплуатации {{ ydb-short-name }} кластера. С {{ k8s }} вы можете использовать универсальный подход к управлению приложением в любом облачном провайдере. Это руководство содержит инструкции для развертывания {{ ydb-short-name }} в [AWS EKS](https://aws.amazon.com/ru/eks/) или [{{ managed-k8s-full-name}}](https://cloud.yandex.ru/services/managed-kubernetes).
 
 ## Пререквизиты
 

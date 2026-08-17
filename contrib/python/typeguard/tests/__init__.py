@@ -7,7 +7,6 @@ from typing import (
     NamedTuple,
     NewType,
     TypeVar,
-    Union,
 )
 
 T_Foo = TypeVar("T_Foo")
@@ -26,7 +25,7 @@ class Employee(NamedTuple):
     id: int
 
 
-JSONType = Union[str, float, bool, None, List["JSONType"], Dict[str, "JSONType"]]
+JSONType = str | float | bool | None | List["JSONType"] | Dict[str, "JSONType"]
 myint = NewType("myint", int)
 mylist = NewType("mylist", List[int])
 

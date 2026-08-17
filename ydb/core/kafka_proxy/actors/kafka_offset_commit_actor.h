@@ -10,6 +10,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
@@ -19,12 +20,18 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include "ydb/services/persqueue_v1/actors/persqueue_utils.h"
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 
 namespace NKafka {
 using namespace NKikimr;
 
-class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor> {
+extern const TString CHECK_GROUP_GENERATION;
+
+class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor>
+                             , public TKafkaExceptionHandler<TKafkaOffsetCommitActor> {
 
 struct TRequestInfo {
     TString TopicName = "";
@@ -46,12 +53,18 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void Die(const TActorContext& ctx) override;
 
     STATEFN(StateWork) {
-        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
@@ -59,6 +72,8 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
         }
     }
 
@@ -68,6 +83,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendAuthRequest(const NActors::TActorContext& ctx);
     void CreateConsumerGroupIfNecessary(const TString& topicName,
@@ -76,6 +93,9 @@ private:
     void AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx);
     void ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx);
     void SendFailedForAllPartitions(EKafkaErrors error, const TActorContext& ctx);
+    void SendCommits(const TActorContext& ctx);
+    void SendGenerationCheckRequest(const TActorContext& ctx);
+    TString GetMetadataDatabasePath() const;
 
 private:
     const TContext::TPtr Context;
@@ -95,6 +115,7 @@ private:
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
     EKafkaErrors Error = NONE_ERROR;
+    std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
         .RetryLimitCount = 6,

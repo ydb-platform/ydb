@@ -1,3 +1,4 @@
+// NOLINTBEGIN(modernize-use-designated-initializers)
 {"information_schema", "_pg_foreign_data_wrappers", "authorization_identifier", "name"},
 {"information_schema", "_pg_foreign_data_wrappers", "fdwoptions", "_text"},
 {"information_schema", "_pg_foreign_data_wrappers", "fdwowner", "oid"},
@@ -2053,3 +2054,4 @@
 {"pg_catalog", "pg_views", "schemaname", "name"},
 {"pg_catalog", "pg_views", "viewname", "name"},
 {"pg_catalog", "pg_views", "viewowner", "name"},
+// NOLINTEND(modernize-use-designated-initializers)

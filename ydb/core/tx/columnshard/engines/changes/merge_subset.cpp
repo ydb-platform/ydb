@@ -33,7 +33,7 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
                 }
             }
         }
-        if (GranuleMeta->GetPortionsIndex().HasOlderIntervals(pInfo, portionsInUsage)) {
+        if (NGranule::NPortionsIndex::TPortionsIndex::HasOlderIntervals(*PortionsIndexSnapshot, pInfo, portionsInUsage)) {
             filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
         }
     }
@@ -80,10 +80,11 @@ ui64 TWritePortionsToMerge::GetColumnMaxChunkMemory() const {
     return result;
 }
 
-TWritePortionsToMerge::TWritePortionsToMerge(
-    std::vector<TWritePortionInfoWithBlobsResult>&& portions, const std::shared_ptr<TGranuleMeta>& granuleMeta)
-    : TBase(granuleMeta)
-    , WritePortions(std::move(portions)) {
+TWritePortionsToMerge::TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions,
+    const std::shared_ptr<TGranuleMeta>& granuleMeta, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+    : TBase(granuleMeta, portionsIndexSnapshot)
+    , WritePortions(std::move(portions))
+{
     ui32 idx = 0;
     for (auto&& i : WritePortions) {
         i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(++idx);

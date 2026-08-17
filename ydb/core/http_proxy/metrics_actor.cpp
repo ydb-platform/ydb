@@ -1,12 +1,11 @@
 #include "metrics_actor.h"
-#include "events.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/cache/cache.h>
 
+#include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 namespace NKikimr::NHttpProxy {
@@ -82,4 +81,4 @@ namespace NKikimr::NHttpProxy {
         return new TMetricsActor(settings);
     }
 
-}
+} // namespace NKikimr::NHttpProxy

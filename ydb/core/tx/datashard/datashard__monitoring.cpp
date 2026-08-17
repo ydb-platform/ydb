@@ -1,6 +1,7 @@
 #include "datashard_impl.h"
 #include "operation.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/util/pb.h>
 
@@ -8,6 +9,7 @@
 #include <library/cpp/resource/resource.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <util/string/subst.h>
 
 namespace NKikimr::NDataShard {
 
@@ -23,6 +25,11 @@ void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
         return;
     }
+
+    const TStringBuf monRoot = NKikimr::IsTabletDevUiSecurePath(ev->Get()->PathInfo())
+        ? TStringBuf("../..")
+        : TStringBuf("..");
+    SubstGlobal(blob, "{{MON_ROOT}}", monRoot);
 
     TStringBuilder response;
     response << "HTTP/1.1 200 Ok\r\n";
@@ -109,7 +116,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     activities.SetLastCompletedStep(Pipeline.GetLastCompleteTx().Step);
     activities.SetUtmostCompletedTx(Pipeline.GetUtmostCompleteTx().TxId);
     activities.SetUtmostCompletedStep(Pipeline.GetUtmostCompleteTx().Step);
-    activities.SetDataTxCompleteLag(GetDataTxCompleteLag().MilliSeconds());
+    activities.SetDataTxCompleteLag(GetTxCompleteLag().MilliSeconds());
     activities.SetScanTxCompleteLag(GetScanTxCompleteLag().MilliSeconds());
 
     auto& pcfg = *response->Record.MutablePipelineConfig();
@@ -330,6 +337,45 @@ void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
     }
 
     Send(ev->Sender, response);
+}
+
+static TString MakeReadSetData(bool commit) {
+    NKikimrTx::TReadSetData data;
+    data.SetDecision(commit ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
+
+    TString encoded;
+    AFL_ENSURE(data.SerializeToString(&encoded));
+
+    return encoded;
+}
+
+void TDataShard::HandleMonSendReadSetToSelf(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
+    auto cgi = ev->Get()->Cgi();
+    ui64 step = 0, txId = 0, srcTabletId = 0, seqNo = 0;
+    bool commit = false;
+    if (!cgi.Has("step") || !TryFromString(cgi.Get("step"), step) ||
+        !cgi.Has("txId") || !TryFromString(cgi.Get("txId"), txId) ||
+        !cgi.Has("srcTabletId") || !TryFromString(cgi.Get("srcTabletId"), srcTabletId) ||
+        !cgi.Has("seqNo") || !TryFromString(cgi.Get("seqNo"), seqNo) ||
+        !cgi.Has("commit") || !TryFromString(cgi.Get("commit"), commit)) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nInvalid request parameters."));
+        return;
+    }
+    auto tx = GetVolatileTxManager().FindByCommitTxId(txId);
+    if (!tx) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nTransaction not found."));
+        return;
+    }
+    if (step != tx->Version.Step) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nMismatching transaction step."));
+        return;
+    }
+    auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
+        step, txId, srcTabletId, TabletID(), srcTabletId,
+        MakeReadSetData(commit), seqNo
+    );
+    ctx.Send(ctx.SelfID, std::move(event));
+    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 200 OK\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nRead Set is sent."));
 }
 
 void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {

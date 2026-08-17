@@ -8,12 +8,29 @@
 
 namespace NYql::NFmr {
 
-const std::vector<TString> TableYsonRows = {
+// Exposes CheckIsSorted (protected) so the empty-chunkIndexes edge case can be
+// tested directly, without needing to force TParserFragmentListIndex into
+// producing zero row markups for non-empty table content.
+class TTestableSortedWriter: public TFmrTableDataServiceSortedWriter {
+public:
+    using TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter;
+    using TFmrTableDataServiceSortedWriter::CheckIsSorted;
+};
+
+const std::vector<TString> TextTableYsonRows = {
     "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n",
     "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n",
     "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};\n",
     "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
 };
+
+const std::vector<TString> TableYsonRows = [] {
+    std::vector<TString> result;
+    for (const auto& row : TextTableYsonRows) {
+        result.push_back(GetBinaryYson(row));
+    }
+    return result;
+}();
 
 TTableChunkStats WriteDataToTableDataSerice(
     ITableDataService::TPtr tableDataService,
@@ -68,8 +85,8 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].DataWeight, secPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].SortedChunkStats.IsSorted, false);
 
-        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
-        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());
+        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin(), TextTableYsonRows.begin() + 2);
+        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin() + 2, TextTableYsonRows.end());
 
         TString group = GetTableDataServiceGroup("tableId", "partId");
         auto firstChunkTableContent = tableDataService->Get(group, "0").GetValueSync();
@@ -148,6 +165,26 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 75);
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 150);
+    }
+
+    Y_UNIT_TEST(CheckIsSortedWithEmptyChunkIndexesDoesNotUnderflow) {
+        ITableDataService::TPtr tableDataService = MakeLocalTableDataService();
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = {"key"};
+        sortingColumns.SortOrders = {ESortOrder::Ascending};
+
+        TTestableSortedWriter writer(
+            "tableId",
+            "partId",
+            tableDataService,
+            TString(),
+            TFmrWriterSettings(),
+            sortingColumns
+        );
+
+        // chunkIndexes.size() - 1 underflows to SIZE_MAX for an empty vector;
+        // this must not attempt any out-of-bounds indexing.
+        writer.CheckIsSorted(TStringBuf(), {});
     }
 }
 

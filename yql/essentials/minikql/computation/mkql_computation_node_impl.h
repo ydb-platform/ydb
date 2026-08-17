@@ -160,6 +160,8 @@ private:
 
     void InvalidateValue(TComputationContext& compCtx) const final;
 
+    void CollectInvalidationIndexes(std::set<ui32>& out) const final;
+
     const IComputationNode* GetSource() const final;
 
 protected:
@@ -1331,6 +1333,11 @@ public:
         MKQL_ENSURE(!Empty(ctx), "Value not created");
         auto& val = ctx.MutableValues[Index_];
         return static_cast<TBoxedData<T>*>(val.AsBoxed().Get())->Get();
+    }
+
+    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const {
+        MKQL_ENSURE(!Empty(ctx), "Value not created");
+        return ctx.MutableValues[Index_];
     }
 
     template <typename... Args>

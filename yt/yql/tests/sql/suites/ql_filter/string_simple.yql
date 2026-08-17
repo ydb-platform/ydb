@@ -1,0 +1,5 @@
+pragma yt.UseQLFilter;
+
+select a
+from plato.Input
+where a = "target" AND b = Utf8("\xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82\x20\xD0\xBC\xD0\xB8\xD1\x80") AND b != "\xD0";

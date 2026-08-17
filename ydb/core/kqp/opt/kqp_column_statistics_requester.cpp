@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
@@ -35,6 +35,13 @@ void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNo
         }
 
         if (callableInput->IsList()){
+            // Only propagate when the lambda takes exactly one argument per list element (the shape this
+            // mapping assumes). Some callables pair a list child0 with a lambda of a different arity -- e.g.
+            // HybridRank, whose child0 is the positional scoring tuple but whose Fuse lambda takes a single
+            // rank-vector argument -- and indexing Arg(j) past the lambda's args would be out of range.
+            if (lambda.Args().Size() != callableInput->ChildrenSize()) {
+                continue;
+            }
             for (size_t j = 0; j < callableInput->ChildrenSize(); ++j){
                 KqpTableByExprNode[lambda.Args().Arg(j).Ptr()] = KqpTableByExprNode[callableInput->Child(j)];
             }
@@ -72,28 +79,34 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
     AsyncReadiness = NThreading::WaitAll(futures).Apply(
-            [this, futures=std::move(futures)](const TFuture<void>&) mutable {
+            [weakSharedState=std::weak_ptr{sharedState}, futures=std::move(futures)](const TFuture<void>&) mutable {
         for (auto& fut : futures) {
             if (fut.HasException()) {
                 fut.TryRethrow();
             }
 
             auto newStats = fut.ExtractValue();
-            if (!ColumnStatisticsResponse) {
-                ColumnStatisticsResponse = std::move(newStats);
+            auto sharedState = weakSharedState.lock();
+            if (!sharedState) {
+                //parent already deleted, just return
+                return;
+            }
+            if (!sharedState->Response.has_value()) {
+                sharedState->Response = std::move(newStats);
             } else {
                 // merge statistics
                 for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
-                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    auto& oldColumn2Stat = sharedState->Response->ColumnStatisticsByTableName[table];
                     for (const auto& [column, newStat] : column2Stat.Data) {
                         auto& oldStat = oldColumn2Stat.Data[column];
                         if (newStat.CountMinSketch) {
@@ -102,27 +115,37 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                         if (newStat.EqWidthHistogramEstimator) {
                             oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
                         }
+                        if (!newStat.Type.empty()) {
+                            oldStat.Type = newStat.Type;
+                        }
+                        if (newStat.NumUniqueVals) {
+                            oldStat.NumUniqueVals = newStat.NumUniqueVals;
+                        }
+                        if (newStat.HyperLogLog) {
+                            oldStat.HyperLogLog = newStat.HyperLogLog;
+                        }
                     }
                 }
             }
         }
     });
+    SharedState = sharedState;
 
     return TStatus::Async;
 }
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
-    Y_ENSURE(AsyncReadiness.IsReady() && ColumnStatisticsResponse.has_value());
+    Y_ENSURE(AsyncReadiness.IsReady() && SharedState && SharedState->Response.has_value());
 
-    if (!ColumnStatisticsResponse->Issues().Empty()) {
-        TStringStream ss; ColumnStatisticsResponse->Issues().PrintTo(ss);
+    if (!SharedState->Response->Issues().Empty()) {
+        TStringStream ss; SharedState->Response->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
         return IGraphTransformer::TStatus::Ok;
     }
 
-    for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+    for (auto&& [tableName, columnStatistics]:  SharedState->Response->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
-            {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
+            {std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );
     }
 
@@ -174,20 +197,98 @@ TMaybe<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetTableAndCo
     return std::pair{std::move(table), std::move(column)};
 }
 
+TVector<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetEquiJoinConditions(const TCoEquiJoin& equiJoin) {
+    if (equiJoin.ArgCount() < 3) {
+        return {};
+    }
+
+    THashMap<TString, TExprNode::TPtr> joinArgMap;
+
+    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+        auto joinArg = input.List().Ptr()->ChildPtr(0);
+
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
+            return {};
+        }
+
+        joinArgMap.insert({scope.Cast<TCoAtom>().StringValue(), joinArg});
+    }
+
+    TVector<std::pair<TString, TString>> result;
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+    GetEquiJoinConditions(joinTuple, joinArgMap, result);
+
+    return result;
+}
+
+void TKqpColumnStatisticsRequester::GetEquiJoinConditions(const TCoEquiJoinTuple& joinTuple, 
+        THashMap<TString, TExprNode::TPtr> & joinArgMap,
+        TVector<std::pair<TString, TString>> & result) {
+
+    if (auto left = joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
+        GetEquiJoinConditions(left.Cast(), joinArgMap, result);
+    }
+    if (auto right = joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
+        GetEquiJoinConditions(right.Cast(), joinArgMap, result);  
+    }
+
+    size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
+
+    for (size_t i = 0; i < joinKeysCount; ++i) {
+        size_t keyIndex = i * 2;
+
+        auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
+        auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+
+        auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
+        auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
+
+        auto leftArg = joinArgMap.at(leftScope);
+        auto rightArg = joinArgMap.at(rightScope);
+
+        YQL_CLOG(TRACE, CoreDq) << "Trying to add join stats";
+
+
+        if (!KqpTableByExprNode.contains(leftArg.Get()) || KqpTableByExprNode.at(leftArg.Get()) == nullptr) {
+            continue;
+        }
+        if (!KqpTableByExprNode.contains(rightArg.Get()) || KqpTableByExprNode.at(rightArg.Get()) == nullptr) {
+            continue;
+        }
+
+        auto leftTable = TExprBase(KqpTableByExprNode.at(leftArg.Get())).Cast<TKqpTable>().Path().StringValue();
+        auto rightTable = TExprBase(KqpTableByExprNode.at(rightArg.Get())).Cast<TKqpTable>().Path().StringValue();
+
+        result.push_back(std::make_pair(leftTable, leftColumn));
+        result.push_back(std::make_pair(rightTable, rightColumn));
+    }
+}
+
 bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
 
     if (
         TCoFilterBase::Match(input.Get()) ||
-        TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
+        (TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())) ||
+        TCoEquiJoin::Match(input.Get())
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
-        auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
+        auto computer = TPredicateSelectivityComputer(dummyStats, true);
 
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
         } else if (TCoFlatMapBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body());
+        } else if (TCoEquiJoin::Match(input.Get())) {
+            YQL_CLOG(TRACE, CoreDq) << "Fetching join stats";
+
+            auto joinColumns = GetEquiJoinConditions(TCoEquiJoin(input));
+            for (auto & [table, column] : joinColumns) {
+                YQL_CLOG(TRACE, CoreDq) << "Adding join stats for table: " << table << ", column: " << column;
+                HistColumnsByTableName[table].insert(std::move(column));
+            }
         } else {
             Y_ENSURE(false);
         }
@@ -196,7 +297,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         for (const auto& item: columnStatsUsedMembers.Data) {
             if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
                 const auto& [table, column] = *maybeTableAndColumn;
-                using TColumnStatisticsUsedMember = NDq::TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+                using TColumnStatisticsUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
                 switch (item.PredicateType) {
                 case TColumnStatisticsUsedMember::EEquality:
                     CMColumnsByTableName[table].insert(std::move(column));

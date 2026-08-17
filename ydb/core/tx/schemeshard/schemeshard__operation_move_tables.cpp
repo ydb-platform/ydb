@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
+#include "schemeshard_info_types.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -28,20 +29,22 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {
-        if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
-        }
-        if (srcPath->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
-        }
         TPath::TChecker checks = srcPath.Check();
         checks.IsResolved()
               .NotDeleted()
               .NotAsyncReplicaTable()
+              .NotReadOnlyColumnTable()
               .IsCommonSensePath();
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+
+        if (!srcPath.Base()->IsTable() && !srcPath.Base()->IsColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
+        }
+        if (srcPath.Base()->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
         }
     }
 
@@ -56,6 +59,17 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
     THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
+
+    // Dropping a column table is currently incompatible with move-table (KIKIMR-22715).
+    if (dstPath.IsResolved()
+            && !dstPath.IsDeleted()
+            && dstPath.Base()->IsColumnTable()
+            && dstPath.IsUnderDeleting()
+            && !AppData()->FeatureFlags.GetEnableMoveWithColumnTableReplace())
+    {
+        return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off")};
+    }
 
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
 
@@ -79,7 +93,19 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
         Y_ABORT_UNLESS(srcChildPath.Base()->PathId == child.second);
 
-        result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        const bool isLocalIndex = context.SS->Indexes.contains(srcChildPath.Base()->PathId) &&
+            TTableIndexInfo::IsLocalIndex(context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type);
+        if (isLocalIndex) {
+            if (srcPath.Base()->IsColumnTable()) {
+                const TString srcIndexPath = srcPath.PathString() + "/" + name;
+                result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            } else {
+                result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+            }
+            continue;
+        } else {
+            result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        }
 
         for (const auto& [implTableName, implTablePathId]: srcChildPath.Base()->GetChildren()) {
             TPath srcImplTable = srcChildPath.Child(implTableName);

@@ -1,6 +1,5 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
@@ -9,6 +8,8 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -19,9 +20,12 @@
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/core/backup/common/feature_flags.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -49,6 +53,19 @@ template <typename T>
 concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
+
+bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
+    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+        return false;
+    }
+
+    while (item.NextIndexIdx < item.Table->indexes_size() &&
+           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
+        ++item.NextIndexIdx;
+    }
+
+    return item.NextIndexIdx < item.Table->indexes_size();
+}
 
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
@@ -286,7 +303,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
 
-                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (!settings.source_prefix().empty() && NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -313,7 +330,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
                 }
 
-                if (AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -432,7 +449,7 @@ private:
             if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
                 item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
-                item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+                item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePathDb(settings, itemIdx));
             }
         }
 
@@ -687,6 +704,10 @@ private:
             return false;
         }
 
+        if (AppData()->AlwaysSetSystemOwner || AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
+            op.SetNewOwner(BUILTIN_ACL_METADATA);
+        }
+
         Send(Self->SelfId(), std::move(propose));
         return true;
     }
@@ -738,6 +759,8 @@ private:
             record.SetOwner(*importInfo->UserSID);
         }
         FillOwner(record, item.Permissions);
+
+        record.SetOwner(ChooseAppropriateOwner(record, AppData()));
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);
@@ -1074,17 +1097,19 @@ private:
         }
     }
 
-    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
+    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf issue, TStringBuf marker) {
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
             auto& item = importInfo->Items[itemIdx];
 
-            item.Issue = itemIssue;
+            item.Issue = issue;
             PersistImportItemState(db, *importInfo, itemIdx);
 
             if (importInfo->State != EState::Waiting) {
                 return;
             }
+        } else if (issue) {
+            importInfo->Issue = issue;
         }
 
         Cancel(*importInfo, itemIdx, marker);
@@ -1412,23 +1437,29 @@ private:
         Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
 
         if (!msg.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
+            return CancelAndPersist(db, importInfo, -1,
+                TStringBuilder() << "cannot get schema mapping: " << msg.Error, "cannot get schema mapping");
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
             if (importInfo->GetEncryptedBackup() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                return CancelAndPersist(db, importInfo, -1,
+                    importInfo->GetEncryptedBackup()
+                        ? "encryption is requested, but the export is not encrypted"
+                        : "the export is encrypted, but no encryption settings are specified",
+                    "incorrect schema mapping");
             }
         }
 
+        const ui32 itemsSizeBefore = importInfo->Items.size();
         const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
         if (!fillResult.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, fillResult.ErrorMessage);
+            return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
         }
 
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo);
+        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 
@@ -1864,8 +1895,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
-                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1884,7 +1914,10 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
+                if (item.Table) {
+                    ++item.NextIndexIdx;
+                }
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
@@ -18,6 +19,8 @@ template <typename TType>
 class IS3ConfSettingWithDisable : public IS3ConfSettingWithDisableCheck {
 public:
     virtual void Disable(TType value, const TString& reason) = 0;
+
+    virtual void SetDefault(TType value) = 0;
 };
 
 template <typename TType, TType Default>
@@ -28,10 +31,14 @@ class TS3ConfSettingDefault final : NCommon::TConfSetting<TType, NCommon::EConfS
 
 public:
     TType GetOrDefault() const {
-        return DisabledValue.value_or(TBase::Get().GetOrElse(Default));
+        return DisabledValue.value_or(TBase::Get().GetOrElse(DefaultValue.value_or(Default)));
     }
 
 protected:
+    void SetDefault(TType value) final {
+        DefaultValue = value;
+    }
+
     void Disable(TType value, const TString& reason) final {
         DisabledValue = value;
         DisabledReason = reason;
@@ -48,6 +55,7 @@ protected:
 
 private:
     std::optional<TType> DisabledValue;
+    std::optional<TType> DefaultValue;
     TString DisabledReason;
     bool DisableReported = false;
 };
@@ -75,7 +83,7 @@ public:
     TS3ConfSettingDefault<bool, false> AtomicUploadCommit;            // Commit each file independently, w/o transaction semantic over all files
     TS3ConfSettingOptional<bool> UseConcurrentDirectoryLister;        // By default TS3GatewayConfig::AllowConcurrentListings
     TS3ConfSettingOptional<ui64> MaxDiscoveryFilesPerDirectory;       // By default TS3GatewayConfig::MaxListingResultSizePerPartition
-    TS3ConfSettingDefault<bool, false> UseRuntimeListing;             // Enables runtime listing
+    TS3ConfSettingDefault<bool, false> UseRuntimeListing;             // Enables runtime listing (requires ActorSystem during optimisation)
     TS3ConfSettingDefault<ui64, 1000'000> FileQueueBatchSizeLimit;    // Limits total size of files in one PathBatch from FileQueue
     TS3ConfSettingDefault<ui64, 1000> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     TS3ConfSettingOptional<ui64> FileQueuePrefetchSize;
@@ -106,6 +114,11 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     void DisablePragma(IS3ConfSettingWithDisable<TType>& pragma, TType value, const TString& reason) {
         pragma.Disable(value, reason);
         DisabledPragmas.emplace_back(&pragma);
+    }
+
+    template <typename TType>
+    void ChangeDefaultPragmaValue(IS3ConfSettingWithDisable<TType>& pragma, TType value) {
+        pragma.SetDefault(value);
     }
 
     TS3Settings::TConstPtr Snapshot() const;

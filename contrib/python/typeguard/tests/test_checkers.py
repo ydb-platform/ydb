@@ -14,7 +14,9 @@ from typing import (
     AnyStr,
     BinaryIO,
     Callable,
+    ClassVar,
     Collection,
+    Concatenate,
     ContextManager,
     Dict,
     ForwardRef,
@@ -25,7 +27,7 @@ from typing import (
     Literal,
     Mapping,
     MutableMapping,
-    Optional,
+    ParamSpec,
     Protocol,
     Sequence,
     Set,
@@ -33,6 +35,7 @@ from typing import (
     TextIO,
     Tuple,
     Type,
+    TypeGuard,
     TypeVar,
     Union,
 )
@@ -50,7 +53,7 @@ from typeguard import (
     check_type_internal,
     suppress_type_checks,
 )
-from typeguard._checkers import is_typeddict
+from typeguard._checkers import _sentinel_types, is_typeddict
 from typeguard._utils import qualified_name
 
 from . import (
@@ -70,11 +73,6 @@ if sys.version_info >= (3, 11):
     SubclassableAny = Any
 else:
     from typing_extensions import Any as SubclassableAny
-
-if sys.version_info >= (3, 10):
-    from typing import Concatenate, ParamSpec, TypeGuard
-else:
-    from typing_extensions import Concatenate, ParamSpec, TypeGuard
 
 P = ParamSpec("P")
 
@@ -292,6 +290,13 @@ class TestLiteral:
         pytest.raises(TypeCheckError, check_type, 0, Literal[False])
         pytest.raises(TypeCheckError, check_type, 1, Literal[True])
 
+    def test_literal_bool_after_equal_int(self):
+        # the matching bool must be found even when an == equal int precedes it
+        check_type(True, Literal[1, True])
+        check_type(True, Literal[True, 1])
+        check_type(False, Literal[0, False])
+        check_type(False, Literal[False, 0])
+
     def test_literal_illegal_value(self):
         pytest.raises(TypeError, check_type, 4, Literal[1, 1.1]).match(
             r"Illegal literal value: 1.1$"
@@ -482,7 +487,7 @@ class TestTypedDict:
         ],
     )
     def test_typed_dict(
-        self, value, total: bool, error_re: Optional[str], typing_provider
+        self, value, total: bool, error_re: str | None, typing_provider
     ):
         class DummyDict(typing_provider.TypedDict, total=total):
             x: int
@@ -535,6 +540,59 @@ class TestTypedDict:
         ):
             check_type({"x": 1, "y": 6, "z": "foo"}, DummyDict)
 
+    def test_required_pass(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        check_type({"x1": 1, "x2": 2}, DummyDict)
+        check_type({"x1": 1, "x2": 2, "y": 3}, DummyDict)
+
+    def test_required_missing(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        with pytest.raises(TypeCheckError, match=r'is missing required key\(s\): "x1"'):
+            check_type({"x2": 2, "y": 3}, DummyDict)
+
+        with pytest.raises(TypeCheckError, match=r'is missing required key\(s\): "x2"'):
+            check_type({"x1": 1, "y": 3}, DummyDict)
+
+    def test_required_wrong_type(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        # Ensure inner type is validated correctly (regression test for #533)
+        with pytest.raises(
+            TypeCheckError, match=r"value of key 'x1' of dict is not an instance of int"
+        ):
+            check_type({"x1": "foo", "x2": 2, "y": 3}, DummyDict)
+
+        with pytest.raises(
+            TypeCheckError, match=r"value of key 'x2' of dict is not an instance of int"
+        ):
+            check_type({"x1": 1, "x2": "foo", "y": 3}, DummyDict)
+
     def test_is_typeddict(self, typing_provider):
         # Ensure both typing.TypedDict and typing_extensions.TypedDict are recognized
         class DummyDict(typing_provider.TypedDict):
@@ -542,6 +600,57 @@ class TestTypedDict:
 
         assert is_typeddict(DummyDict)
         assert not is_typeddict(dict)
+
+    def test_typed_dict_with_forward_ref_from_external_module(self):
+        """Regression test for #536: forward ref NameError in Python 3.14."""
+        import tests.dummymodule
+
+        # Only import the TypedDict, NOT ModuleLocalClass - this tests that forward
+        # references resolve using the type's module namespace, not the caller's
+        TypedDictWithForwardRef = tests.dummymodule.TypedDictWithForwardRef
+
+        # Should not raise NameError for forward ref to ModuleLocalClass
+        check_type({"x": tests.dummymodule.ModuleLocalClass()}, TypedDictWithForwardRef)
+
+        # Should still enforce types correctly
+        with pytest.raises(
+            TypeCheckError, match=r"is not an instance of .*ModuleLocalClass"
+        ):
+            check_type({"x": "not a ModuleLocalClass"}, TypedDictWithForwardRef)
+
+    def test_extra_items_positive(self, typing_provider):
+        try:
+
+            class DummyDict(typing_provider.TypedDict, extra_items=Union[str, int]):
+                x: int
+        except TypeError as exc:
+            if "unexpected keyword argument 'extra_items'" in str(exc):
+                pytest.skip(
+                    f"typing provider {typing_provider!r} does not support extra_items in TypedDict"
+                )
+            else:
+                raise
+
+        check_type({"x": 6, "y": 7, "z": "foo"}, DummyDict)
+
+    def test_extra_items_bad_type(self, typing_provider):
+        try:
+
+            class DummyDict(typing_provider.TypedDict, extra_items=Union[str, int]):
+                x: int
+        except TypeError as exc:
+            if "unexpected keyword argument 'extra_items'" in str(exc):
+                pytest.skip(
+                    f"typing provider {typing_provider!r} does not support extra_items in TypedDict"
+                )
+            else:
+                raise
+
+        with pytest.raises(
+            TypeCheckError,
+            match=r"value of key 'z' of dict did not match any element in the union",
+        ):
+            check_type({"x": 6, "y": 7, "z": None}, DummyDict)
 
 
 class TestList:
@@ -701,12 +810,6 @@ class TestFrozenSet:
         pytest.param(
             tuple,
             id="builtin",
-            marks=[
-                pytest.mark.skipif(
-                    sys.version_info < (3, 9),
-                    reason="builtins.tuple is not parametrizable before Python 3.9",
-                )
-            ],
         ),
     ],
 )
@@ -798,15 +901,7 @@ class TestUnion:
         "annotation",
         [
             pytest.param(Union[str, int], id="pep484"),
-            pytest.param(
-                ForwardRef("str | int"),
-                id="pep604",
-                marks=[
-                    pytest.mark.skipif(
-                        sys.version_info < (3, 10), reason="Requires Python 3.10+"
-                    )
-                ],
-            ),
+            pytest.param(ForwardRef("str | int"), id="pep604"),
         ],
     )
     @pytest.mark.parametrize(
@@ -859,7 +954,6 @@ class TestUnion:
         sys.implementation.name != "cpython",
         reason="Test relies on CPython's reference counting behavior",
     )
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_uniontype_reference_leak(self):
         class Leak:
             def __del__(self):
@@ -891,11 +985,9 @@ class TestUnion:
         inner3()
         assert not leaked
 
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_raw_uniontype_success(self):
         check_type(str | int, types.UnionType)
 
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_raw_uniontype_fail(self):
         if sys.version_info < (3, 14):
             expected_type = r"\w+\.UnionType"
@@ -1241,6 +1333,36 @@ class TestProtocol:
                 f"'member'"
             )
 
+    def test_class_against_protocol_ignores_instance_attributes(self) -> None:
+        # Checking a class (not an instance) against type[Protocol] must not
+        # flag instance attributes as missing; only ClassVar members are
+        # required on the class itself. See issue #499.
+        class MyProtocol(Protocol):
+            foo: str
+
+        class Foo:
+            def __init__(self) -> None:
+                self.foo = "bar"
+
+        check_type(Foo, type[MyProtocol])
+
+    def test_class_against_protocol_requires_classvar(self) -> None:
+        class MyProtocol(Protocol):
+            bar: ClassVar[int]
+
+        class Missing:
+            pass
+
+        pytest.raises(TypeCheckError, check_type, Missing, type[MyProtocol]).match(
+            f"is not compatible with the {MyProtocol.__qualname__} protocol "
+            f"because it has no attribute named 'bar'"
+        )
+
+        class Present:
+            bar = 3
+
+        check_type(Present, type[MyProtocol])
+
     def test_missing_method(self) -> None:
         class MyProtocol(Protocol):
             def meth(self) -> None:
@@ -1293,6 +1415,24 @@ class TestProtocol:
         class Foo:
             def meth(self) -> None:
                 pass
+
+        pytest.raises(TypeCheckError, check_type, Foo(), MyProtocol).match(
+            f"^{qualified_name(Foo)} is not compatible with the "
+            f"{MyProtocol.__qualname__} protocol because its 'meth' method has too "
+            f"few positional arguments"
+        )
+
+    def test_subject_method_no_positional_params(self) -> None:
+        class ZeroArg:
+            def __call__(self) -> None:
+                return None
+
+        class MyProtocol(Protocol):
+            def meth(self, x: str) -> None:
+                pass
+
+        class Foo:
+            meth = ZeroArg()
 
         pytest.raises(TypeCheckError, check_type, Foo(), MyProtocol).match(
             f"^{qualified_name(Foo)} is not compatible with the "
@@ -1404,6 +1544,40 @@ class TestProtocol:
         # check is skipped
         check_type(Foo(), MyProtocol)
 
+    def test_inherited_classmethod(self) -> None:
+        class MyProtocol(Protocol):
+            @classmethod
+            def class_meth(cls) -> None:
+                pass
+
+        class Base:
+            @classmethod
+            def class_meth(cls) -> None:
+                pass
+
+        class Sub(Base):
+            pass
+
+        check_type(Sub(), MyProtocol)
+        check_type(Sub, type[MyProtocol])
+
+    def test_inherited_staticmethod(self) -> None:
+        class MyProtocol(Protocol):
+            @staticmethod
+            def static_meth() -> None:
+                pass
+
+        class Base:
+            @staticmethod
+            def static_meth() -> None:
+                pass
+
+        class Sub(Base):
+            pass
+
+        check_type(Sub(), MyProtocol)
+        check_type(Sub, type[MyProtocol])
+
 
 class TestRecursiveType:
     def test_valid(self):
@@ -1499,6 +1673,27 @@ def test_any_subclass():
         pass
 
     check_type(Foo(), int)
+
+
+@pytest.mark.parametrize("sentinel_type", _sentinel_types)
+def test_sentinel(sentinel_type):
+    MISSING = sentinel_type("MISSING")
+    check_type(MISSING, MISSING)
+    pytest.raises(TypeCheckError, check_type, None, MISSING)
+
+
+@pytest.mark.parametrize("sentinel_type", _sentinel_types)
+def test_sentinel_in_union(sentinel_type):
+    MISSING = sentinel_type("MISSING")
+    check_type(MISSING, str | MISSING)
+    check_type("foo", str | MISSING)
+    with pytest.raises(
+        TypeCheckError, match=r"did not match any element in the union"
+    ) as exc:
+        check_type(42, str | MISSING)
+
+    assert "str: is not an instance of str" in str(exc.value)
+    assert "MISSING" in str(exc.value)
 
 
 def test_none():

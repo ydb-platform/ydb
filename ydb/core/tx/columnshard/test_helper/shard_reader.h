@@ -79,7 +79,8 @@ public:
         : Runtime(runtime)
         , TabletId(tabletId)
         , PathId(pathId)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+    {
     }
 
     bool IsFinished() const {

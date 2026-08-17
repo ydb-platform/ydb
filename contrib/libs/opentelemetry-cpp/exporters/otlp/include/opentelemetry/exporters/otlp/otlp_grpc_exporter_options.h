@@ -35,12 +35,16 @@ struct OPENTELEMETRY_EXPORT OtlpGrpcExporterOptions : public OtlpGrpcClientOptio
   OtlpGrpcExporterOptions &operator=(OtlpGrpcExporterOptions &&)      = default;
   ~OtlpGrpcExporterOptions() override;
 
-  /** Collection Limits. No limit by default. */
-  std::uint32_t max_attributes           = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_events               = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_links                = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_attributes_per_event = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_attributes_per_link  = std::numeric_limits<std::uint32_t>::max();
+  /** Collection Limits. No limit by default.
+   * @deprecated Configure span limits via TracerProviderFactory::Create(), SpanLimitsConfiguration,
+   * or the YAML `tracer_provider.limits` node instead. These fields will be
+   * removed in a future release.
+   */
+  std::uint32_t max_attributes           = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_events               = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_links                = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_attributes_per_event = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_attributes_per_link  = (std::numeric_limits<std::uint32_t>::max)();
 };
 
 }  // namespace otlp

@@ -544,7 +544,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 
         const auto counters = getCountersObj("after read");
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessageLagByCommittedPerPartition), formExpectedJson(30, 20), caseDescr);
-        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(106, 693), caseDescr);
+        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(114, 761), caseDescr);
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessagesRead), formExpectedJson(2, 17), caseDescr);
     }
 
@@ -555,7 +555,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 
         const auto counters = getCountersObj("after disable");
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessageLagByCommittedPerPartition), formExpectedJson(30, 20), caseDescr);
-        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(106, 693), caseDescr);
+        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(114, 761), caseDescr);
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessagesRead), formExpectedJson(2, 17), caseDescr);
     }
 }
@@ -612,103 +612,109 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
     static const TConsumerDetailedMetricsTestRegistration TestRegistration;
 
     // Test that changing monitoring project ID updates counters for both consumers and write operations
-    Y_UNIT_TEST(MonitoringProjectIdChange) {
-        for (bool firstClassCitizen : {false, true}) {
-            Cerr << "Run MonitoringProjectIdChange(FirstClassCitizen=" << firstClassCitizen << ")\n";
+    void MonitoringProjectIdChange(const bool firstClassCitizen) {
+        Cerr << "Run MonitoringProjectIdChange(FirstClassCitizen=" << firstClassCitizen << ")\n";
 
-            TTestContext tc;
-            TFinalizer finalizer(tc);
-            bool activeZone{false};
-            tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
-            tc.Runtime->SetScheduledLimit(100);
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        bool activeZone{false};
+        tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
+        tc.Runtime->SetScheduledLimit(100);
 
-            tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(true);
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(true);
 
-            const TString firstProjectId = "first-monitoring-project-id";
-            const TString secondProjectId = "second-monitoring-project-id";
-            const TString consumer = "test-consumer";
+        const TString firstProjectId = "first-monitoring-project-id";
+        const TString secondProjectId = "second-monitoring-project-id";
+        const TString consumer = "test-consumer";
 
-            // Initial setup with first monitoring project ID and a consumer
-            TTabletPreparationParameters parameters{
-                .metricsLevel = METRICS_LEVEL_DETAILED,
-                .monitoringProjectId = firstProjectId,
+        // Initial setup with first monitoring project ID and a consumer
+        TTabletPreparationParameters parameters{
+            .metricsLevel = METRICS_LEVEL_DETAILED,
+            .monitoringProjectId = firstProjectId,
+        };
+
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write some data to populate write counters
+        CmdWrite({.Partition = 0, .SourceId = "sourceid0", .Data = TestData(), .TestContext = tc, .Error = false, .IsFirst = true});
+        CmdWrite({.Partition = 0, .SourceId = "sourceid1", .Data = TestData(), .TestContext = tc, .Error = false});
+
+        // Helper to read messages and populate consumer counters
+        auto doRead = [&tc, &consumer](const TString& sessionId, ui64 partitionSessionId) {
+            TPQCmdSettings sessionSettings{0, consumer, sessionId};
+            sessionSettings.PartitionSessionId = partitionSessionId;
+            TPQCmdReadSettings readSettings{
+                /*session=*/sessionId,
+                /*partition=*/0,
+                /*offset=*/0,
+                /*count=*/2,
+                /*size=*/16_MB,
+                /*resCount=*/1,
             };
+            readSettings.PartitionSessionId = partitionSessionId;
+            readSettings.User = consumer;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+            CmdKillSession(0, consumer, sessionId, tc);
+        };
 
-            PQTabletPrepare(parameters, {{consumer, false}}, tc);
+        // Read messages to populate consumer counters
+        doRead("session", 1);
 
-            // Write some data to populate write counters
-            CmdWrite({.Partition = 0, .SourceId = "sourceid0", .Data = TestData(), .TestContext = tc, .Error = false, .IsFirst = true});
-            CmdWrite({.Partition = 0, .SourceId = "sourceid1", .Data = TestData(), .TestContext = tc, .Error = false});
-
-            // Helper to read messages and populate consumer counters
-            auto doRead = [&tc, &consumer](const TString& sessionId, ui64 partitionSessionId) {
-                TPQCmdSettings sessionSettings{0, consumer, sessionId};
-                sessionSettings.PartitionSessionId = partitionSessionId;
-                TPQCmdReadSettings readSettings{
-                    /*session=*/sessionId,
-                    /*partition=*/0,
-                    /*offset=*/0,
-                    /*count=*/2,
-                    /*size=*/16_MB,
-                    /*resCount=*/1,
-                };
-                readSettings.PartitionSessionId = partitionSessionId;
-                readSettings.User = consumer;
-                readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
-                BeginCmdRead(readSettings, tc);
-                TAutoPtr<IEventHandle> handle;
-                auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-                UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
-                CmdKillSession(0, consumer, sessionId, tc);
-            };
-
-            // Read messages to populate consumer counters
-            doRead("session", 1);
-
-            // Verify counters exist under first monitoring project ID
-            auto getCountersGroup = [&tc, firstClassCitizen](const TString& monitoringProjectId) -> ::NMonitoring::TDynamicCounterPtr {
-                auto counters = tc.Runtime->GetAppData(0).Counters;
-                auto group = counters->GetSubgroup("counters", "topics_per_partition");
-                group = group->GetSubgroup("host", firstClassCitizen ? "" : "cluster");
-                if (!monitoringProjectId.empty()) {
-                    group = group->GetSubgroup("monitoring_project_id", monitoringProjectId);
-                }
-                return group;
-            };
-
-            {
-                auto group = getCountersGroup(firstProjectId);
-                TStringStream countersStr;
-                group->OutputHtml(countersStr);
-                Cerr << "Counters under first project ID:\n"
-                     << countersStr.Str() << "\n";
-                // Verify counters exist by checking the group is not empty
-                UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
-                              "Expected counters under first monitoring project ID");
+        // Verify counters exist under first monitoring project ID
+        auto getCountersGroup = [&tc, firstClassCitizen](const TString& monitoringProjectId) -> ::NMonitoring::TDynamicCounterPtr {
+            auto counters = tc.Runtime->GetAppData(0).Counters;
+            auto group = counters->GetSubgroup("counters", "topics_per_partition");
+            group = group->GetSubgroup("host", firstClassCitizen ? "" : "cluster");
+            if (!monitoringProjectId.empty()) {
+                group = group->GetSubgroup("monitoring_project_id", monitoringProjectId);
             }
+            return group;
+        };
 
-            // Change monitoring project ID
-            parameters.monitoringProjectId = secondProjectId;
-            PQTabletPrepare(parameters, {{consumer, false}}, tc);
-
-            // Write more data to populate new counters under the new project ID
-            CmdWrite({.Partition = 0, .SourceId = "sourceid2", .Data = TestData(), .TestContext = tc, .Error = false});
-            CmdWrite({.Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false});
-
-            // Read again to populate consumer counters under new project ID
-            doRead("session", 2);
-
-            // Verify counters now exist under second monitoring project ID
-            {
-                auto group = getCountersGroup(secondProjectId);
-                TStringStream countersStr;
-                group->OutputHtml(countersStr);
-                Cerr << "Counters under second project ID:\n"
-                     << countersStr.Str() << "\n";
-                UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
-                              "Expected counters under second monitoring project ID");
-            }
+        {
+            auto group = getCountersGroup(firstProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under first project ID:\n"
+                    << countersStr.Str() << "\n";
+            // Verify counters exist by checking the group is not empty
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                            "Expected counters under first monitoring project ID");
         }
+
+        // Change monitoring project ID
+        parameters.monitoringProjectId = secondProjectId;
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write more data to populate new counters under the new project ID
+        CmdWrite({.Partition = 0, .SourceId = "sourceid2", .Data = TestData(), .TestContext = tc, .Error = false});
+        CmdWrite({.Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false});
+
+        // Read again to populate consumer counters under new project ID
+        doRead("session", 2);
+
+        // Verify counters now exist under second monitoring project ID
+        {
+            auto group = getCountersGroup(secondProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under second project ID:\n"
+                    << countersStr.Str() << "\n";
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                            "Expected counters under second monitoring project ID");
+        }
+    }
+
+    Y_UNIT_TEST(MonitoringProjectIdChangeFCC) {
+        MonitoringProjectIdChange(true);
+    }
+
+    Y_UNIT_TEST(MonitoringProjectIdChangeFederation) {
+        MonitoringProjectIdChange(false);
     }
 
     Y_UNIT_TEST(PartitionWriteQuota) {
@@ -756,7 +762,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
             histogram->OutputHtml(histogramStr);
             Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
             auto instant = histogram->FindNamedCounter("Interval", "0ms")->Val();
-            auto oneSec = histogram->FindNamedCounter("Interval", "1000ms")->Val();
+            auto oneSec = histogram->FindNamedCounter("Interval", "100ms")->Val();
             auto twoSec = histogram->FindNamedCounter("Interval", "2500ms")->Val();
             UNIT_ASSERT_VALUES_EQUAL(oneSec + twoSec, 5);
             UNIT_ASSERT(twoSec >= 2);
@@ -1492,6 +1498,147 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                 UNIT_ASSERT_C(consumerSG, user);
             }
         }
+    }
+
+    Y_UNIT_TEST(PartitionReadCounters) {
+        SetEnv("FAST_UT", "1");
+        TTestContext tc;
+        RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        bool dbRegistered{false};
+        bool labeledCountersReceived =false ;
+
+        tc.Prepare(dispatchName, setup, activeZone, true, true, true);
+        tc.Runtime->SetScheduledLimit(10000);
+
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+                labeledCountersReceived = true;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(event);
+        });
+        PQTabletPrepare(
+            {
+                .readSpeed = 1_MB,
+            },
+            {
+                TConsumerPreparationParameters{
+                    .Name = "client",
+                    .Important = true
+                },
+                {
+                    .Name = "client2",
+                    .Important = true,
+                    .ReadSpeedInMessagesPerSecond = 100,
+                },
+                TConsumerPreparationParameters{
+                    .Name = "$without_consumer",
+                    .Important = true,
+                    .ReadSpeedInBytesPerSecond = 5_KB,
+                }
+            },
+            *tc.Runtime, tc.TabletId, tc.Edge
+        );
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 325;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+        PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc, false, true, {"client2", "$without_consumer"});
+
+        IActor* actor = CreateTabletCountersAggregator(false);
+        auto aggregatorId = tc.Runtime->Register(actor);
+        tc.Runtime->EnableScheduleForActor(aggregatorId);
+
+        TString s{4_KB, 'c'};
+        TVector<std::pair<ui64, TString>> data({{0, s}});
+        for (auto i = 0; i < 100; ++i) {
+            CmdWrite(0, "sourceid1", data, tc, false);
+            ++data[0].first;
+        }
+
+        for (auto i = 0; i < 100; ++i) {
+            CmdRead(TPQCmdReadSettings("", 0, i, 1, 4_KB, 1, false, {i}, 0, 0, "client"), tc);
+        }
+
+        for (auto i = 0; i < 100; ++i) {
+            CmdRead(TPQCmdReadSettings("", 0, i, 1, 4_KB, 1, false, {i}, 0, 0, "client2"), tc);
+        }
+
+        for (auto i = 0; i < 100; ++i) {
+            CmdRead(TPQCmdReadSettings("", 0, i, 1, 4_KB, 1, false, {i}, 0, 0, "$without_consumer"), tc);
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
+            tc.Runtime->DispatchEvents(options);
+        }
+        //UNIT_ASSERT(labeledCountersReceived);
+
+        {
+            NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+            result->SetPath("/Root");
+            TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+            for (auto& attr : attrs) {
+                auto ua = result->MutablePathDescription()->AddUserAttributes();
+                ua->SetKey(attr);
+                ua->SetValue(attr);
+            }
+            NSchemeCache::TDescribeResult::TCPtr cres = result;
+            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+        {
+            auto counters = tc.Runtime->GetAppData(0).Counters;
+            auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+            auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "cloud_id")
+                                ->GetSubgroup("folder_id", "folder_id")
+                                ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            auto group_client1 = group->GetSubgroup("consumer", "client");
+            group_client1->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group_client1->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+            group_client1->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
+            auto group_client2 = group->GetSubgroup("consumer", "client2");
+            group_client2->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group_client2->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+            group_client2->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
+            auto group_without_consumer = group->GetSubgroup("consumer", "$without_consumer");
+            group_without_consumer->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group_without_consumer->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+            group_without_consumer->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
+            TStringStream countersStr;
+            dbGroup->OutputHtml(countersStr);
+            const TString referenceCounters = NResource::Find(TStringBuf("counters_topics_read.html"));
+            Cerr << "REF: " << referenceCounters << "\n";
+            Cerr << "COUNTERS: " << (countersStr.Str() + "\n") << "\n";
+
+            UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        } });
     }
 
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)

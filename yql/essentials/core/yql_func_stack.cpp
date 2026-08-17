@@ -19,11 +19,38 @@ void TFunctionStack::EnterFrame(const TExprNode& input, TExprContext& ctx) {
             return nullptr;
         }
 
+        auto pos = ctx.GetPosition(input.Pos());
         TStringBuilder str;
         str << "At ";
         switch (input.Type()) {
         case TExprNode::Callable:
             str << "function: " << NormalizeCallableName(input.Content());
+            if (input.Content() == "WithIssue") {
+                if (input.ChildrenSize() != 5) {
+                    str << ", expected 5 arguments";
+                    break;
+                }
+
+                if (input.Child(1)->IsAtom()) {
+                    pos.File = input.Child(1)->Content();
+                } else {
+                    str << ", invalid file";
+                }
+
+                if (!input.Child(2)->IsAtom() || !TryFromString(input.Child(2)->Content(), pos.Row)) {
+                    str << ", invalid row";
+                }
+
+                if (!input.Child(3)->IsAtom() || !TryFromString(input.Child(3)->Content(), pos.Column)) {
+                    str << ", invalid column";
+                }
+
+                if (input.Child(4)->IsAtom()) {
+                    str << ", " << input.Child(4)->Content();
+                } else {
+                    str << ", invalid message";
+                }
+            }
             break;
         case TExprNode::List:
             str << "tuple";
@@ -35,7 +62,7 @@ void TFunctionStack::EnterFrame(const TExprNode& input, TExprContext& ctx) {
             str << "unknown";
         }
 
-        return MakeIntrusive<TIssue>(ctx.GetPosition(input.Pos()), str);
+        return MakeIntrusive<TIssue>(pos, str);
     });
 }
 

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/sdk/common/atomic_unique_ptr.h"
@@ -120,10 +121,8 @@ public:
 
   bool Add(std::unique_ptr<T> &&ptr) noexcept
   {
-    // rvalue to lvalue reference
-    bool result = Add(std::ref(ptr));
-    ptr.reset();
-    return result;
+    std::unique_ptr<T> owner = std::move(ptr);
+    return Add(owner);
   }
 
   /**

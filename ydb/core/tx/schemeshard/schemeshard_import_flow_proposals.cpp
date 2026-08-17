@@ -4,14 +4,16 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -106,6 +108,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     }
     FillOwner(record, item.Permissions);
 
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
+
     if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;
     }
@@ -184,6 +188,10 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 
         Y_ABORT_UNLESS(it->second < src.ColumnsSize());
         tableDesc.MutableColumns()->Add()->CopyFrom(src.GetColumns(it->second));
+    }
+
+    for (const auto& stat : scheme.statistics()) {
+        FillMultiColumnStatistics(*tableDesc.AddMultiColumnStatistics(), stat);
     }
 
     return tableDesc;
@@ -429,6 +437,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
+    using google::protobuf::util::TimeUtil;
+
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
@@ -467,6 +477,38 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
         }
+
+        addedConsumer.SetAvailabilityPeriodMs(TimeUtil::DurationToMilliseconds(consumer.availability_period()));
+        if (consumer.has_shared_consumer_type()) {
+            const auto& sharedConsumerType = consumer.shared_consumer_type();
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
+            addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
+            addedConsumer.SetDefaultProcessingTimeoutSeconds(TimeUtil::DurationToSeconds(sharedConsumerType.default_processing_timeout()));
+            addedConsumer.SetDefaultDelayMessageTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_delay()));
+            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_wait_time()));
+            const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+
+            if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {
+                const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+                addedConsumer.SetDeadLetterPolicyEnabled(true);
+                if (deadLetterPolicy.has_condition()) {
+                    addedConsumer.SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
+                }
+
+                if (deadLetterPolicy.has_move_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_MOVE);
+                    addedConsumer.SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
+                } else if (deadLetterPolicy.has_delete_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+            } else {
+                addedConsumer.SetDeadLetterPolicyEnabled(false);
+            }
+        } else {
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING);
+        }
     }
 
     return propose;
@@ -483,23 +525,22 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Topic);
 
-    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
-    auto& record = propose->Record;
-
-    auto& modifyScheme = *record.AddTransaction();
-
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TString database = domainPath.PathString();
+
     std::pair<TString, TString> wdAndPath;
-    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+    if (!TrySplitPathByDb(item.DstPathName, database, wdAndPath, error)) {
         return nullptr;
     }
 
-    modifyScheme.SetWorkingDir(wdAndPath.first);
+    const auto& [workingDir, name] = wdAndPath;
 
-    auto codes =
-        NGRpcProxy::V1::FillProposeRequestImpl(wdAndPath.second, *item.Topic, modifyScheme, AppData(), error, wdAndPath.first);
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
 
-    if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
+    if (auto result = NPQ::NSchema::ProposeCreateTopic(modifyScheme, *item.Topic, database, workingDir, name); !result) {
+        error = std::move(result.GetErrorMessage());
         return nullptr;
     }
 

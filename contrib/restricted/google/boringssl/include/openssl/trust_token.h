@@ -1,21 +1,21 @@
-/* Copyright (c) 2020, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2020 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_TRUST_TOKEN_H
 #define OPENSSL_HEADER_TRUST_TOKEN_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/base.h>   // IWYU pragma: export
 #include <contrib/restricted/google/boringssl/include/openssl/stack.h>
 
 #if defined(__cplusplus)
@@ -31,8 +31,8 @@ extern "C" {
 //
 // References:
 // https://eprint.iacr.org/2020/072.pdf
-// https://github.com/alxdavids/privacy-pass-ietf/tree/master/drafts
-// https://github.com/WICG/trust-token-api/blob/master/README.md
+// https://github.com/ietf-wg-privacypass/base-drafts
+// https://github.com/WICG/trust-token-api/blob/main/README.md
 //
 // WARNING: This API is unstable and subject to change.
 
@@ -126,6 +126,18 @@ OPENSSL_EXPORT TRUST_TOKEN_CLIENT *TRUST_TOKEN_CLIENT_new(
 
 // TRUST_TOKEN_CLIENT_free releases memory associated with |ctx|.
 OPENSSL_EXPORT void TRUST_TOKEN_CLIENT_free(TRUST_TOKEN_CLIENT *ctx);
+
+// TRUST_TOKEN_CLIENT_dup_for_testing returns a newly-allocated copy of |ctx|,
+// or NULL on error. This may be useful for testing the library, e.g. to
+// benchmark an individual operation.
+//
+// WARNING: This function should never be used in production. A
+// |TRUST_TOKEN_CLIENT| maintains single-use state between
+// |TRUST_TOKEN_CLIENT_begin_issuance| and |TRUST_TOKEN_CLIENT_finish_issuance|
+// operations. Cloning this state will cause tokens to be linkable and no longer
+// anonymized.
+OPENSSL_EXPORT TRUST_TOKEN_CLIENT *TRUST_TOKEN_CLIENT_dup_for_testing(
+    const TRUST_TOKEN_CLIENT *ctx);
 
 // TRUST_TOKEN_CLIENT_add_key configures the |ctx| to support the public key
 // |key|. It sets |*out_key_index| to the index this key has been configured to.

@@ -54,6 +54,7 @@ public:
         , EmptyBuffers_(2)
         , Buffer_(BufferSize_ * 2)
         , Thread_(TThread::TParams{SendThread, this}.SetName("retryful_writer"))
+        , TraceContext_(NTracing::CreateTraceContext("TRetryfulWriter", context.Config))
     {
         SecondaryPath_ = path;
         SecondaryPath_.Append_ = true;
@@ -63,14 +64,7 @@ public:
         SecondaryPath_.OptimizeFor_.Clear();
 
         if (options.CreateTransaction_) {
-            WriteTransaction_.ConstructInPlace(rawClient, ClientRetryPolicy_, context, parentId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
-            auto append = path.Append_.GetOrElse(false);
-            auto lockMode = (append  ? LM_SHARED : LM_EXCLUSIVE);
-            NDetail::RequestWithRetry<void>(
-                ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                [this, &path, &lockMode] (TMutationId& mutationId) {
-                    RawClient_->Lock(mutationId, WriteTransaction_->GetId(), path.Path_, lockMode);
-                });
+            CreateTransaction();
         }
 
         EmptyBuffers_.Push(TBuffer(BufferSize_ * 2));
@@ -127,7 +121,10 @@ private:
         Error,
     } WriterState_ = Ok;
 
+    NTracing::TTraceContextWrapperPtr TraceContext_;
+
 private:
+    void CreateTransaction();
     void FlushBuffer(bool lastBlock);
     void Send(const TBuffer& buffer);
     void CheckWriterState();

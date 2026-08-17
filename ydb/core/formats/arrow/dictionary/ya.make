@@ -12,8 +12,6 @@ PEERDIR(
 
 SRCS(
     conversion.cpp
-    object.cpp
-    diff.cpp
 )
 
 END()

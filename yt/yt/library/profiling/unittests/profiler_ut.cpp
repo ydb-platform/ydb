@@ -49,9 +49,10 @@ TEST(TProfilerTest, SaveOptions)
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
     {
-        ASSERT_FALSE(TTesting::ReadOptions(profiler).DisableSensorsRename);
+        ASSERT_FALSE(TTesting::ReadOptions(profiler).DisableSensorsRename.has_value());
         auto newProfiler = profiler.WithRenameDisabled();
-        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename);
+        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename.has_value());
+        ASSERT_TRUE(TTesting::ReadOptions(newProfiler).DisableSensorsRename.value());
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -395,6 +395,8 @@ public:
         return ReverseSort;
     }
     NJson::TJsonValue DebugJson() const;
+    
+    TString DebugString() const;
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
@@ -519,6 +521,13 @@ public:
 
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
+    }
+
+    explicit operator size_t() const {
+        size_t h = (size_t)Position;
+        h = CombineHashes(h, (size_t)RecordsCount);
+        h = CombineHashes(h, (size_t)ReverseSort);
+        return h;
     }
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {

@@ -3,24 +3,23 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TLazyListWrapper: public TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>>;
 
 public:
     TLazyListWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , List(list)
+        , List_(list)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto list = List->GetValue(ctx);
+        auto list = List_->GetValue(ctx);
 
         if (IsOptional && !list) {
             return NUdf::TUnboxedValuePod();
@@ -34,11 +33,11 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto factory = ctx.GetFactory();
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
 
         const auto wrap = BasicBlock::Create(context, "wrap", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -72,10 +71,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(List);
+        this->DependsOn(List_);
     }
 
-    IComputationNode* const List;
+    IComputationNode* const List_;
 };
 
 } // namespace
@@ -91,5 +90,4 @@ IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

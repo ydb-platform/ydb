@@ -10,6 +10,8 @@
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TPortionWriteController: public NColumnShard::IWriteController,
@@ -23,14 +25,18 @@ public:
         TWritePortionInfoWithBlobsResult& MutablePortion() {
             return Portion;
         }
+
         const TWritePortionInfoWithBlobsResult& GetPortion() const {
             return Portion;
         }
+
         TWritePortionInfoWithBlobsResult&& ExtractPortion() {
             return std::move(Portion);
         }
+
         TInsertPortion(TWritePortionInfoWithBlobsResult&& portion)
-            : Portion(std::move(portion)) {
+            : Portion(std::move(portion))
+        {
         }
     };
 
@@ -39,6 +45,7 @@ private:
     std::vector<TInsertPortion> Portions;
     std::vector<NColumnShard::TWriteResult> WriteResults;
     TActorId DstActor;
+
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
@@ -54,6 +61,7 @@ private:
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
         ctx.Send(DstActor, result.release());
     }
+
     virtual void DoOnStartSending() override {
     }
 
@@ -63,7 +71,8 @@ public:
         : Action(action)
         , Portions(std::move(portions))
         , WriteResults(std::move(writeResults))
-        , DstActor(dstActor) {
+        , DstActor(dstActor)
+    {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
@@ -83,7 +92,8 @@ private:
 public:
     TSliceToMerge(const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
-        , ModificationType(modificationType) {
+        , ModificationType(modificationType)
+    {
     }
 
     void Add(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
@@ -103,7 +113,9 @@ public:
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
                 Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             if (portionConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "cannot prepare for write"},
+                    {"reason", portionConclusion.GetErrorMessage()});
                 return portionConclusion;
             }
             result.emplace_back(portionConclusion.DetachResult());
@@ -129,8 +141,9 @@ public:
                         if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
                             if (defaultColumn.IsFail()) {
-                                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build default column")(
-                                    "reason", defaultColumn.GetErrorMessage());
+                                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                                    {"event", "cannot build default column"},
+                                    {"reason", defaultColumn.GetErrorMessage()});
                                 return defaultColumn;
                             }
                             gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult())
@@ -145,7 +158,9 @@ public:
                         }
                     }
                 }
-                //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("data", NArrow::DebugJson(i, 5, 5))("write_id", SequentialWriteId[idx]);
+                //                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                //                    {"data", NArrow::DebugJson(i, 5, 5)},
+                //                    {"writeId", SequentialWriteId[idx]});
                 recordsCountSum += i->num_rows();
                 gContainer
                     ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
@@ -167,7 +182,9 @@ public:
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
                 ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             if (portionConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "cannot prepare for write"},
+                    {"reason", portionConclusion.GetErrorMessage()});
                 return portionConclusion;
             }
             result.emplace_back(portionConclusion.DetachResult());
@@ -177,8 +194,10 @@ public:
 };
 
 void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
-        "parent_id", Context.GetTabletActorId())("path_id", PathId);
+    const YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE,
+              {"tabletId", TabletId},
+              {"parentId", Context.GetTabletActorId()},
+              {"pathId", PathId});
     NArrow::NMerger::TIntervalPositions splitPositions;
     for (auto&& unit : WriteUnits) {
         splitPositions.Merge(unit.GetData()->GetData()->GetSeparationPoints());
@@ -209,13 +228,16 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
     std::vector<TPortionWriteController::TInsertPortion> portionsToWrite;
     TString cancelWritingReason;
     if (!Context.IsActive()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+            {"event", "abort_execution"});
         cancelWritingReason = "execution aborted";
     } else {
         for (auto&& i : slicesToMerge) {
             auto conclusion = i.Finalize(Context, portionsToWrite);
             if (conclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build slice")("reason", conclusion.GetErrorMessage());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "cannot build slice"},
+                    {"reason", conclusion.GetErrorMessage()});
                 cancelWritingReason = conclusion.GetErrorMessage();
                 break;
             }
@@ -243,10 +265,9 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
             i.SetErrorMessage(cancelWritingReason, false);
         }
         NColumnShard::TInsertedPortions pack(std::move(writeResults), std::vector<NColumnShard::TInsertedPortion>());
-        auto result =
-            std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
+        auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
+            NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
         TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
-    
     }
 }
 }   // namespace NKikimr::NOlap::NWritingPortions

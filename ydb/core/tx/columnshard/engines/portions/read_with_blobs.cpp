@@ -7,6 +7,10 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
@@ -18,14 +22,13 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns, const bool restoreAbsent) const {
     THashMap<TChunkAddress, TString> blobs;
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("portion_id", PortionInfo.GetPortionInfo().GetPortionId());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"portionId", PortionInfo.GetPortionInfo().GetPortionId()});
     for (auto&& i : PortionInfo.GetRecordsVerified()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns,
-        PortionInfo.GetPortionInfo().GetPathId().DebugString());
+    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns);
 }
 
 TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
@@ -42,8 +45,7 @@ TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
 }
 
 std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-    const TVersionedIndex& tables) {
+    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         const auto schema = i.GetPortionInfo().GetSchema(tables);
@@ -91,7 +93,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
     const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
     if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "we don't need sync portion");
+        YDB_LOG_WARN("",
+            {"event", "we don't need sync portion"});
         return {};
     }
     NYDBTest::TControllers::GetColumnShardController()->OnPortionActualization(source.PortionInfo.GetPortionInfo());
@@ -123,10 +126,26 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
-    for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        to->GetIndexInfo()
-            .AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), targetTier, secondaryData)
-            .Validate();
+    const bool sameSchema = from->GetVersion() == to->GetVersion();
+    const auto& fromIndexInfo = from->GetIndexInfo();
+    const ui32 recordsCount = source.PortionInfo.GetPortionInfo().GetRecordsCount();
+    for (auto&& [indexId, toIndex] : to->GetIndexInfo().GetIndexes()) {
+        bool reused = false;
+        if (fromIndexInfo.HasIndexId(indexId)) {
+            const bool canTryReuse =
+                sameSchema || fromIndexInfo.GetIndexVerified(indexId)->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok();
+            if (canTryReuse) {
+                auto existingChunks = source.GetEntityChunks(indexId);
+                if (!existingChunks.empty()) {
+                    reused = to->GetIndexInfo()
+                                 .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
+                                 .Ok();
+                }
+            }
+        }
+        if (!reused) {
+            to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
+        }
     }
 
     const NSplitter::TEntityGroups groups =
@@ -135,7 +154,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 
     return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages);
+        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages, to->GetIndexInfo());
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

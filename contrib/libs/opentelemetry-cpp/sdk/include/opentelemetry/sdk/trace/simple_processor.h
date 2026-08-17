@@ -43,6 +43,11 @@ public:
       : exporter_(std::move(exporter))
   {}
 
+  SimpleSpanProcessor(const SimpleSpanProcessor &)            = delete;
+  SimpleSpanProcessor(SimpleSpanProcessor &&)                 = delete;
+  SimpleSpanProcessor &operator=(const SimpleSpanProcessor &) = delete;
+  SimpleSpanProcessor &operator=(SimpleSpanProcessor &&)      = delete;
+
   std::unique_ptr<Recordable> MakeRecordable() noexcept override
   {
     return exporter_->MakeRecordable();
@@ -54,7 +59,8 @@ public:
 
   void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
   {
-    nostd::span<std::unique_ptr<Recordable>> batch(&span, 1);
+    std::unique_ptr<Recordable> local = std::move(span);
+    nostd::span<std::unique_ptr<Recordable>> batch(&local, 1);
     const std::lock_guard<opentelemetry::common::SpinLockMutex> locked(lock_);
     if (exporter_->Export(batch) == sdk::common::ExportResult::kFailure)
     {

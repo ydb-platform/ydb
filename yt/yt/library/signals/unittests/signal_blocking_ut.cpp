@@ -2,10 +2,6 @@
 
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/logging/log.h>
-
-#include <yt/yt/library/backtrace_introspector/introspect.h>
-
 #include <yt/yt/library/signals/signal_blocking.h>
 
 #include <signal.h>
@@ -21,20 +17,7 @@ namespace NYT::NSignals {
 
 #ifndef _win_
 
-YT_TRY_BLOCK_SIGNAL_FOR_PROCESS(SIGRTMIN, [] (bool ok, int threadCount) {
-    if (!ok) {
-        NLogging::TLogger Logger("SignalBlocking");
-        YT_LOG_WARNING("Thread count is not 1, trying to get thread infos (ThreadCount: %v)", threadCount);
-        auto threadInfos = NYT::NBacktraceIntrospector::IntrospectThreads();
-        auto descripion = NYT::NBacktraceIntrospector::FormatIntrospectionInfos(threadInfos);
-        AbortProcessDramatically(
-            EProcessExitCode::GenericError,
-            Format(
-                "Thread count is not 1, threadCount: %v, threadInfos: %v",
-                threadCount,
-                descripion));
-    }
-});
+YT_TRY_BLOCK_SIGNAL_FOR_PROCESS(SIGRTMIN, GetDefaultSignalBlockingCallback(NLogging::TLogger("SignalBlocking")));
 
 class TSignalBlockingTest
     : public ::testing::Test

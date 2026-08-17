@@ -1,5 +1,7 @@
 #include "error.h"
 
+#include "error_utils.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 
 #include <util/stream/format.h>
@@ -89,33 +91,33 @@ EErrorKind GetErrorKind(const NProto::TError& e)
 
     if (FACILITY_FROM_CODE(code) == FACILITY_KIKIMR) {
         switch (STATUS_FROM_CODE(code)) {
-            case 1:  // NKikimrProto::ERROR
-            case 3:  // NKikimrProto::TIMEOUT
-            case 4:  // NKikimrProto::RACE
-            case 6:  // NKikimrProto::BLOCKED
-            case 7:  // NKikimrProto::NOTREADY
-            case 12: // NKikimrProto::DEADLINE
-            case 20: // NKikimrProto::NOT_YET
+            case 1:    // NKikimrProto::ERROR
+            case 3:    // NKikimrProto::TIMEOUT
+            case 4:    // NKikimrProto::RACE
+            case 6:    // NKikimrProto::BLOCKED
+            case 7:    // NKikimrProto::NOTREADY
+            case 12:   // NKikimrProto::DEADLINE
+            case 20:   // NKikimrProto::NOT_YET
                 return EErrorKind::ErrorRetriable;
         }
     }
 
     if (FACILITY_FROM_CODE(code) == FACILITY_SCHEMESHARD) {
         switch (STATUS_FROM_CODE(code)) {
-            case 13: // NKikimrScheme::StatusNotAvailable
-            case 8:  // NKikimrScheme::StatusMultipleModifications
+            case 13:   // NKikimrScheme::StatusNotAvailable
+            case 8:    // NKikimrScheme::StatusMultipleModifications
                 return EErrorKind::ErrorRetriable;
         }
     }
 
     if (FACILITY_FROM_CODE(code) == FACILITY_TXPROXY) {
         switch (STATUS_FROM_CODE(code)) {
-            case 16: // NKikimr::NTxProxy::TResultStatus::ProxyNotReady
-            case 20: // NKikimr::NTxProxy::TResultStatus::ProxyShardNotAvailable
-            case 21: // NKikimr::NTxProxy::TResultStatus::ProxyShardTryLater
-            case 22: // NKikimr::NTxProxy::TResultStatus::ProxyShardOverloaded
-            case 51: // NKikimr::NTxProxy::TResultStatus::ExecTimeout:
-            case 55: // NKikimr::NTxProxy::TResultStatus::ExecResultUnavailable:
+            case 16:   // NKikimr::NTxProxy::TResultStatus::ProxyNotReady
+            case 20:   // NKikimr::NTxProxy::TResultStatus::ProxyShardNotAvailable
+            case 21:   // NKikimr::NTxProxy::TResultStatus::ProxyShardTryLater
+            case 22:   // NKikimr::NTxProxy::TResultStatus::ProxyShardOverloaded
+            case 51:   // NKikimr::NTxProxy::TResultStatus::ExecTimeout:
+            case 55:   // NKikimr::NTxProxy::TResultStatus::ExecResultUnavailable:
                 return EErrorKind::ErrorRetriable;
         }
     }
@@ -152,8 +154,8 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
         return EDiagnosticsErrorKind::ErrorSilent;
     }
 
-    if (HasProtoFlag(e.GetFlags(), NProto::EF_SILENT)
-        || code == E_IO_SILENT) // TODO: NBS-3124#622886b937bf95501db66aad
+    if (HasProtoFlag(e.GetFlags(), NProto::EF_SILENT) ||
+        code == E_IO_SILENT)   // TODO: NBS-3124#622886b937bf95501db66aad
     {
         return EDiagnosticsErrorKind::ErrorSilent;
     }
@@ -182,9 +184,46 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
     return EDiagnosticsErrorKind::ErrorFatal;
 }
 
+bool IsCanNotAcquireDataError(const NProto::TError& e)
+{
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == CantAcquireDataErrorMessage;
+}
+
 bool IsConnectionError(const NProto::TError& e)
 {
     return e.GetCode() == E_GRPC_UNAVAILABLE;
+}
+
+bool IsSessionBlockedError(const NProto::TError& e)
+{
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == TabletGenerationBlockedErrorMessage;
+}
+
+bool IsDeviceBrokenError(const NProto::TError& e)
+{
+    return e.GetCode() == E_INVALID_STATE &&
+           e.GetMessage() == DeviceBrokenErrorMessage;
+}
+
+bool IsNeverRetriableError(const NProto::TError& e)
+{
+    constexpr EWellKnownResultCodes NeverRetriableErrors[] = {
+        E_CANCELLED,   // Request is canceled,
+                       // no point in retrying
+        E_ARGUMENT,    // Request is ill-formed,
+                       // no point in retrying
+        E_IO_SILENT,   // Unrecoverable error, that must be
+                       // passed up to the client
+        E_IO,          // Unrecoverable error, that must be
+                       // passed up to the client
+    };
+
+    return AnyOf(
+        NeverRetriableErrors,
+        [errorCode = e.GetCode()]   //
+        (EWellKnownResultCodes code) { return code == errorCode; });
 }
 
 NJson::TJsonValue FormatErrorJson(const NProto::TError& e)
@@ -197,13 +236,13 @@ NJson::TJsonValue FormatErrorJson(const NProto::TError& e)
         result["CodeString"] = stream.Str();
     }
 
-    if (e.GetMessage()){
+    if (e.GetMessage()) {
         TStringStream stream;
         ::google::protobuf::io::PrintJSONString(stream, e.GetMessage());
         result["Message"] = stream.Str();
     }
 
-    if (e.GetFlags()){
+    if (e.GetFlags()) {
         result["Flags"] = e.GetFlags();
     }
 
@@ -278,6 +317,11 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     TStringStream out;
     out << "Tablet is dead: " << location.File << ":" << location.Line;
     return MakeError(code, out.Str());
+}
+
+NProto::TError MakeCanNotAcquireDataError()
+{
+    return MakeError(E_REJECTED, TString(CantAcquireDataErrorMessage));
 }
 
 }   // namespace NYdb::NBS

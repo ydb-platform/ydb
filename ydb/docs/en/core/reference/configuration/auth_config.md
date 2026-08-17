@@ -168,16 +168,15 @@ auth_config:
     bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
     bind_password: "serviceAccauntPassword"
     search_filter: "uid=$username"
+    scheme: "ldap"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+      enable_nested_groups_search: true
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
   #...
 ```
@@ -359,3 +358,29 @@ Together with the `min_error_refresh_time`, determines the possible interval for
 Default value: `1m`
     ||
 |#
+
+## Node registration token configuration {#node-registration-token}
+
+{{ ydb-short-name }} allows you to configure the authentication method for database nodes when they register with a cluster. This is done via the `node_registration_token` parameter in the `auth_config` section.
+
+#|
+|| Parameter | Description ||
+|| node_registration_token
+| Specifies the authentication method for database nodes registering with a cluster.
+
+Possible values:
+
+- Empty string (`""`) — nodes authenticate using TLS certificates when registering with the cluster. In this mode, nodes must use certificates for authentication during the registration process. For details on configuring node authentication with certificates, see [Database node authentication and authorization](../../devops/configuration-management/configuration-v1/node-authorization.md).
+- `"root@builtin"` — nodes authenticate using a special debug token when registering with the cluster. This authentication method is deprecated and will be removed in future releases. To ensure cluster security, always prefer TLS certificate‑based authentication by setting this parameter to an empty string.
+
+||
+|#
+
+Example of an `auth_config` section with TLS certificate authentication enabled:
+
+```yaml
+auth_config:
+  ...
+  node_registration_token: ""
+  ...
+```

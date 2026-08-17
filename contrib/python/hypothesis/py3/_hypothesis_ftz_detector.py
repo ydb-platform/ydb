@@ -83,8 +83,8 @@ def modules_imported_by(mod: str) -> FTZCulprits:
 
 # We don't want to redo all the expensive process-spawning checks when we've already
 # done them, so we cache known-good packages and a known-FTZ result if we have one.
-KNOWN_FTZ = None
-CHECKED_CACHE = set()
+KNOWN_FTZ: str | None = None
+CHECKED_CACHE: set[str] = set()
 
 
 def identify_ftz_culprits() -> str:
@@ -156,4 +156,4 @@ if __name__ == "__main__":
     # change the last element of key from `name` to `-len(name)` so that we check
     # grequests before gevent.
     # KNOWN_EVER_CULPRITS = [c for c in KNOWN_EVER_CULPRITS if c != "gevent"]
-    print(identify_ftz_culprits())
+    print(identify_ftz_culprits())  # noqa: T201

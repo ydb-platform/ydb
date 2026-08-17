@@ -24,7 +24,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 #ifdef PQ_LOG_PREFIX
 #undef PQ_LOG_PREFIX
 #endif
-#define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
+#define PQ_LOG_PREFIX (TStringBuilder() << "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session)
 
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?
 // const TString& TopicPrefix(const TActorContext& ctx);

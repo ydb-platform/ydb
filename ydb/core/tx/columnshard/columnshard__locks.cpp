@@ -9,7 +9,8 @@ private:
 public:
     TAbortWriteTransaction(TColumnShard* self, const ui64 lockId)
         : TBase(self)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -33,7 +34,8 @@ void TColumnShard::SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockN
     auto& lock = OperationsManager->GetLockVerified(lockId);
     if (!lock.IsSubscribed()) {
         lock.SetSubscribed();
-        Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
+        Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()),
+            std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
     }
 }
 
@@ -54,7 +56,6 @@ void TColumnShard::MaybeAbortTransaction(const ui64 lockId) {
     Execute(new TAbortWriteTransaction(this, lockId));
 }
 
-
 void TColumnShard::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& /*ctx*/) {
     auto* msg = ev->Get();
     const ui64 lockId = msg->Record.GetLockId();
@@ -69,4 +70,4 @@ void TColumnShard::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr&
     }
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

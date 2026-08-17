@@ -61,6 +61,8 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TTxId DropTxId = InvalidTxId;
     TTxId LastTxId = InvalidTxId;
 
+    bool IsOrphanPlaceholder = false; // in-memory only, never persisted
+
     ui64 DirAlterVersion = 0;
     ui64 ACLVersion = 0;
 
@@ -119,6 +121,7 @@ public:
     bool IsPQGroup() const;
     bool IsDomainRoot() const;
     bool IsSubDomainRoot() const;
+    bool IsPlainSubDomainRoot() const;
     bool IsExternalSubDomainRoot() const;
     bool IsRtmrVolume() const;
     bool IsBlockStoreVolume() const;
@@ -144,6 +147,7 @@ public:
     bool IsBackupCollection() const;
     bool IsSecret() const;
     bool IsStreamingQuery() const;
+    bool IsTestShardSet() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

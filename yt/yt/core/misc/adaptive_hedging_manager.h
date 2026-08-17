@@ -34,8 +34,10 @@ struct IAdaptiveHedgingManager
     //! Registers request and schedule invocation of its corresponding secondary request.
     //! #startSecondaryRequest will be called when the conditions are met, i.e.
     //! (adaptive) deadline is reached, quota is not exhausted and primary request has not finished yet.
+    //! Primary request consumes one token, meanwhile secondary request consumes #hedgingPrice tokens.
     virtual void RegisterRequest(
         TFuture<void> requestFuture,
+        int hedgingPrice,
         TClosure startSecondaryRequest) = 0;
 
     //! Returns a set of statistics accumulated since last call to this method.

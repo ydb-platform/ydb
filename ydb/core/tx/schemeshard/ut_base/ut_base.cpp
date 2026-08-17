@@ -3,6 +3,8 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -10,10 +12,6 @@
 
 #include <locale>
 
-namespace NKikimr::NSchemeShard {
-// defined in ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
-}  // namespace NKikimr::NSchemeShard
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -579,6 +577,119 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
                 UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+            }
+        }
+
+        // Verify the ConnectDatabase right handling in TEffectiveACL::Update
+        {
+            auto aclHasRight = [](const TString& serialized, NACLib::EAccessRights right) {
+                NACLib::TACL acl(serialized);
+                for (const auto& ace : acl.GetACE()) {
+                    if (ace.GetAccessRight() == (ui32)right) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            auto aclHasConnect = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::ConnectDatabase);
+            };
+            auto aclHasRead = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::GenericRead);
+            };
+
+            TEffectiveACL parentACL;
+            {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+
+                parentACL.Init(input.SerializeAsString());
+            }
+
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForSelf()));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ true)));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ false)));
+
+            const TString ownACL = [] {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+                return input.SerializeAsString();
+            }();
+            const TString emptyOwnACL;
+
+            for (bool isContainer : {true, false}) {
+                // Case 1: tenant root, empty self acl (InheritFrom branch).
+                // connect right stays in ForSelf but is stripped from children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 2: tenant root, non-empty self acl (MergeWithParent branch).
+                // connect right stays in ForSelf and is stripped from children, but the tenant's own
+                // ordinary read right keeps propagating to children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "read right must survive in ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 3: in-domain path (not tenant root), empty self acl (InheritFrom branch).
+                // connect right keeps propagating down to children.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                }
+
+                // Case 4: in-domain path (not tenant root), non-empty self acl (MergeWithParent branch).
+                // connect right keeps propagating down and the own ordinary read right propagates too.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ true)),
+                        "ordinary read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ false)),
+                        "ordinary read right must survive in ForObjects, isContainer=" << isContainer);
+                }
             }
         }
 
@@ -3142,6 +3253,48 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ChildrenCount(3)});
     }
 
+    // https://github.com/ydb-platform/ydb/issues/41037, drop during copy
+    Y_UNIT_TEST(CopyTableSourceDropRejectedWhileWaitingForProposedParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvSchemaChanged::EventType);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table", NKikimrScheme::StatusAccepted);
+        const ui64 copyTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        const ui64 dropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {copyTxId, dropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+    }
+
     Y_UNIT_TEST(CopyTableAndConcurrentChanges) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3406,6 +3559,182 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, {txId-1, txId});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // TDropForceUnsafe on a table with an in-progress split must abort the split
+    // via AbortUnsafe() and delete all shards. Three variants cover the three
+    // distinct dst-tablet states at the time of the drop:
+    //   1. TEvCreateTablet not yet sent (Hive unaware, TabletID == InvalidTabletId)
+    //   2. TEvCreateTablet sent, reply pending (Hive has pending creation, TabletID == InvalidTabletId)
+    //   3. Dst tablet created (TabletID valid, split in ConfigureParts)
+
+    // Variant 1: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // has not yet been sent to Hive (TabletID == InvalidTabletId, Hive unaware).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeBeforeCreateTabletRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTablet: dst shards are in ShardInfos but Hive has
+        // never seen them (TabletID == InvalidTabletId).
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 2: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // was sent but TEvCreateTabletReply is pending (TabletID == InvalidTabletId,
+    // Hive has a pending creation to cancel).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeDuringCreateParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTabletReply: TEvCreateTablet was sent, Hive has a
+        // pending creation, but TabletID has not been assigned yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::EvCreateTabletReply);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 3: ForceDropUnsafe while split is in ConfigureParts (dst tablets
+    // created, TEvInitSplitMergeDestination sent but not yet acked).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvInitSplitMergeDestination: dst tablets exist (TabletID
+        // valid) but ConfigureParts has not completed yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
     }
 
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
@@ -4526,6 +4855,129 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TSet<TString>& expectedNames) {
+            return [expectedNames](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                TSet<TString> names;
+                for (const auto& stat : table.GetMultiColumnStatistics()) {
+                    names.insert(stat.GetName());
+                    // column names must be resolved to ids on persist
+                    UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                    UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                    UNIT_ASSERT(stat.TypesSize() > 0);
+                    for (const auto type : stat.GetTypes()) {
+                        UNIT_ASSERT_EQUAL(
+                            static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                            NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+            };
+        };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            Columns { Name: "b"   Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" ColumnNames: "b" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // ADD STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1", "s2"})});
+
+        // DROP STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "s2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: duplicate statistics name must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: dropping a non-existent statistics must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "nope"
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TString& expectedName) {
+            return [expectedName](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.MultiColumnStatisticsSize(), 1);
+                const auto& stat = table.GetMultiColumnStatistics(0);
+                UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+                UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+            };
+        };
+
+        // CREATE TABLE: MultiColumnStatistics entry with no Types.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s1")});
+
+        // ALTER TABLE ADD STATISTICS: also with no Types.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            DropMultiColumnStatistics: "s1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s2")});
     }
 
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
@@ -6586,6 +7038,485 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
     }
 
+    Y_UNIT_TEST(AlterTableBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with 2 PK columns
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Initially no bloom filter prefixes
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+        }
+
+        // Add prefix bloom filter on first PK column
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        }
+
+        // Add another prefix with custom FPP — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.05 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.05, 1e-9);
+        }
+
+        // Disable KEY_BLOOM_FILTER — should clear all prefixes
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+    }
+
+    Y_UNIT_TEST(CreateTableWithBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with bloom filter prefix and custom FPP from the start
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.02, 1e-9);
+        }
+
+        // Alter to add second prefix — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // Disable — should clear all
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexMigration) {
+        // Tests migration of legacy nameless ByKeyFilterPrefixes to named TTableIndex
+        // scheme objects. Migration should be idempotent and leave engine prefixes untouched.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto getTable = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable();
+        };
+        // Assert the migrated set matches the legacy prefixes: idx_bloom_1 over (Key1)
+        // and idx_bloom_2 over (Key1, Key2).
+        auto checkMigratedBloomIndexes = [&]() {
+            const auto table = getTable();
+            THashMap<TString, TVector<TString>> keysByName;
+            for (const auto& idx : table.GetTableIndexes()) {
+                if (idx.GetType() != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
+                keysByName[idx.GetName()] = TVector<TString>(
+                    idx.GetKeyColumnNames().begin(), idx.GetKeyColumnNames().end());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.at("idx_bloom_1"), (TVector<TString>{"Key1"}));
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.at("idx_bloom_2"), (TVector<TString>{"Key1", "Key2"}));
+        };
+
+        // Two PK columns and two legacy prefixes (length 1 and 2) - no named indexes specified.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
+                ByKeyFilterPrefixes { PrefixLength: 2 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(getTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 2);
+
+        // Restart SchemeShard to deterministically run/settle the migrator actor.
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // After migration: a named scheme object per prefix; engine prefixes unchanged.
+        checkMigratedBloomIndexes();
+        UNIT_ASSERT_VALUES_EQUAL(getTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 2);
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        checkMigratedBloomIndexes();
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexConsistentCopy) {
+        // Consistent copy of a row table must carry the prefix bloom filter scheme object
+        // to the copy, keeping it consistent with the engine ByKeyFilterPrefixes.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "src"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        // Source has both the scheme object child and the engine prefix.
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/src", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/src"), 1);
+
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+              SrcPath: "/MyRoot/src"
+              DstPath: "/MyRoot/dst"
+            })");
+        env.TestWaitNotification(runtime, txId);
+
+        // The copy carries the bloom scheme object child and the engine prefix.
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/dst", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/dst"), 1);
+    }
+
+    // Creates "/MyRoot/<name>" as a row table with one prefix bloom filter scheme object
+    // (idx_bloom_1 over Key1) plus the matching engine ByKeyFilterPrefix.
+    static void CreateRowTableWithBloomIndex(TTestBasicRuntime& runtime, NSchemeShardUT_Private::TTestEnv& env,
+            ui64& txId, const TString& name)
+    {
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "%s"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )", name.c_str()));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexCopyTable) {
+        // CopyTable of a row table must carry the prefix bloom filter scheme object
+        // and the engine ByKeyFilterPrefix.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "src");
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "dst", "/MyRoot/src");
+        env.TestWaitNotification(runtime, txId);
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/dst", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/dst"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexMoveTable) {
+        // Moving a row table keeps its prefix bloom filter scheme object and
+        // engine ByKeyFilterPrefix consistent.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "src");
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/src", "/MyRoot/moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/src"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/moved", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/moved"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexMoveIndex) {
+        // Renaming a row-table prefix bloom filter index renames the scheme object;
+        // the engine ByKeyFilterPrefix is unaffected.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "idx_bloom_1", "idx_bloom_renamed", false);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_renamed",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        // Move non-existent index -> error; move to an existing name without overwrite -> error.
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "non_existent", "something", false,
+            {NKikimrScheme::StatusPathDoesNotExist});
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropOneOfMany) {
+        // Dropping one bloom index must leave the other index and its ByKeyFilterPrefix intact.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+            IndexDescription {
+              Name: "idx_bloom_2"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1", "Key2"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 2);
+
+        // Drop only idx_bloom_1 (prefix length 1).
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // idx_bloom_1 gone; idx_bloom_2 and its prefix (length 2, not 1) survive.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_2",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1", "Key2"});
+        {
+            const auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription()
+                .GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDisableFilter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
+    }
+
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6750,6 +7681,102 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup", 400, 10, 40, 400),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(41)});
+    }
+
+    Y_UNIT_TEST(PQGroupsCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        // Initially the domain has no PQ groups.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+
+        // Create first topic with 4 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_1\""
+                        "TotalGroupCount: 4 "
+                        "PartitionPerTablet: 2 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(4)});
+
+        // Create second topic with 6 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 6 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(10)});
+
+        // Altering an existing topic must not change the topic count
+        // even when the partition count grows.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 8 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(12)});
+
+        // Drop the first topic.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Drop the second topic - the domain is empty again.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_2");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+    }
+
+    Y_UNIT_TEST(PQGroupsCountAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_A\""
+                        "TotalGroupCount: 3 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_B\""
+                        "TotalGroupCount: 5 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Reboot SchemeShard - the counter must be recovered from persisted state.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
     }
 
     Y_UNIT_TEST(CreatePersQueueGroupWithKeySchema) {
@@ -10484,351 +11511,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             AlterUserAttrs({{"__document_api_version", "1"}}));
     }
 
-    class TSchemaHelper {
-    private:
-        NScheme::TTypeRegistry TypeRegistry;
-        const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
-
-    public:
-        explicit TSchemaHelper(const TArrayRef<NKikimr::NScheme::TTypeInfo>& keyColumnTypes)
-            : KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
-        {}
-
-        TString FindSplitKey(const TVector<TVector<TString>>& histogramKeys, TVector<ui64> histogramValues = {}, ui64 total = 0) const {
-            if (histogramValues.empty() && !histogramKeys.empty()) {
-                for (size_t i = 0; i < histogramKeys.size(); i++) {
-                    histogramValues.push_back(i + 1);
-                }
-                total = histogramKeys.size() + 1;
-            }
-
-            NKikimrTableStats::THistogram histogram = FillHistogram(histogramKeys, histogramValues);
-            TSerializedCellVec splitKey = ChooseSplitKeyByHistogram(histogram, total, KeyColumnTypes);
-            return PrintKey(splitKey);
-        }
-
-    private:
-        NKikimr::TSerializedCellVec MakeCells(const TVector<TString>& tuple) const {
-            UNIT_ASSERT(tuple.size() <= KeyColumnTypes.size());
-            TSmallVec<NKikimr::TCell> cells;
-
-            for (size_t i = 0; i < tuple.size(); ++i) {
-                if (tuple[i] == "NULL") {
-                    cells.push_back(NKikimr::TCell());
-                } else {
-                    switch (KeyColumnTypes[i].GetTypeId()) {
-#define ADD_CELL_FROM_STRING(ydbType, cppType) \
-                    case NKikimr::NScheme::NTypeIds::ydbType: { \
-                        cppType val = FromString<cppType>(tuple[i]); \
-                        cells.push_back(NKikimr::TCell((const char*)&val, sizeof(val))); \
-                        break; \
-                    }
-
-                    ADD_CELL_FROM_STRING(Bool, bool);
-
-                    ADD_CELL_FROM_STRING(Uint8, ui8);
-                    ADD_CELL_FROM_STRING(Int8, i8);
-                    ADD_CELL_FROM_STRING(Uint16, ui16);
-                    ADD_CELL_FROM_STRING(Int16, i16);
-                    ADD_CELL_FROM_STRING(Uint32, ui32);
-                    ADD_CELL_FROM_STRING(Int32, i32);
-                    ADD_CELL_FROM_STRING(Uint64, ui64);
-                    ADD_CELL_FROM_STRING(Int64, i64);
-
-                    ADD_CELL_FROM_STRING(Double, double);
-                    ADD_CELL_FROM_STRING(Float, float);
-
-                    case NKikimr::NScheme::NTypeIds::String:
-                    case NKikimr::NScheme::NTypeIds::Utf8: {
-                        cells.push_back(NKikimr::TCell(tuple[i].data(), tuple[i].size()));
-                        break;
-                    }
-#undef ADD_CELL_FROM_STRING
-                    default:
-                        UNIT_ASSERT_C(false, "Unexpected type");
-                    }
-                }
-            }
-
-            return NKikimr::TSerializedCellVec(cells);
-        }
-
-        NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys, const TVector<ui64>& values) const {
-            NKikimrTableStats::THistogram histogram;
-            for (auto i : xrange(keys.size())) {
-                TSerializedCellVec sk(MakeCells(keys[i]));
-                auto bucket = histogram.AddBuckets();
-                bucket->SetKey(sk.GetBuffer());
-                bucket->SetValue(values[i]);
-            }
-            return histogram;
-        }
-
-        TString PrintKey(const TSerializedCellVec& key) const {
-            return PrintKey(key.GetCells());
-        }
-
-        TString PrintKey(const TConstArrayRef<TCell>& cells) const {
-            return DbgPrintTuple(TDbTupleRef(KeyColumnTypes.data(), cells.data(), cells.size()), TypeRegistry);
-        }
-    };
-
-    Y_UNIT_TEST(SplitKey) {
-        TSmallVec<NScheme::TTypeInfo> keyColumnTypes = {
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)
-        };
-
-        TSchemaHelper schemaHelper(keyColumnTypes);
-
-        {
-            TString splitKey = schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "3", "bbbbbbbb", "42" },
-                                                  { "5", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 3, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bbbbbbbb", "42" },
-                                                  { "1", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : bbbbbbbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "2", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "2", "a", "42" },
-                                                  { "2", "b", "42" },
-                                                  { "2", "c", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "3", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : c, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "2", "aaa", "1" },
-                                                  { "2", "aaa", "2" },
-                                                  { "2", "aaa", "3" },
-                                                  { "2", "aaa", "4" },
-                                                  { "2", "aaa", "5" },
-                                                  { "2", "bbb", "1" },
-                                                  { "2", "bbb", "2" },
-                                                  { "3", "ccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : bbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({});
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  53,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  25,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  75,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  24,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  76,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  7,
-                                                  8,
-                                                  9
-                                              }, 10);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 4, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  30,
-                                                  40,
-                                                  70
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 7, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  30,
-                                                  40,
-                                                  70,
-                                                  90,
-                                                  91,
-                                                  92,
-                                                  93,
-                                                  94,
-                                                  95
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : NULL, Uint32 : NULL)");
-        }
-    }
-
     Y_UNIT_TEST(ListNotCreatedDirCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -11338,6 +12020,71 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             }});
     }
 
+    Y_UNIT_TEST(AlterMigratedIndexTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant/Table/Index/", R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+              PartitioningPolicy {
+                MinPartitionsCount: 1
+                SizeToSplit: 100502
+                FastSplitSettings {
+                  SizeThreshold: 100502
+                  RowCountThreshold: 100502
+                }
+              }
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
+            NLs::PathExist,
+        });
+    }
+
     template <typename TCreateFn, typename TDropFn>
     void DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp op, TCreateFn&& createFn, TDropFn&& dropFn) {
         TTestBasicRuntime runtime;
@@ -11707,7 +12454,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
         TTestEnvOptions opts;
-        opts.EnableTopicSplitMerge(true);
 
         TTestBasicRuntime runtime;
 

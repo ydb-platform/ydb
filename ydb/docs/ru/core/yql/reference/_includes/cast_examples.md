@@ -12,5 +12,5 @@ SELECT
     CAST(["3.14", "bad", "42"] AS List<Float>),   -- [3.14, 42]
         --Тип элемента не опциональный: неудачный элемент удалён.
     CAST(255 AS Uint8),                     -- 255
-    CAST(256 AS Uint8) IS NULL              -- true, выходит за диапазон
+    CAST(256 AS Uint8) IS NULL;             -- true, выходит за диапазон
 ```

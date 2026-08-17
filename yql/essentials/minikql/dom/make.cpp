@@ -15,9 +15,10 @@ namespace {
 TUnboxedValuePod MakeData(const TDataTypeId nodeType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     switch (nodeType) {
         case TDataType<char*>::Id:
+            // ENodeType::String is zero, so we don't need to add any mark
             return value;
         case TDataType<TUtf8>::Id:
-            return value;
+            return SetUtf8Mark(value);
         case TDataType<bool>::Id:
             return SetNodeType<ENodeType::Bool>(value);
         case TDataType<i8>::Id:

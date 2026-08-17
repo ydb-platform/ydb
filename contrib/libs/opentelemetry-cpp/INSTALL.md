@@ -23,7 +23,8 @@ You can link OpenTelemetry C++ SDK with libraries provided in
   repository. To install Git, consult the [Set up
   Git](https://help.github.com/articles/set-up-git/) guide on GitHub.
 - [CMake](https://cmake.org/) for building opentelemetry-cpp API, SDK with their
-  unittests. The minimum CMake version is 3.16.
+  unittests. The minimum CMake version is 3.16 (3.18+ is recommended to support
+  FetchContent with the latest dependencies).
   To install CMake,
   consult the [Installing CMake](https://cmake.org/install/) guide.
 - [GoogleTest](https://github.com/google/googletest) framework to build and run
@@ -268,6 +269,7 @@ build configuration.
 | **exporters_elasticsearch**| opentelemetry-cpp::elasticsearch_log_record_exporter                                             |
 | **exporters_etw**          | opentelemetry-cpp::etw_exporter                                                                  |
 | **exporters_zipkin**       | opentelemetry-cpp::zipkin_trace_exporter                                                         |
+| **resource_detectors**     | opentelemetry-cpp::resource_detectors                                                            |
 | **shims_opentracing**      | opentelemetry-cpp::opentracing_shim                                                              |
 
 ## Build instructions using Bazel

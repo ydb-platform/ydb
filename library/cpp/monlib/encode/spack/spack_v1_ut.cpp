@@ -2,6 +2,7 @@
 
 #include <library/cpp/monlib/encode/protobuf/protobuf.h>
 #include <library/cpp/monlib/metrics/labels.h>
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <library/cpp/monlib/metrics/metric.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -809,6 +810,417 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
                 AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(17));
             }
         }
+    }
+
+    Y_UNIT_TEST(SimpleV13) {
+        ui8 expectedSerialized[] = {
+            // header
+            0x53, 0x50,             // magic "SP"                     (fixed ui16)
+        // minor, major
+            0x03, 0x01,             // version                        (fixed ui16)
+            0x18, 0x00,             // header size                    (fixed ui16)
+            0x00,                   // time precision                 (fixed ui8)
+            0x00,                   // compression algorithm          (fixed ui8)
+            0x02, 0x00, 0x00, 0x00, // label names count  (fixed ui32) -- 2 names: "project", "name"
+            0x03, 0x00, 0x00, 0x00, // label values count (fixed ui32) -- 3 values: "solomon", "temperature", "speed"
+            0x02, 0x00, 0x00, 0x00, // metric count       (fixed ui32)
+            0x02, 0x00, 0x00, 0x00, // points count       (fixed ui32)
+
+            // string pools (length-delimited)
+            // label names (sorted by frequency: "name" appears 2x, "project" 1x)
+            0x04, 0x6e, 0x61, 0x6d, 0x65,                   // varint(4) + "name"
+            0x07, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, // varint(7) + "project"
+            // label values (sorted by frequency: all appear 1x, insertion order preserved)
+            0x07, 0x73, 0x6f, 0x6c, 0x6f, 0x6d, 0x6f, 0x6e, // varint(7) + "solomon"
+            0x0b, 0x74, 0x65, 0x6d, 0x70, 0x65, 0x72, 0x61, // varint(11) + "temperature"
+            0x74, 0x75, 0x72, 0x65,
+            0x05, 0x73, 0x70, 0x65, 0x65, 0x64,              // varint(5) + "speed"
+
+            // common time
+            0x00, 0x2f, 0x68, 0x59, // common time in seconds         (fixed ui32)
+
+            // common labels
+            0x01,                   // common labels count             (varint)
+            0x01,                   // label name index (project)      (varint)
+            0x00,                   // label value index (solomon)     (varint)
+
+            // metric 1: COUNTER, ONE_WITHOUT_TS
+            0x09,                                           // types (COUNTER | ONE_WITHOUT_TS)        (fixed ui8)
+            0x00,                                           // flags                                   (fixed ui8)
+            // no metric name index (v1_3 does not have it)
+            0x01,                                           // metric labels count                     (varint)
+            0x00,                                           // label name index (name)                 (varint)
+            0x01,                                           // label value index (temperature)         (varint)
+            0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // value 17 (fixed ui64)
+
+            // metric 2: GAUGE, ONE_WITH_TS
+            0x06,                                           // types (GAUGE | ONE_WITH_TS)             (fixed ui8)
+            0x00,                                           // flags                                   (fixed ui8)
+            0x01,                                           // metric labels count                     (varint)
+            0x00,                                           // label name index (name)                 (varint)
+            0x02,                                           // label value index (speed)               (varint)
+            0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x45, 0x40, // value 42.0 (double IEEE754)
+        };
+
+        // encode
+        {
+            TBuffer actualSerialized;
+            {
+                TBufferOutput out(actualSerialized);
+                auto e = EncoderSpackV13(
+                    &out,
+                    ETimePrecision::SECONDS,
+                    ECompression::IDENTITY);
+
+                e->OnStreamBegin();
+                e->OnCommonTime(TInstant::Seconds(1500000000));
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("project", "solomon");
+                    e->OnLabelsEnd();
+                }
+
+                {
+                    e->OnMetricBegin(EMetricType::COUNTER);
+                    {
+                        e->OnLabelsBegin();
+                        e->OnLabel("name", "temperature");
+                        e->OnLabelsEnd();
+                    }
+                    e->OnUint64(TInstant::Zero(), 17);
+                    e->OnMetricEnd();
+                }
+
+                {
+                    e->OnMetricBegin(EMetricType::GAUGE);
+                    {
+                        e->OnLabelsBegin();
+                        e->OnLabel("name", "speed");
+                        e->OnLabelsEnd();
+                    }
+                    e->OnDouble(now, 42);
+                    e->OnMetricEnd();
+                }
+
+                e->OnStreamEnd();
+                e->Close();
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(actualSerialized.Size(), Y_ARRAY_SIZE(expectedSerialized));
+            UNIT_ASSERT_BINARY_EQUALS(actualSerialized.Data(), expectedSerialized);
+        }
+
+        // decode
+        {
+            NProto::TMultiSamplesList samples;
+            {
+                auto input = TMemoryInput(expectedSerialized, Y_ARRAY_SIZE(expectedSerialized));
+                auto encoder = EncoderProtobuf(&samples);
+                DecodeSpackV1(&input, encoder.Get());
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::MilliSeconds(samples.GetCommonTime()),
+                                     TInstant::Seconds(1500000000));
+
+            UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 1);
+            AssertLabelEqual(samples.GetCommonLabels(0), "project", "solomon");
+
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2);
+            {
+                const auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+                UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+                AssertLabelEqual(s.GetLabels(0), "name", "temperature");
+                UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+                AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(17));
+            }
+            {
+                const auto& s = samples.GetSamples(1);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+                UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+                AssertLabelEqual(s.GetLabels(0), "name", "speed");
+                UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+                AssertPointEqual(s.GetPoints(0), now, double(42));
+            }
+        }
+    }
+
+    // Ported from Java MetricSpackEncoderTest.doEncodeDecode
+    void V13EncodeDecodeImpl(ETimePrecision timePrecision, ECompression compression) {
+        const TInstant commonTime = TInstant::Seconds(1500000000);
+        const TInstant alignedNow = (timePrecision == ETimePrecision::SECONDS)
+            ? TInstant::Seconds(now.Seconds())
+            : now;
+
+        // label value with embedded null bytes (v1_3 feature)
+        TStringBuilder nullLabelBuilder;
+        nullLabelBuilder << "thįs";
+        nullLabelBuilder << '\0';
+        nullLabelBuilder << "īs";
+        nullLabelBuilder << '\0';
+        nullLabelBuilder << "fïne";
+
+        TString nullLabel = nullLabelBuilder;
+        UNIT_ASSERT_VALUES_EQUAL(nullLabel.size(), 15u);
+
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            auto e = EncoderSpackV13(&out, timePrecision, compression);
+
+            e->OnStreamBegin();
+            e->OnCommonTime(commonTime);
+            {
+                e->OnLabelsBegin();
+                e->OnLabel("project", "solomon");
+                e->OnLabel("cluster", "production");
+                e->OnLabel("service", "stockpile");
+                e->OnLabelsEnd();
+            }
+            { // metric #1 (no values)
+                e->OnMetricBegin(EMetricType::GAUGE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q1");
+                    e->OnLabelsEnd();
+                }
+                e->OnMetricEnd();
+            }
+            { // metric #2 (one value without ts)
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q2");
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(TInstant::Zero(), 42);
+                e->OnMetricEnd();
+            }
+            { // metric #3 (one value with ts)
+                e->OnMetricBegin(EMetricType::GAUGE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q3");
+                    e->OnLabelsEnd();
+                }
+                e->OnDouble(alignedNow + TDuration::Seconds(5), 3.14159);
+                e->OnMetricEnd();
+            }
+            { // metric #4 (many values with ts)
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q4");
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(alignedNow + TDuration::Seconds(5), 43);
+                e->OnUint64(alignedNow + TDuration::Seconds(10), 44);
+                e->OnUint64(alignedNow + TDuration::Seconds(15), 45);
+                e->OnMetricEnd();
+            }
+            { // metric #5 (igauge)
+                e->OnMetricBegin(EMetricType::IGAUGE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q5");
+                    e->OnLabelsEnd();
+                }
+                e->OnInt64(alignedNow, 46);
+                e->OnMetricEnd();
+            }
+            { // metric #6 (hist_rate)
+                e->OnMetricBegin(EMetricType::HIST_RATE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q6");
+                    e->OnLabelsEnd();
+                }
+                auto h = ExplicitHistogramSnapshot({10, 20, 30, Max<double>()}, {0, 1, 0, 100});
+                e->OnHistogram(alignedNow, h);
+                e->OnMetricEnd();
+            }
+            { // metric #7 (hist, many values)
+                e->OnMetricBegin(EMetricType::HIST);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "q7");
+                    e->OnLabelsEnd();
+                }
+                {
+                    auto h = ExplicitHistogramSnapshot({10, 20, 30, Max<double>()}, {0, 1, 0, 13});
+                    e->OnHistogram(alignedNow + TDuration::Seconds(5), h);
+                }
+                {
+                    auto h = ExplicitHistogramSnapshot({10, 20, 30, Max<double>()}, {1, 0, 2, 42});
+                    e->OnHistogram(alignedNow + TDuration::Seconds(10), h);
+                }
+                e->OnMetricEnd();
+            }
+            { // metric #8 (counter with embedded null bytes in label)
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", nullLabel);
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(TInstant::Zero(), 1234);
+                e->OnMetricEnd();
+            }
+            { // metric #9 (mem-only)
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "aggregate");
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(TInstant::Zero(), 42);
+                e->OnMemOnly(true);
+                e->OnMetricEnd();
+            }
+            e->OnStreamEnd();
+            e->Close();
+        }
+
+        // verify header
+        auto* header = reinterpret_cast<const TSpackHeader*>(buffer.Data());
+        UNIT_ASSERT_VALUES_EQUAL(header->Version, static_cast<ui16>(SV1_03));
+        UNIT_ASSERT_VALUES_EQUAL(DecodeCompression(header->Compression), compression);
+        UNIT_ASSERT_VALUES_EQUAL(header->MetricCount, 9u);
+        UNIT_ASSERT_VALUES_EQUAL(header->PointsCount, 11u);
+
+        // decode and verify
+        NProto::TMultiSamplesList samples;
+        {
+            IMetricEncoderPtr e = EncoderProtobuf(&samples);
+            TBufferInput in(buffer);
+            DecodeSpackV1(&in, e.Get());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInstant::MilliSeconds(samples.GetCommonTime()),
+            commonTime);
+
+        UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 3);
+        AssertLabelEqual(samples.GetCommonLabels(0), "project", "solomon");
+        AssertLabelEqual(samples.GetCommonLabels(1), "cluster", "production");
+        AssertLabelEqual(samples.GetCommonLabels(2), "service", "stockpile");
+
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 9);
+        { // #1 no values
+            const auto& s = samples.GetSamples(0);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q1");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 0);
+        }
+        { // #2 one value without ts
+            const auto& s = samples.GetSamples(1);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q2");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+            AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(42));
+        }
+        { // #3 one value with ts
+            const auto& s = samples.GetSamples(2);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q3");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+            AssertPointEqual(s.GetPoints(0), alignedNow + TDuration::Seconds(5), 3.14159);
+        }
+        { // #4 many values with ts
+            const auto& s = samples.GetSamples(3);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q4");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 3);
+            AssertPointEqual(s.GetPoints(0), alignedNow + TDuration::Seconds(5), ui64(43));
+            AssertPointEqual(s.GetPoints(1), alignedNow + TDuration::Seconds(10), ui64(44));
+            AssertPointEqual(s.GetPoints(2), alignedNow + TDuration::Seconds(15), ui64(45));
+        }
+        { // #5 igauge
+            const auto& s = samples.GetSamples(4);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::IGAUGE);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q5");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+            AssertPointEqual(s.GetPoints(0), alignedNow, i64(46));
+        }
+        { // #6 hist_rate
+            const auto& s = samples.GetSamples(5);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::HIST_RATE);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q6");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+
+            const auto& h = s.GetPoints(0).GetHistogram();
+            UNIT_ASSERT_VALUES_EQUAL(h.BoundsSize(), 4u);
+            UNIT_ASSERT_VALUES_EQUAL(h.ValuesSize(), 4u);
+        }
+        { // #7 hist, many
+            const auto& s = samples.GetSamples(6);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::HISTOGRAM);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "q7");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
+        }
+        { // #8 embedded null bytes in label
+            const auto& s = samples.GetSamples(7);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            UNIT_ASSERT_STRINGS_EQUAL(s.GetLabels(0).GetName(), "sensor");
+            UNIT_ASSERT_VALUES_EQUAL(s.GetLabels(0).GetValue().size(), nullLabel.size());
+            UNIT_ASSERT_VALUES_EQUAL(s.GetLabels(0).GetValue(), nullLabel);
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+            AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(1234));
+        }
+        { // #9 mem-only
+            const auto& s = samples.GetSamples(8);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), true);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            AssertLabelEqual(s.GetLabels(0), "sensor", "aggregate");
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+            AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(42));
+        }
+    }
+
+    Y_UNIT_TEST(V13EncodeDecodeSeconds) {
+        V13EncodeDecodeImpl(ETimePrecision::SECONDS, ECompression::IDENTITY);
+    }
+
+    Y_UNIT_TEST(V13EncodeDecodeMillis) {
+        V13EncodeDecodeImpl(ETimePrecision::MILLIS, ECompression::IDENTITY);
+    }
+
+    Y_UNIT_TEST(V13EncodeDecodeZlib) {
+        V13EncodeDecodeImpl(ETimePrecision::SECONDS, ECompression::ZLIB);
+    }
+
+    Y_UNIT_TEST(V13EncodeDecodeZstd) {
+        V13EncodeDecodeImpl(ETimePrecision::SECONDS, ECompression::ZSTD);
+    }
+
+    Y_UNIT_TEST(V13EncodeDecodeLz4) {
+        V13EncodeDecodeImpl(ETimePrecision::SECONDS, ECompression::LZ4);
+    }
+
+    Y_UNIT_TEST(V13EmptyStream) {
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            auto e = EncoderSpackV13(&out, ETimePrecision::SECONDS, ECompression::IDENTITY);
+            e->OnStreamBegin();
+            e->OnStreamEnd();
+            e->Close();
+        }
+
+        auto* header = reinterpret_cast<const TSpackHeader*>(buffer.Data());
+        UNIT_ASSERT_VALUES_EQUAL(header->Version, static_cast<ui16>(SV1_03));
+        UNIT_ASSERT_VALUES_EQUAL(header->MetricCount, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(header->PointsCount, 0u);
     }
 
     Y_UNIT_TEST(V12MissingNameForOneMetric) {

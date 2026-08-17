@@ -10,8 +10,13 @@
 #include "mkql_block_coalesce.h"
 #include "mkql_block_container.h"
 #include "mkql_block_decimal.h"
+#include "mkql_block_dynamic_variant.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
+#include "mkql_block_guess.h"
+#include "mkql_block_variant.h"
+#include "mkql_block_variant_item.h"
+#include "mkql_block_way.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
@@ -36,6 +41,7 @@
 #include "mkql_element.h"
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
+#include "mkql_erased.h"
 #include "mkql_exists.h"
 #include "mkql_expand_map.h"
 #include "mkql_extend.h"
@@ -64,6 +70,7 @@
 #include "mkql_length.h"
 #include "mkql_linear.h"
 #include "mkql_listfromrange.h"
+#include "mkql_list_join.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
@@ -77,6 +84,7 @@
 #include "mkql_nop.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
+#include "mkql_runtime_feature.h"
 #include "mkql_pickle.h"
 #include "mkql_prepend.h"
 #include "mkql_queue.h"
@@ -127,8 +135,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapArg(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
@@ -245,6 +252,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
+        {"ListJoinCore", &WrapListJoinCore},
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
@@ -252,10 +260,14 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromBytes", &WrapFromBytes},
         {"NewMTRand", &WrapNewMTRand},
         {"NextMTRand", &WrapNextMTRand},
+        {"AsErased", &WrapAsErased},
+        {"PeekErased", &WrapPeekErased},
         {"Random", &WrapRandom<ERandom::Double>},
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},
         {"Now", &WrapNow},
+        {"HostRuntimeSetting", &WrapHostRuntimeSetting},
+        {"UdfRuntimeSetting", &WrapUdfRuntimeSetting},
         {"Pickle", &WrapPickle},
         {"StablePickle", &WrapStablePickle},
         {"Unpickle", &WrapUnpickle},
@@ -303,6 +315,11 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
         {"BlockExists", &WrapBlockExists},
+        {"BlockGuess", &WrapBlockGuess},
+        {"BlockVariant", &WrapBlockVariant},
+        {"BlockVariantItem", &WrapBlockVariantItem},
+        {"BlockDynamicVariant", &WrapBlockDynamicVariant},
+        {"BlockWay", &WrapBlockWay},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},
         {"BlockOr", &WrapBlockOr},
@@ -358,6 +375,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},
@@ -416,5 +434,4 @@ TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeF
     };
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -14,11 +15,13 @@ struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, 
     bool Success;
     TString Message;
     ui32 EntriesLoaded;
+    ui32 EntriesFailed;
 
-    TEvKqpWarmupComplete(bool success, TString message = {}, ui32 entriesLoaded = 0)
+    TEvKqpWarmupComplete(bool success, TString message = {}, ui32 entriesLoaded = 0, ui32 entriesFailed = 0)
         : Success(success)
         , Message(std::move(message))
         , EntriesLoaded(entriesLoaded)
+        , EntriesFailed(entriesFailed)
     {}
 };
 
@@ -33,21 +36,35 @@ struct TEvStartWarmup : public NActors::TEventLocal<TEvStartWarmup, TKqpEvents::
 };
 
 struct TKqpWarmupConfig {
-    TDuration Deadline = TDuration::Seconds(10);        // Soft deadline: time for discovery + compilation after warmup actor start
-    TDuration HardDeadline = TDuration::Seconds(20);    // Hard deadline: max time from actor start (must be >= Deadline)
+    TDuration SoftDeadline = TDuration::Seconds(10);       // Soft deadline: time for discovery + compilation after warmup actor start
+    TDuration HardDeadline = TDuration::Seconds(20);       // Hard deadline: max time from actor start (must be >= SoftDeadline)
     ui32 MaxConcurrentCompilations = 5;
     ui32 MaxQueriesToLoad = 1000;
-    ui32 MaxNodesToRequest = 5;                           // Max nodes to query for warmup (0 = all nodes)
+    ui32 MaxNodesToRequest = 5;                              // Max nodes to query for warmup (0 = all nodes)
+    ui64 MaxCompilationDurationMs = 0;                       // Override for fetch filter (0 = use SoftDeadline/2 heuristic) for testing purposes
 };
 
 inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableServiceConfig::TCompileCacheWarmupConfig& proto) {
     TKqpWarmupConfig config;
-    config.Deadline = TDuration::Seconds(proto.GetSoftDeadlineSeconds());
+    config.SoftDeadline = TDuration::Seconds(proto.GetSoftDeadlineSeconds());
     config.HardDeadline = TDuration::Seconds(proto.GetHardDeadlineSeconds());
     config.MaxConcurrentCompilations = proto.GetMaxConcurrentCompilations();
     config.MaxQueriesToLoad = proto.GetMaxQueriesToLoad();
     config.MaxNodesToRequest = proto.GetMaxNodesToRequest();
     return config;
+}
+
+// Warmup targets tenant databases. The root/service domain is served by system nodes that must be
+// discoverable from startup, so warmup (which holds a node out of discovery until its cache is warm)
+// is not applied there. The root node's TenantName equals the canonized domain path (e.g. "/Root").
+inline bool IsCompileCacheWarmupEnabled(
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const TString& tenantName,
+        const TString& domainName) {
+    return tableServiceConfig.GetEnableCompileCacheWarmup()
+        && !tenantName.empty()
+        && !domainName.empty()
+        && tenantName != CanonizePath(domainName);
 }
 
 inline NActors::TActorId MakeKqpWarmupActorId(ui32 nodeId) {

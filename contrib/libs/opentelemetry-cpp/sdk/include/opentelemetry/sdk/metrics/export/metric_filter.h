@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -35,14 +36,14 @@ namespace metrics
 class MetricFilter
 {
 public:
-  enum class MetricFilterResult
+  enum class MetricFilterResult : std::uint8_t
   {
     kAccept,
     kDrop,
     kAcceptPartial,
   };
 
-  enum class AttributesFilterResult
+  enum class AttributesFilterResult : std::uint8_t
   {
     kAccept,
     kDrop,
@@ -62,13 +63,13 @@ public:
       const PointAttributes &attributes)>;
 
   // static
-  static std::unique_ptr<MetricFilter> Create(TestMetricFn test_metric_fn,
-                                              TestAttributesFn test_attributes_fn)
+  static std::unique_ptr<MetricFilter> Create(const TestMetricFn &test_metric_fn,
+                                              const TestAttributesFn &test_attributes_fn)
   {
     return std::make_unique<MetricFilter>(test_metric_fn, test_attributes_fn);
   }
 
-  MetricFilter(TestMetricFn test_metric_fn, TestAttributesFn test_attributes_fn)
+  MetricFilter(const TestMetricFn &test_metric_fn, const TestAttributesFn &test_attributes_fn)
       : test_metric_fn_(test_metric_fn), test_attributes_fn_(test_attributes_fn)
   {}
 

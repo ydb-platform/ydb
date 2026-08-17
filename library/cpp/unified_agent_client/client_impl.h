@@ -9,6 +9,8 @@
 #include <library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h>
 #include <library/cpp/unified_agent_client/grpc_io.h>
 
+#include <contrib/libs/grpc/include/grpcpp/support/status.h>
+
 #include <library/cpp/logger/global/global.h>
 
 #include <util/generic/deque.h>
@@ -144,9 +146,10 @@ namespace NUnifiedAgent::NPrivate {
 
         void Acknowledge(ui64 seqNo);
 
-        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo);
+        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo, const TFMaybe<ui32>& protocolVersion,
+            TString bindingToken);
 
-        void OnGrpcCallFinished();
+        void OnGrpcCallFinished(const grpc::Status& finishStatus);
 
         NThreading::TFuture<void> PreFork();
 
@@ -155,6 +158,8 @@ namespace NUnifiedAgent::NPrivate {
         void PostForkChild();
 
         void SetAgentMaxReceiveMessage(size_t);
+
+        friend class TGrpcCall;
 
     private:
         enum class EPollingStatus {
@@ -232,6 +237,12 @@ namespace NUnifiedAgent::NPrivate {
     private:
         void MakeGrpcCall();
 
+        void TouchGrpcCallActivity();
+
+        void ScheduleGrpcCallWatchdog();
+
+        void CheckGrpcCallInactivity();
+
         void DoClose();
 
         void BeginClose(TInstant deadline);
@@ -247,6 +258,8 @@ namespace NUnifiedAgent::NPrivate {
         TIntrusivePtr<TClient> Client;
         TFMaybe<TString> OriginalSessionId;
         TFMaybe<TString> SessionId;
+        TFMaybe<ui32> NegotiatedProtocol;
+        TString SessionBindingToken;
         TFMaybe<THashMap<TString, TString>> Meta;
         TScopeLogger Logger;
         bool CloseStarted;
@@ -265,8 +278,10 @@ namespace NUnifiedAgent::NPrivate {
         THolder<TGrpcTimer> MakeGrpcCallTimer;
         THolder<TGrpcTimer> ForceCloseTimer;
         THolder<TGrpcTimer> PollTimer;
+        THolder<TGrpcTimer> GrpcCallWatchdogTimer;
         ui64 GrpcInflightMessages;
         ui64 GrpcInflightBytes;
+        std::atomic<ui64> LastGrpcCallActivityUsec;
 
         std::atomic<size_t> InflightBytes;
         bool CloseRequested;

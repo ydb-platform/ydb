@@ -52,8 +52,13 @@ private:
     vhd_io* VhdIo;
 
 public:
-    TVhostRequestImpl(vhd_io* vhdIo, EBlockStoreRequest type, ui64 from,
-                      ui64 length, TSgList sgList, void* cookie)
+    TVhostRequestImpl(
+        vhd_io* vhdIo,
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList,
+        void* cookie)
         : TVhostRequest(type, from, length, std::move(sgList), cookie)
         , VhdIo(vhdIo)
     {}
@@ -108,13 +113,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TVhostDevice owns a vhost block device that can be served by multiple
+// vhost request queues simultaneously. libvhost provides
+// device-level routing via vhd_request.vdev (a queue may be shared
+// between devices, but a single vhd_request always belongs to exactly
+// one vdev/device).
 class TVhostDevice final: public IVhostDevice
 {
 private:
-    vhd_request_queue* const VhdQueue;
+    // Native request queues registered with vhd_register_blockdev().
+    TVector<vhd_request_queue*> VhdQueues;
+    // Caller-side identifier (e.g. endpoint pointer) attached to every
+    // request dispatched from any of the device's queues.
+    void* const Cookie;
+
     const TString SocketPath;
     const TString DeviceName;
-    void* const Cookie;
 
     vhd_bdev_info VhdBdevInfo;
     vhd_vdev* VhdVdev = nullptr;
@@ -122,21 +136,29 @@ private:
     TMutex Lock;
 
 public:
-    TVhostDevice(vhd_request_queue* vhdQueue, TString socketPath,
-                 TString deviceName, ui32 blockSize, ui64 blocksCount,
-                 ui32 queuesCount, bool discardEnabled, ui32 optimalIoSize,
-                 void* cookie, const TVhostCallbacks& callbacks)
-        : VhdQueue(vhdQueue)
+    TVhostDevice(
+        TVector<vhd_request_queue*> vhdQueues,
+        void* cookie,
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        const TVhostCallbacks& callbacks)
+        : VhdQueues(std::move(vhdQueues))
+        , Cookie(cookie)
         , SocketPath(std::move(socketPath))
         , DeviceName(std::move(deviceName))
-        , Cookie(cookie)
     {
+        Y_ABORT_UNLESS(!VhdQueues.empty());
+
         Zero(VhdBdevInfo);
         VhdBdevInfo.serial = DeviceName.c_str();
         VhdBdevInfo.socket_path = SocketPath.c_str();
         VhdBdevInfo.block_size = blockSize;
         VhdBdevInfo.total_blocks = blocksCount;
-        VhdBdevInfo.num_queues = queuesCount;
+        VhdBdevInfo.num_queues = VhdQueues.size();
         VhdBdevInfo.map_cb = callbacks.MapMemory;
         VhdBdevInfo.unmap_cb = callbacks.UnmapMemory;
         VhdBdevInfo.optimal_io_size = optimalIoSize;
@@ -153,9 +175,11 @@ public:
 
     bool Start() override
     {
-        vhd_request_queue* queues[1] = {VhdQueue};
-
-        VhdVdev = vhd_register_blockdev(&VhdBdevInfo, queues, 1, Cookie);
+        VhdVdev = vhd_register_blockdev(
+            &VhdBdevInfo,
+            VhdQueues.data(),
+            static_cast<int>(VhdQueues.size()),
+            this);
 
         return VhdVdev != nullptr;
     }
@@ -182,8 +206,10 @@ public:
         auto completion = std::make_unique<TUnregisterCompletion>(result);
 
         with_lock (Lock) {
-            vhd_unregister_blockdev(VhdVdev, TUnregisterCompletion::Callback,
-                                    completion.release());
+            vhd_unregister_blockdev(
+                VhdVdev,
+                TUnregisterCompletion::Callback,
+                completion.release());
             VhdVdev = nullptr;
         }
 
@@ -198,6 +224,13 @@ public:
             }
             vhd_blockdev_set_total_blocks(VhdVdev, blocksCount);
         }
+    }
+
+    // Returns the cookie that should be attached to every request
+    // dispatched through this device.
+    void* GetCookie() const
+    {
+        return Cookie;
     }
 };
 
@@ -231,18 +264,6 @@ public:
         vhd_stop_queue(VhdRequestQueue);
     }
 
-    IVhostDevicePtr CreateDevice(TString socketPath, TString deviceName,
-                                 ui32 blockSize, ui64 blocksCount,
-                                 ui32 queuesCount, bool discardEnabled,
-                                 ui32 optimalIoSize, void* cookie,
-                                 const TVhostCallbacks& callbacks) override
-    {
-        return std::make_shared<TVhostDevice>(
-            VhdRequestQueue, std::move(socketPath), std::move(deviceName),
-            blockSize, blocksCount, queuesCount, discardEnabled, optimalIoSize,
-            cookie, callbacks);
-    }
-
     TVhostRequestPtr DequeueRequest() override
     {
         vhd_request vhdRequest;
@@ -260,10 +281,18 @@ public:
         return nullptr;
     }
 
+    vhd_request_queue* GetNativeQueue() const
+    {
+        return VhdRequestQueue;
+    }
+
 private:
     TVhostRequestPtr CreateVhostRequest(const vhd_request& vhdRequest)
     {
-        void* cookie = vhd_vdev_get_priv(vhdRequest.vdev);
+        auto* device =
+            reinterpret_cast<TVhostDevice*>(vhd_vdev_get_priv(vhdRequest.vdev));
+        void* cookie = device ? device->GetCookie() : nullptr;
+
         auto* vhdBdevIo = vhd_get_bdev_io(vhdRequest.io);
 
         EBlockStoreRequest type;
@@ -286,9 +315,12 @@ private:
         }
 
         return std::make_shared<TVhostRequestImpl>(
-            vhdRequest.io, type, vhdBdevIo->first_sector * VHD_SECTOR_SIZE,
+            vhdRequest.io,
+            type,
+            vhdBdevIo->first_sector * VHD_SECTOR_SIZE,
             vhdBdevIo->total_sectors * VHD_SECTOR_SIZE,
-            ConvertVhdSgList(vhdBdevIo->sglist), cookie);
+            ConvertVhdSgList(vhdBdevIo->sglist),
+            cookie);
     }
 
     static TSgList ConvertVhdSgList(const vhd_sglist& vhdSglist)
@@ -297,7 +329,9 @@ private:
         sgList.reserve(vhdSglist.nbuffers);
         for (ui32 i = 0; i < vhdSglist.nbuffers; ++i) {
             const auto& buffer = vhdSglist.buffers[i];
-            sgList.emplace_back(reinterpret_cast<char*>(buffer.base), buffer.len);
+            sgList.emplace_back(
+                reinterpret_cast<char*>(buffer.base),
+                buffer.len);
         }
         return sgList;
     }
@@ -323,14 +357,50 @@ public:
     {
         return std::make_shared<TVhostQueue>();
     }
+
+    IVhostDevicePtr CreateDevice(
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        TVector<IVhostQueuePtr> queues,
+        void* cookie,
+        const TVhostCallbacks& callbacks) override
+    {
+        Y_ABORT_UNLESS(!queues.empty());
+
+        TVector<vhd_request_queue*> rawQueues;
+        rawQueues.reserve(queues.size());
+        for (const auto& queue: queues) {
+            auto* typed = static_cast<TVhostQueue*>(queue.get());
+            rawQueues.push_back(typed->GetNativeQueue());
+        }
+
+        return std::make_shared<TVhostDevice>(
+            std::move(rawQueues),
+            cookie,
+            std::move(socketPath),
+            std::move(deviceName),
+            blockSize,
+            blocksCount,
+            discardEnabled,
+            optimalIoSize,
+            callbacks);
+    }
 };
 
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVhostRequest::TVhostRequest(EBlockStoreRequest type, ui64 from, ui64 length,
-                             TSgList sgList, void* cookie)
+TVhostRequest::TVhostRequest(
+    EBlockStoreRequest type,
+    ui64 from,
+    ui64 length,
+    TSgList sgList,
+    void* cookie)
     : Type(type)
     , From(from)
     , Length(length)

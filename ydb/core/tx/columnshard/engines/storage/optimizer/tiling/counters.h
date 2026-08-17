@@ -1,38 +1,108 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
+
 #include <ydb/library/actors/core/log.h>
+
+#include <array>
+#include <atomic>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 static constexpr ui32 TILING_LAYERS_COUNT = 10;
+static constexpr ui32 TILING_PRIORITY_LEVEL_COUNT = 11;
 
 class TPortionCategoryCounterAgents: public NColumnShard::TPortionCategoryCounterAgents {
 private:
     using TBase = NColumnShard::TPortionCategoryCounterAgents;
 
 public:
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Height;
+    using TLevelNodeCounts = std::array<std::atomic<i64>, TILING_PRIORITY_LEVEL_COUNT>;
+
+    const std::shared_ptr<TLevelNodeCounts> LevelNodeCounts = std::make_shared<TLevelNodeCounts>();
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
+    const NColumnShard::TIncrementalHistogram OverloadHistogram;
+    const NColumnShard::TIncrementalHistogram WidthHistogram;
+    const NColumnShard::TIncrementalHistogram HeightHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")){
+        , MaxOverload(TBase::GetValue("Overload/Max"))
+        , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
+        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
+        , HeightHistogram(base.GetModuleId(), "ByLevel/Height", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
+    {
     }
 };
 
 class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> Height;
+    using TLevelNodeCounts = TPortionCategoryCounterAgents::TLevelNodeCounts;
+    std::shared_ptr<TLevelNodeCounts> LevelNodeCounts;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> HeightHistogram;
+    std::optional<ui64> LastOverload;
+    std::optional<ui64> LastHeight;
+
+    static ui32 LevelBucket(const ui64 overload) {
+        return std::min<ui64>(overload, TILING_PRIORITY_LEVEL_COUNT - 1);
+    }
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-        : TBase(agents) {
-        Height = agents.Height->GetClient();
+        : TBase(agents)
+        , LevelNodeCounts(agents.LevelNodeCounts)
+        , MaxOverload(agents.MaxOverload)
+        , OverloadHistogram(agents.OverloadHistogram.BuildGuard())
+        , WidthHistogram(agents.WidthHistogram.BuildGuard())
+        , HeightHistogram(agents.HeightHistogram.BuildGuard())
+    {
     }
 
-    void SetHeight(const i32 height) {
-        Height->SetValue(height);
+    ~TPortionCategoryCounters() {
+        if (LastOverload) {
+            (*LevelNodeCounts)[LevelBucket(*LastOverload)].fetch_sub(1);
+        }
+    }
+
+    void SetOverload(const ui64 overload) {
+        if (LastOverload) {
+            OverloadHistogram->Sub(*LastOverload, 1);
+            (*LevelNodeCounts)[LevelBucket(*LastOverload)].fetch_sub(1);
+        }
+        OverloadHistogram->Add(overload, 1);
+        (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
+        LastOverload = overload;
+    }
+
+    void SetHeight(const ui64 height) {
+        if (LastHeight) {
+            HeightHistogram->Sub(*LastHeight, 1);
+        }
+        HeightHistogram->Add(height, 1);
+        LastHeight = height;
+    }
+
+    i64 GetMaxOverloadLevel() const {
+        for (i64 level = TILING_PRIORITY_LEVEL_COUNT - 1; level >= 0; --level) {
+            if ((*LevelNodeCounts)[level].load() > 0) {
+                MaxOverload->Set(level);
+                return level;
+            }
+        }
+        MaxOverload->Set(0);
+        return 0;
+    }
+
+    void AddWidth(const ui64 width) {
+        WidthHistogram->Add(width, 1);
+    }
+
+    void RemoveWidth(const ui64 width) {
+        WidthHistogram->Sub(width, 1);
     }
 };
 
@@ -41,7 +111,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounterAgents> Portions;
 
     TLevelAgents(const TString& name, NColumnShard::TCommonCountersOwner& baseOwner)
-        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name)) {
+        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name))
+    {
     }
 };
 
@@ -50,21 +121,28 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<std::shared_ptr<TLevelAgents>> Levels;
     std::vector<std::shared_ptr<TLevelAgents>> Accumulators;
+    std::shared_ptr<TLevelAgents> LastLevel;
+    std::shared_ptr<TLevelAgents> Tiling;
+    const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
+    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
 
 public:
     TGlobalCounters()
-        : TBase("TilingCompactionOptimizer") {
+        : TBase("TilingCompactionOptimizer")
+        , TasksSkippedByPriorityGap(TBase::GetDeriviative("Tasks/SkippedByPriorityGap/Count"))
+        , GeneratedTasksPriorityLevel(std::make_shared<NColumnShard::TDeriviativeHistogram>(
+              GetModuleId(), "Tasks/GeneratedByPriorityLevel/Count", "", std::set<i64>{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }))
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
             Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
         }
+        LastLevel = std::make_shared<TLevelAgents>("last", *this);
+        Tiling = std::make_shared<TLevelAgents>("tiling", *this);
     }
 
     static std::shared_ptr<TPortionCategoryCounters> BuildClient(
-        const std::vector<std::shared_ptr<TLevelAgents>>& agentList,
-        const ui32 idx,
-        const TString& debugName)
-    {
+        const std::vector<std::shared_ptr<TLevelAgents>>& agentList, const ui32 idx, const TString& debugName) {
         AFL_VERIFY(idx < agentList.size())("idx", idx)("limit", agentList.size())("type", debugName);
         return std::make_shared<TPortionCategoryCounters>(*agentList[idx]->Portions);
     }
@@ -76,6 +154,22 @@ public:
     static std::shared_ptr<TPortionCategoryCounters> BuildAccumulatorClient(const ui32 accId) {
         return BuildClient(Singleton<TGlobalCounters>()->Accumulators, accId, "accumulator");
     }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildLastClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->LastLevel->Portions);
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildTilingClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->Tiling->Portions);
+    }
+
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetTasksSkippedByPriorityGap() {
+        return Singleton<TGlobalCounters>()->TasksSkippedByPriorityGap;
+    }
+
+    static const std::shared_ptr<NColumnShard::TDeriviativeHistogram>& GetGeneratedTasksPriorityLevel() {
+        return Singleton<TGlobalCounters>()->GeneratedTasksPriorityLevel;
+    }
 };
 
 class TLevelCounters {
@@ -83,7 +177,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
 
     explicit TLevelCounters(std::shared_ptr<TPortionCategoryCounters> portions)
-        : Portions(std::move(portions)) {
+        : Portions(std::move(portions))
+    {
         AFL_VERIFY(Portions);
     }
 };
@@ -92,8 +187,17 @@ class TCounters {
 public:
     std::vector<TLevelCounters> Levels;
     std::vector<TLevelCounters> Accumulators;
+    TLevelCounters LastLevel;
+    TLevelCounters Tiling;
+    const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
+    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
 
-    TCounters() {
+    TCounters()
+        : LastLevel(TGlobalCounters::BuildLastClient())
+        , Tiling(TGlobalCounters::BuildTilingClient())
+        , TasksSkippedByPriorityGap(TGlobalCounters::GetTasksSkippedByPriorityGap())
+        , GeneratedTasksPriorityLevel(TGlobalCounters::GetGeneratedTasksPriorityLevel())
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
             Accumulators.emplace_back(TGlobalCounters::BuildAccumulatorClient(i));
@@ -109,6 +213,14 @@ public:
         AFL_VERIFY(accIdx < Accumulators.size())("idx", accIdx)("count", Accumulators.size());
         return Accumulators[accIdx];
     }
+
+    const TLevelCounters& GetLastLevelCounters() const {
+        return LastLevel;
+    }
+
+    const TLevelCounters& GetTilingCounters() const {
+        return Tiling;
+    }
 };
 
-}  // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -1,10 +1,10 @@
 # Updating Configuration of {{ ydb-short-name }} Clusters Deployed with Ansible
 
-During [initial deployment](initial-deployment.md), the Ansible playbook used the provided config file to create the initial cluster configuration. Technically, it generates two variants of the original config file and deploys them to all hosts via Ansible's mechanism for cross-server file copy. This article explains which options are available to change the cluster's configuration after the initial deployment.
+ During [initial deployment](initial-deployment/index.md), the Ansible playbook used the provided config file to create the initial cluster configuration. Technically, it generates two variants of the original config file and deploys them to all hosts via Ansible's mechanism for cross-server file copy. This article explains which options are available to change the cluster's configuration after the initial deployment.
 
 ## Update Configuration via Ansible Playbook
 
-[ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.update_config` that can be used to update {{ ydb-short-name }} cluster's configuration. Go to the same directory used for the [initial deployment](initial-deployment.md), edit `files/config.yaml` as needed, and then run this playbook:
+[ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.update_config` that can be used to update {{ ydb-short-name }} cluster's configuration. Go to the same directory used for the [initial deployment](initial-deployment/index.md), edit `files/config.yaml` as needed, and then run this playbook:
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config

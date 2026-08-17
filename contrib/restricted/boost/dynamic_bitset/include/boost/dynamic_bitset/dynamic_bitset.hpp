@@ -1426,13 +1426,13 @@ template< typename Iterator >
 class bit_iterator_base
 {
 public:
-    typedef typename std::iterator_traits<Iterator>::iterator_category iterator_category;
+    typedef typename std::iterator_traits< Iterator >::iterator_category iterator_category;
     typedef bool                                 value_type;
     typedef std::ptrdiff_t                       difference_type;
     typedef value_type *                         pointer;
     typedef value_type &                         reference;
 
-    static constexpr int                         bits_per_block = std::numeric_limits< typename std::iterator_traits<Iterator>::value_type >::digits;
+    static constexpr int                         bits_per_block = std::numeric_limits< typename std::iterator_traits< Iterator >::value_type >::digits;
 
     BOOST_DYNAMIC_BITSET_CONSTEXPR20             bit_iterator_base( Iterator block_iterator, int bit_index );
 
@@ -1440,11 +1440,13 @@ public:
     friend BOOST_DYNAMIC_BITSET_CONSTEXPR20 bool operator==( const bit_iterator_base< Iter > & lhs, const bit_iterator_base< Iter > & rhs );
     template< typename Iter >
     friend BOOST_DYNAMIC_BITSET_CONSTEXPR20 bool operator<( const bit_iterator_base< Iter > & lhs, const bit_iterator_base< Iter > & rhs );
+    template< typename Iter >
+    friend BOOST_DYNAMIC_BITSET_CONSTEXPR20 difference_type operator-( const bit_iterator_base< Iter > & lhs, const bit_iterator_base< Iter > & rhs );
 
 protected:
     BOOST_DYNAMIC_BITSET_CONSTEXPR20 void increment();
     BOOST_DYNAMIC_BITSET_CONSTEXPR20 void decrement();
-    BOOST_DYNAMIC_BITSET_CONSTEXPR20 void add( typename std::iterator_traits<Iterator>::difference_type n );
+    BOOST_DYNAMIC_BITSET_CONSTEXPR20 void add( typename std::iterator_traits< Iterator >::difference_type n );
 
     Iterator                              m_block_iterator;
     int                                   m_bit_index = 0;
@@ -1771,7 +1773,8 @@ to_block_range( const dynamic_bitset< Block, AllocatorOrContainer > & b, BlockOu
 //!     <a href="https://en.cppreference.com/w/cpp/named_req/InputIterator">LegacyInputIterator</a>
 //!     and its `value_type` must be the same type as `Block`. The size
 //!     of the iterator range must be less than or equal to
-//!     `b.num_blocks()`.
+//!     `b.num_blocks()`. Excess bits are not copied into the bitset,
+//!     which doesn't change its size.
 //!
 //!     \param first The start of the range.
 //!     \param last The end of the range.

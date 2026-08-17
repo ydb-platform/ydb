@@ -8,13 +8,18 @@
 || Параметр | Тип | Значение по умолчанию | Описание ||
 || `enable_kafka_proxy` | bool | `false` | Включает или отключает Kafka Proxy. ||
 || `listening_port` | int32 | `9092` | Порт, на котором будет доступен Kafka API. ||
+|| `listening_address` | string | `[::]` | Сетевой адрес, на котором Kafka Proxy принимает входящие соединения. Значение `[::]` — все интерфейсы (dual-stack, должна быть включена поддержка IPv6), `127.0.0.1` или `[::1]` — только localhost. ||
 || `transaction_timeout_ms` | uint32 | `300000` (5 минут) | Максимальный таймаут для Kafka транзакций, после которого транзакция будет отменена. ||
 || `auto_create_topics_enable` | bool | `false` | Включает автоматическое создание топиков при обращении к ним. Аналог [такой же опции](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) в Apache Kafka. ||
 || `auto_create_consumers_enable` | bool | `true` | Включает автоматическое заведение консьюмеров при обращении к ним. ||
 || `topic_creation_default_partitions` | uint32 | `1` | Количество партиций, которое будет создано, если при добавлении топика по Kafka протоколу не было указано количество партиций. Аналог опиции [num.partitions](https://kafka.apache.org/documentation/#brokerconfigs_num.partitions) в Apache Kafka. ||
 || `ssl_cerificate` | string | - | Путь к файлу сертификата для доступа по SSL, включающий в себя сразу и файл сертификата и файл ключа. При указании этого параметра Kafka Proxy автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата. ||
 || `cert` | string | - | Путь к файлу сертификата для доступа по SSL. При указании этого параметра Kafka Proxy автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата. ||
-|| `key` | string | - | Путь к файлу ключа для доступа по SSL. |#
+|| `key` | string | - | Путь к файлу ключа для доступа по SSL. ||
+|| `ca` | string | - | Путь к файлу certificate authority для mTLS. ||
+|| `enable_self_signed_certs` | bool | `false` | Разрешает использование самоподписанных сертификатов для mTLS. ||
+|| `mtls_enable` | bool | `false` | Включает использование mTLS аутентификации. ||
+|#
 
 ## Пример заполненного конфига
 
@@ -22,6 +27,7 @@
 kafka_proxy_config:
   enable_kafka_proxy: true
   listening_port: 9092
+  listening_address: "[::]"
   transaction_timeout_ms: 300000 # 5 минут
   auto_create_topics_enable: true
   auto_create_consumers_enable: true

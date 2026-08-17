@@ -3,6 +3,8 @@
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -29,8 +31,8 @@ using TStatePtr = std::shared_ptr<TState>;
 
 class TReader: public IQReader {
 public:
-    explicit TReader(const TOperationMap::TMapPtr& map)
-        : Map_(map)
+    explicit TReader(TOperationMap::TMapPtr map)
+        : Map_(std::move(map))
     {
     }
 
@@ -40,7 +42,7 @@ public:
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
-        return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({key, it->second})));
+        return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({.Key = key, .Value = it->second})));
     }
 
 private:
@@ -49,8 +51,8 @@ private:
 
 class TWriter: public IQWriter {
 public:
-    TWriter(const TOperationMapPtr& operation, const TQWriterSettings& settings)
-        : Operation_(operation)
+    TWriter(TOperationMapPtr operation, const TQWriterSettings& settings)
+        : Operation_(std::move(operation))
         , Settings_(settings)
     {
     }
@@ -96,9 +98,9 @@ private:
 
 class TIterator: public IQIterator {
 public:
-    TIterator(const TQIteratorSettings& settings, const TOperationMap::TMapPtr& map)
+    TIterator(const TQIteratorSettings& settings, TOperationMap::TMapPtr map)
         : Settings_(settings)
-        , Map_(map)
+        , Map_(std::move(map))
         , It_(Map_->begin())
     {
     }
@@ -108,7 +110,7 @@ public:
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
-        auto res = TMaybe<TQItem>({It_->first, It_->second});
+        auto res = TMaybe<TQItem>({.Key = It_->first, .Value = It_->second});
         ++It_;
         return NThreading::MakeFuture(res);
     }
@@ -128,15 +130,15 @@ public:
 
     IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& readerSettings) const final {
         Y_UNUSED(readerSettings);
-        return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
+        return std::make_shared<TReader>(GetOperation(operationId, /*forWrite=*/false)->ReadMap);
     }
 
     IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& writerSettings) const final {
-        return MakeCloseAwareWriterDecorator(std::make_shared<TWriter>(GetOperation(operationId, true), writerSettings));
+        return MakeCloseAwareWriterDecorator(std::make_shared<TWriter>(GetOperation(operationId, /*forWrite=*/true), writerSettings));
     }
 
     IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const final {
-        return std::make_shared<TIterator>(iteratorSettings, GetOperation(operationId, false)->ReadMap);
+        return std::make_shared<TIterator>(iteratorSettings, GetOperation(operationId, /*forWrite=*/false)->ReadMap);
     }
 
 private:

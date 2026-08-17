@@ -80,7 +80,7 @@ public:
 
   static TraceFlags TraceFlagsFromHex(nostd::string_view trace_flags)
   {
-    uint8_t flags;
+    uint8_t flags{0};
     detail::HexToBinary(trace_flags, &flags, sizeof(flags));
     return TraceFlags(flags);
   }
@@ -140,7 +140,7 @@ private:
     }
 
     // hex is valid, convert it to binary
-    uint8_t version_binary;
+    uint8_t version_binary{kInvalidVersion};
     detail::HexToBinary(version_hex, &version_binary, sizeof(version_binary));
     if (version_binary == kInvalidVersion)
     {
@@ -191,6 +191,7 @@ private:
     return ExtractContextFromTraceHeaders(trace_parent, trace_state);
   }
 
+public:
   bool Fields(nostd::function_ref<bool(nostd::string_view)> callback) const noexcept override
   {
     return (callback(kTraceParent) && callback(kTraceState));

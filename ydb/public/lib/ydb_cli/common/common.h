@@ -39,6 +39,29 @@ private:
     int Code;
 };
 
+class TInitializationException : public TNeedToExitWithCode {
+public:
+    TInitializationException()
+        : TNeedToExitWithCode(EXIT_FAILURE)
+    {}
+
+    explicit TInitializationException(TString errorCode)
+        : TNeedToExitWithCode(EXIT_FAILURE)
+        , ErrorCode(std::move(errorCode))
+    {}
+
+    const std::optional<TString>& GetErrorCode() const {
+        return ErrorCode;
+    }
+
+    bool HasErrorCode() const {
+        return ErrorCode.has_value();
+    }
+
+private:
+    std::optional<TString> ErrorCode;
+};
+
 class TProfileConfig {
 public:
     TProfileConfig(const TString& profileName);

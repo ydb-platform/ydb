@@ -2,35 +2,58 @@
 
 #include <ydb/core/persqueue/pqtablet/partition/mlp/mlp.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ {
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPReadRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPCommitRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPUnlockRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPChangeMessageDeadlineRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPPurgeRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvGetMLPConsumerStateRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"consumer", ev->Get()->Consumer},
+        {"partitionId", ev->Get()->PartitionId});
+    MLPPendingEvents.emplace_back(ev);
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"consumer", ev->Get()->Record.GetConsumer()},
+        {"getPartitionId", ev->Get()->GetPartitionId()});
     MLPPendingEvents.emplace_back(ev);
 }
 
@@ -48,39 +71,62 @@ void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHa
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPReadRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPCommitRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPUnlockRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPChangeMessageDeadlineRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPPurgeRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvGetMLPConsumerStateRequest",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"consumer", ev->Get()->Consumer},
+        {"partitionId", ev->Get()->PartitionId});
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"consumer", ev->Get()->Record.GetConsumer()},
+        {"getPartitionId", ev->Get()->GetPartitionId()});
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
     auto& metrics = ev->Get()->Metrics;
 
-    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << metrics.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerState",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"metrics", metrics.ShortDebugString()});
     auto it = MLPConsumers.find(metrics.GetConsumer());
     if (it == MLPConsumers.end()) {
         return;
@@ -95,7 +141,9 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", record.ShortDebugString()});
 
     auto it = MLPConsumers.find(record.GetConsumer());
     if (it == MLPConsumers.end()) {
@@ -104,6 +152,9 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
 
     auto& consumerInfo = it->second;
     consumerInfo.UseForReading = record.GetUseForReading();
+    consumerInfo.LockedMessageCount = record.GetLockedMessageCount();
+    consumerInfo.DelayedMessageCount = record.GetDelayedMessageCount();
+    consumerInfo.MessageCount = record.GetMessageCount();
 
     record.SetGeneration(TabletGeneration);
     record.SetCookie(++PQRBCookie);
@@ -111,7 +162,9 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
 }
 
 void TPartition::ProcessMLPPendingEvents() {
-    LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
+    YDB_LOG_DEBUG("Process MLP pending events. Count",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"mLPPendingEventsSize", MLPPendingEvents.size()});
 
     auto visitor = [this](auto& v) {
         Handle(v);
@@ -148,12 +201,16 @@ void TPartition::InitializeMLPConsumers() {
         }
     }
 
-    LOG_D("Initializing MLP Consumers: " << consumers.size());
+    YDB_LOG_DEBUG("Initializing MLP",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"consumers", consumers.size()});
 
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
         if (auto cit = consumers.find(name); cit != consumers.end()) {
-            LOG_I("Updating MLP consumer '" << name << "' config");
+            YDB_LOG_INFO("Updating MLP consumer config",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"name", name});
             auto& config = cit->second;
             Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(Config, config,
                 retentionPeriod(config), GetPerPartitionCounterSubgroup()));
@@ -162,7 +219,9 @@ void TPartition::InitializeMLPConsumers() {
             continue;
         }
 
-        LOG_I("Destroing MLP consumer '" << name << "'");
+        YDB_LOG_INFO("Destroing MLP consumer",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"name", name});
 
         Send(consumerInfo.ActorId, new TEvents::TEvPoison()); // TODO MLP delete blobs
         it = MLPConsumers.erase(it);
@@ -173,13 +232,16 @@ void TPartition::InitializeMLPConsumers() {
             continue;
         }
 
-        LOG_I("Creating MLP consumer '" << name << "'");
+        YDB_LOG_INFO("Creating MLP consumer",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"name", name});
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             DbPath,
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
+            TabletGeneration,
             Config,
             consumer,
             retentionPeriod(consumer),

@@ -5,10 +5,11 @@ from .constants import (
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     PACKAGE_JSON_FILENAME,
     PNPM_BUILD_BACKUP_LOCKFILE_FILENAME,
-    PNPM_PRE_LOCKFILE_FILENAME,
     PNPM_LOCKFILE_FILENAME,
     PNPM_WS_FILENAME,
 )
+
+PNPM_WORKSPACE_STATE_FILENAME = ".pnpm-workspace-state-v1.json"
 
 
 # Base utility functions
@@ -78,16 +79,20 @@ def build_nots_path(build_root: str) -> str:
     return build_nots
 
 
-def build_nm_store_path(build_root: str, moddir: str) -> str:
-    return os.path.join(build_nots_path(build_root), "nm_store", moddir)
-
-
+# TODO: удалить
 def build_vs_store_path(build_root: str, moddir: str) -> str:
     return os.path.join(build_nots_path(build_root), "vm_store", moddir)
 
 
-def build_traces_store_path(build_root: str, moddir: str) -> str:
-    return os.path.join(build_nots_path(build_root), "traces", moddir)
+def arc_root_to_folder_name(arc_root: str) -> str:
+    return arc_root.replace(os.sep, "-").replace(".", "-")
+
+
+def build_traces_store_path(build_root: str, moddir: str, arc_root: str = None) -> str:
+    base = build_nots_path(build_root)
+    if arc_root:
+        return os.path.join(base, "traces", arc_root_to_folder_name(arc_root), moddir)
+    return os.path.join(base, "traces", moddir)
 
 
 def build_pnpm_store_path(build_root: str) -> str:
@@ -101,10 +106,6 @@ def extract_package_name_from_path(p):
 
 
 # PNPM-specific utility functions
-def build_pre_lockfile_path(p):
-    return os.path.join(p, PNPM_PRE_LOCKFILE_FILENAME)
-
-
 def build_build_backup_lockfile_path(p):
     return os.path.join(p, PNPM_BUILD_BACKUP_LOCKFILE_FILENAME)
 
@@ -115,3 +116,32 @@ def build_lockfile_path(p):
 
 def build_ws_config_path(p):
     return os.path.join(p, PNPM_WS_FILENAME)
+
+
+def _remove_yaml_fields(path, fields):
+    if not os.path.exists(path):
+        return
+
+    try:
+        import ymakeyaml as yaml
+    except ImportError:
+        import yaml
+
+    with open(path) as f:
+        data = yaml.load(f, Loader=yaml.CSafeLoader) or {}
+
+    for field in fields:
+        data.pop(field, None)
+    with open(path, "w") as f:
+        yaml.dump(data, f, Dumper=yaml.CSafeDumper)
+
+
+def remove_node_modules_volatile_metadata(node_modules_path):
+    workspace_state_path = os.path.join(node_modules_path, PNPM_WORKSPACE_STATE_FILENAME)
+    if os.path.exists(workspace_state_path):
+        os.remove(workspace_state_path)
+
+    _remove_yaml_fields(
+        os.path.join(node_modules_path, ".modules.yaml"),
+        ("prunedAt", "storeDir"),
+    )

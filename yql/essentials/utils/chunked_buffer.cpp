@@ -46,7 +46,7 @@ size_t TChunkedBuffer::CopyTo(IOutputStream& dst, size_t toCopy) const {
 
 TChunkedBuffer& TChunkedBuffer::Append(TStringBuf buf, const std::shared_ptr<const void>& owner) {
     if (!buf.empty()) {
-        Items_.emplace_back(TChunk{buf, owner});
+        Items_.emplace_back(TChunk{.Buf = buf, .Owner = owner});
         Size_ += buf.size();
     }
     return *this;
@@ -55,7 +55,7 @@ TChunkedBuffer& TChunkedBuffer::Append(TStringBuf buf, const std::shared_ptr<con
 TChunkedBuffer& TChunkedBuffer::Append(TString&& str) {
     if (!str.empty()) {
         auto owner = std::make_shared<TString>(std::move(str));
-        Items_.emplace_back(TChunk{*owner, owner});
+        Items_.emplace_back(TChunk{.Buf = *owner, .Owner = owner});
         Size_ += owner->size();
     }
     return *this;

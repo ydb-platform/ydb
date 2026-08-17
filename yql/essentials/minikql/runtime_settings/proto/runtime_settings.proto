@@ -1,0 +1,19 @@
+package NYql.NProto;
+
+import "yql/essentials/providers/common/proto/activation/activation.proto";
+
+message TRuntimeSetting {
+    required string Name = 1;
+    required string Value = 2;
+    optional NYql.TActivationPercentage Activation = 3;
+}
+
+message TUdfSettings {
+    required string Module = 1;
+    repeated TRuntimeSetting RuntimeSettings = 2;
+}
+
+message TRuntimeSettings {
+    repeated TRuntimeSetting HostSettings = 1;
+    repeated TUdfSettings UdfSettings = 2;
+}

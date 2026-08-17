@@ -94,7 +94,7 @@ void TCounterWriter::PopTag()
     Counters_.pop_back();
 }
 
-void TCounterWriter::AddGauge(const std::string& name, double value)
+void TCounterWriter::AddGauge(TStringBuf name, double value)
 {
     auto& [gauge, iteration] = Counters_.back()->Gauges[name];
     iteration = Iteration_;
@@ -114,7 +114,7 @@ void TCounterWriter::AddGauge(const std::string& name, double value)
     gauge.Update(value);
 }
 
-void TCounterWriter::AddCounter(const std::string& name, i64 value)
+void TCounterWriter::AddCounter(TStringBuf name, i64 value)
 {
     auto& [counter, iteration, lastValue] = Counters_.back()->Counters[name];
     iteration = Iteration_;
@@ -245,9 +245,9 @@ void TProducerSet::Collect(IRegistryPtr profiler, IInvokerPtr invoker)
 
     invoker->Invoke(BIND_NO_PROPAGATE([_ = std::move(toRemove)] { }));
 
-    // Use blocking Get(), because we want to lock current thread while data structure is updating.
+    // Use BlockingGet(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
-        future.Get();
+        future.BlockingGet();
     }
 }
 

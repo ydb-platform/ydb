@@ -859,6 +859,21 @@ NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
             settings.csv.delimiter = delimiter[0];
         }
 
+        if (json.has("columns_list")) {
+            const auto& cl = json["columns_list"];
+            if (!cl.isArray()) {
+                throw yexception() << "columns_list must be a JSON array of strings";
+            }
+            const size_t n = cl.size();
+            for (size_t i = 0; i < n; ++i) {
+                settings.csv.file_column_names.push_back(cl[i].getString());
+            }
+        }
+
+        if (json.has("empty_as_default")) {
+            settings.csv.empty_as_default = json["empty_as_default"].get<bool>();
+        }
+
         if (json.has("data.datetime.formatname")) {
             auto formatName = json["data.datetime.formatname"].getString();
             settings.date_time_format_name = ToDateTimeFormat(formatName);

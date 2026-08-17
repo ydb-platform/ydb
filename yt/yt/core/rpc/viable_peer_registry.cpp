@@ -6,7 +6,11 @@
 
 #include <yt/yt/core/misc/random.h>
 
+#include <yt/yt/library/numeric/algorithm_helpers.h>
+
 #include <library/cpp/yt/compact_containers/compact_set.h>
+
+#include <util/random/shuffle.h>
 
 namespace NYT::NRpc {
 
@@ -19,6 +23,9 @@ using namespace NThreading;
 class TViablePeerRegistry
     : public IViablePeerRegistry
 {
+    template <class T>
+    using TPeerPriorityMap = TCompactFlatMap<EPeerPriority, T, TEnumTraits<EPeerPriority>::GetDomainSize()>;
+
 public:
     TViablePeerRegistry(
         TViablePeerRegistryConfigPtr config,
@@ -106,7 +113,6 @@ public:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        HashToActiveChannel_.clear();
         PriorityToHashToActiveChannel_.clear();
         ActivePeerToPriority_.Clear();
         PriorityToActivePeers_.clear();
@@ -122,10 +128,9 @@ public:
             auto lastActivePriority = PriorityToActivePeers_.rbegin()->first;
             auto firstBacklogPriority = PriorityToBacklogPeers_.begin()->first;
 
-            YT_LOG_DEBUG(
-                "Trying to rotate random active peer (LastActivePriority: %v, FirstBacklogPriority: %v)",
-                lastActivePriority,
-                firstBacklogPriority);
+            YT_TLOG_DEBUG("Trying to rotate random active peer")
+                .With("LastActivePriority", lastActivePriority)
+                .With("FirstBacklogPriority", firstBacklogPriority);
 
             if (lastActivePriority < firstBacklogPriority) {
                 return {};
@@ -137,7 +142,8 @@ public:
             const auto& activePeers = PriorityToActivePeers_.rbegin()->second;
             auto addressToEvict = activePeers.GetRandomElement().first;
 
-            YT_LOG_DEBUG("Moving random viable peer to backlog (Address: %v)", addressToEvict);
+            YT_TLOG_DEBUG("Moving random viable peer to backlog")
+                .With("Address", addressToEvict);
             // This call will automatically activate a random peer from the backlog.
             GuardedUnregisterPeer(addressToEvict);
             // The rotated peer will end up in the backlog after this call.
@@ -152,6 +158,11 @@ public:
     {
         auto guard = ReaderGuard(SpinLock_);
 
+        int activePeerCount = ActivePeerToPriority_.Size();
+        if (activePeerCount == 0) {
+            return nullptr;
+        }
+
         const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
         auto hash = balancingExt.has_balancing_hint()
             ? balancingExt.balancing_hint()
@@ -160,18 +171,9 @@ public:
         int stickyGroupSize = balancingExt.sticky_group_size();
         auto randomIndex = randomNumber % stickyGroupSize;
 
-        if (ActivePeerToPriority_.Size() == 0) {
-            return nullptr;
-        }
-
         int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, stickyGroupSize);
-
-        auto smallestPriorityEntryIt = PriorityToActivePeers_.begin();
-        int smallestPriorityActivePeerCount = smallestPriorityEntryIt->second.Size();
-        bool usePriority = smallestPriorityActivePeerCount >= minPeersToPickFrom;
-        const auto& hashToActiveChannel = usePriority
-            ? GetOrCrash(PriorityToHashToActiveChannel_, smallestPriorityEntryIt->first)
-            : HashToActiveChannel_;
+        const auto& priorityWithPeers = GetRandomPriorityByMinPeersGroupSize(minPeersToPickFrom);
+        const auto& hashToActiveChannel = GetOrCrash(PriorityToHashToActiveChannel_, priorityWithPeers.first);
 
         auto channelIt = hashToActiveChannel.lower_bound(std::pair(hash, std::string()));
         auto rebaseIt = [&] {
@@ -182,7 +184,7 @@ public:
 
         TCompactSet<std::string, 16> seenAddresses;
 
-        auto currentRandomIndex = usePriority ? randomIndex : (randomIndex % ActivePeerToPriority_.Size());
+        auto currentRandomIndex = randomIndex % priorityWithPeers.second.Size();
         while (true) {
             rebaseIt();
             const auto& address = channelIt->first.second;
@@ -196,13 +198,12 @@ public:
             }
         }
 
-        YT_LOG_DEBUG(
-            "Sticky peer selected (RequestId: %v, RequestHash: %x, RandomIndex: %v/%v, Address: %v)",
-            request->GetRequestId(),
-            hash,
-            randomIndex,
-            stickyGroupSize,
-            channelIt->first.second);
+        YT_TLOG_DEBUG("Sticky peer selected")
+            .With("RequestId", request->GetRequestId())
+            .WithFormat("RequestHash", "%x", hash)
+            .WithFormat("RandomIndex", "%v/%v", randomIndex, stickyGroupSize)
+            .With("PeerPriority", priorityWithPeers.first)
+            .With("Address", channelIt->first.second);
 
         return channelIt->second;
     }
@@ -211,27 +212,66 @@ public:
     {
         YT_ASSERT_READER_SPINLOCK_AFFINITY(SpinLock_);
 
-        YT_VERIFY(0 < peerCount && peerCount <= ActivePeerToPriority_.Size());
+        int activePeerCount = ActivePeerToPriority_.Size();
+        YT_VERIFY(0 < peerCount && peerCount <= activePeerCount);
 
         int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, peerCount);
 
         std::vector<std::pair<std::string, IChannelPtr>> peers;
+        peers.reserve(peerCount);
 
         const auto& smallestPriorityPool = PriorityToActivePeers_.begin()->second;
 
         if (minPeersToPickFrom <= smallestPriorityPool.Size()) {
+            // Common case.
             for (const auto& index : GetRandomIndexes(smallestPriorityPool.Size(), peerCount)) {
                 peers.push_back(smallestPriorityPool[index]);
             }
-        } else {
-            for (const auto& index : GetRandomIndexes(ActivePeerToPriority_.Size(), peerCount)) {
-                const auto& [address, priority] = ActivePeerToPriority_[index];
-                peers.emplace_back(
-                    address,
-                    GetOrCrash(PriorityToActivePeers_, priority).Get(address));
+
+            return peers;
+        }
+
+        // Create random sample of priorities of peerCount size,
+        // with probability of priority is peerGroupSize / minPeersToPickFrom.
+        std::vector<EPeerPriority> peerPriorities;
+        peerPriorities.reserve(minPeersToPickFrom);
+        for (const auto& [priority, peers]: PriorityToActivePeers_) {
+            if (peers.Size() < minPeersToPickFrom) {
+                peerPriorities.insert(peerPriorities.end(), peers.Size(), priority);
+                minPeersToPickFrom -= peers.Size();
+            } else {
+                peerPriorities.insert(peerPriorities.end(), minPeersToPickFrom, priority);
+                break;
             }
         }
 
+        PartialShuffle(peerPriorities.begin(), peerPriorities.begin() + peerCount, peerPriorities.end());
+        peerPriorities.resize(peerCount);
+
+        TPeerPriorityMap<int> peerPriorityCounts;
+        for (auto peerPriority : peerPriorities) {
+            ++peerPriorityCounts[peerPriority];
+        }
+
+        if (peerPriorityCounts.size() == 1) {
+            // Fast path: all peers have the same priority.
+            const auto& priorityPeers = GetOrCrash(PriorityToActivePeers_, peerPriorityCounts.begin()->first);
+            for (const auto& index : GetRandomIndexes(priorityPeers.Size(), peerCount)) {
+                peers.push_back(priorityPeers[index]);
+            }
+
+            return peers;
+        }
+
+        // Slow path.
+        for (const auto& [priority, count] : peerPriorityCounts) {
+            const auto& priorityPeers = GetOrCrash(PriorityToActivePeers_, priority);
+            for (const auto& index : GetRandomIndexes(priorityPeers.Size(), count)) {
+                peers.push_back(priorityPeers[index]);
+            }
+        }
+
+        Shuffle(peers.begin(), peers.end());
         return peers;
     }
 
@@ -247,12 +287,11 @@ public:
 
         const auto& theWinner = getLoad(channelOne) < getLoad(channelTwo) ? channelOne : channelTwo;
 
-        YT_LOG_DEBUG(
-            "Selected a peer via the power of two choices strategy (RequestId: %v, Peer1: %v, Peer2: %v, Winner: %v)",
-            request ? request->GetRequestId() : TRequestId(),
-            channelOne.first,
-            channelTwo.first,
-            theWinner.first);
+        YT_TLOG_DEBUG("Selected a peer via the power of two choices strategy")
+            .With("RequestId", request ? request->GetRequestId() : TRequestId())
+            .With("Peer1", channelOne.first)
+            .With("Peer2", channelTwo.first)
+            .With("Winner", theWinner.first);
 
         return theWinner.second;
     }
@@ -277,21 +316,19 @@ public:
                 backupPeer.second,
                 *hedgingOptions);
 
-            YT_LOG_DEBUG(
-                "Random peers selected (RequestId: %v, PrimaryAddress: %v, BackupAddress: %v)",
-                request ? request->GetRequestId() : TRequestId(),
-                primaryPeer.first,
-                backupPeer.first);
+            YT_TLOG_DEBUG("Random peers selected")
+                .With("RequestId", request ? request->GetRequestId() : TRequestId())
+                .With("PrimaryAddress", primaryPeer.first)
+                .With("BackupAddress", backupPeer.first);
         } else if (Config_->EnablePowerOfTwoChoicesStrategy && ActivePeerToPriority_.Size() >= 2) {
             return PickChannelFromTwoRandom(request);
         } else {
             auto peer = PickRandomPeers()[0];
             channel = peer.second;
 
-            YT_LOG_DEBUG(
-                "Random peer selected (RequestId: %v, Address: %v)",
-                request ? request->GetRequestId() : TRequestId(),
-                peer.first);
+            YT_TLOG_DEBUG("Random peer selected")
+                .With("RequestId", request ? request->GetRequestId() : TRequestId())
+                .With("Address", peer.first);
         }
 
         return channel;
@@ -320,6 +357,8 @@ public:
     }
 
 private:
+    using TPriorityToPeers = std::map<EPeerPriority, TIndexedHashMap<std::string, IChannelPtr>>::value_type;
+
     const TViablePeerRegistryConfigPtr Config_;
     const TCallback<IChannelPtr(const std::string& address)> CreateChannel_;
     const IPeerPriorityProviderPtr PeerPriorityProvider_;
@@ -327,15 +366,13 @@ private:
 
     const size_t ClientStickinessRandomNumber_ = RandomNumber<size_t>();
 
-
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
     // Information for active peers with created channels.
     std::map<EPeerPriority, TIndexedHashMap<std::string, IChannelPtr>> PriorityToActivePeers_;
     TIndexedHashMap<std::string, EPeerPriority> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
-    std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
-    THashMap<EPeerPriority, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
+    TPeerPriorityMap<std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
 
     THashMap<std::string, EPeerPriority> BacklogPeerToPriority_;
     std::map<EPeerPriority, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;
@@ -346,14 +383,15 @@ private:
     {
         YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
-        YT_LOG_DEBUG("Awaiting peer availability");
+        YT_TLOG_DEBUG("Awaiting peer availability");
         PeersAvailablePromise_ = NewPromise<void>();
 
         PeersAvailablePromise_.ToFuture().Subscribe(BIND([Logger = Logger] (const TError& error) {
             if (error.IsOK()) {
-                YT_LOG_DEBUG("Peers are available");
+                YT_TLOG_DEBUG("Peers are available");
             } else {
-                YT_LOG_DEBUG(error, "Error while awaiting peers");
+                YT_TLOG_DEBUG("Error while awaiting peers")
+                    .With(error);
             }
         }));
     }
@@ -371,7 +409,7 @@ private:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        if (resetStoredError && PeersAvailablePromise_.IsSet() && !PeersAvailablePromise_.Get().IsOK()) {
+        if (resetStoredError && PeersAvailablePromise_.IsSet() && !PeersAvailablePromise_.GetOrCrash().IsOK()) {
             InitPeersAvailablePromise();
         }
 
@@ -401,10 +439,9 @@ private:
                     // MaxPeerCount is required to be positive.
                     YT_VERIFY(!PriorityToActivePeers_.empty());
                     auto lastActivePeerPriority = PriorityToActivePeers_.rbegin()->first;
-                    YT_LOG_DEBUG(
-                        "Comparing priorities with active peers (LargestActivePeerPriority: %v, CurrentPeerPriority: %v)",
-                        lastActivePeerPriority,
-                        priority);
+                    YT_TLOG_DEBUG("Comparing priorities with active peers")
+                        .With("LargestActivePeerPriority", lastActivePeerPriority)
+                        .With("CurrentPeerPriority", priority);
 
                     if (priority < lastActivePeerPriority) {
                         // If an active peer with lower priority than the one being added exists,
@@ -413,18 +450,16 @@ private:
                         auto activePeerAddressToEvict = PriorityToActivePeers_.rbegin()->second.GetRandomElement().first;
                         EraseActivePeer(activePeerAddressToEvict);
                         AddBacklogPeer(activePeerAddressToEvict, lastActivePeerPriority);
-                        YT_LOG_DEBUG(
-                            "Active peer evicted to backlog (Address: %v, Priority: %v, ReplacingAddress: %v)",
-                            activePeerAddressToEvict,
-                            lastActivePeerPriority,
-                            address);
+                        YT_TLOG_DEBUG("Active peer evicted to backlog")
+                            .With("Address", activePeerAddressToEvict)
+                            .With("Priority", lastActivePeerPriority)
+                            .With("ReplacingAddress", address);
                         // We don't return here, since we still need to add our actual peer to the set of active peers.
                     } else {
                         AddBacklogPeer(address, priority);
-                        YT_LOG_DEBUG(
-                            "Viable peer added to backlog (Address: %v, Priority: %v)",
-                            address,
-                            priority);
+                        YT_TLOG_DEBUG("Viable peer added to backlog")
+                            .With("Address", address)
+                            .With("Priority", priority);
                         return true;
                     }
                 }
@@ -433,13 +468,12 @@ private:
 
         AddActivePeer(address, priority);
 
-        YT_LOG_DEBUG(
-            "Activated viable peer (Address: %v, Priority: %v, ActivePeerCount: %v, BacklogPeerCount: %v, MaxPeerCount: %v)",
-            address,
-            priority,
-            ActivePeerToPriority_.Size(),
-            BacklogPeerToPriority_.size(),
-            Config_->MaxPeerCount);
+        YT_TLOG_DEBUG("Activated viable peer")
+            .With("Address", address)
+            .With("Priority", priority)
+            .With("ActivePeerCount", ActivePeerToPriority_.Size())
+            .With("BacklogPeerCount", BacklogPeerToPriority_.size())
+            .With("MaxPeerCount", Config_->MaxPeerCount);
 
         return true;
     }
@@ -461,23 +495,21 @@ private:
 
         // Check if the peer is in the backlog and erase it if so.
         if (EraseBacklogPeer(address)) {
-            YT_LOG_DEBUG(
-                "Unregistered backlog peer (Address: %v, ActivePeerCount: %v, BacklogPeerCount: %v, MaxPeerCount: %v)",
-                address,
-                ActivePeerToPriority_.Size(),
-                BacklogPeerToPriority_.size(),
-                Config_->MaxPeerCount);
+            YT_TLOG_DEBUG("Unregistered backlog peer")
+                .With("Address", address)
+                .With("ActivePeerCount", ActivePeerToPriority_.Size())
+                .With("BacklogPeerCount", BacklogPeerToPriority_.size())
+                .With("MaxPeerCount", Config_->MaxPeerCount);
             return true;
         }
 
         // Check if the peer is active and erase it if so.
         if (EraseActivePeer(address)) {
-            YT_LOG_DEBUG(
-                "Unregistered active peer (Address: %v, ActivePeerCount: %v, BacklogPeerCount: %v, MaxPeerCount: %v)",
-                address,
-                ActivePeerToPriority_.Size(),
-                BacklogPeerToPriority_.size(),
-                Config_->MaxPeerCount);
+            YT_TLOG_DEBUG("Unregistered active peer")
+                .With("Address", address)
+                .With("ActivePeerCount", ActivePeerToPriority_.Size())
+                .With("BacklogPeerCount", BacklogPeerToPriority_.size())
+                .With("MaxPeerCount", Config_->MaxPeerCount);
             ActivateBacklogPeers();
             return true;
         }
@@ -495,7 +527,9 @@ private:
 
             // Peer will definitely be activated, since the number of active peers is less than MaxPeerCount.
             RegisterPeerWithPriority(randomBacklogPeer.first, priority);
-            YT_LOG_DEBUG("Activated peer from backlog (Address: %v, Priority: %v)", randomBacklogPeer.first, priority);
+            YT_TLOG_DEBUG("Activated peer from backlog")
+                .With("Address", randomBacklogPeer.first)
+                .With("Priority", priority);
 
             // Until this moment the newly activated peer is still present in the backlog.
             EraseBacklogPeer(randomBacklogPeer.first);
@@ -513,7 +547,6 @@ private:
         // Save the created channel for the given address for sticky requests.
         auto& priorityHashToActiveChannel = PriorityToHashToActiveChannel_[priority];
         GeneratePeerHashes(address, [&] (size_t hash) {
-            HashToActiveChannel_[std::pair(hash, address)] = channel;
             priorityHashToActiveChannel[std::pair(hash, address)] = channel;
         });
 
@@ -541,7 +574,6 @@ private:
 
         auto priorityHashToActiveChannelIt = GetIteratorOrCrash(PriorityToHashToActiveChannel_, activePeerIt->second);
         GeneratePeerHashes(address, [&] (size_t hash) {
-            HashToActiveChannel_.erase(std::pair(hash, address));
             priorityHashToActiveChannelIt->second.erase(std::pair(hash, address));
         });
 
@@ -578,6 +610,24 @@ private:
         BacklogPeerToPriority_.erase(backlogPeerIt);
 
         return true;
+    }
+
+    const TPriorityToPeers& GetRandomPriorityByMinPeersGroupSize(
+        int minPeersToPickFrom) const
+    {
+        YT_ASSERT_READER_SPINLOCK_AFFINITY(SpinLock_);
+
+        int activePeerCount = ActivePeerToPriority_.Size();
+        auto priorityEntryIt = PriorityToActivePeers_.begin();
+        if (priorityEntryIt->second.Size() < minPeersToPickFrom && PriorityToActivePeers_.size() > 1) {
+            int randomPeerPrioritySelectionIndex = RandomNumber<size_t>(std::min(minPeersToPickFrom, activePeerCount));
+            while (randomPeerPrioritySelectionIndex >= priorityEntryIt->second.Size()) {
+                randomPeerPrioritySelectionIndex -= priorityEntryIt->second.Size();
+                ++priorityEntryIt;
+            }
+        }
+
+        return *priorityEntryIt;
     }
 };
 

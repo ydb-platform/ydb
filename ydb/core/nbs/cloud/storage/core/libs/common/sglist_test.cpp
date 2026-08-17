@@ -4,8 +4,10 @@ namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSgList ResizeBlocks(TVector<TString>& blocks, ui64 blocksCount,
-                     const TString& blockContent)
+TSgList ResizeBlocks(
+    TVector<TString>& blocks,
+    ui64 blocksCount,
+    const TString& blockContent)
 {
     blocks.clear();
     blocks.reserve(blocksCount);

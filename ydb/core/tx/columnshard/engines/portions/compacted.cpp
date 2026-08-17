@@ -20,8 +20,7 @@ void TCompactedPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobI
             NIceDb::TUpdate<IndexPortions::CommitTxId>(0), NIceDb::TUpdate<IndexPortions::InsertWriteId>(0),
             NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1), NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
             NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
 }
 

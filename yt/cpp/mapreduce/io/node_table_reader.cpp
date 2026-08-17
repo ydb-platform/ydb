@@ -3,6 +3,7 @@
 #include <yt/cpp/mapreduce/common/node_builder.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <library/cpp/yson/parser.h>
@@ -341,6 +342,16 @@ bool TNodeTableReader::IsRawReaderExhausted() const
     return Finished_;
 }
 
+void TNodeTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TNodeTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TNodeTableReader::PrepareParsing()
@@ -368,6 +379,9 @@ void TNodeTableReader::OnStreamError(std::exception_ptr exception, TString error
 
 void TNodeTableReader::CheckValidity() const
 {
+    if (IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     if (!Valid_) {
         ythrow yexception() << "Iterator is not valid";
     }

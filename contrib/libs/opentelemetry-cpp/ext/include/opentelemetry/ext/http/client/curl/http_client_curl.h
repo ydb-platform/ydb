@@ -60,7 +60,7 @@ public:
 class Request : public opentelemetry::ext::http::client::Request
 {
 public:
-  Request() : method_(opentelemetry::ext::http::client::Method::Get), uri_("/") {}
+  Request() : uri_("/") {}
 
   void SetMethod(opentelemetry::ext::http::client::Method method) noexcept override
   {
@@ -113,7 +113,7 @@ public:
   }
 
 public:
-  opentelemetry::ext::http::client::Method method_;
+  opentelemetry::ext::http::client::Method method_{opentelemetry::ext::http::client::Method::Get};
   opentelemetry::ext::http::client::HttpSslOptions ssl_options_;
   opentelemetry::ext::http::client::Body body_;
   opentelemetry::ext::http::client::Headers headers_;
@@ -242,6 +242,11 @@ class HttpClientSync : public opentelemetry::ext::http::client::HttpClientSync
 public:
   HttpClientSync() : curl_global_initializer_(HttpCurlGlobalInitializer::GetInstance()) {}
 
+  HttpClientSync(const HttpClientSync &)            = delete;
+  HttpClientSync(HttpClientSync &&)                 = delete;
+  HttpClientSync &operator=(const HttpClientSync &) = delete;
+  HttpClientSync &operator=(HttpClientSync &&)      = delete;
+
   opentelemetry::ext::http::client::Result Get(
       const nostd::string_view &url,
       const opentelemetry::ext::http::client::HttpSslOptions &ssl_options,
@@ -312,6 +317,12 @@ public:
   // The call (curl_global_init) is not thread safe. Ensure this is called only once.
   HttpClient();
   HttpClient(const std::shared_ptr<sdk::common::ThreadInstrumentation> &thread_instrumentation);
+
+  HttpClient(const HttpClient &)            = delete;
+  HttpClient(HttpClient &&)                 = delete;
+  HttpClient &operator=(const HttpClient &) = delete;
+  HttpClient &operator=(HttpClient &&)      = delete;
+
   ~HttpClient() override;
 
   std::shared_ptr<opentelemetry::ext::http::client::Session> CreateSession(

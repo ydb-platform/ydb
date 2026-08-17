@@ -105,6 +105,87 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         }
     }
 
+    // ReadTokenAsLabelValue's loop runs MAX_LABEL_VALUE_LEN times: one iteration per
+    // appended character plus one final iteration to detect the closing quote. So the
+    // longest value it can successfully parse is (MAX_LABEL_VALUE_LEN - 1) characters.
+    Y_UNIT_TEST(LabelValueAtNewLimitIsAccepted) {
+        const auto value = TString(1023, 'a');
+        const auto inputMetrics = TString("m{l=\"") + value + "\"} 1\n";
+
+        auto samples = Decode(inputMetrics);
+
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+        auto& s = samples.GetSamples(0);
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
+        ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "m");
+        ASSERT_LABEL_EQUAL(s.GetLabels(1), "l", value);
+    }
+
+    Y_UNIT_TEST(LabelValueOverNewLimitStillThrows) {
+        const auto value = TString(1024, 'a');
+        const auto inputMetrics = TString("m{l=\"") + value + "\"} 1\n";
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Decode(inputMetrics), TPrometheusDecodeException,
+            "trying to parse too long label value, size >= 1024");
+    }
+
+    Y_UNIT_TEST(NameAlreadyPresent) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics);
+        } catch(...) {
+            return;
+        }
+        UNIT_ASSERT(false);
+    }
+
+    Y_UNIT_TEST(NameAlreadyPresentButMangled) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics, TPrometheusDecodeSettings{.NameMangler = [](auto s) -> TString {
+                                      return TStringBuilder{}<<"mm_" << s;
+                                  }});
+        } catch(...) {
+            UNIT_ASSERT(false);
+        }
+    }
+
+    Y_UNIT_TEST(MangledNameClash) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{mm_sensor=\"other\",sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics, TPrometheusDecodeSettings{.NameMangler = [](auto s) -> TString {
+                                      return TStringBuilder{}<<"mm_" << s;
+                                  }});
+        } catch(...) {
+            return;
+        }
+        UNIT_ASSERT(false);
+    }
+
     Y_UNIT_TEST(Counter) {
         constexpr auto inputMetrics =
             "# A normal comment.\n"

@@ -22,6 +22,11 @@ public:
       : cardinality_limit_(cardinality_limit)
   {}
 
+  AggregationConfig(const AggregationConfig &)            = default;
+  AggregationConfig(AggregationConfig &&)                 = default;
+  AggregationConfig &operator=(const AggregationConfig &) = default;
+  AggregationConfig &operator=(AggregationConfig &&)      = default;
+
   virtual AggregationType GetType() const noexcept { return AggregationType::kDefault; }
 
   static const AggregationConfig *GetOrDefault(const AggregationConfig *config)

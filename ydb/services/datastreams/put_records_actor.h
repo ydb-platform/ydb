@@ -16,6 +16,7 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataStreams::V1 {
 
@@ -24,6 +25,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString Key;
         TString ExplicitHash;
         TString Ip;
+        TString ChoosePartitionKey;
     };
 
     TString GetSerializedData(const TPutRecordsItem& item) {
@@ -37,7 +39,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString str;
         bool res = proto.SerializeToString(&str);
-        Y_ABORT_UNLESS(res);
+        AFL_ENSURE(res);
         return str;
     }
 
@@ -108,6 +110,7 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetData(GetSerializedData(item));
                 w->SetPartitionKey(item.Key);
                 w->SetExplicitHash(item.ExplicitHash);
+                w->SetChoosePartitionKey(item.ChoosePartitionKey);
                 w->SetDisableDeduplication(true);
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
@@ -130,8 +133,8 @@ namespace NKikimr::NDataStreams::V1 {
                 return;
             }
 
-            Y_ABORT_UNLESS(ev->Get()->Record.HasPartitionResponse());
-            Y_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0, "Wrong number of cmd write commands");
+            AFL_ENSURE(ev->Get()->Record.HasPartitionResponse());
+            AFL_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0)("reason", "Wrong number of cmd write commands");
             auto offset = ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult(0).GetOffset();
             ReplySuccessAndDie(ctx, offset);
         }
@@ -272,7 +275,7 @@ namespace NKikimr::NDataStreams::V1 {
             , TRlHelpers({}, request, 4_KB, false, TDuration::Seconds(1))
             , Ip(request->GetPeerName())
     {
-        Y_ENSURE(request);
+        AFL_ENSURE(request);
     }
 
     template<class TDerived, class TProto>
@@ -325,7 +328,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
-        if (AppData(this->ActorContext())->EnforceUserTokenRequirement || AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
@@ -353,7 +356,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
+            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
         } else {
             Write(this->ActorContext());
         }
@@ -398,7 +401,7 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx) {
         auto it = PartitionToActor.find(ev->Get()->PartitionId);
-        Y_ENSURE(it != PartitionToActor.end());
+        AFL_ENSURE(it != PartitionToActor.end());
         if (ev->Get()->ErrorText.Defined()) {
             PutRecordsResult.set_failed_record_count(
                     PutRecordsResult.failed_record_count() + it->second.RecordIndexes.size());
@@ -450,7 +453,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString hashKey = NPQ::AsKeyBound(GetHashKey(record));
         auto* partition = chooser->GetPartition(hashKey);
-        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
+        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip, hashKey});
         PartitionToActor[partition->PartitionId].RecordIndexes.push_back(index);
     }
 

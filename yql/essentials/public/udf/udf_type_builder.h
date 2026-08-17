@@ -687,7 +687,18 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 47)
+class IFunctionTypeInfoBuilder20: public IFunctionTypeInfoBuilder19 {
+public:
+    // You should not use this method for defining UDF signatures, it's used for runtime behavior change only.
+    // For example, add extra input validation based on runtime setting.
+    virtual TStringRef GetRuntimeSetting(TStringRef name) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 47)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder20;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder19;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder18;

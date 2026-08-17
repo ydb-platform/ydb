@@ -2,6 +2,8 @@
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -11,7 +13,7 @@ namespace {
 class TPgDqIntegration: public TDqIntegrationBase {
 public:
     explicit TPgDqIntegration(TPgState::TPtr state)
-        : State_(state)
+        : State_(std::move(state))
     {
     }
 
@@ -21,7 +23,7 @@ public:
 
     TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
         if (AllOf(read, [](const auto val) { return TPgReadTable::Match(val); })) {
-            return 0ul;
+            return 0UL;
         }
         return Nothing();
     }

@@ -9,7 +9,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAttributeConsumer::TAttributeConsumer(IAttributeDictionary* attributes, std::optional<THashSet<TString>> keyWhitelist)
+TAttributeConsumer::TAttributeConsumer(IAttributeDictionary* attributes, std::optional<THashSet<std::string>> keyWhitelist)
     : Attributes_(attributes)
     , KeyWhitelist_(std::move(keyWhitelist))
 { }
@@ -22,7 +22,7 @@ IAttributeDictionary* TAttributeConsumer::GetAttributes() const
 void TAttributeConsumer::OnMyKeyedItem(TStringBuf key)
 {
     Writer_.reset(new TBufferedBinaryYsonWriter(&Output_));
-    Forward(Writer_.get(), [this, key = TString(key)] {
+    Forward(Writer_.get(), [this, key = std::string(key)] {
         Writer_->Flush();
         Writer_.reset();
         if (!KeyWhitelist_ || KeyWhitelist_->contains(key)) {

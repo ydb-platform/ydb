@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -50,6 +51,8 @@ struct ScopeMetrics
   inline ScopeMetrics &operator=(const ScopeMetrics &) = default;
 
   inline ScopeMetrics &operator=(ScopeMetrics &&) = default;
+
+  ~ScopeMetrics() = default;
 };
 
 struct ResourceMetrics
@@ -70,6 +73,8 @@ struct ResourceMetrics
   inline ResourceMetrics &operator=(const ResourceMetrics &) = default;
 
   inline ResourceMetrics &operator=(ResourceMetrics &&) = default;
+
+  ~ResourceMetrics() = default;
 };
 
 /**
@@ -85,10 +90,12 @@ public:
   MetricProducer()          = default;
   virtual ~MetricProducer() = default;
 
-  MetricProducer(const MetricProducer &)  = delete;
-  MetricProducer(const MetricProducer &&) = delete;
+  MetricProducer(const MetricProducer &)            = delete;
+  MetricProducer(MetricProducer &&)                 = delete;
+  MetricProducer &operator=(const MetricProducer &) = delete;
+  MetricProducer &operator=(MetricProducer &&)      = delete;
 
-  enum class Status
+  enum class Status : std::uint8_t
   {
     kSuccess,
     kFailure,

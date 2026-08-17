@@ -44,9 +44,13 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
             if (onFinishWaiting) {
                 onFinishWaiting();
             }
-            throw;
+            throw yexception() << "HTTP request to model API failed, reason:\n" << CurrentExceptionMessage();
         }
     }();
+
+    if (response.Interrupted) {
+        throw yexception() << "Request to model API was interrupted";
+    }
 
     if (!response.IsSuccess()) {
         throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);

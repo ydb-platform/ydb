@@ -99,6 +99,11 @@ YT_DEFINE_ERROR_ENUM(
     ((HunkTabletStoreToggleConflict)          (1745))
     ((HunkStoreAllocationFailed)              (1746))
     ((TabletResharded)                        (1747))
+    ((ReadOnlySmoothMovementStage)            (1748))
+
+    // Test error codes.
+    ((TestingFailureBeforeWrite)              (1798))
+    ((TestingFailureAfterWrite)               (1799))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -246,6 +251,7 @@ DEFINE_ENUM(ESecondaryIndexKind,
     ((Unique)                   (2))
 );
 
+struct TUnfoldedColumns;
 struct TIndexInfo;
 
 DEFINE_ENUM(ETableToIndexCorrespondence,

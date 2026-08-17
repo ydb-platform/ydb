@@ -7,7 +7,7 @@
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
                   {
@@ -39,7 +39,7 @@
           ]
       },
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (BlockHash)",
         "args":
           [
             {

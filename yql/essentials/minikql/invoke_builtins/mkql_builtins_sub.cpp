@@ -5,8 +5,9 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -30,21 +31,7 @@ struct TSub: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TSub<TLeft, 
 template <ui8 Precision>
 struct TDecimalSub {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        const auto s = SafeSub(l, r);
-
-        using namespace NYql::NDecimal;
-
-        if (IsNormal<Precision>(l) && IsNormal<Precision>(r) && IsNormal<Precision>(s)) {
-            return NUdf::TUnboxedValuePod(s);
-        }
-
-        if (IsNan(l) || IsNan(r) || !s) {
-            return NUdf::TUnboxedValuePod(Nan());
-        } else {
-            return NUdf::TUnboxedValuePod(s > 0 ? +Inf() : -Inf());
-        }
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::Sub(left.GetInt128(), right.GetInt128(), Precision));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -249,8 +236,8 @@ struct TAnyDateTimeSubIntervalT {
         const auto zero = ConstantInt::get(type, 0);
 
         if (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(type, APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(left, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
@@ -697,5 +684,4 @@ void RegisterSub(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Sub"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

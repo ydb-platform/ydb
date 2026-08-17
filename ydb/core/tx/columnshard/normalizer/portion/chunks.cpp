@@ -16,7 +16,8 @@ class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
 
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -80,7 +81,8 @@ public:
         std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
         : Blobs(std::move(blobs))
         , Chunks(std::move(chunks))
-        , NormContext(nCtx) {
+        , NormContext(nCtx)
+    {
     }
 
     virtual TString GetTaskClassIdentifier() const override {
@@ -135,7 +137,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
-    ACFL_INFO("normalizer", "TChunksNormalizer")("message", TStringBuilder() << chunks.size() << " chunks found");
+    YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TChunksNormalizer"},
+        {"message", TStringBuilder() << chunks.size() << " chunks found"});
     if (chunks.empty()) {
         return tasks;
     }
@@ -143,7 +147,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
     TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
-        ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
+        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TChunksNormalizer"},
+            {"error", "can't initialize tables manager"});
         return TConclusionStatus::Fail("Can't load index");
     }
 

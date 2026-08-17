@@ -26,6 +26,7 @@ PY3TEST()
         contrib/python/boto3
         contrib/python/moto
         contrib/python/requests
+        library/python/port_manager
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python
@@ -37,5 +38,10 @@ PY3TEST()
     )
 
     SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:4)
+    ELSE()
+        REQUIREMENTS(cpu:2)
+    ENDIF()
 
 END()

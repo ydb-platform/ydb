@@ -23,9 +23,11 @@ private:
     TString YdbTokenFile;
     TString CaCertificateFile;
     TString SslCertificateFile;
+    std::optional<NMvp::EAccessServiceType> AccessServiceTypeFromConfig;
+    std::optional<NMvp::EAccessServiceType> AccessServiceTypeFromTokenFile;
 
 public:
-    std::optional<NMvp::TTokensConfig> TokensOverrideConfig;
+    std::optional<NMvp::TTokensConfig> TokensFromConfig;
 
     bool LogToStderr = false;
     bool Mlock = false;
@@ -48,8 +50,9 @@ private:
     void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic);
     void SetPorts();
     TString AddSchemeToUserToken(const TString& token, const TString& scheme);
+    void MergeAccessServiceType();
     void MigrateJwtInfoToOAuth2Exchange();
-    void ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride);
+    void ValidateTokensFromConfig(const NMvp::TTokensConfig& tokensOverride);
     void ValidateOAuth2ExchangeTokenEndpointScheme(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
                                                    const TString& configSource);
     void ValidateOAuth2ExchangeTokenNames(const google::protobuf::RepeatedPtrField<NMvp::TOAuth2Exchange>& oauth2Exchange,
@@ -57,9 +60,9 @@ private:
     void ValidateOAuth2CredentialsFields(const NMvp::TOAuth2Exchange::TCredentials& creds,
                                          const TString& credsRole,
                                          const TString& tokenName);
-    void OverrideTokensConfig();
+    void OverrideTokensFromConfig();
     void ValidateTokensConfig();
-    void LoadTokens();
+    void LoadTokensFromTokenFile();
     void LoadCertificates();
 };
 

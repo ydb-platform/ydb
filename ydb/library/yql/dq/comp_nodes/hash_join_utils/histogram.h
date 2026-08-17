@@ -19,7 +19,7 @@ public:
     Histogram() = default;
 
     template <typename F, typename... Args>
-    void AddData(const TTupleLayout* layout, const ui8* data, ui32 nTuples, F HashMapper, Args&&... args) {
+    void AddData(const TTupleLayout* layout, const ui8* data, ui32 nTuples, F HashMapper, const Args&... args) {
         const auto layoutTotalRowSize = layout->TotalRowSize;
 
         for (ui32 i = 0; i < nTuples; i += 1 /*step*/) {
@@ -38,7 +38,7 @@ public:
                 overflowSize += size;
             }
 
-            auto key = HashMapper(hash, std::forward<Args>(args)...);
+            auto key = HashMapper(hash, args...);
             TuplesCountStatistics_[key]++;
             TuplesSizeStatistics_[key] += layoutTotalRowSize;
             OverflowSizeStatistics_[key] += overflowSize;

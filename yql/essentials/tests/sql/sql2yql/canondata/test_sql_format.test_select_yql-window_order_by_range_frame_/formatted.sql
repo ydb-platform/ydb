@@ -1,0 +1,235 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE CURRENT ROW
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE UNBOUNDED PRECEDING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE 1 PRECEDING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN 1 PRECEDING AND CURRENT ROW
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE CURRENT ROW
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN CURRENT ROW AND CURRENT ROW
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);
+
+SELECT
+    a,
+    Sum(a) OVER (
+        ORDER BY
+            a
+        RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+    ) AS r
+FROM (
+    VALUES
+        (1),
+        (2),
+        (3),
+        (4),
+        (5)
+) AS x (
+    a
+);

@@ -5,6 +5,10 @@ namespace NKqp {
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
+bool TExtractJoinExpressionsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
@@ -19,11 +23,11 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     TVector<TMapElement> mapElements;
 
     for (auto & c : conjuncts) {
-        if (c.MaybeJoinCondition(false)) {
+        if (c.MaybeEquiJoinCondition()) {
             newConjuncts.push_back(c);
         }
-        else if (c.MaybeJoinCondition(true)) {
-            TJoinCondition cond(c);
+        else if (c.MaybeExprEquiJoinCondition()) {
+            TEquiJoinCondition cond(c);
             TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameMap;
             TNodeOnNodeOwnedMap replaceMap;
             if (cond.ExtractExpressions(replaceMap, renameMap)) {
@@ -44,7 +48,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     }
 
     filter->FilterExpr = MakeConjunction(newConjuncts, props.PgSyntax);
-    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
+    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements);
     filter->SetInput(newMap);
     return true;
 }

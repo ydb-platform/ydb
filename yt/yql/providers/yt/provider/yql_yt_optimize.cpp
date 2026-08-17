@@ -42,14 +42,16 @@ TMaybeNode<TYtSection> MaterializeSectionIfRequired(TExprBase world, TYtSection 
     const bool hasLimit = NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip);
     bool needMaterialize = hasLimit && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample);
     bool hasDynamic = false;
+    bool hasRLS = false;
     if (!needMaterialize) {
         bool hasRanges = false;
         for (TYtPath path: section.Paths()) {
             TYtPathInfo pathInfo(path);
             hasDynamic = hasDynamic || (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic);
+            hasRLS = hasRLS || (pathInfo.Table->Meta && pathInfo.Table->Meta->HasRLS);
             hasRanges = hasRanges || pathInfo.Ranges;
         }
-        needMaterialize = hasRanges || (hasLimit && hasDynamic);
+        needMaterialize = hasRanges || (hasLimit && (hasDynamic || hasRLS));
     }
 
     if (needMaterialize) {
@@ -324,7 +326,7 @@ TMaybeNode<TYtSection> UpdateSectionWithFilters(TYtSection section, const TVecto
         .Done();
 }
 
-} //namespace
+} // namespace
 
 TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection section, TYtDSink dataSink, TYqlRowSpecInfo::TPtr outRowSpec, bool keepSortness, bool allowWorldDeps, bool allowMaterialize,
     TSyncMap& syncList, const TYtState::TPtr& state, TExprContext& ctx)
@@ -373,7 +375,7 @@ TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection sec
 
 TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool keepSortness, const TYtState::TPtr& state, TExprContext& ctx) {
     TYtOutTableInfo outTable(GetSequenceItemType(section, false)->Cast<TStructExprType>(),
-        state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration));
     if (section.Paths().Size() == 1) {
         auto srcTableInfo = TYtTableBaseInfo::Parse(section.Paths().Item(0).Table());
         if (keepSortness && srcTableInfo->RowSpec && srcTableInfo->RowSpec->IsSorted()) {
@@ -548,7 +550,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         } else {
                                             itemsCount += tableRecord;
                                         }
-                                        if (info->Table->Meta->IsDynamic) {
+                                        if (info->Table->Meta->IsDynamic || info->Table->Meta->HasRLS) {
                                             useItemsCount = false;
                                         }
                                         YQL_ENSURE(info->Table->Cluster);
@@ -826,9 +828,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
             continue;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
-            continue;
-        }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
             continue;
         }
 

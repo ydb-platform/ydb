@@ -2,6 +2,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <unordered_set>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -196,8 +197,8 @@ private:
 
 public:
     TSetCreate(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -275,8 +276,8 @@ private:
 
 public:
     TSetDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -305,8 +306,8 @@ private:
 
 public:
     TSetMerge(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -362,13 +363,13 @@ UDF_TYPE_ID_MAP(MAKE_RESOURCE)
         setType = builder.Resource(SetResourceName##slot); \
         break;
 
-static const auto CreateName = TStringRef::Of("Create");
-static const auto AddValueName = TStringRef::Of("AddValue");
-static const auto WasChangedName = TStringRef::Of("WasChanged"); // must be used right after AddValue
-static const auto SerializeName = TStringRef::Of("Serialize");
-static const auto DeserializeName = TStringRef::Of("Deserialize");
-static const auto MergeName = TStringRef::Of("Merge");
-static const auto GetResultName = TStringRef::Of("GetResult");
+const auto CreateName = TStringRef::Of("Create");
+const auto AddValueName = TStringRef::Of("AddValue");
+const auto WasChangedName = TStringRef::Of("WasChanged"); // must be used right after AddValue
+const auto SerializeName = TStringRef::Of("Serialize");
+const auto DeserializeName = TStringRef::Of("Deserialize");
+const auto MergeName = TStringRef::Of("Merge");
+const auto GetResultName = TStringRef::Of("GetResult");
 
 class TSetModule: public IUdfModule {
 public:

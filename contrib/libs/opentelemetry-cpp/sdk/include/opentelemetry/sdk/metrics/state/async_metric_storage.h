@@ -34,7 +34,7 @@ namespace metrics
 class AsyncMetricStorage : public MetricStorage, public AsyncWritableMetricStorage
 {
 public:
-  AsyncMetricStorage(InstrumentDescriptor instrument_descriptor,
+  AsyncMetricStorage(const InstrumentDescriptor &instrument_descriptor,
                      const AggregationType aggregation_type,
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
                      ExemplarFilterType exempler_filter_type,
@@ -50,7 +50,7 @@ public:
             std::make_unique<AttributesHashMap>(aggregation_config_->cardinality_limit_)),
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
         exemplar_filter_type_(exempler_filter_type),
-        exemplar_reservoir_(exemplar_reservoir),
+        exemplar_reservoir_(std::move(exemplar_reservoir)),
 #endif
         temporal_metric_storage_(instrument_descriptor, aggregation_type, aggregation_config)
   {}

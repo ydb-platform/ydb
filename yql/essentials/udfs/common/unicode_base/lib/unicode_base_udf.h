@@ -280,7 +280,7 @@ struct TStringToStringMapper: public TOperationMixin<TStringToStringMapper<Funct
     static std::variant<TNoChangesTag, TString> Execute(TStringRef arg) {
         if (auto wide = UTF8ToWide(arg);
             static_cast<bool (*)(TUtf16String&, size_t pos, size_t count)>(Function)(wide, 0, TUtf16String::npos)) {
-            return WideToUTF8(std::move(wide));
+            return WideToUTF8(wide);
         } else {
             return TNoChangesTag{};
         }
@@ -646,7 +646,7 @@ DEFINE_UTF8_OPERATION_BIN_STRICT(TryToUint64, TToUint64Converter</*strict=*/true
 using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>;
 
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const std::string_view::const_iterator from,
@@ -658,14 +658,15 @@ static void SplitToListImpl(
 }
 
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const TUtf32String::const_iterator start,
     const TIt& it,
     TTmpVector& result) {
     const std::string_view& original = input.AsStringRef();
-    size_t charPos = 0U, bytePos = 0U;
+    size_t charPos = 0U;
+    size_t bytePos = 0U;
     for (const auto& elem : it) {
         for (const size_t next = std::distance(start, elem.TokenStart()); charPos < next; ++charPos) {
             bytePos += WideCharSize(original[bytePos]);
@@ -681,7 +682,7 @@ static void SplitToListImpl(
 }
 
 template <typename TIt, typename TStrIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const TStrIt from,

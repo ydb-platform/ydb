@@ -11,8 +11,8 @@ namespace NYT::NYson {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... TAdditionalArgs>
-TExtendedYsonProducer<TAdditionalArgs...>::TExtendedYsonProducer(
-    TExtendedYsonProducer::TUnderlyingCallback callback,
+TParametricYsonProducer<TAdditionalArgs...>::TParametricYsonProducer(
+    TParametricYsonProducer::TUnderlyingCallback callback,
     EYsonType type)
     : Type_(type)
     , Callback_(std::move(callback))
@@ -21,7 +21,7 @@ TExtendedYsonProducer<TAdditionalArgs...>::TExtendedYsonProducer(
 }
 
 template <class... TAdditionalArgs>
-void TExtendedYsonProducer<TAdditionalArgs...>::Run(IYsonConsumer* consumer, TAdditionalArgs... args) const
+void TParametricYsonProducer<TAdditionalArgs...>::Run(IYsonConsumer* consumer, TAdditionalArgs... args) const
 {
     Callback_(consumer, std::forward<TAdditionalArgs>(args)...);
 }

@@ -12,8 +12,16 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
+
+#include <memory>
+
+namespace NKikimr::NWorkloadManager {
+class ISessionUpdater;
+class IQueryClassifier;
+}
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -89,7 +97,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const TString& userSID);
+    TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool IsSerializable() const override {
         return true;
@@ -101,10 +109,7 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    TString GetUserSID() const {
-        auto token = GetUserToken();
-        return token ? token->GetUserSID() : "";
-    }
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
@@ -128,6 +133,14 @@ public:
 
     bool HasKafkaApiOperations() const {
         return Record.GetRequest().HasKafkaApiOperations();
+    }
+
+    bool HasDeferredPublication() const {
+        return Record.GetRequest().HasDeferredPublication();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublication() const {
+        return Record.GetRequest().GetDeferredPublication();
     }
 
     bool GetKeepSession() const {
@@ -262,6 +275,14 @@ public:
         return Record.GetRequest().GetClientAddress();
     }
 
+    TString GetApplicationName() const {
+        if (RequestCtx) {
+            return "";  // gRPC path carries app name via the session, not the query request
+        }
+
+        return Record.GetRequest().GetApplicationName();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -345,6 +366,22 @@ public:
 
     TIntrusivePtr<TUserRequestContext> GetUserRequestContext() const {
         return UserRequestContext;
+    }
+
+    void SetWmSessionUpdater(const std::shared_ptr<NWorkloadManager::ISessionUpdater>& wmSessionUpdater) {
+        WmSessionUpdater = wmSessionUpdater;
+    }
+
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> GetWmSessionUpdater() const {
+        return WmSessionUpdater;
+    }
+
+    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
+        WmQueryClassifier = std::move(classifier);
+    }
+
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
+        return WmQueryClassifier;
     }
 
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
@@ -462,6 +499,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;
@@ -483,6 +521,8 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 
 SRCS(
     mlp_changer_ut.cpp
+    mlp_describer_ut.cpp
     mlp_purger_ut.cpp
     mlp_reader_ut.cpp
     mlp_writer_ut.cpp
@@ -20,4 +21,5 @@ END()
 
 RECURSE(
     common
+    pipe
 )

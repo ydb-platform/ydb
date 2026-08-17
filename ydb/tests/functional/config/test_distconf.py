@@ -3,12 +3,15 @@ import logging
 import yaml
 import tempfile
 import os
+import socket
+import requests
 from hamcrest import assert_that
 import time
 import pytest
 import functools
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import wait_for
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
@@ -38,9 +41,9 @@ def fetch_config(config_client):
     return result.config[0].config
 
 
-def get_config_version(yaml_config):
-    config = yaml.safe_load(yaml_config)
-    return config.get('metadata', {}).get('version', 0)
+def bump_config_version(config_dict):
+    config_dict["metadata"]["version"] = config_dict["metadata"].get("version", 0) + 1
+    return config_dict["metadata"]["version"]
 
 
 class DistConfKiKiMRTest(object):
@@ -57,7 +60,7 @@ class DistConfKiKiMRTest(object):
     console_node = 3
 
     @classmethod
-    def setup_class(cls):
+    def _setup_cluster(cls):
         if cls.nodes_count == 0:
             cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
@@ -101,23 +104,50 @@ class DistConfKiKiMRTest(object):
         cls.dynconfig_client = DynConfigClient(host, grpc_port)
 
     @classmethod
+    def _teardown_cluster(cls):
+        if hasattr(cls, "cluster") and cls.cluster is not None:
+            cls.cluster.stop()
+        cls.cluster = None
+        cls.swagger_client = None
+        cls.dynconfig_client = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._setup_cluster()
+
+    @classmethod
     def teardown_class(cls):
-        cls.cluster.stop()
+        cls._teardown_cluster()
 
     def check_kikimr_is_operational(self, table_path, tablet_ids):
         for partition_id, tablet_id in enumerate(tablet_ids):
             write_resp = self.cluster.kv_client.kv_write(
                 table_path, partition_id, "key", value_for("key", tablet_id)
             )
+            logger.debug(f"write_resp: {write_resp}")
             assert_that(write_resp.operation.status == StatusIds.SUCCESS)
 
             read_resp = self.cluster.kv_client.kv_read(
                 table_path, partition_id, "key"
             )
+            logger.debug(f"read_resp: {read_resp}")
             assert_that(read_resp.operation.status == StatusIds.SUCCESS)
 
 
 class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
+    @classmethod
+    def setup_class(cls):
+        pass
+
+    @classmethod
+    def teardown_class(cls):
+        pass
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        type(self)._setup_cluster()
+        yield
+        type(self)._teardown_cluster()
 
     def test_cluster_is_operational_with_distconf(self):
         table_path = '/Root/mydb/mytable_with_metadata'
@@ -131,6 +161,116 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             timeout_seconds=3
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
+
+    @pytest.mark.parametrize("target_kind", ["root", "direct"], ids=["root", "direct-bound"])
+    def test_replace_static_node_fqdn(self, target_kind):
+        target_node_id = None
+
+        def find_target_node():
+            nonlocal target_node_id
+            for node in self.cluster.nodes.values():
+                try:
+                    response = requests.get(
+                        f"http://{node.host}:{node.mon_port}/actors/nodewarden",
+                        params={"page": "distconf", "json": ""},
+                        timeout=2,
+                    )
+                    response.raise_for_status()
+                    state = response.json()
+                    if state["scepter"] is None:
+                        continue
+                    if target_kind == "root":
+                        target_node_id = state["self_node_id"]
+                        return True
+                    if state["direct_bound_nodes"]:
+                        target_node_id = state["direct_bound_nodes"][0]["node_id"]
+                        return True
+                except (KeyError, ValueError, requests.RequestException):
+                    pass
+            return False
+
+        assert_that(wait_for(find_target_node, timeout_seconds=60))
+        target_node = self.cluster.nodes[target_node_id]
+        observer_node = next(
+            node for node_id, node in self.cluster.nodes.items()
+            if node_id != target_node_id
+        )
+        observer_swagger_client = SwaggerClient(observer_node.host, observer_node.mon_port)
+        new_fqdn = socket.getfqdn().lower()
+
+        fetched_config = yaml.safe_load(fetch_config(self.cluster.config_client))
+        hosts = fetched_config["config"]["hosts"]
+        target_host_index = next(
+            index for index, host in enumerate(hosts)
+            if host["port"] == target_node.ic_port
+        )
+        target_host = hosts[target_host_index]
+
+        assert_that(target_host["port"] == target_node.ic_port)
+        assert_that("node_id" not in target_host)
+        assert_that(target_host["host"] != new_fqdn)
+        socket.getaddrinfo(new_fqdn, target_node.ic_port)
+
+        pdisk_info = observer_swagger_client.pdisk_info(target_node_id)
+        pdisks_before_restart = {
+            (pdisk["PDiskId"], pdisk["Path"], pdisk["Guid"])
+            for pdisk in pdisk_info["PDiskStateInfo"]
+        }
+        assert_that(pdisks_before_restart)
+
+        target_host["host"] = new_fqdn
+        expected_version = bump_config_version(fetched_config)
+        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        def config_is_applied_to_target_node():
+            try:
+                node_config = target_node.read_node_config()
+                node_host = node_config["config"]["hosts"][target_host_index]
+                return (
+                    node_config["metadata"]["version"] == expected_version
+                    and node_host["host"] == new_fqdn
+                    and "node_id" not in node_host
+                )
+            except (KeyError, OSError, TypeError, yaml.YAMLError):
+                return False
+
+        assert_that(wait_for(config_is_applied_to_target_node, timeout_seconds=60))
+
+        target_node.stop()
+        target_node.enable_node_id_auto_detection()
+        target_node.start()
+
+        def node_reconnected_with_new_fqdn():
+            try:
+                node_info = next(
+                    node for node in observer_swagger_client.nodes_info()["Nodes"]
+                    if node["NodeId"] == target_node_id
+                )
+                system_state = node_info["SystemState"]
+                return (
+                    not node_info.get("Disconnected", False)
+                    and system_state["Host"].lower() == new_fqdn
+                    and system_state["SystemState"] == "Green"
+                )
+            except (KeyError, StopIteration):
+                return False
+
+        assert_that(wait_for(node_reconnected_with_new_fqdn, timeout_seconds=120))
+
+        def pdisks_reconnected_to_same_node():
+            try:
+                pdisk_info = observer_swagger_client.pdisk_info(target_node_id)
+                pdisks = {
+                    (pdisk["PDiskId"], pdisk["Path"], pdisk["Guid"])
+                    for pdisk in pdisk_info["PDiskStateInfo"]
+                }
+                return pdisks == pdisks_before_restart
+            except KeyError:
+                return False
+
+        assert_that(wait_for(pdisks_reconnected_to_same_node, timeout_seconds=120))
 
     def test_cluster_expand_with_distconf(self):
         table_path = '/Root/mydb/mytable_with_expand'
@@ -182,12 +322,14 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         # prepare new node
         new_node = self.cluster.prepare_node(self.configurator)
         new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
-        dumped_fetched_config["metadata"]["version"] = 1
+        bump_config_version(dumped_fetched_config)
 
         # replace config
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+        time.sleep(5)
+
         # start new node
         new_node.start()
 
@@ -339,9 +481,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         })
 
         # add new node in hosts
+        hostname = socket.gethostname().lower()
         config_section["hosts"].append({
             "host_config_id": host_config_id,
-            "host": "localhost",
+            "host": hostname,
             "port": node_port_allocator.ic_port,
         })
         self.configurator.full_config = dumped_fetched_config
@@ -359,12 +502,16 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         # prepare new node
         new_node = self.cluster.prepare_node(self.configurator, seed_nodes_file.name)
         new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
-        dumped_fetched_config["metadata"]["version"] = 1
+        bump_config_version(dumped_fetched_config)
 
         # replace config
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        # wait for config to propagate to all nodes
+        time.sleep(5)
+
         # start new node
         new_node.start()
 
@@ -401,7 +548,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         dumped_fetched_config = yaml.safe_load(fetched_config)
 
         # replace config with invalid host config id
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         dumped_fetched_config["config"]["host_configs"][0]["host_config_id"] = 1000
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
@@ -413,7 +560,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         # replace config with invalid host config disk path
         dumped_fetched_config["config"]["host_configs"][0]["drive"].append(dumped_fetched_config["config"]["host_configs"][0]["drive"][0])
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
@@ -428,7 +575,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             "type": "ROT"
         }
 
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
@@ -440,6 +587,104 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         assert_that(replace_config_response.operation.status == StatusIds.BAD_REQUEST)
         assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
         logger.debug(replace_config_response.operation)
+
+    def test_dry_run_valid_config_not_applied(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+        if 'host_configs' in dumped_config.get('config', {}):
+            for host_config in dumped_config['config']['host_configs']:
+                for drive in host_config.get('drive', []):
+                    if 'expected_slot_count' in drive:
+                        drive['expected_slot_count'] = drive['expected_slot_count'] + 1
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+    def test_dry_run_invalid_config_returns_error(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+        if 'host_configs' in dumped_config.get('config', {}):
+            first_host_config = dumped_config['config']['host_configs'][0]
+            if 'drive' in first_host_config and len(first_host_config['drive']) > 0:
+                first_host_config['drive'].append(first_host_config['drive'][0].copy())
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run invalid config response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+    def test_dry_run_then_real_apply(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=False)
+        logger.debug(f"real replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_real = fetch_config(self.cluster.config_client)
+        fetched_after_real_parsed = yaml.safe_load(fetched_after_real)
+        assert_that(fetched_after_real_parsed['metadata']['version'] == original_version + 1)
+
+    def fetch_config_with_storage(self):
+        from ydb.tests.library.clients.kikimr_config_client import ConfigClient
+        fetch_config_response = self.cluster.config_client.fetch_all_configs(
+            transform=ConfigClient.FetchTransform.ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG)
+        assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
+
+        result = config.FetchConfigResult()
+        fetch_config_response.operation.result.Unpack(result)
+        return result.config[0].config
+
+    def test_dry_run_disable_distconf_does_not_disable(self):
+        fetched_config = self.fetch_config_with_storage()
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        assert dumped_config.get('config', {}).get('self_management_config', {}).get('enabled', False) is True, \
+            "Distconf should be enabled initially"
+
+        dumped_config['metadata']['version'] = original_version + 1
+        dumped_config['config']['self_management_config']['enabled'] = False
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run disable distconf response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+        assert fetched_after_dry_run_parsed.get('config', {}).get('self_management_config', {}).get('enabled', False) is True, \
+            "Distconf should still be enabled after dry_run"
 
 
 class TestDistConfBootstrapValidation:

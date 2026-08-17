@@ -2,16 +2,17 @@
 
 #include "private.h"
 #include "invoker_queue.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/heap.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/containers/ring_queue.h>
+
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/memory/weak_ptr.h>
 
@@ -251,6 +252,7 @@ public:
         for (const auto& item : Heap_) {
             item.Bucket->Drain();
         }
+        Heap_.clear();
     }
 
     bool BeginExecute(TEnqueuedAction* action, int index)
@@ -314,19 +316,19 @@ public:
         TotalTimeCounter_.Record(timeFromEnqueue);
 
         if (timeFromStart > LogDurationThreshold) {
-            YT_LOG_DEBUG("Callback execution took too long (Wait: %v, Execution: %v, Total: %v)",
-                CpuDurationToDuration(action->StartedAt - action->EnqueuedAt),
-                timeFromStart,
-                timeFromEnqueue);
+            YT_TLOG_DEBUG("Callback execution took too long")
+                .With("Wait", CpuDurationToDuration(action->StartedAt - action->EnqueuedAt))
+                .With("Execution", timeFromStart)
+                .With("Total", timeFromEnqueue);
         }
 
         auto waitTime = CpuDurationToDuration(action->StartedAt - action->EnqueuedAt);
 
         if (waitTime > LogDurationThreshold) {
-            YT_LOG_DEBUG("Callback wait took too long (Wait: %v, Execution: %v, Total: %v)",
-                waitTime,
-                timeFromStart,
-                timeFromEnqueue);
+            YT_TLOG_DEBUG("Callback wait took too long")
+                .With("Wait", waitTime)
+                .With("Execution", timeFromStart)
+                .With("Total", timeFromEnqueue);
         }
 
         action->Finished = true;

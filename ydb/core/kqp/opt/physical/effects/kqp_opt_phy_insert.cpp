@@ -2,6 +2,8 @@
 #include "kqp_opt_phy_effects_impl.h"
 #include "kqp_opt_phy_uniq_helper.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -9,14 +11,15 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TMaybeNode<TDqCnUnionAll> MakeConditionalInsertRows(const TExprBase& input, const TKikimrTableDescription& table,
-    const TMaybe<THashSet<TStringBuf>>& inputColumns, bool abortOnError, TPositionHandle pos, TExprContext& ctx)
+    const TMaybe<THashSet<TStringBuf>>& inputColumns, bool abortOnError, TPositionHandle pos, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
 {
     auto condenseResult = CondenseInput(input, ctx);
     if (!condenseResult) {
         return {};
     }
 
-    auto helper = CreateInsertUniqBuildHelper(table, inputColumns, pos, ctx);
+    auto helper = CreateInsertUniqBuildHelper(table, inputColumns, pos, ctx, kqpCtx);
     auto computeKeysStage = helper->CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
 
     auto inputPrecompute = helper->CreateInputPrecompute(computeKeysStage, pos, ctx);
@@ -127,12 +130,11 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-    const bool needPrecompute = !(isSink && abortOnError);
+    const bool needPrecompute = !abortOnError;
 
     if (needPrecompute) {
         const static TMaybe<THashSet<TStringBuf>> empty;
-        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, empty, abortOnError, insert.Pos(), ctx);
+        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, empty, abortOnError, insert.Pos(), ctx, kqpCtx);
         if (!insertRows) {
             return node;
         }

@@ -43,7 +43,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     TDqMeteringStats::TInputStatsMeter,
     TInstant& startTs,
-    bool& inputConsumed,
+    ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker
 );
@@ -55,7 +55,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
     const NKikimr::NMiniKQL::THolderFactory& factory,
     TDqMeteringStats::TInputStatsMeter,
     TInstant& startTs,
-    bool& inputConsumed,
+    ui64& inputsConsumed,
     NUdf::IPgBuilder* pgBuilder = nullptr
 );
 

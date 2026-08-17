@@ -131,6 +131,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BUILD INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX INIT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return "ALTER TABLE BUILD INDEX PUBLISH SHADOW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
@@ -274,6 +276,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP BACKUP COLLECTION";
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
@@ -290,10 +293,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+        return "INCREMENTAL RESTORE LOCK TARGETS";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        return "INCREMENTAL RESTORE UNLOCK TARGETS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return "SET CONSTRAINT";
     // secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         return "CREATE SECRET";
@@ -310,6 +315,11 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return "TRUNCATE TABLE";
+    // test shard set
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        return "CREATE TEST SHARD SET";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        return "DROP TEST SHARD SET";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -434,6 +444,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetInitiateBuildIndexMainTable().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));
@@ -667,6 +680,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
+        // The aggregator does not carry a target name in its proto; its
+        // WorkingDir already points at the backup-collection path.
+        result.emplace_back(tx.GetWorkingDir());
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
@@ -683,12 +701,19 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        for (const auto& dst : tx.GetIncrementalRestoreLockTargets().GetDstPaths()) {
+            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), dst}));
+        }
+        for (const auto& src : tx.GetIncrementalRestoreLockTargets().GetSrcPaths()) {
+            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), src}));
+        }
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         // For incremental restore finalization, we don't have a specific path in the message
         // since it operates on paths determined at runtime
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()}));
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
         break;
@@ -709,6 +734,12 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         result.emplace_back(tx.GetTruncateTable().GetTableName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTestShardSet().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     }
 
@@ -797,7 +828,7 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 const auto& modify = alter.GetModifyUser();
                 result.LoginUser = modify.GetUser();
 
-                if (modify.HasPassword()) { // there is no difference beetwen password and password's hash
+                if (modify.HasHashedPassword()) {
                     result.LoginUserChange.push_back("password");
                 }
 

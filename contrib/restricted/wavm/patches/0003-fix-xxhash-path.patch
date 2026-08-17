@@ -1,0 +1,13 @@
+diff --git a/Include/WAVM/Inline/Hash.h b/Include/WAVM/Inline/Hash.h
+index 8a4d2eed..ceb5a102 100644
+--- a/Include/WAVM/Inline/Hash.h
++++ b/Include/WAVM/Inline/Hash.h
+@@ -13,7 +13,7 @@
+ 
+ #define XXH_FORCE_NATIVE_FORMAT 1
+ #define XXH_INLINE_ALL
+-#include "xxhash/xxhash.h"
++#include <contrib/libs/xxhash/xxhash.h>
+ 
+ #if defined(__GNUC__)
+ #pragma GCC diagnostic pop

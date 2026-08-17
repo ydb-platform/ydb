@@ -6,10 +6,6 @@
 
 namespace NKikimr {
 
-namespace NGRpcProxy::V1 {
-class IClustersCfgProvider;
-}
-
 namespace NGRpcService {
 namespace V1 {
 
@@ -17,12 +13,10 @@ class ServicesInitializer {
 public:
     ServicesInitializer(NActors::TActorSystem* actorSystem,
                         NActors::TActorId schemeCache,
-                        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                        NGRpcProxy::V1::IClustersCfgProvider** p)
+                        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : ActorSystem(actorSystem)
         , SchemeCache(schemeCache)
-        , Counters(counters) 
-        , ClusterCfgProvider(p) {
+        , Counters(counters) {
     }
 
     void Execute();
@@ -34,13 +28,11 @@ private:
     NActors::TActorId InitNewSchemeCacheActor();
     void InitWriteService();
     void InitReadService();
-    void InitSchemaService();
 
 private:
     NActors::TActorSystem* ActorSystem;
     NActors::TActorId SchemeCache;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    NGRpcProxy::V1::IClustersCfgProvider** ClusterCfgProvider;
 };
 
 

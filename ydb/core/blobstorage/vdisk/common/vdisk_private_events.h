@@ -187,6 +187,7 @@ namespace NKikimr {
     struct TEvListChunksResult : TEventLocal<TEvListChunksResult, TEvBlobStorage::EvListChunksResult> {
         THashSet<TChunkIdx> ChunksHuge;
         THashSet<TChunkIdx> ChunksSyncLog;
+        THashSet<TChunkIdx> ChunksChunkKeeper;
     };
 
 } // NKikimr

@@ -24,17 +24,17 @@ WITH (option = value [, ...])
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
 
-            * `TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token.
+            * `TOKEN_SECRET_PATH` — the [secret](../../../concepts/datamodel/secrets.md) that contains the token.
 
         * [Login and password](../../../recipes/ydb-sdk/auth-static.md):
 
             * `USER` — a database user name.
-            * `PASSWORD_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
+            * `PASSWORD_SECRET_PATH` — the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
 
         * [Delegated service account](https://yandex.cloud/en/docs/iam/concepts/service-control):
 
             * `SERVICE_ACCOUNT_ID` — identifier of the service account.
-            * `INITIAL_TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token for the service account. Used for initialization.
+            * `INITIAL_TOKEN_SECRET_PATH` — the [secret](../../../concepts/datamodel/secrets.md) that contains the token for the service account. Used for initialization.
 
 
 * `CONSISTENCY_LEVEL` — [consistency level of replicated data](../../../concepts/async-replication.md#consistency-levels):
@@ -46,7 +46,7 @@ WITH (option = value [, ...])
 
 {% note tip %}
 
-Before creating an asynchronous replication instance, you must [create](create-object-type-secret.md) a secret with authentication credentials for the source database or ensure that you have access to an existing secret.
+Before creating an asynchronous replication instance, you must [create](create-secret.md) a secret with authentication credentials for the source database or ensure that you have access to an existing secret.
 
 {% endnote %}
 
@@ -57,7 +57,7 @@ CREATE ASYNC REPLICATION my_replication_for_single_table
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -70,7 +70,7 @@ CREATE ASYNC REPLICATION my_replication_for_multiple_tables
 FOR original_table_1 AS replica_table_1, original_table_2 AS replica_table_2
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -81,7 +81,7 @@ CREATE ASYNC REPLICATION my_replication_for_dir
 FOR original_dir AS replica_dir
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -92,7 +92,7 @@ CREATE ASYNC REPLICATION my_replication_for_database
 FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -103,7 +103,7 @@ CREATE ASYNC REPLICATION my_consistent_replication
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CA_CERT = '-----BEGIN CERTIFICATE-----...'
 );
 ```
@@ -115,7 +115,7 @@ CREATE ASYNC REPLICATION my_consistent_replication
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CONSISTENCY_LEVEL = 'GLOBAL'
 );
 ```
@@ -127,7 +127,7 @@ CREATE ASYNC REPLICATION my_consistent_replication_1min_commit_interval
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CONSISTENCY_LEVEL = 'GLOBAL',
     COMMIT_INTERVAL = Interval('PT1M')
 );

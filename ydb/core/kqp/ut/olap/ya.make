@@ -3,7 +3,8 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -15,9 +16,9 @@ SRCS(
     GLOBAL kqp_olap_ut.cpp
     aggregations_ut.cpp
     clickbench_ut.cpp
-    dictionary_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
+    peephole_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
 )
@@ -25,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/protos
     yql/essentials/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
@@ -32,6 +34,7 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
+    ydb/library/aws_init
     ydb/public/sdk/cpp/src/client/operation
 )
 
@@ -46,4 +49,5 @@ RECURSE_FOR_TESTS(
     statistics
     storage
     reading
+    pushdown
 )

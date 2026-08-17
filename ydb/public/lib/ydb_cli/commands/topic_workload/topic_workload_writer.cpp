@@ -7,6 +7,8 @@
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
+#include <string>
+
 using namespace NYdb::NConsoleClient;
 
 TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params)
@@ -17,12 +19,14 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWrite
     Producers = std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>>();
     Producers.reserve(Params.PartitionCount);
 
+    NTopic::TTopicClient topicClient(Params.Driver);
+
     for (ui32 i = 0; i < Params.PartitionCount; ++i) {
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load test different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
 
-        Producers.push_back(CreateProducer(partitionId));
+        Producers.push_back(CreateProducer(partitionId, topicClient));
     }
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -128,7 +132,8 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
     );
 }
 
-std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
+std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId,
+                                                                                         NTopic::TTopicClient& topicClient) {
     auto clock = NUnifiedAgent::TClock();
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
@@ -142,8 +147,16 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
+    if (Params.BatchInnerCodec.Defined()) {
+        settings.BatchInnerCodec((NYdb::NTopic::ECodec)*Params.BatchInnerCodec);
+    }
     settings.Path(Params.TopicName);
     settings.ProducerId(producerId);
+    settings.BatchFlushInterval(Params.BatchFlushInterval);
+    if (Params.BatchFlushSizeBytes.has_value()) {
+        settings.BatchFlushSizeBytes(Params.BatchFlushSizeBytes.value());
+    }
+    settings.BatchFlushMessageCount(Params.BatchFlushMessageCount);
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }
@@ -163,7 +176,11 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer->SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
+    if (Params.UseTransactions) {
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
+    }
+
+    producer->SetWriteSession(topicClient.CreateWriteSession(settings));
 
     return producer;
 }

@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/metadata/blobstorage_pdisk_metadata.h>
 #include <ydb/core/util/random.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include "cli.h"
 #include "cli_cmds.h"
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
@@ -10,6 +11,41 @@
 
 namespace NKikimr {
 namespace NDriverClient {
+
+namespace {
+
+NPDisk::TMainKey MakeMetadataMainKey(const TVector<NPDisk::TKey>& keys) {
+    NPDisk::TMainKey mainKey;
+    for (const auto& key : keys) {
+        mainKey.Keys.push_back(key);
+    }
+    mainKey.Initialize();
+    return mainKey;
+}
+
+void PrintDiskOpenError(const TString& path, const TString& details) {
+    if (details.Contains("Permission denied")) {
+        Cerr << "Cannot open disk '" << path << "': permission denied." << Endl;
+        Cerr << "Try running the command with sudo." << Endl;
+        return;
+    }
+
+    if (details.Contains("No such file or directory")) {
+        Cerr << "Cannot open disk '" << path << "': no such file or directory." << Endl;
+        Cerr << "Check that <PATH> points to an existing disk device." << Endl;
+        return;
+    }
+
+    if (details.Contains("can't flock") || details.Contains("Resource temporarily unavailable")) {
+        Cerr << "Cannot lock disk '" << path << "': the disk is already in use." << Endl;
+        Cerr << "Stop YDB or any other process using this disk, then try again." << Endl;
+        return;
+    }
+
+    Cerr << "Failed to clear YDB metadata from disk '" << path << "': " << details << Endl;
+}
+
+} // anonymous namespace
 
 class TClientCommandDiskInfo : public TClientCommand {
 public:
@@ -195,7 +231,7 @@ public:
 class TClientCommandDiskObliterate : public TClientCommand {
 public:
     TClientCommandDiskObliterate()
-        : TClientCommand("obliterate", {}, "Obliterate local disk, so it will be self-formatted on startup")
+        : TClientCommand("obliterate", {}, "Clear YDB metadata from the disk, so YDB can format the disk again on startup")
     {}
 
     TString Path;
@@ -203,7 +239,42 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk device path");
+        SetFreeArgTitle(0, "<PATH>", "Path to the block device");
+    }
+
+    void Prepare(TConfig& config) override {
+        config.ArgsSettings = TConfig::TArgSettings();
+        Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
+        config.Opts = &Opts;
+        Config(config);
+        SetCustomUsage(config);
+        try {
+            SaveParseResult(config);
+        } catch (const NLastGetopt::TUsageException& e) {
+            const TString message = e.what();
+            if (!message.Contains("free args")) {
+                throw;
+            }
+
+            if (config.ArgC <= 1) {
+                Cerr << "Missing required argument <PATH>." << Endl << Endl;
+            } else {
+                Cerr << "Specify exactly one disk device path." << Endl << Endl;
+            }
+
+            config.PrintHelpAndExit();
+        }
+        config.ParseResult = ParseResult.get();
+        Parse(config);
+    }
+
+    void SetCustomUsage(TConfig& config) override {
+        TStringBuilder fullName;
+        for (const auto& parent : config.ParentCommands) {
+            fullName << parent.Name << " ";
+        }
+        fullName << config.ArgV[0] << " <PATH>";
+        config.Opts->SetCustomUsage(fullName);
     }
 
     virtual void Parse(TConfig& config) override {
@@ -215,7 +286,7 @@ public:
         try {
             ObliterateDisk(Path);
         } catch (const yexception& e) {
-            Cerr << "Error, what# " << e.what() << Endl;
+            PrintDiskOpenError(Path, e.what());
             return 1;
         }
         return 0;
@@ -255,25 +326,34 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        MainKey = {};
-        for (auto& key : MainKeyTmp) {
-            MainKey.Keys.push_back(key);
-        }
-        if (MainKey.Keys.empty()) {
-            MainKey.Initialize();
-        } else {
-            MainKey.IsInitialized = true;
-        }
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
     }
 
     int Run(TConfig& /*config*/) override {
-        auto rec = ReadPDiskMetadata(Path, MainKey);
-        if (rec.ByteSizeLong() == 0) {
-            Cerr << "Failed to read PDisk metadata from: " << Path << Endl;
+        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
+
+        std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> metadata;
+        try {
+            metadata = ReadPDiskMetadata(Path, MainKey);
+        } catch (const yexception& ex) {
+            Cerr << "Failed to read PDisk metadata from '" << Path << "': " << ex.what() << Endl;
             return EXIT_FAILURE;
         }
 
-        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
+        if (!metadata || metadata->ByteSizeLong() == 0) {
+            const char* message = metadata ? "PDisk metadata is empty: " : "No PDisk metadata found: ";
+            if (requestedYaml) {
+                Cerr << message << Path << "; requested YAML files were not written" << Endl;
+                return EXIT_FAILURE;
+            }
+            if (JsonOut) {
+                Cout << "{}" << Endl;
+            } else {
+                Cout << message << Path << Endl;
+            }
+            return EXIT_SUCCESS;
+        }
+        const auto& rec = *metadata;
 
         auto decomposeToFile = [&](const TString& outPath, const char* label, auto getComposite, bool hasComposite) -> bool {
             if (outPath.empty()) {
@@ -384,15 +464,7 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        MainKey = {};
-        for (auto& key : MainKeyTmp) {
-            MainKey.Keys.push_back(key);
-        }
-        if (MainKey.Keys.empty()) {
-            MainKey.Initialize();
-        } else {
-            MainKey.IsInitialized = true;
-        }
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
     }
 
     int Run(TConfig& /*config*/) override {
@@ -450,11 +522,15 @@ public:
             *rec.MutableCommittedStorageConfig()->MutablePrevConfig() = oldCommitted;
         }
 
-        if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
-            return EXIT_FAILURE;
+        if (!CommittedYamlPath.empty()) {
+            if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
-        if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
-            return EXIT_FAILURE;
+        if (!ProposedYamlPath.empty()) {
+            if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
 
         if (rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig()) {
@@ -491,6 +567,43 @@ public:
     }
 };
 
+class TClientCommandDiskMetadataClean : public TClientCommand {
+public:
+    TClientCommandDiskMetadataClean()
+        : TClientCommand("clean", {}, "Clean PDisk metadata")
+    {}
+
+    TString Path;
+    TVector<NPDisk::TKey> MainKeyTmp;
+    NPDisk::TMainKey MainKey;
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<PATH>", "PDisk device path");
+        config.Opts->AddLongOption('k', "main-key", "Encryption main-key to use while cleaning metadata")
+            .RequiredArgument("NUM").Optional().AppendTo(&MainKeyTmp);
+    }
+
+    void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+        Path = config.ParseResult->GetFreeArgs()[0];
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
+    }
+
+    int Run(TConfig& /*config*/) override {
+        try {
+            const NKikimrBlobStorage::TPDiskMetadataRecord emptyRecord;
+            WritePDiskMetadata(Path, emptyRecord, MainKey);
+            Cout << "PDisk metadata cleaned: " << Path << Endl;
+            return EXIT_SUCCESS;
+        } catch (const yexception& ex) {
+            Cerr << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+};
+
 class TClientCommandDiskMetadata : public TClientCommandTree {
 public:
     TClientCommandDiskMetadata()
@@ -498,6 +611,7 @@ public:
     {
         AddCommand(std::make_unique<TClientCommandDiskMetadataRead>());
         AddCommand(std::make_unique<TClientCommandDiskMetadataWrite>());
+        AddCommand(std::make_unique<TClientCommandDiskMetadataClean>());
     }
 };
 

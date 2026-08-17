@@ -9,10 +9,14 @@
 
 #include <yt/yt/core/ypath/token.h>
 
+#include <yt/yt/library/cgroup/statistics.h>
+
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/producer.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/threading/atomic_object.h>
+
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -35,14 +39,16 @@ namespace NYT::NProfiling {
 using namespace NYPath;
 using namespace NProfiling;
 using namespace NConcurrency;
+using namespace NThreading;
+using namespace NCGroups;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
-YT_DEFINE_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
-YT_DEFINE_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
 
 // Please, refer to /proc documentation to know more about available information.
 // http://www.kernel.org/doc/Documentation/filesystems/proc.txt
@@ -64,36 +70,27 @@ public:
     void CollectSensors(ISensorWriter* writer) override
     {
         try {
-            auto cgroups = GetProcessCgroups();
-            for (const auto& group : cgroups) {
-                for (const auto& controller : group.Controllers) {
-                    if (controller == "cpu") {
-                        auto stat = GetCgroupCpuStat(group.ControllersName, group.Path);
+            auto cpuStatistics = TSelfCGroupsStatisticsFetcher::Get()->GetCpuThrottlingStatistics();
 
-                        if (!FirstCgroupStat_) {
-                            FirstCgroupStat_ = stat;
-                        }
-
-                        writer->AddCounter(
-                            "/cgroup/periods",
-                            stat.NrPeriods - FirstCgroupStat_->NrPeriods);
-
-                        writer->AddCounter(
-                            "/cgroup/throttled_periods",
-                            stat.NrThrottled - FirstCgroupStat_->NrThrottled);
-
-                        writer->AddCounter(
-                            "/cgroup/throttled_cpu_percent",
-                            (stat.ThrottledTime - FirstCgroupStat_->ThrottledTime) / 10'000'000);
-
-                        writer->AddCounter(
-                            "/cgroup/wait_cpu_percent",
-                            (stat.WaitTime - FirstCgroupStat_->WaitTime) / 10'000'000);
-
-                        return;
-                    }
-                }
+            if (!FirstCpuStatistics_) {
+                FirstCpuStatistics_ = cpuStatistics;
             }
+
+            writer->AddCounter(
+                "/cgroup/periods",
+                cpuStatistics.NrPeriods - FirstCpuStatistics_->NrPeriods);
+
+            writer->AddCounter(
+                "/cgroup/throttled_periods",
+                cpuStatistics.NrThrottled - FirstCpuStatistics_->NrThrottled);
+
+            writer->AddCounter(
+                "/cgroup/throttled_cpu_percent",
+                (cpuStatistics.ThrottledTime - FirstCpuStatistics_->ThrottledTime).NanoSeconds() / 10'000'000);
+
+            writer->AddCounter(
+                "/cgroup/wait_cpu_percent",
+                (cpuStatistics.WaitTime - FirstCpuStatistics_->WaitTime).NanoSeconds() / 10'000'000);
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
                 YT_LOG_INFO(ex, "Failed to collect cgroup cpu statistics");
@@ -103,7 +100,7 @@ public:
     }
 
 private:
-    std::optional<TCgroupCpuStat> FirstCgroupStat_;
+    std::optional<TCpuThrottlingStatistics> FirstCpuStatistics_;
     bool CgroupErrorLogged_ = false;
 };
 
@@ -118,28 +115,27 @@ public:
     void CollectSensors(ISensorWriter* writer) override
     {
         try {
-            auto cgroups = GetProcessCgroups();
-            for (const auto& group : cgroups) {
-                for (const auto& controller : group.Controllers) {
-                    if (controller == "memory") {
-                        auto stat = GetCgroupMemoryStat(group.Path);
+            const auto* fetcher = TSelfCGroupsStatisticsFetcher::Get();
+            auto memoryStatistics = fetcher->GetMemoryStatistics();
 
-                        writer->AddGauge("/memory_limit", stat.HierarchicalMemoryLimit);
-                        writer->AddGauge("/cache", stat.Cache);
-                        writer->AddGauge("/rss", stat.Rss);
-                        writer->AddGauge("/rss_huge", stat.RssHuge);
-                        writer->AddGauge("/mapped_file", stat.MappedFile);
-                        writer->AddGauge("/dirty", stat.Dirty);
-                        writer->AddGauge("/writeback", stat.Writeback);
+            writer->AddGauge("/cache", memoryStatistics.Cache);
+            writer->AddGauge("/rss", memoryStatistics.AnonWithSwapCached);
+            writer->AddGauge("/rss_huge", memoryStatistics.RssHuge);
+            writer->AddGauge("/mapped_file", memoryStatistics.MappedFile);
+            writer->AddGauge("/dirty", memoryStatistics.Dirty);
+            writer->AddGauge("/writeback", memoryStatistics.Writeback);
 
-                        TotalMemoryLimit_.store(stat.HierarchicalMemoryLimit);
-                        AnonymousMemoryLimit_.store(SafeGetAnonymousMemoryLimit(
-                            group.Path,
-                            stat.HierarchicalMemoryLimit));
+            auto memoryLimits = fetcher->GetMemoryLimits();
+            if (memoryLimits.MemoryLimit) {
+                writer->AddGauge("/memory_limit", *memoryLimits.MemoryLimit);
+                TotalMemoryLimit_.store(*memoryLimits.MemoryLimit);
+            }
 
-                        return;
-                    }
-                }
+            auto anonymousMemoryLimit = ComputeAnonymousMemoryLimit(
+                memoryLimits.AnonymousMemoryLimit,
+                memoryLimits.MemoryLimit);
+            if (anonymousMemoryLimit) {
+                AnonymousMemoryLimit_.store(*anonymousMemoryLimit);
             }
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
@@ -161,26 +157,22 @@ public:
 
 private:
     bool CgroupErrorLogged_ = false;
-    bool AnonymousLimitErrorLogged_ = false;
 
     std::atomic<i64> TotalMemoryLimit_ = 0;
     std::atomic<i64> AnonymousMemoryLimit_ = 0;
 
-    i64 SafeGetAnonymousMemoryLimit(const std::string& cgroupPath, i64 totalMemoryLimit)
+    static std::optional<i64> ComputeAnonymousMemoryLimit(
+        std::optional<i64> anonymousMemoryLimit,
+        std::optional<i64> totalMemoryLimit)
     {
-        try {
-            auto anonymousLimit = GetCgroupAnonymousMemoryLimit(cgroupPath);
-            auto result = anonymousLimit.value_or(totalMemoryLimit);
-            result = std::min(result, totalMemoryLimit);
-            return result != 0 ? result : totalMemoryLimit;
-        } catch (const std::exception& ex) {
-            if (!AnonymousLimitErrorLogged_) {
-                YT_LOG_INFO(ex, "Failed to collect cgroup anonymous memory limit");
-                AnonymousLimitErrorLogged_ = true;
-            }
+        if (!totalMemoryLimit) {
+            return anonymousMemoryLimit;
         }
-
-        return totalMemoryLimit;
+        if (!anonymousMemoryLimit) {
+            return totalMemoryLimit;
+        }
+        i64 result = std::min(*anonymousMemoryLimit, *totalMemoryLimit);
+        return result != 0 ? result : totalMemoryLimit;
     }
 };
 
@@ -257,6 +249,27 @@ public:
         }
     }
 
+    TResourceTrackerTagsGuard RegisterPerThreadExtraTags(
+        const std::string& threadName,
+        const NProfiling::TTagSet& extraTags)
+    {
+        return PerThreadExtraTags_.Transform([&threadName, &extraTags] (auto& storage) {
+            auto [it, inserted] = storage.try_emplace(threadName, extraTags);
+            if (!inserted) {
+                return TResourceTrackerTagsGuard(std::nullopt);
+            }
+
+            return TResourceTrackerTagsGuard(threadName);
+        });
+    }
+
+    void UnregisterPerThreadExtraTags(const std::string& threadName)
+    {
+        PerThreadExtraTags_.Transform([&threadName] (auto& storage) {
+            storage.erase(threadName);
+        });
+    }
+
 private:
     const TCpuCgroupTrackerPtr CpuCgroupTracker_ = New<TCpuCgroupTracker>();
     const TMemoryCgroupTrackerPtr MemoryCgroupTracker_ = New<TMemoryCgroupTracker>();
@@ -283,6 +296,8 @@ private:
     std::atomic<double> LastCpuWait_;
 
     std::atomic<double> MaxThreadPoolUtilization_;
+
+    TAtomicObject<THashMap<std::string, TTagSet>> PerThreadExtraTags_;
 
     void CollectSensors(ISensorWriter* writer) override
     {
@@ -398,7 +413,7 @@ private:
             info.ProfilingKey = info.ThreadName;
 
             // Group threads by thread pool, using YT thread naming convention.
-            if (auto index = info.ProfilingKey.rfind(':'); index != TString::npos) {
+            if (auto index = info.ProfilingKey.rfind(':'); index != std::string::npos) {
                 bool isDigit = std::all_of(info.ProfilingKey.cbegin() + index + 1, info.ProfilingKey.cend(), [] (char c) {
                     return std::isdigit(c);
                 });
@@ -509,6 +524,14 @@ private:
             double totalCpuTime = userCpuTime + systemCpuTime;
 
             TWithTagGuard tagGuard(writer, "thread", profilingKey);
+            PerThreadExtraTags_.Read([&tagGuard, &profilingKey] (const auto& storage) {
+                if (auto it = storage.find(profilingKey); it != storage.end()) {
+                    for (const auto& tag : it->second.Tags()) {
+                        tagGuard.AddTag(tag);
+                    }
+                }
+            });
+
             writer->AddGauge("/user_cpu", userCpuTime);
             writer->AddGauge("/system_cpu", systemCpuTime);
             writer->AddGauge("/total_cpu", totalCpuTime);
@@ -548,6 +571,54 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TResourceTrackerTagsGuard::TResourceTrackerTagsGuard(std::optional<std::string> threadName)
+    : ThreadName_(std::move(threadName))
+{ }
+
+TResourceTrackerTagsGuard::TResourceTrackerTagsGuard(TResourceTrackerTagsGuard&& other) noexcept
+{
+    ThreadName_ = std::move(other.ThreadName_);
+    other.ThreadName_ = std::nullopt;
+}
+
+TResourceTrackerTagsGuard& TResourceTrackerTagsGuard::operator=(TResourceTrackerTagsGuard&& other) noexcept
+{
+    if (this == &other) {
+        return *this;
+    }
+
+    if (ThreadName_) {
+        Release();
+    }
+
+    ThreadName_ = std::move(other.ThreadName_);
+    other.ThreadName_ = std::nullopt;
+    return *this;
+}
+
+TResourceTrackerTagsGuard::~TResourceTrackerTagsGuard()
+{
+    Release();
+}
+
+void TResourceTrackerTagsGuard::Release() noexcept
+{
+    if (ThreadName_) {
+        TResourceTrackerImpl::Get()->UnregisterPerThreadExtraTags(*ThreadName_);
+        ThreadName_ = std::nullopt;
+    }
+}
+
+TResourceTrackerTagsGuard::operator bool() const
+{
+    return ThreadName_.has_value();
+}
+
+const std::optional<std::string>& TResourceTrackerTagsGuard::GetThreadName() const
+{
+    return ThreadName_;
+}
+
 void TResourceTracker::Enable()
 {
     TResourceTrackerImpl::Get()->Enable();
@@ -586,6 +657,13 @@ void TResourceTracker::SetCpuToVCpuFactor(double factor)
 void TResourceTracker::Configure(const TResourceTrackerConfigPtr& config)
 {
     TResourceTrackerImpl::Get()->Configure(config);
+}
+
+TResourceTrackerTagsGuard TResourceTracker::RegisterPerThreadExtraTags(
+    const std::string& threadName,
+    const NProfiling::TTagSet& extraTags)
+{
+    return TResourceTrackerImpl::Get()->RegisterPerThreadExtraTags(threadName, extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -45,9 +45,17 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(99, 100), 1);
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(101, 100), 2);
 
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(4, 1, 100ull << 30), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(101, 100, 100ull << 30), 1);
+
         TPDiskConfig pdiskConfig3u(0, 0, 0);
         pdiskConfig3u.SlotSizeInUnits = 3;
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfig3u.GetOwnerWeight(10), 4);
+
+        TPDiskConfig pdiskConfigFixedSize(0, 0, 0);
+        pdiskConfigFixedSize.SlotSizeInUnits = 3;
+        pdiskConfigFixedSize.ExpectedSlotSize = 100ull << 30;
+        UNIT_ASSERT_VALUES_EQUAL(pdiskConfigFixedSize.GetOwnerWeight(10), 1);
 
         // TODO(ydynnikov): test the case of groupSizeInUnits > UI8_MAX (255)
     }
@@ -56,7 +64,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 4ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -71,7 +79,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -86,7 +94,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 1000ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -101,7 +109,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -116,7 +124,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;

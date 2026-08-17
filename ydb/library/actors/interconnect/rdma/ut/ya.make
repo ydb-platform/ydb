@@ -1,10 +1,11 @@
 GTEST()
 
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
+    REQUIREMENTS(cpu:4)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

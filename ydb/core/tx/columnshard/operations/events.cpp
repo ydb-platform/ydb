@@ -16,13 +16,13 @@ void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTrans
 }
 
 TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize,
-    const std::shared_ptr<arrow::RecordBatch>& pkBatch,
-    const bool noDataToWrite, const ui32 recordsCount)
+    const std::shared_ptr<arrow::RecordBatch>& pkBatch, const bool noDataToWrite, const ui32 recordsCount)
     : WriteMeta(writeMeta)
     , DataSize(dataSize)
     , NoDataToWrite(noDataToWrite)
     , PKBatch(pkBatch)
-    , RecordsCount(recordsCount) {
+    , RecordsCount(recordsCount)
+{
     AFL_VERIFY(WriteMeta);
 }
 
@@ -33,7 +33,8 @@ TEvWritePortionResult::TEvWritePortionResult(const NKikimrProto::EReplyStatus wr
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction, TInsertedPortions&& insertedData)
     : WriteStatus(writeStatus)
     , WriteAction(writeAction)
-    , InsertedData(std::move(insertedData)) {
+    , InsertedData(std::move(insertedData))
+{
 }
 
 }   // namespace NKikimr::NColumnShard::NPrivateEvents::NWrite

@@ -303,9 +303,6 @@ namespace NKikimr::NPersQueueTests {
                     pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
                     NKikimrConfig::TFeatureFlags ff;
-                    ff.SetEnableTopicSplitMerge(true);
-                    ff.SetEnableTopicServiceTx(true);
-                    ff.SetEnableTopicAutopartitioningForCDC(true);
                     ff.SetEnableTopicAutopartitioningForReplication(true);
                     ff.SetEnableMirroredTopicSplitMerge(true);
                     pqSettings.SetFeatureFlags(ff);
@@ -391,8 +388,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -509,8 +504,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -656,8 +649,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -708,6 +699,18 @@ namespace NKikimr::NPersQueueTests {
                 PrintTopicDescription(name, "4", server);
             }
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 5);
+
+            // Mirror topology catch-up can lag behind src splits under PQv1 create path.
+            {
+                const TInstant deadline = TDuration::Seconds(60).ToDeadLine();
+                while (CountPartitionsByStatus(dstTopicFullName, server).Active != 5 ||
+                       CountPartitionsByStatus(dstTopicFullName, server).Partitions != finalPartitionsCount)
+                {
+                    UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for mirrored topic to follow multisplit");
+                    Cerr << "Waiting for dst mirror partitions to catch up after multisplit\n";
+                    Sleep(TDuration::Seconds(1));
+                }
+            }
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 5);
 
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
@@ -789,8 +792,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount + 1,
@@ -914,8 +915,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -1064,8 +1063,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 1,

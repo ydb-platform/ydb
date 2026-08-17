@@ -24,6 +24,9 @@ Ydb::StatusIds::StatusCode YdbStatusFromProxyStatus(TEvTxUserProxy::TEvProposeTr
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress: {
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         }
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed: {
+            return Ydb::StatusIds::PRECONDITION_FAILED;
+        }
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
             return Ydb::StatusIds::BAD_REQUEST;
         }
@@ -58,7 +61,7 @@ Ydb::StatusIds::StatusCode YdbStatusFromProxyStatus(TEvTxUserProxy::TEvProposeTr
             }
             default: {
                 return Ydb::StatusIds::GENERIC_ERROR;
-            } 
+            }
         }
         }
         default: {

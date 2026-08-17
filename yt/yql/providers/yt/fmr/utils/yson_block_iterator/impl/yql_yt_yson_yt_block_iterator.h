@@ -27,6 +27,7 @@ public:
         TYtBlockIteratorSettings settings,
         std::vector<ESortOrder> sortOrders = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
+        TMaybe<bool> isLastRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
         TMaybe<TString> lastRowKeys = Nothing()
     );
@@ -34,6 +35,8 @@ public:
     ~TYtBlockIterator() final;
 
     bool NextBlock(TIndexedBlock& out) final;
+
+    std::vector<ESortOrder> GetSortOrder() final;
 
 private:
     bool RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const;
@@ -50,9 +53,10 @@ private:
     THolder<NYql::NCommon::IBlockReader> BlockReader_;
     THolder<NYql::NCommon::TInputBuf> InputBuf_;
 
-    TMaybe<TFmrTableKeysBoundary> FirstBound_;
-    TMaybe<TFmrTableKeysBoundary> LastBound_;
-    TMaybe<bool> IsFirstBoundInclusive_;
+    TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
+    TMaybe<TFmrTableKeysBoundary> LastBoundary_;
+    bool IsFirstBoundInclusive_ = true;
+    bool IsLastBoundInclusive_ = true;
 };
 
 } // namespace NYql::NFmr

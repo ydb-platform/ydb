@@ -61,7 +61,7 @@ class YdbMixedWorkload(WorkloadBase):
         ]
 
     def get_bulk_upsert_cmd(self):
-        return self.get_command_prefix(subcmds=['run', 'bulk_upsert'] + self.get_cols_count_command_params()) + [
+        return self.get_command_prefix(subcmds=['run', 'bulk-upsert'] + self.get_cols_count_command_params()) + [
             '-s', self.duration,
             '-t', '40',
             '--rows', '1000',

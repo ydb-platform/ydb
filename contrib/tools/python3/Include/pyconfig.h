@@ -1,9 +1,7 @@
 #pragma once
 
-#if defined(__APPLE__) && (defined(__aarch64__) || defined(_M_ARM64))
-#   include "pyconfig-osx-arm64.h"
-#elif defined(__APPLE__) && (defined(__x86_64__) || defined(_M_X64))
-#   include "pyconfig-osx-x86_64.h"
+#if defined(__APPLE__)
+#   include "pyconfig-osx.h"
 #elif defined(_MSC_VER)
 #   include "pyconfig-win.h"
 #else
@@ -12,6 +10,24 @@
 
 #if defined(_musl_)
 #   include "pyconfig-musl.h"
+#endif
+
+#undef Py_DEBUG
+
+/* Define if you want to build an interpreter with many run-time checks. */
+#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
+#define Py_DEBUG
+#define GC_NDEBUG
+#endif
+
+#ifdef Py_DEBUG
+#define ABIFLAGS "d"
+#else
+#define ABIFLAGS ""
+#endif
+
+#ifdef address_sanitizer_enabled
+#undef WITH_PYMALLOC
 #endif
 
 #if WITH_MIMALLOC

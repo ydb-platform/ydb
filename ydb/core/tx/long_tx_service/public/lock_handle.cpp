@@ -11,10 +11,10 @@ namespace NLongTxService {
         return as->NodeId;
     }
 
-    void TLockHandle::Register(ui64 lockId, TActorSystem* as) noexcept {
+    void TLockHandle::Register(ui64 lockId, TActorSystem* as, TInstant lockTimestamp) noexcept {
         Y_ABORT_UNLESS(lockId, "Cannot register a zero lock id");
         Y_ABORT_UNLESS(as, "Cannot register without a valid actor system");
-        as->Send(MakeLongTxServiceID(as->NodeId), new TEvLongTxService::TEvRegisterLock(lockId));
+        as->Send(MakeLongTxServiceID(as->NodeId), new TEvLongTxService::TEvRegisterLock(lockId, lockTimestamp));
     }
 
     void TLockHandle::Unregister(ui64 lockId, TActorSystem* as) noexcept {

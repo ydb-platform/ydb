@@ -287,6 +287,13 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT(third.GetValueByPath("t.[2]", result));
             UNIT_ASSERT(result.GetStringRobust() == "g");
 
+            third.GetValueByPathOrCreate("t.[3]") = "7";
+            third.GetValueByPathOrCreate("t.[2]") = "4";
+            UNIT_ASSERT(third.GetValueByPath("t.[2]", result));
+            UNIT_ASSERT(result.GetStringRobust() == "4");
+            UNIT_ASSERT(third.GetValueByPath("t.[3]", result));
+            UNIT_ASSERT(result.GetStringRobust() == "7");
+
             UNIT_ASSERT(lhs.SetValueByPath("l/a/c/se", "h", '/'));
             UNIT_ASSERT(lhs.GetValueByPath("l/a/c/se", result, '/'));
             UNIT_ASSERT(result.GetStringRobust() == "h");
@@ -681,5 +688,13 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         UNIT_ASSERT_VALUES_EQUAL(filled["3"][0], TJsonValue{3});
         UNIT_ASSERT_VALUES_EQUAL(filled["4"].GetMapSafe().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(filled["4"]["5"], TJsonValue{5});
+    }
+
+    Y_UNIT_TEST(GetStringSafeTest) {
+        TJsonValue json;
+        json["key"] = "value";
+        TString& valueRef = json["key"].GetStringSafe();
+        valueRef = "new_value";
+        UNIT_ASSERT_VALUES_EQUAL(json["key"].GetString(), "new_value");
     }
 } // Y_UNIT_TEST_SUITE(TJsonValueTest)

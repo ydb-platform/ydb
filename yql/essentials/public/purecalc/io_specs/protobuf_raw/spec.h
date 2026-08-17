@@ -40,7 +40,7 @@ public:
     explicit TProtobufRawInputSpec(
         const google::protobuf::Descriptor& descriptor,
         const TMaybe<TString>& timestampColumn = Nothing(),
-        const TProtoSchemaOptions& options = {});
+        TProtoSchemaOptions options = {});
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override;
@@ -94,7 +94,7 @@ public:
     explicit TProtobufRawOutputSpec(
         const google::protobuf::Descriptor& descriptor,
         google::protobuf::MessageFactory* = nullptr,
-        const TProtoSchemaOptions& options = {},
+        TProtoSchemaOptions options = {},
         google::protobuf::Arena* arena = nullptr);
 
 public:
@@ -155,7 +155,7 @@ public:
     explicit TProtobufRawMultiOutputSpec(
         TVector<const google::protobuf::Descriptor*>,
         TMaybe<TVector<google::protobuf::MessageFactory*>> = {},
-        const TProtoSchemaOptions& options = {},
+        TProtoSchemaOptions options = {},
         TMaybe<TVector<google::protobuf::Arena*>> arenas = {});
 
 public:

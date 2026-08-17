@@ -41,7 +41,7 @@ void RemoveRanges(
 }
 
 void TestOverlaps(
-    const TTestRangeMap& map,
+    TTestRangeMap& map,
     const std::span<const TTestRangeMap::TItem>& ranges,
     TBlockRange64 rangeToCheck)
 {
@@ -77,10 +77,10 @@ void TestOverlaps(
         for (ui64 j = i; j <= rangeToCheck.End; ++j) {
             auto r = TBlockRange64::MakeClosedInterval(i, j);
             auto expectedResult = expected(r);
-            const auto* result = map.FindFirstOverlapping(r);
+            auto result = map.FindFirstOverlapping(r);
             UNIT_ASSERT_VALUES_EQUAL_C(
                 expectedResult.has_value(),
-                result != nullptr,
+                result.has_value(),
                 sb + r.Print());
 
             if (expectedResult) {
@@ -331,6 +331,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
     Y_UNIT_TEST(Enumerate)
     {
         using TTestRangeMap = TBlockRangeMap<TString, ui64>;
+        using TFindItem = TTestRangeMap::TFindItem;
         using TItem = TTestRangeMap::TItem;
 
         TTestRangeMap map;
@@ -356,7 +357,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
         {
             TSet<TString> enumerated;
             map.Enumerate(
-                [&](const TItem& item)
+                [&](TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;
@@ -367,7 +368,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
             TSet<TString> enumerated;
             map.EnumerateOverlapping(
                 TBlockRange64::MakeClosedInterval(1, 1),
-                [&](const TItem& item)
+                [&](const TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;
@@ -378,7 +379,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
             TSet<TString> enumerated;
             map.EnumerateOverlapping(
                 TBlockRange64::MakeClosedInterval(2, 4),
-                [&](const TItem& item)
+                [&](const TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;
@@ -391,7 +392,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
             TSet<TString> enumerated;
             map.EnumerateOverlapping(
                 TBlockRange64::MakeClosedInterval(3, 5),
-                [&](const TItem& item)
+                [&](const TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;
@@ -405,7 +406,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
             TSet<TString> enumerated;
             map.EnumerateOverlapping(
                 TBlockRange64::MakeClosedInterval(5, 5),
-                [&](const TItem& item)
+                [&](const TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;
@@ -418,7 +419,7 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
             TSet<TString> enumerated;
             map.EnumerateOverlapping(
                 TBlockRange64::MakeClosedInterval(6, 6),
-                [&](const TItem& item)
+                [&](const TFindItem& item)
                 {
                     enumerated.insert(item.Key);
                     return TTestRangeMap::EEnumerateContinuation::Continue;

@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD030 -->
 # CREATE TRANSFER
 
 Creates a [transfer](../../../concepts/transfer.md) from a [topic](../../../concepts/datamodel/topic.md) to a [table](../../../concepts/datamodel/table.md).
@@ -5,7 +6,7 @@ Creates a [transfer](../../../concepts/transfer.md) from a [topic](../../../conc
 Syntax:
 
 ```yql
-CREATE TRANSFER transfer_name 
+CREATE TRANSFER transfer_name
 FROM topic_name TO table_name USING lambda
 WITH (option = value[, ...])
 ```
@@ -82,7 +83,7 @@ CREATE TRANSFER example_transfer
     FROM example_topic TO example_table USING $transformation_lambda
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 

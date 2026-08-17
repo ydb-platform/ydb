@@ -72,7 +72,8 @@ namespace NDatetime {
 
     TSimpleTM ToCivilTime(const TInstant& absoluteTime, const TTimeZone& tz) {
         TTimePoint tp = TSystemClock::from_time_t(absoluteTime.TimeT());
-        return CivilToTM(cctz::convert(tp, tz), tz.lookup(tp));
+        auto al = tz.lookup(tp);
+        return CivilToTM(al.cs, al);
     }
 
     TSimpleTM CreateCivilTime(const TTimeZone& tz, ui32 year, ui32 mon, ui32 day, ui32 h, ui32 m, ui32 s) {

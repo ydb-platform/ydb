@@ -22,6 +22,7 @@ private:
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+
     virtual TString DoDebugString() const {
         return "";
     }
@@ -53,7 +54,8 @@ public:
 
     IFetchingStep(const TString& name)
         : Name(name)
-        , Signals(TFetchingStepsSignalsCollection::GetSignals(name)) {
+        , Signals(TFetchingStepsSignalsCollection::GetSignals(name))
+    {
     }
 
     TString DebugString(const bool stats = false) const;
@@ -64,12 +66,13 @@ private:
     YDB_READONLY_DEF(TString, BranchName);
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant = 0;
-    TAtomic FinishInstant;
+    TAtomic FinishInstant = 0;
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
         : BranchName(branchName)
-        , Steps(std::move(steps)) {
+        , Steps(std::move(steps))
+    {
     }
 
     void AddStepDuration(const ui32 index, const TDuration dLocal, const TDuration dGlobal) {
@@ -99,22 +102,33 @@ public:
 
 class TFetchingScriptOwner: TNonCopyable {
 private:
-    TAtomic InitializationDetector = 0;
+    static constexpr TAtomicBase StateEmpty = 0;
+    static constexpr TAtomicBase StateInitialized = 1;
+    static constexpr TAtomicBase StateInProgress = 2;
+
+    TAtomic InitializationDetector = StateEmpty;
     std::shared_ptr<TFetchingScript> Script;
 
     void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
         Script = std::move(script);
-        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
+        AFL_VERIFY(AtomicCas(&InitializationDetector, StateInitialized, StateInProgress));
+    }
+
+    // Script is published by the release AtomicCas above and may happen on another thread
+    // (conveyor); it must not be read until the acquire load below observes StateInitialized
+    bool IsInitialized() const {
+        return AtomicGet(InitializationDetector) == StateInitialized;
     }
 
 public:
     const std::shared_ptr<TFetchingScript>& GetScriptVerified() const {
+        AFL_VERIFY(IsInitialized());
         AFL_VERIFY(Script);
         return Script;
     }
 
     TString ProfileDebugString() const {
-        if (Script) {
+        if (HasScript()) {
             return TStringBuilder() << Script->ProfileDebugString() << Endl;
         } else {
             return TStringBuilder() << "NO_SCRIPT" << Endl;
@@ -122,11 +136,11 @@ public:
     }
 
     bool HasScript() const {
-        return !!Script;
+        return IsInitialized() && !!Script;
     }
 
     bool NeedInitialization() const {
-        return AtomicGet(InitializationDetector) != 1;
+        return !IsInitialized();
     }
 
     class TInitializationGuard: TNonCopyable {
@@ -135,19 +149,22 @@ public:
 
     public:
         TInitializationGuard(TFetchingScriptOwner& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             Owner.StartInitialization();
         }
+
         void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
             Owner.FinishInitialization(std::move(script));
         }
+
         ~TInitializationGuard() {
             AFL_VERIFY(!Owner.NeedInitialization());
         }
     };
 
     std::optional<TInitializationGuard> StartInitialization() {
-        if (AtomicCas(&InitializationDetector, 2, 0)) {
+        if (AtomicCas(&InitializationDetector, StateInProgress, StateEmpty)) {
             return std::optional<TInitializationGuard>(*this);
         } else {
             return std::nullopt;
@@ -167,7 +184,8 @@ private:
 
     TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)
         : GuaranteeNotOptional(guaranteeNotOptional)
-        , FullSchema(schema) {
+        , FullSchema(schema)
+    {
     }
 
 private:

@@ -28,6 +28,12 @@
 #include <map>
 #include <sstream>
 
+#ifndef _MSC_VER
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
 namespace orc {
 
   // default location of the timezone files
@@ -780,6 +786,17 @@ namespace orc {
 #ifdef _MSC_VER
     return getTimezoneByName("UTC");
 #else
+    // The absence of LOCAL_TIMEZONE means UTC conventionally
+    {
+      std::string filename(LOCAL_TIMEZONE_DIR);
+      filename += "/";
+      filename += LOCAL_TIMEZONE;
+      struct stat _ignored;
+      if (stat(filename.c_str(), &_ignored) == -1) {
+        return getTimezoneByName("UTC");
+      }
+    }
+
     return getTimezoneByFilename(LOCAL_TIMEZONE_DIR, LOCAL_TIMEZONE);
 #endif
   }

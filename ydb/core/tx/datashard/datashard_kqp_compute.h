@@ -7,6 +7,10 @@
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
@@ -87,14 +91,7 @@ public:
     TTypeEnvironment* Env = nullptr;
 };
 
-IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
-IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
-IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
-
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const TString& userSID);
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

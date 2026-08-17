@@ -4,6 +4,7 @@ with open("pg_class.txt") as f:
     pg_class_file = f.readlines()
 
 with open("pg_class.generated.h", "w") as f:
+    print("// NOLINTBEGIN(modernize-use-designated-initializers)", file=f)
     for p in pg_class_file[2:-2]:
         s = p.split("|")
         oid = int(s[0].strip())
@@ -23,11 +24,13 @@ with open("pg_class.generated.h", "w") as f:
             + "},",
             file=f,
         )
+    print("// NOLINTEND(modernize-use-designated-initializers)", file=f)
 
 with open("columns.txt") as f:
     columns_file = f.readlines()
 
 with open("columns.generated.h", "w") as f:
+    print("// NOLINTBEGIN(modernize-use-designated-initializers)", file=f)
     for p in columns_file[2:-2]:
         s = p.split("|")
         print(s)
@@ -37,3 +40,4 @@ with open("columns.generated.h", "w") as f:
         udt = s[3].strip()
         print(schemaname, relname, name, udt)
         print('{"' + schemaname + '", "' + relname + '", "' + name + '", "' + udt + '"},', file=f)
+    print("// NOLINTEND(modernize-use-designated-initializers)", file=f)

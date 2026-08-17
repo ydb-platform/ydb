@@ -15,8 +15,12 @@ using ObservableCallbackPtr = void (*)(ObserverResult, void *);
 class ObservableInstrument
 {
 public:
-  ObservableInstrument()          = default;
-  virtual ~ObservableInstrument() = default;
+  ObservableInstrument()                                            = default;
+  ObservableInstrument(const ObservableInstrument &)                = default;
+  ObservableInstrument(ObservableInstrument &&) noexcept            = default;
+  ObservableInstrument &operator=(const ObservableInstrument &)     = default;
+  ObservableInstrument &operator=(ObservableInstrument &&) noexcept = default;
+  virtual ~ObservableInstrument()                                   = default;
 
   /**
    * Sets up a function that will be called whenever a metric collection is initiated.

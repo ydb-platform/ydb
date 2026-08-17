@@ -4,11 +4,12 @@
 #include "data_accessor.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -28,25 +29,28 @@ public:
 
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
-            : Operator(bOperator) {
+            : Operator(bOperator)
+        {
         }
 
         class TBuilder {
         private:
-            TBlobInfo* OwnerBlob;
             TWritePortionInfoWithBlobsConstructor* OwnerPortion;
+            ui32 BlobIndex;
 
         public:
-            TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
-                : OwnerBlob(&blob)
-                , OwnerPortion(&portion) {
+            TBuilder(TWritePortionInfoWithBlobsConstructor& portion, const ui32 blobIndex)
+                : OwnerPortion(&portion)
+                , BlobIndex(blobIndex)
+            {
             }
+
             ui64 GetSize() const {
-                return OwnerBlob->GetSize();
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).GetSize();
             }
 
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
-                return OwnerBlob->AddChunk(*OwnerPortion, chunk);
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).AddChunk(*OwnerPortion, chunk);
             }
         };
 
@@ -68,6 +72,7 @@ public:
                 result.append(i->GetData());
             }
             ChunksOrdered.clear();
+            AFL_VERIFY(result.size() == Size)("result", result.size())("expected", Size);
             return result;
         }
     };
@@ -77,14 +82,22 @@ private:
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
     explicit TWritePortionInfoWithBlobsConstructor(TPortionAccessorConstructor&& portionConstructor)
-        : PortionConstructor(std::move(portionConstructor)) {
+        : PortionConstructor(std::move(portionConstructor))
+    {
         AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
-    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
-        Blobs.emplace_back(TBlobInfo(bOperator));
-        return TBlobInfo::TBuilder(Blobs.back(), *this);
+    TBlobInfo& MutableBlobInfoVerified(const ui32 blobIndex) {
+        AFL_VERIFY(blobIndex < Blobs.size())("index", blobIndex)("size", Blobs.size());
+        return Blobs[blobIndex];
     }
+
+    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
+        const ui32 blobIndex = Blobs.size();
+        Blobs.emplace_back(TBlobInfo(bOperator));
+        return TBlobInfo::TBuilder(*this, blobIndex);
+    }
+    friend class TBlobInfo::TBuilder;
     friend class TWritePortionInfoWithBlobsResult;
 
 public:
@@ -92,11 +105,11 @@ public:
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
-        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type);
+        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type, const TIndexInfo& indexInfo);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
-        const std::shared_ptr<IStoragesManager>& operators);
+        const std::shared_ptr<IStoragesManager>& operators, const TIndexInfo& indexInfo);
 
     std::vector<TBlobInfo>& GetBlobs() {
         return Blobs;
@@ -135,7 +148,8 @@ public:
         TBlobInfo(const TString& blobData, TBlobChunks&& chunks, const std::shared_ptr<IBlobsStorageOperator>& stOperator)
             : Chunks(std::move(chunks))
             , ResultBlob(blobData)
-            , Operator(stOperator) {
+            , Operator(stOperator)
+        {
         }
 
         const TString& GetResultBlob() const {
@@ -152,7 +166,7 @@ private:
 
     TString GetBlobByAddressVerified(const ui32 entityId, const ui32 chunkIdx) const {
         for (auto&& i : Blobs) {
-            for (auto&& b: i.GetChunks()) {
+            for (auto&& b : i.GetChunks()) {
                 if (b.GetEntityId() == entityId && b.GetChunkIdx() == chunkIdx) {
                     auto* recordInfo = GetPortionResult().GetRecordPointer(TChunkAddress(entityId, chunkIdx));
                     AFL_VERIFY(recordInfo);
@@ -168,14 +182,13 @@ public:
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(
         const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns, const bool restoreAbsent) const {
         THashMap<TChunkAddress, TString> blobs;
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
-            "portion_id", GetPortionResult().GetPortionInfo().GetPortionId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"portionId", GetPortionResult().GetPortionInfo().GetPortionId()});
         for (auto&& i : GetPortionResult().GetRecordsVerified()) {
             blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
             Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
         }
-        return GetPortionResult().PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns,
-            GetPortionResult().GetPortionInfo().GetPathId().DebugString());
+        return GetPortionResult().PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns);
     }
 
     std::vector<TBlobInfo>& MutableBlobs() {
@@ -183,7 +196,8 @@ public:
     }
 
     TWritePortionInfoWithBlobsResult(TWritePortionInfoWithBlobsConstructor&& constructor)
-        : PortionConstructor(std::move(constructor.PortionConstructor)) {
+        : PortionConstructor(std::move(constructor.PortionConstructor))
+    {
         for (auto&& i : constructor.Blobs) {
             Blobs.emplace_back(i.ExtractBlob(), i.ExtractChunks(), i.GetOperator());
         }
@@ -200,7 +214,6 @@ public:
         for (auto&& i : Blobs) {
             i.RegisterBlobId(*this, TUnifiedBlobId(1, 1, 1, ++idx, 1, 1, i.GetSize()));
         }
-
     }
 
     void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {

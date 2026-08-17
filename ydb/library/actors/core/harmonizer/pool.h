@@ -16,7 +16,9 @@ template <typename T>
 struct TWaitingStats;
 
 struct TThreadInfo {
-    TValueHistory<8> UsedCpu;
+    static constexpr ui8 CpuHistorySize = 32;
+
+    TValueHistory<CpuHistorySize> UsedCpu;
     TValueHistory<8> ElapsedCpu;
 }; // struct TThreadInfo
 
@@ -26,6 +28,7 @@ struct TPoolInfo {
     ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
+    bool IsSharedOnly = false;
 
     i16 DefaultFullThreadCount = 0;
     i16 MinFullThreadCount = 0;
@@ -36,11 +39,8 @@ struct TPoolInfo {
     float MinThreadCount = 0;
     float MaxThreadCount = 0;
 
-    ui16 LocalQueueSize;
-    ui16 MaxLocalQueueSize = 0;
-    ui16 MinLocalQueueSize = 0;
-
     i16 Priority = 0;
+    ui8 NeedyCpuWindowSeconds = 1;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
     ui32 MaxAvgPingUs = 0;
@@ -73,11 +73,13 @@ struct TPoolInfo {
     TPoolInfo();
 
     double GetCpu(i16 threadIdx) const;
+    double GetCpuForLastSeconds(i16 threadIdx, ui8 seconds) const;
     double GetElapsed(i16 threadIdx) const;
     double GetLastSecondCpu(i16 threadIdx) const;
     double GetLastSecondElapsed(i16 threadIdx) const;
 
     double GetSharedCpu(i16 sharedThreadIdx) const;
+    double GetSharedCpuForLastSeconds(i16 sharedThreadIdx, ui8 seconds) const;
     double GetSharedElapsed(i16 sharedThreadIdx) const;
     double GetLastSecondSharedCpu(i16 sharedThreadIdx) const;
     double GetLastSecondSharedElapsed(i16 sharedThreadIdx) const;

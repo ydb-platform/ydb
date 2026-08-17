@@ -1,12 +1,16 @@
 #include "write.h"
+
 #include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS
 
 namespace NKikimr::NOlap {
 
 TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId) {
     Y_ABORT_UNLESS(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_BLOBS)("generated_blob_id", blobId.ToStringNew());
+    YDB_LOG_TRACE("",
+        {"generatedBlobId", blobId.ToStringNew()});
     AddDataForWrite(externalBlobId.value_or(blobId), data);
     return externalBlobId.value_or(blobId);
 }
@@ -21,7 +25,10 @@ void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TS
 }
 
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "WriteBlobResult")("blob_id", blobId.ToStringNew())("status", status);
+    YDB_LOG_DEBUG("",
+        {"event", "WriteBlobResult"},
+        {"blobId", blobId.ToStringNew()},
+        {"status", status});
     AFL_VERIFY(Counters);
     auto it = WritingStart.find(blobId);
     AFL_VERIFY(it != WritingStart.end());
@@ -41,11 +48,13 @@ bool IBlobsWritingAction::IsReady() const {
 }
 
 IBlobsWritingAction::~IBlobsWritingAction() {
-//    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
+    //    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
 }
 
 void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "SendWriteBlobRequest")("blob_id", blobId.ToStringNew());
+    YDB_LOG_DEBUG("",
+        {"event", "SendWriteBlobRequest"},
+        {"blobId", blobId.ToStringNew()});
     AFL_VERIFY(Counters);
     Counters->OnRequest(data.size());
     WritingStarted = true;
@@ -53,4 +62,4 @@ void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifi
     return DoSendWriteBlobRequest(data, blobId);
 }
 
-}
+}   // namespace NKikimr::NOlap

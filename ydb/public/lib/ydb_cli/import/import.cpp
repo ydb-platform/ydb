@@ -574,6 +574,7 @@ class TImportFileClient::TImpl {
 public:
     explicit TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
                                      const TImportFileSettings& settings);
+    ~TImpl();
     TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
 
 private:
@@ -673,6 +674,21 @@ TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TCo
         RetryPool->Start(Settings.Threads_);
     }
     RequestsInflight = std::make_unique<std::counting_semaphore<>>(Settings.MaxInFlightRequests_);
+}
+
+TImportFileClient::TImpl::~TImpl() {
+    if (FileProgressPool) {
+        FileProgressPool->Stop();
+    }
+    if (RetryPool) {
+        RetryPool->Stop();
+    }
+    if (ProcessingPool) {
+        ProcessingPool->Stop();
+    }
+    if (TableClient) {
+        TableClient->Stop().Wait();
+    }
 }
 
 TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, const TString& dbPath) {
@@ -1175,7 +1191,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
                     UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
                         .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
-                            jobInflightManager->ReleaseJob();
                             if (asyncStatus.GetValueSync().IsSuccess()) {
                                 batchStatus->Completed = true;
                                 if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
@@ -1183,6 +1198,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                         "Couldn't add worker func to save progress"));
                                 }
                             }
+                            jobInflightManager->ReleaseJob();
                             return asyncStatus;
                         });
                 }
@@ -1207,7 +1223,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                 // batch was read successfully, sending data via Apache Arrow
                                 UpsertTValueBufferParquet(dbPath, std::move(batch), writeOptions)
                                     .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
-                                        jobInflightManager->ReleaseJob();
                                         if (asyncStatus.GetValueSync().IsSuccess()) {
                                             batchStatus->Completed = true;
                                             if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
@@ -1215,6 +1230,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                                     "Couldn't add worker func to save progress"));
                                             }
                                         }
+                                        jobInflightManager->ReleaseJob();
                                         return asyncStatus;
                                     });
                             } else {
@@ -1231,6 +1247,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                         if (!Failed.exchange(true)) {
                             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
                         }
+                        jobInflightManager->ReleaseJob();
                     }
                 }
                 break;
@@ -1394,7 +1411,6 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                             return parser.BuildListOnArena(buffer, filePath, arena);
                         })
                         .Apply([&jobsInflight, &confirmedBytes, &writeProgress, batchSizeBytes](const TAsyncStatus& asyncStatus) {
-                            jobsInflight.release();
                             auto status = asyncStatus.GetValueSync();
                             if (status.IsSuccess()) {
                                 confirmedBytes.fetch_add(batchSizeBytes, std::memory_order_relaxed);
@@ -1402,6 +1418,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                                     writeProgress();
                                 }
                             }
+                            jobsInflight.release();
                             return asyncStatus;
                         });
                 } catch (const std::exception& e) {

@@ -13,7 +13,7 @@ using TSecondaryIndexes = TVector<std::pair<
     const NYql::TIndexDescription*>>;
 
 TSecondaryIndexes BuildAffectedIndexTables(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
-    NYql::TExprContext& ctx, const THashSet<TStringBuf>* filter = nullptr);
+    NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const THashSet<TStringBuf>* filter = nullptr);
 
 struct TCondenseInputResult {
     NYql::NNodes::TExprBase Stream;
@@ -70,7 +70,7 @@ NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompu
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
     const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumn, bool abortOnError,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 enum class TKqpPhyUpsertIndexMode {
     Upsert,
@@ -123,6 +123,11 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
+bool FulltextUsesRowIdAsDocId(const NYql::TIndexDescription* indexDesc);
+
+void AddFulltextDocIdColumns(const NYql::TIndexDescription* indexDesc,
+    TVector<TStringBuf>& indexTableColumns, THashSet<TStringBuf>& indexTableColumnsSet);
+
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
     const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
     bool forDelete, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
@@ -136,8 +141,8 @@ NYql::NNodes::TExprBase BuildFulltextDictRows(const NYql::NNodes::TExprBase& tok
 
 NYql::NNodes::TExprBase CombineFulltextDictRows(const TVector<NYql::NNodes::TExprBase>& deltas, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescription& table, const NYql::NNodes::TExprBase& tokenRows,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
+    const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextDictUpsert(const NYql::TKikimrTableDescription& dictTable,
     const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);

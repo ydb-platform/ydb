@@ -1,16 +1,12 @@
-import sys
 from typing import Any, NoReturn
 from collections.abc import Iterator
 
 import numpy as np
 import numpy.typing as npt
 
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
+from typing_extensions import assert_type
 
-AR_b: npt.NDArray[np.bool_]
+AR_b: npt.NDArray[np.bool]
 AR_u4: npt.NDArray[np.uint32]
 AR_i8: npt.NDArray[np.int64]
 AR_f8: npt.NDArray[np.float64]
@@ -115,7 +111,7 @@ assert_type(np.polyval(AR_O, AR_O), npt.NDArray[np.object_])
 
 assert_type(np.polyadd(poly_obj, AR_i8), np.poly1d)
 assert_type(np.polyadd(AR_f8, poly_obj), np.poly1d)
-assert_type(np.polyadd(AR_b, AR_b), npt.NDArray[np.bool_])
+assert_type(np.polyadd(AR_b, AR_b), npt.NDArray[np.bool])
 assert_type(np.polyadd(AR_u4, AR_b), npt.NDArray[np.unsignedinteger[Any]])
 assert_type(np.polyadd(AR_i8, AR_i8), npt.NDArray[np.signedinteger[Any]])
 assert_type(np.polyadd(AR_f8, AR_i8), npt.NDArray[np.floating[Any]])
@@ -133,7 +129,7 @@ assert_type(np.polysub(AR_O, AR_O), npt.NDArray[np.object_])
 
 assert_type(np.polymul(poly_obj, AR_i8), np.poly1d)
 assert_type(np.polymul(AR_f8, poly_obj), np.poly1d)
-assert_type(np.polymul(AR_b, AR_b), npt.NDArray[np.bool_])
+assert_type(np.polymul(AR_b, AR_b), npt.NDArray[np.bool])
 assert_type(np.polymul(AR_u4, AR_b), npt.NDArray[np.unsignedinteger[Any]])
 assert_type(np.polymul(AR_i8, AR_i8), npt.NDArray[np.signedinteger[Any]])
 assert_type(np.polymul(AR_f8, AR_i8), npt.NDArray[np.floating[Any]])

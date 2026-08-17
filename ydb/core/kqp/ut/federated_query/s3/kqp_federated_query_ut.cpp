@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <fmt/format.h>
 
@@ -958,8 +960,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(InsertIntoBucketValuesCast) {
-        const TString writeDataSourceName = "/Root/write_data_source";
-        const TString writeTableName = "/Root/write_binding";
+        const TString writeDataSourceName1 = "/Root/write_data_source1";
+        const TString writeDataSourceName2 = "/Root/write_data_source2";
+        const TString writeTableName1 = "/Root/write_binding1";
+        const TString writeTableName2 = "/Root/write_binding2";
         const TString writeBucket = "test_bucket_values_cast";
         const TString writeObject = "test_object_write/";
         {
@@ -973,22 +977,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         {
             const TString query = fmt::format(R"(
-                CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                CREATE EXTERNAL DATA SOURCE `{write_source1}` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="{write_location}",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `{write_table}` (
+                CREATE EXTERNAL DATA SOURCE `{write_source2}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{write_location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{write_table1}` (
                     key Uint64 NOT NULL,
                     value String NOT NULL
                 ) WITH (
-                    DATA_SOURCE="{write_source}",
+                    DATA_SOURCE="{write_source1}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+                CREATE EXTERNAL TABLE `{write_table2}` (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source2}",
                     LOCATION="{write_object}",
                     FORMAT="tsv_with_names"
                 );
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_location"_a = GetBucketLocation(writeBucket),
                 "write_object"_a = writeObject);
 
@@ -999,31 +1018,33 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr->GetQueryClient();
         {
             const TString query = fmt::format(R"(
-                INSERT INTO `{write_table}`
+                INSERT INTO `{write_table1}`
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source1}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_table}` SELECT * FROM AS_TABLE([
+                INSERT INTO `{write_table2}` SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source2}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                 SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_object"_a = writeObject);
 
             const auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -1905,13 +1926,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName, bool enableOltp) {
+    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName) {
         const TString bucket = "test_bucket3";
         const TString object = "test_object";
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(enableOltp);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
@@ -1964,11 +1984,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
     }
 
-    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable, bool enableOltp) {
-        if (enableOltp) {
-            const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
-            ValidateResult(client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync());
-        }
+    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable) {
+        const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
+        ValidateResult(client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync());
 
         {
             const TString query = TStringBuilder() << "SELECT key, value FROM `" << olapTable << "` ORDER BY key;";
@@ -1976,33 +1994,31 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    void DoCreateTableAsSelectFromExternalDataSource(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
+    void DoCreateTableAsSelectFromExternalDataSource(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        if (enableOltp) {
-            const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "TestDomain";
-                CREATE TABLE `{destination}` (
-                    PRIMARY KEY (key, value)
+        const TString query = fmt::format(R"(
+            PRAGMA TablePathPrefix = "TestDomain";
+            CREATE TABLE `{destination}` (
+                PRIMARY KEY (key, value)
+            )
+            AS SELECT *
+            FROM `{external_source}`.`/` WITH (
+                format="json_each_row",
+                schema(
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
                 )
-                AS SELECT *
-                FROM `{external_source}`.`/` WITH (
-                    format="json_each_row",
-                    schema(
-                        key Utf8 NOT NULL,
-                        value Utf8 NOT NULL
-                    )
-                );)",
-                "destination"_a = oltpTable,
-                "external_source"_a = externalDataSourceName
-            );
-            requestRunner(query, client, kikimr->GetDriver());
-        }
+            );)",
+            "destination"_a = oltpTable,
+            "external_source"_a = externalDataSourceName
+        );
+        requestRunner(query, client, kikimr->GetDriver());
 
         const TString olapTable = "DestinationOlap";
         {
@@ -2026,7 +2042,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable, enableOltp);
+        ValidateTables(client, oltpTable, olapTable);
     }
 
     void RunGenericQuery(const TString& query, TQueryClient& client, const TDriver&) {
@@ -2054,34 +2070,32 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericQuery) {
-        DoCreateTableAsSelectFromExternalDataSource(&RunGenericQuery, true);
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericQuery);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericScript) {
-        DoCreateTableAsSelectFromExternalDataSource(&RunGenericScript, false);
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericScript);
     }
 
-    void DoCreateTableAsSelectFromExternalTable(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
+    void DoCreateTableAsSelectFromExternalTable(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        if (enableOltp) {
-            const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "TestDomain";
-                CREATE TABLE `{destination}` (
-                    PRIMARY KEY (key, value)
-                )
-                AS SELECT *
-                FROM `{external_table}`;)",
-                "destination"_a = oltpTable,
-                "external_table"_a = externalTableName
-            );
-            requestRunner(query, client, kikimr->GetDriver());
-        }
+        const TString query = fmt::format(R"(
+            PRAGMA TablePathPrefix = "TestDomain";
+            CREATE TABLE `{destination}` (
+                PRIMARY KEY (key, value)
+            )
+            AS SELECT *
+            FROM `{external_table}`;)",
+            "destination"_a = oltpTable,
+            "external_table"_a = externalTableName
+        );
+        requestRunner(query, client, kikimr->GetDriver());
 
         const TString olapTable = "DestinationOlap";
         {
@@ -2099,15 +2113,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable, enableOltp);
+        ValidateTables(client, oltpTable, olapTable);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericQuery) {
-        DoCreateTableAsSelectFromExternalTable(&RunGenericQuery, true);
+        DoCreateTableAsSelectFromExternalTable(&RunGenericQuery);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericScript) {
-        DoCreateTableAsSelectFromExternalTable(&RunGenericScript, false);
+        DoCreateTableAsSelectFromExternalTable(&RunGenericScript);
     }
 
     Y_UNIT_TEST(OverridePlannerDefaults) {
@@ -3044,7 +3058,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = false});
+        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = true}); // Script execution may be restarted only by background check
         auto db = kikimr->GetQueryClient();
 
         constexpr char BUCKET[] = "test_restart_query_and_cleanup_with_get_operation_bucket";
@@ -3196,6 +3210,86 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "42");
         UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
+    }
+
+    Y_UNIT_TEST(TestAtomicUploadCommitWithMultipleTransactions) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char BUCKET[] = "test_atomic_upload_commit_with_multiple_transactions";
+        constexpr char EXTERNAL_DATA_SOURCE_NAME[] = "test_bucket";
+        CreateBucket(BUCKET);
+
+        {   // Create external data source
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                ))",
+                "location"_a = GetBucketLocation(BUCKET),
+                "source_name"_a = EXTERNAL_DATA_SOURCE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        constexpr char TABLE_NAME[] = "failure_table";
+
+        {   // Create sample table
+            const TString query = fmt::format(R"(
+                CREATE TABLE `{table_name}` (
+                    Key Int32 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                "table_name"_a = TABLE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
+                INSERT INTO `{table_name}` (Key, Value) VALUES (42, "value");
+
+                INSERT INTO `{source_name}`.`f/` WITH (FORMAT = "json_each_row") SELECT 42;
+
+                SELECT * FROM `{table_name}`;
+
+                INSERT INTO `{source_name}`.`x/` WITH (FORMAT = "json_each_row") SELECT 42;
+            )",
+            "source_name"_a=EXTERNAL_DATA_SOURCE_NAME,
+            "table_name"_a=TABLE_NAME
+        );
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql, TExecuteScriptSettings().StatsMode(EStatsMode::Profile)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+        TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        const auto& metadata = readyOp.Metadata();
+        UNIT_ASSERT_VALUES_EQUAL_C(metadata.ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+
+        const auto& ast = metadata.ExecStats.GetAst();
+        UNIT_ASSERT(ast);
+        AstChecker(3, 5)(*ast);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetString(), "value");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "{\"column0\":42}\n{\"column0\":42}\n");
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
     }
 
@@ -3548,15 +3642,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithReplicatedS3Write) {
+    Y_UNIT_TEST_TWIN(ExecuteQueryWithReplicatedS3Write, EnableIndexStreamWrite) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
-        const TString bucket = "test_bucket_s3_replicate";
+        const TString bucket = TStringBuilder() << "test_bucket_s3_replicate" << EnableIndexStreamWrite;
         const TString object = "object/test_object";
 
         CreateBucketWithObject(bucket, object, "test-data");
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto appConfig = NKikimrConfig::TAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
         auto db = kikimr->GetQueryClient();
 
         {
@@ -3595,6 +3692,260 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "test-data\"Data\"\n\"test-data\"\n\"Data\"\n\"test-data\"\n");
+    }
+
+    Y_UNIT_TEST(TestFilesCreationWithS3BlockInsert) {
+        constexpr char bucket[] = "testFilesCreationWithS3BlockInsertBucket";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char tableName[] = "olapTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE TABLE `{table}` (
+                    time Timestamp NOT NULL,
+                    class String NOT NULL,
+                    PRIMARY KEY (time, class)
+                ) WITH (
+                    STORE = COLUMN
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "table"_a = tableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        constexpr ui64 size = 1'000'000;
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                UPSERT INTO `{table}`
+                    (time, class)
+                SELECT
+                    CurrentUtcTimestamp(TableRow()) AS time,
+                    CAST(RandomUuid(TableRow()) AS String) AS class
+                FROM AS_TABLE(ListReplicate(<|A: 1|>, {size}));)",
+                "size"_a = size,
+                "table"_a = tableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        constexpr ui64 tasks = 10;
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                PRAGMA s3.UseBlocksSink = "true";
+                PRAGMA ydb.MaxTasksPerStage = "{tasks}";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": {tasks} }}
+                ] @@;
+
+                INSERT INTO `{external_source}`.`tests/`
+                WITH (FORMAT = parquet)
+                SELECT * FROM `{table}`;)",
+                "external_source"_a = externalDataSourceName,
+                "table"_a = tableName,
+                "tasks"_a = tasks
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        UNIT_ASSERT_GE(tasks, GetObjectKeys(bucket).size());
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                SELECT COUNT(*) FROM `{external_source}`.`tests/`
+                WITH (
+                    FORMAT = parquet,
+                    SCHEMA (
+                        time Timestamp,
+                        class String
+                    )
+                );)",
+                "external_source"_a = externalDataSourceName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), size);
+        }
+    }
+
+    Y_UNIT_TEST(ReturningWithInsertOnS3Storage) {
+        const TString dataSourceName = "/Root/s3_data_source";
+        const TString tableName = "/Root/external_table";
+        const TString bucket = "test_bucket_insert_returning";
+        const TString object = "test_object/";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(bucket, s3Client);
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto client = kikimr->GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{ds}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{loc}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{tbl}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{ds}",
+                LOCATION="{obj}",
+                FORMAT="tsv_with_names"
+            );
+        )", "ds"_a = dataSourceName, "loc"_a = GetBucketLocation(bucket), "tbl"_a = tableName, "obj"_a = object);
+
+        auto resultCreateDS = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(resultCreateDS.IsSuccess(), resultCreateDS.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING *;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{ds}`.`{obj}` WITH (FORMAT = "tsv_with_names", SCHEMA (key Utf8 NOT NULL, value Utf8 NOT NULL)) (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "ds"_a = dataSourceName, "obj"_a = object);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TestSuccessfulReadAfterPartialFileError) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "partial-read-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}};
+        TS3Mock s3Mock(
+            std::move(data),
+            TS3Mock::TSettings(port).WithPartialReadFailure(objectPath));
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/partial_read_source` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/partial_read_table` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE = "/Root/partial_read_source",
+                LOCATION = "{object}",
+                FORMAT = "json_each_row"
+            );)",
+            "port"_a = port,
+            "bucket"_a = bucket,
+            "object"_a = object
+        ), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*)
+            FROM `/Root/partial_read_table`;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
+        UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
+    }
+
+    Y_UNIT_TEST(MultipleWriteIntoExternalTableDisabled) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_disabled";
+        const TString bucket = "testBucketMultipleWriteIntoExternalTableDisabled";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto client = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "{external_source}",
+                    LOCATION = "/write-path/",
+                    FORMAT = "json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            );
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+            INSERT INTO `{external_table}` SELECT 1 as key, "X" as value;
+            INSERT INTO `{external_table}` SELECT 2 as key, "Y" as value;
+        )", "external_table"_a=externalTableName);
+
+        auto result = client.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for external table: db.[" << externalTableName);
     }
 }
 

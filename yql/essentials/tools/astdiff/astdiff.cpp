@@ -56,10 +56,12 @@ int Main(int argc, const char** argv)
         return 2;
     }
 
-    const TString fileOne(argv[1]), fileTwo(argv[2]);
+    const TString fileOne(argv[1]);
+    const TString fileTwo(argv[2]);
     const TString progOneAst = TFileInput(fileOne).ReadAll();
     const TString progTwoAst = TFileInput(fileTwo).ReadAll();
-    const auto progOne(ParseAst(progOneAst)), progTwo(ParseAst(progTwoAst));
+    const auto progOne(ParseAst(progOneAst));
+    const auto progTwo(ParseAst(progTwoAst));
 
     if (!(progOne.IsOk() && progTwo.IsOk())) {
         if (!progOne.IsOk()) {
@@ -73,11 +75,13 @@ int Main(int argc, const char** argv)
         return 3;
     }
 
-    TExprContext ctxOne, ctxTwo;
-    TExprNode::TPtr exprOne, exprTwo;
+    TExprContext ctxOne;
+    TExprContext ctxTwo;
+    TExprNode::TPtr exprOne;
+    TExprNode::TPtr exprTwo;
 
-    const bool okOne = CompileExpr(*progOne.Root, exprOne, ctxOne, nullptr, nullptr);
-    const bool okTwo = CompileExpr(*progTwo.Root, exprTwo, ctxTwo, nullptr, nullptr);
+    const bool okOne = CompileExpr(*progOne.Root, exprOne, ctxOne, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
+    const bool okTwo = CompileExpr(*progTwo.Root, exprTwo, ctxTwo, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
 
     if (!(okOne && okTwo)) {
         if (!okOne) {

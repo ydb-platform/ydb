@@ -1,5 +1,3 @@
 #include "context.h"
 
-namespace NKikimr::NOlap::NCompaction {
-
-}
+namespace NKikimr::NOlap::NCompaction {}

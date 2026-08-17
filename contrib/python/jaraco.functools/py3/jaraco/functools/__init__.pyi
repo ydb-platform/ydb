@@ -3,13 +3,14 @@ from functools import partial
 from operator import methodcaller
 from typing import (
     Any,
+    Concatenate,
     Generic,
     Protocol,
     TypeVar,
     overload,
 )
 
-from typing_extensions import Concatenate, ParamSpec, TypeVarTuple, Unpack
+from typing_extensions import ParamSpec, TypeVarTuple, Unpack
 
 _P = ParamSpec('_P')
 _R = TypeVar('_R')
@@ -104,6 +105,9 @@ def print_yielded(func: Callable[_P, Iterator[Any]]) -> Callable[_P, None]: ...
 def pass_none(
     func: Callable[Concatenate[_T, _P], _R],
 ) -> Callable[Concatenate[_T, _P], _R]: ...
+def signed(
+    func: Callable[Concatenate[_T, _P], str],
+) -> Callable[Concatenate[_T, _P], str]: ...
 def assign_params(
     func: Callable[..., _R], namespace: dict[str, Any]
 ) -> partial[_R]: ...
@@ -115,7 +119,7 @@ def except_(
 ) -> Callable[[Callable[_P, Any]], Callable[_P, Any]]: ...
 def identity(x: _T) -> _T: ...
 def bypass_when(
-    check: _V, *, _op: Callable[[_V], Any] = ...
+    check: _V | Callable[[], _V], *, _op: Callable[[_V], Any] = ...
 ) -> Callable[[Callable[[_T], _R]], Callable[[_T], _T | _R]]: ...
 def bypass_unless(
     check: Any,

@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
+#include <variant>
+
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -20,8 +22,8 @@ enum class EExportProgress {
 };
 
 struct TExportItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
+    uint32_t PartsTotal = 0;
+    uint32_t PartsCompleted = 0;
     TInstant StartTime;
     TInstant EndTime;
 };
@@ -30,6 +32,15 @@ struct TEncryptionAlgorithm {
     static const std::string AES_128_GCM;
     static const std::string AES_256_GCM;
     static const std::string CHACHA_20_POLY_1305;
+};
+
+struct TYdbDumpFormat {
+};
+
+struct TParquetFormat {
+    using TSelf = TParquetFormat;
+
+    FLUENT_SETTING_DEFAULT(uint32_t, RowGroupSize, 10000);
 };
 
 /// YT
@@ -53,7 +64,7 @@ class TExportToYtResponse : public TOperation {
 public:
     struct TMetadata {
         TExportToYtSettings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
@@ -104,6 +115,9 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 
+    using FormatVariant = std::variant<TYdbDumpFormat, TParquetFormat>;
+    FLUENT_SETTING(FormatVariant, Format);
+
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;
         SymmetricKey_ = key;
@@ -118,7 +132,7 @@ class TExportToS3Response : public TOperation {
 public:
     struct TMetadata {
         TExportToS3Settings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
@@ -147,6 +161,7 @@ struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSetting
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
@@ -163,7 +178,7 @@ class TExportToFsResponse : public TOperation {
 public:
     struct TMetadata {
         TExportToFsSettings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 

@@ -25,6 +25,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/services/bg_tasks/abstract
     ydb/services/metadata
+    ydb/services/scheme_secret
 )
 
 YQL_LAST_ABI_VERSION()

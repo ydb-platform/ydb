@@ -78,7 +78,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     NKikimr::TSubDomainKey FilterTenantId;
 
 public:
-    TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonTabletInfo(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TJsonWhiteboardRequest(viewer, ev)
     {
         static TString prefix = "json/tabletinfo ";
@@ -339,8 +339,12 @@ public:
         }
         if (!Tablets.empty()) {
             TBase::Bootstrap();
-            for (auto tablet : Tablets) {
-                Request->Record.AddFilterTabletId(tablet.first);
+            // TBase::Bootstrap() may reply and pass away without building the request,
+            // for example when nothing is left to ask after filtering the nodes by database
+            if (!ReplySent) {
+                for (const auto& [tabletId, tabletType] : Tablets) {
+                    Request->Record.AddFilterTabletId(tabletId);
+                }
             }
         }
         RequestDone();

@@ -68,11 +68,6 @@ struct TDataEvents {
             return *this;
         }
 
-        TEvWrite& SetUserSID(const TString& userSID) {
-            Record.SetUserSID(userSID);
-            return *this;
-        }
-
         NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
             const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat,
@@ -109,7 +104,11 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
             auto result = std::make_unique<TEvWriteResult>();
-            ACFL_WARN("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"event", "ev_write_error"},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status)},
+                {"details", errorMsg},
+                {"txId", txId});
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
@@ -229,6 +228,10 @@ struct TDataEvents {
     struct TEvLockRowsCancel : public NActors::TEventPB<TEvLockRowsCancel, NKikimrDataEvents::TEvLockRowsCancel, TDataEvents::EvLockRowsCancel> {
     public:
         TEvLockRowsCancel() = default;
+
+        explicit TEvLockRowsCancel(ui64 requestId) {
+            Record.SetRequestId(requestId);
+        }
     };
 
     struct TEvLockRowsResult : public NActors::TEventPB<TEvLockRowsResult, NKikimrDataEvents::TEvLockRowsResult, TDataEvents::EvLockRowsResult> {

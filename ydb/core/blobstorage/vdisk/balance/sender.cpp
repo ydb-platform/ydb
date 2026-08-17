@@ -6,6 +6,8 @@
 
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_BALANCING
+
 
 namespace NKikimr {
 namespace NBalancing {
@@ -21,17 +23,18 @@ namespace {
         TPDiskCtxPtr PDiskCtx;
         TVector<TPartInfo> Parts;
         TReplQuoter::TPtr Quoter;
+        NMonitoring::TDynamicCounters::TCounterPtr QuoterThrottledCounter;
         const TBlobStorageGroupType GType;
         NMonGroup::TBalancingGroup& MonGroup;
-
         TVector<TPart> Result;
         ui32 Responses = 0;
     public:
 
-        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
+        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
             : PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
+            , QuoterThrottledCounter(quoterThrottledCounter)
             , GType(gType)
             , MonGroup(monGroup)
             , Result(Parts.size())
@@ -40,7 +43,10 @@ namespace {
         void SendReadRequests(const TActorId& selfId) {
             for (ui32 i = 0; i < Parts.size(); ++i) {
                 auto& item = Parts[i];
-                Result[i] = TPart{.Key=item.Key, .PartsMask=item.PartsMask};
+                Result[i] = TPart{
+                    .Key = item.Key,
+                    .PartsMask = item.PartsMask,
+                };
                 std::visit(TOverloaded{
                     [&](TRope&& data) {
                         // part is already in memory, no need to read it from disk
@@ -59,10 +65,17 @@ namespace {
                             reinterpret_cast<void*>(i)
                         );
 
+                        if (item.IsHugeBlob) {
+                            Y_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
+                            ev->BlobId = TLogoBlobID(item.Key, item.PartsMask.FirstPosition() + 1);
+                        }
+
                         TReplQuoter::QuoteMessage(
                             Quoter,
                             std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
-                            diskPart.Size
+                            diskPart.Size,
+                            0,
+                            QuoterThrottledCounter
                         );
                         MonGroup.ReadFromHandoffBytes() += diskPart.Size;
                     }
@@ -117,6 +130,7 @@ namespace {
         std::shared_ptr<TBalancingCtx> Ctx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
+        NMonGroup::TReplGroup& ReplMonGroup;
 
         ui32 RequestsSent = 0;
         ui32 Responses = 0;
@@ -125,11 +139,13 @@ namespace {
         TPartsSender(
             std::shared_ptr<TBalancingCtx> ctx,
             TIntrusivePtr<TBlobStorageGroupInfo> gInfo,
-            TQueueActorMapPtr queueActorMapPtr
+            TQueueActorMapPtr queueActorMapPtr,
+            NMonGroup::TReplGroup& replMonGroup
         )
             : Ctx(ctx)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
+            , ReplMonGroup(replMonGroup)
         {}
 
         void SendRequest(const TVDiskIdShort& vDiskId, const TActorId& selfId, IEventBase* ev, ui32 dataSize) {
@@ -137,7 +153,9 @@ namespace {
             TReplQuoter::QuoteMessage(
                 Ctx->VCtx->ReplNodeRequestQuoter,
                 std::make_unique<IEventHandle>(queue, selfId, ev),
-                dataSize
+                dataSize,
+                0,
+                ReplMonGroup.ReplNodeRequestThrottledMicrosecondsPtr()
             );
             RequestsSent++;
             Ctx->MonGroup.SentOnMainBytes() += dataSize;
@@ -162,12 +180,16 @@ namespace {
                             key, std::move(data), vDiskId,
                             true, nullptr,
                             TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                            false
+                            false,
+                            TWriteSource::BlobBalancer
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
-                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
-                            (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, dataSize));
+                        YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Add in multiput"),
+                            {"marker", "BSVB11"},
+                            {"logoBlobId", key},
+                            {"to", GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))},
+                            {"dataSize", dataSize});
 
                         auto& ev = vDiskToEv[vDiskId];
                         if (!ev) {
@@ -175,31 +197,32 @@ namespace {
                         }
 
                         // TODO(alexvru): checksumming here
-                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, false, {}, NWilson::TTraceId(), false);
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, true, false, {}, NWilson::TTraceId(), false, TWriteSource::BlobBalancer);
                     }
                 }
             }
 
             for (auto& [vDiskId, ev]: vDiskToEv) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Send multiput"), (VDisk, vDiskId.ToString()));
-
-                ui32 blobsSize = 0;
-                for (const auto& item: ev->Record.GetItems()) {
-                    blobsSize += item.GetBuffer().size();
-                }
-
-                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), blobsSize);
+                YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Send multiput"),
+                    {"marker", "BSVB12"},
+                    {"VDisk", vDiskId});
+                const size_t bytes = ev->GetBufferBytes();
+                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), bytes);
             }
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             ++Responses;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
+                YDB_LOG_WARN(VDISKP(Ctx->VCtx, "Put failed"),
+                    {"marker", "BSVB13"},
+                    {"msg", ev->Get()->ToString()});
             } else {
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
+                YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Put done"),
+                    {"marker", "BSVB14"},
+                    {"msg", ev->Get()->ToString()});
             }
         }
 
@@ -207,19 +230,27 @@ namespace {
             ++Responses;
             auto rec = ev->Get()->Record;
             if (rec.GetStatus()  != NKikimrProto::OK) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB33, VDISKP(Ctx->VCtx, "MultiPut failed"), (Msg, ev->Get()->ToString()));
+                YDB_LOG_WARN(VDISKP(Ctx->VCtx, "MultiPut failed"),
+                    {"marker", "BSVB33"},
+                    {"msg", ev->Get()->ToString()});
                 return;
             }
 
             const auto& items = ev->Get()->Record.GetItems();
             for (const auto& item: items) {
                 if (item.GetStatus() != NKikimrProto::OK) {
-                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut item failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()), (Status, NKikimrProto::EReplyStatus_Name(item.GetStatus())), (Error, item.GetErrorReason()));
+                    YDB_LOG_WARN(VDISKP(Ctx->VCtx, "MultiPut item failed"),
+                        {"marker", "BSVB15"},
+                        {"key", LogoBlobIDFromLogoBlobID(item.GetBlobID())},
+                        {"status", NKikimrProto::EReplyStatus_Name(item.GetStatus())},
+                        {"error", item.GetErrorReason()});
                     continue;
                 }
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(item.GetBlobID()));
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "MultiPut done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                YDB_LOG_INFO(VDISKP(Ctx->VCtx, "MultiPut done"),
+                    {"marker", "BSVB16"},
+                    {"key", LogoBlobIDFromLogoBlobID(item.GetBlobID())});
             }
         }
 
@@ -244,10 +275,13 @@ namespace {
         void ReadPartsFromDisk() {
             Become(&TThis::StateRead);
 
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "ReadPartsFromDisk"), (Parts, Reader.GetPartsSize()));
+            YDB_LOG_INFO(VDISKP(Ctx->VCtx, "ReadPartsFromDisk"),
+                {"marker", "BSVB29"},
+                {"parts", Reader.GetPartsSize()});
 
             if (Reader.GetPartsSize() == 0) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to read. PassAway"));
+                YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to read. PassAway"),
+                    {"marker", "BSVB10"});
                 PassAway();
                 return;
             }
@@ -272,7 +306,10 @@ namespace {
             if (ev->Get()->Tag != READ_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB17, VDISKP(Ctx->VCtx, "ReadFromHandoffBatchTimeout"), (Requests, Reader.GetPartsSize()),  (Responses, Reader.GetResponses()));
+            YDB_LOG_INFO(VDISKP(Ctx->VCtx, "ReadFromHandoffBatchTimeout"),
+                {"marker", "BSVB17"},
+                {"requests", Reader.GetPartsSize()},
+                {"responses", Reader.GetResponses()});
             Ctx->MonGroup.ReadFromHandoffBatchTimeout()++;
             SendPartsOnMain();
         }
@@ -292,10 +329,13 @@ namespace {
         void SendPartsOnMain() {
             Become(&TThis::StateSend);
 
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "SendPartsOnMain"), (Parts, Reader.GetResult().size()));
+            YDB_LOG_INFO(VDISKP(Ctx->VCtx, "SendPartsOnMain"),
+                {"marker", "BSVB29"},
+                {"parts", Reader.GetResult().size()});
 
             if (Reader.GetResult().empty()) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB18, VDISKP(Ctx->VCtx, "Nothing to send. PassAway"));
+                YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to send. PassAway"),
+                    {"marker", "BSVB18"});
                 PassAway();
                 return;
             }
@@ -317,14 +357,16 @@ namespace {
             if (ev->Get()->Tag != SEND_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB19, VDISKP(Ctx->VCtx, "SendOnMainBatchTimeout"));
+            YDB_LOG_INFO(VDISKP(Ctx->VCtx, "SendOnMainBatchTimeout"),
+                {"marker", "BSVB19"});
             Ctx->MonGroup.SendOnMainBatchTimeout()++;
             PassAway();
         }
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
+            YDB_LOG_INFO(VDISKP(Ctx->VCtx, "TSender::PassAway"),
+                {"marker", "BSVB28"});
             TActorBootstrapped::PassAway();
         }
 
@@ -358,8 +400,8 @@ namespace {
             , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , Reader(Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType, Ctx->MonGroup)
-            , Sender(ctx, GInfo, queueActorMapPtr)
+            , Reader(Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, ctx->ReplMonGroup.ReplPDiskReadThrottledMicrosecondsPtr(), GInfo->GetTopology().GType, Ctx->MonGroup)
+            , Sender(ctx, GInfo, queueActorMapPtr, Ctx->ReplMonGroup)
         {}
 
         void Bootstrap() {

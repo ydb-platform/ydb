@@ -2,12 +2,16 @@
 
 #include "vhost_test.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist_test.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -16,7 +20,11 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/guid.h>
 #include <util/generic/scope.h>
+#include <util/generic/set.h>
+#include <util/system/event.h>
+#include <util/system/mutex.h>
 #include <util/system/tempfile.h>
+#include <util/system/thread.h>
 #include <util/thread/factory.h>
 #include <util/thread/lfqueue.h>
 
@@ -53,6 +61,7 @@ private:
 
     IServerPtr VhostServer;
     IVHostStatsPtr VHostStats;
+    std::shared_ptr<TTraceServiceMock> TraceService;
     std::shared_ptr<TTestStorage> TestStorage;
     std::shared_ptr<ITestVhostDevice> VhostDevice;
     std::shared_ptr<TTestVhostQueueFactory> VhostQueueFactory;
@@ -114,6 +123,7 @@ private:
     void InitVhostDeviceEnvironment()
     {
         VHostStats = std::make_shared<TTestVHostStats>();
+        TraceService = std::make_shared<TTraceServiceMock>();
         TestStorage = std::make_shared<TTestStorage>();
         TestStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -125,12 +135,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::WriteBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -157,12 +168,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ReadBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -188,8 +200,8 @@ private:
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ZeroBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = {}});
 
             if (ServiceFrozen.test()) {
@@ -214,6 +226,8 @@ private:
 
         VhostServer = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             VHostStats,
             VhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -237,6 +251,7 @@ private:
 
             auto future = VhostServer->StartEndpoint(
                 SocketPath.GetPath(),
+                TraceService,
                 TestStorage,
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -280,6 +295,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -300,6 +317,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -327,6 +345,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -351,6 +371,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 sockets[i],
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -430,6 +451,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         auto vhostStats = std::make_shared<TTestVHostStats>();
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             CreateVhostQueueFactory(),
             CreateDefaultDeviceHandlerFactory(),
@@ -449,6 +472,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto future = vhostServer->StartEndpoint(
             socketPath,
+            std::make_shared<TTraceServiceMock>(),
             std::make_shared<TTestStorage>(),
             options);
 
@@ -471,6 +495,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -496,6 +522,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -515,6 +542,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -535,6 +564,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -559,6 +589,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         auto vhostStats = std::make_shared<TTestVHostStats>();
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -579,6 +611,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -599,6 +632,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<void>();
 
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -650,6 +684,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         };
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -670,8 +706,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         options.UnalignedRequestsDisabled = false;
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }
@@ -727,8 +766,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         UNIT_ASSERT_VALUES_EQUAL(0, fatalErrorCount);
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }
@@ -841,6 +883,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
             ++requestCounter;
         };
 
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -866,6 +909,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -889,6 +934,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = server->StartEndpoint(
                 CreateGuidAsString() + ".sock",
+                testService,
                 testStorage,
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -971,6 +1017,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<TWriteBlocksLocalResponse>();
 
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -991,6 +1038,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -1011,8 +1060,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         options.UnalignedRequestsDisabled = false;
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }
@@ -1048,6 +1100,160 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         future1.GetValue(TDuration::Seconds(5));
         future2.GetValue(TDuration::Seconds(5));
+
+        server->Stop();
+    }
+
+    Y_UNIT_TEST(ShouldHandleMultiQueueRequestsInParallelThreads)
+    {
+        // This test verifies that when an endpoint is created with
+        // VhostQueuesCount = N > 1, requests sent to different vhost queues
+        // are picked up and processed by N different executor threads in
+        // parallel. This exercises the multi-queue support end-to-end:
+        //
+        //   vhost queues -> N executor threads -> shared device handler
+        //
+        // Even though all queues share a single IDeviceHandler, dispatch
+        // happens in the executor thread of the originating queue, so the
+        // storage handler sees calls from N distinct threads concurrently
+        // (as long as request ranges don't overlap and aren't coalesced by
+        // the overlapped-requests guard).
+
+        const TString unixSocketPath = CreateGuidAsString() + ".sock";
+        const ui32 blockSize = 4096;
+        const ui32 queuesCount = 4;
+        const ui64 blocksCount = 1;
+
+        auto queueFactory = std::make_shared<TTestVhostQueueFactory>();
+        auto vhostStats = std::make_shared<TTestVHostStats>();
+
+        TManualEvent allRequestsInFlight;
+        TManualEvent releaseRequests;
+        std::atomic<ui32> inflightCount = 0;
+        TMutex threadIdsLock;
+        TSet<TThread::TId> observedThreadIds;
+
+        auto testService = std::make_shared<TTraceServiceMock>();
+        auto testStorage = std::make_shared<TTestStorage>();
+        testStorage->WriteBlocksLocalHandler =
+            [&](TCallContextPtr ctx,
+                std::shared_ptr<TWriteBlocksLocalRequest> request)
+        {
+            Y_UNUSED(ctx);
+            Y_UNUSED(request);
+
+            with_lock (threadIdsLock) {
+                observedThreadIds.insert(TThread::CurrentThreadId());
+            }
+
+            ui32 count = inflightCount.fetch_add(1) + 1;
+            if (count == queuesCount) {
+                allRequestsInFlight.Signal();
+            }
+
+            releaseRequests.Wait();
+            return MakeFuture(TWriteBlocksLocalResponse());
+        };
+
+        TServerConfig serverConfig;
+        serverConfig.ThreadsCount = queuesCount;
+
+        auto server = CreateServer(
+            CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
+            vhostStats,
+            queueFactory,
+            CreateDefaultDeviceHandlerFactory(),
+            serverConfig,
+            TVhostCallbacks());
+
+        server->Start();
+
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, queueFactory->Queues.size());
+
+        TStorageOptions options;
+        options.DiskId = "testDiskId";
+        options.BlockSize = blockSize;
+        options.BlocksCount = 256;
+        options.VhostQueuesCount = queuesCount;
+        options.UnalignedRequestsDisabled = false;
+        options.CreateOverlappedRequestsGuard = true;
+
+        {
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
+            const auto& error = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(!HasError(error), error);
+        }
+
+        // Each test queue should have exactly one registered device since we
+        // picked N distinct executors.
+        for (const auto& queue: queueFactory->Queues) {
+            UNIT_ASSERT_VALUES_EQUAL(1, queue->GetDevices().size());
+        }
+        auto device = queueFactory->Queues[0]->GetDevices()[0];
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, device->GetQueuesCount());
+
+        TVector<TString> blocks;
+        auto sgList =
+            ResizeBlocks(blocks, blocksCount, TString(blockSize, 'x'));
+
+        // Send one request per queue. With the multi-queue server each queue
+        // is served by its own executor thread, so the handlers will run in
+        // parallel on N different threads. Each request targets a distinct
+        // range so the shared overlapped-requests guard does not coalesce
+        // them.
+        TVector<TFuture<TVhostRequest::EResult>> futures;
+        for (ui32 i = 0; i < queuesCount; ++i) {
+            const ui64 startIndex = 3 + i * blocksCount;
+            futures.push_back(device->SendTestRequest(
+                i,
+                EBlockStoreRequest::WriteBlocks,
+                startIndex * blockSize,
+                blocksCount * blockSize,
+                sgList));
+        }
+
+        // Wait until all requests are simultaneously in flight. If requests
+        // were serialized on a single thread, the last request would never
+        // start until earlier ones complete and this would time out.
+        const bool allStarted =
+            allRequestsInFlight.WaitT(TDuration::Seconds(10));
+        UNIT_ASSERT_C(
+            allStarted,
+            "Not all requests started in parallel: inflight="
+                << inflightCount.load());
+
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, inflightCount.load());
+
+        size_t distinctThreads = 0;
+        with_lock (threadIdsLock) {
+            distinctThreads = observedThreadIds.size();
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            queuesCount,
+            distinctThreads,
+            "Requests were handled by " << distinctThreads
+                                        << " distinct thread(s), expected "
+                                        << queuesCount);
+
+        releaseRequests.Signal();
+
+        for (auto& future: futures) {
+            const auto result = future.GetValue(TDuration::Seconds(10));
+            UNIT_ASSERT(result == TVhostRequest::SUCCESS);
+        }
+
+        {
+            auto future = server->StopEndpoint(unixSocketPath);
+            const auto& error = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(!HasError(error), error);
+        }
 
         server->Stop();
     }

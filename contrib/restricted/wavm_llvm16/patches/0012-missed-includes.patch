@@ -1,0 +1,10 @@
+--- contrib/restricted/wavm_llvm16/Lib/ObjectCache/ObjectCache.cpp	(06e2fba8aa7fdbb318bbb20c356a8edb35e1ce41)
++++ contrib/restricted/wavm_llvm16/Lib/ObjectCache/ObjectCache.cpp	(working tree)
+@@ -1,5 +1,7 @@
+ #include "WAVM/ObjectCache/ObjectCache.h"
+ 
++#include <cstdlib>
++
+ using namespace WAVM;
+ using namespace WAVM::ObjectCache;
+ 

@@ -16,7 +16,7 @@
 
 namespace NKikimr::NPersQueueTests {
 
-static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
+static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
 
     NYdb::NScheme::TSchemeClient schemeClient(*driver);
     auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
@@ -114,7 +114,10 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const st
 
             Cerr << "=== PersQueueClient" << Endl;
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release())).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                .SetDatabase("/Root")
+                .SetAuthToken(BUILTIN_ACL_ROOT);
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 

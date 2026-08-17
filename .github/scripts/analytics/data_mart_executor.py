@@ -6,6 +6,7 @@ import ydb
 import os
 import time
 from ydb_wrapper import YDBWrapper
+from mart_cleanup import cleanup_window_antijoin_by_date_key
 
 # Get repository path
 dir = os.path.dirname(__file__)
@@ -79,6 +80,42 @@ def create_table_if_not_exists(ydb_wrapper, table_path, column_types, store_type
     # In a more sophisticated implementation, we could check if table exists first
     create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key)
 
+
+def _type_name_for_declare(column_type):
+    _, type_name = ydb_type_to_str(column_type, "ROW")
+    return type_name.replace("?", "")
+
+
+def _collect_pk_type_map(primary_keys, column_types):
+    column_types_map = {name: ctype for name, ctype in column_types}
+    missing = [key for key in primary_keys if key not in column_types_map]
+    if missing:
+        raise ValueError(f"Primary keys not found in query result columns: {missing}")
+    return {key: _type_name_for_declare(column_types_map[key]) for key in primary_keys}
+
+
+def cleanup_after_upsert(
+    ydb_wrapper,
+    table_path,
+    results,
+    primary_keys,
+    column_types,
+    window_key,
+    window_interval,
+    query_name,
+):
+    pk_type_map = _collect_pk_type_map(primary_keys, column_types)
+    cleanup_window_antijoin_by_date_key(
+        ydb_wrapper,
+        table_path,
+        results,
+        primary_keys,
+        pk_type_map,
+        window_key,
+        window_interval,
+        query_name,
+    )
+
 def parse_args():
     parser = argparse.ArgumentParser(description="YDB Table Manager")
     parser.add_argument("--table_path", required=True, help="Table path and name")
@@ -88,7 +125,14 @@ def parse_args():
     parser.add_argument("--primary_keys", nargs="+", required=True, help="List of primary keys")
     parser.add_argument("--ttl_min", type=int, help="TTL in minutes")
     parser.add_argument("--ttl_key", help="TTL key column name")
-    
+    parser.add_argument(
+        "--cleanup_window_key",
+        help="Optional: Date key column used for cleanup before upsert.",
+    )
+    parser.add_argument(
+        "--cleanup_window_interval",
+        help='Optional: interval expression for cleanup window, e.g. 365 * Interval("P1D").',
+    )
     return parser.parse_args()
 
 def main():
@@ -131,8 +175,26 @@ def main():
         for column_name, column_ydb_type in column_types:
             column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, args.store_type.upper())
             column_types_map.add_column(column_name, column_type_obj)
-        
+
+        cleanup_args_set = any([args.cleanup_window_key, args.cleanup_window_interval])
+        if cleanup_args_set:
+            if not args.cleanup_window_key or not args.cleanup_window_interval:
+                raise ValueError(
+                    "Cleanup mode requires both --cleanup_window_key and --cleanup_window_interval"
+                )
         ydb_wrapper.bulk_upsert_batches(table_path, results, column_types_map, batch_size, query_name)
+
+        if cleanup_args_set:
+            cleanup_after_upsert(
+                ydb_wrapper=ydb_wrapper,
+                table_path=table_path,
+                results=results,
+                primary_keys=args.primary_keys,
+                column_types=column_types,
+                window_key=args.cleanup_window_key,
+                window_interval=args.cleanup_window_interval,
+                query_name=query_name,
+            )
         
         print('Data uploaded')
 

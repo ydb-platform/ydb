@@ -1,6 +1,5 @@
 #include "yql_dispatch.h"
 
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -10,9 +9,11 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 
-namespace NYql {
+namespace NYql::NCommon {
 
 namespace NPrivate {
+
+constexpr char ContainerSettingDelimiters[] = ",;| ";
 
 template <>
 TParser<TString> GetDefaultParser<TString>() {
@@ -64,27 +65,83 @@ TParser<TInstant> GetDefaultParser<TInstant>() {
         return [](const TString& s) { return FromString<type>(s); }; \
     }
 
-#define YQL_DEFINE_CONTAINER_SETTING_PARSER(type)               \
-    template <>                                                 \
-    TParser<type> GetDefaultParser<type>() {                    \
-        return [](const TString& str) {                         \
-            type res;                                           \
-            StringSplitter(str).SplitBySet(",;| ").AddTo(&res); \
-            for (auto& s : res) {                               \
-                if (s.empty()) {                                \
-                    throw yexception() << "Empty value item";   \
-                }                                               \
-            }                                                   \
-            return res;                                         \
-        };                                                      \
+#define YQL_DEFINE_CONTAINER_SETTING_PARSER(type)                                   \
+    template <>                                                                     \
+    TParser<type> GetDefaultParser<type>() {                                        \
+        return [](const TString& str) {                                             \
+            type res;                                                               \
+            StringSplitter(str).SplitBySet(ContainerSettingDelimiters).AddTo(&res); \
+            for (auto& s : res) {                                                   \
+                if (s.empty()) {                                                    \
+                    throw yexception() << "Empty value item";                       \
+                }                                                                   \
+            }                                                                       \
+            return res;                                                             \
+        };                                                                          \
     }
 
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DEFINE_PRIMITIVE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_PARSER)
 
-} // namespace NPrivate
+template <>
+TSerializer<TString> GetDefaultSerializer<TString>() {
+    return [](const TString& v) {
+        return v;
+    };
+}
 
-namespace NCommon {
+template <>
+TSerializer<bool> GetDefaultSerializer<bool>() {
+    return [](const bool& v) -> TString {
+        return v ? "true" : "false";
+    };
+}
+
+template <>
+TSerializer<TGUID> GetDefaultSerializer<TGUID>() {
+    return [](const TGUID& v) {
+        return GetGuidAsString(v);
+    };
+}
+
+template <>
+TSerializer<NSize::TSize> GetDefaultSerializer<NSize::TSize>() {
+    return [](const NSize::TSize& v) {
+        return ToString(ui64(v));
+    };
+}
+
+template <>
+TSerializer<TInstant> GetDefaultSerializer<TInstant>() {
+    return [](const TInstant& v) {
+        return v.ToString();
+    };
+}
+
+#define YQL_DEFINE_PRIMITIVE_SETTING_SERIALIZER(type)     \
+    template <>                                           \
+    TSerializer<type> GetDefaultSerializer<type>() {      \
+        return [](const type& v) { return ToString(v); }; \
+    }
+
+#define YQL_DEFINE_CONTAINER_SETTING_SERIALIZER(type)                                                                                                  \
+    template <>                                                                                                                                        \
+    TSerializer<type> GetDefaultSerializer<type>() {                                                                                                   \
+        return [](const type& v) {                                                                                                                     \
+            for (const auto& item : v) {                                                                                                               \
+                if (item.find_first_of(ContainerSettingDelimiters) == TString::npos) {                                                                 \
+                    continue;                                                                                                                          \
+                }                                                                                                                                      \
+                throw yexception() << "Setting " << TString(item).Quote() << " contains forbidden char from \"" << ContainerSettingDelimiters << "\""; \
+            }                                                                                                                                          \
+            return JoinSeq(",", v);                                                                                                                    \
+        };                                                                                                                                             \
+    }
+
+YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DEFINE_PRIMITIVE_SETTING_SERIALIZER)
+YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_SERIALIZER)
+
+} // namespace NPrivate
 
 bool TSettingDispatcher::IsRuntime(const TString& name) {
     auto normalizedName = NormalizeName(name);
@@ -173,6 +230,24 @@ void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callbac
     }
 }
 
+ui64 TSettingDispatcher::CountSerializableStaticSettings() const {
+    ui64 count = 0;
+    for (const auto& [name, handler] : Handlers_) {
+        if (handler->HasSerializableValue()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void TSettingDispatcher::SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const {
+    for (const auto& [name, handler] : Handlers_) {
+        if (handler->HasSerializableValue()) {
+            handler->Serialize(callback);
+        }
+    }
+}
+
 const THashSet<TString>& TSettingDispatcher::GetValidClusters() const {
     return ValidClusters;
 }
@@ -199,5 +274,4 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositio
     };
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

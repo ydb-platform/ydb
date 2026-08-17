@@ -7,27 +7,14 @@
 #define BOOST_ITERATOR_ARCHETYPES_HPP
 
 #include <boost/iterator/iterator_categories.hpp>
-#include <boost/operators.hpp>
-#include <boost/static_assert.hpp>
-
 #include <boost/iterator/detail/facade_iterator_category.hpp>
 
-#include <boost/type_traits/is_const.hpp>
-#include <boost/type_traits/add_const.hpp>
-#include <boost/type_traits/remove_const.hpp>
-#include <boost/type_traits/remove_cv.hpp>
-
+#include <boost/operators.hpp>
 #include <boost/concept_archetype.hpp>
-
-#include <boost/mpl/bitand.hpp>
-#include <boost/mpl/int.hpp>
-#include <boost/mpl/equal_to.hpp>
-#include <boost/mpl/if.hpp>
-#include <boost/mpl/eval_if.hpp>
-#include <boost/mpl/and.hpp>
-#include <boost/mpl/identity.hpp>
+#include <boost/mp11/utility.hpp>
 
 #include <cstddef>
+#include <type_traits>
 
 namespace boost {
 namespace iterators {
@@ -38,252 +25,253 @@ struct access_archetype;
 template <class Derived, class Value, class AccessCategory, class TraversalCategory>
 struct traversal_archetype;
 
-namespace archetypes
+namespace archetypes {
+
+enum
 {
-  enum {
-      readable_iterator_bit = 1
-    , writable_iterator_bit = 2
-    , swappable_iterator_bit = 4
-    , lvalue_iterator_bit = 8
-  };
+    readable_iterator_bit = 1,
+    writable_iterator_bit = 2,
+    swappable_iterator_bit = 4,
+    lvalue_iterator_bit = 8
+};
 
-  // Not quite tags, since dispatching wouldn't work.
-  typedef mpl::int_<readable_iterator_bit>::type readable_iterator_t;
-  typedef mpl::int_<writable_iterator_bit>::type writable_iterator_t;
+// Not quite tags, since dispatching wouldn't work.
+using readable_iterator_t = std::integral_constant<unsigned int, readable_iterator_bit>;
+using writable_iterator_t = std::integral_constant<unsigned int, writable_iterator_bit>;
 
-  typedef mpl::int_<
-      (readable_iterator_bit|writable_iterator_bit)
-          >::type readable_writable_iterator_t;
+using readable_writable_iterator_t = std::integral_constant<
+    unsigned int,
+    (readable_iterator_bit | writable_iterator_bit)
+>;
 
-  typedef mpl::int_<
-      (readable_iterator_bit|lvalue_iterator_bit)
-          >::type readable_lvalue_iterator_t;
+using readable_lvalue_iterator_t = std::integral_constant<
+    unsigned int,
+    (readable_iterator_bit | lvalue_iterator_bit)
+>;
 
-  typedef mpl::int_<
-      (lvalue_iterator_bit|writable_iterator_bit)
-          >::type writable_lvalue_iterator_t;
+using writable_lvalue_iterator_t = std::integral_constant<
+    unsigned int,
+    (lvalue_iterator_bit | writable_iterator_bit)
+>;
 
-  typedef mpl::int_<swappable_iterator_bit>::type swappable_iterator_t;
-  typedef mpl::int_<lvalue_iterator_bit>::type lvalue_iterator_t;
+using swappable_iterator_t = std::integral_constant<unsigned int, swappable_iterator_bit>;
+using lvalue_iterator_t = std::integral_constant<unsigned int, lvalue_iterator_bit>;
 
-  template <class Derived, class Base>
-  struct has_access
-    : mpl::equal_to<
-          mpl::bitand_<Derived,Base>
-        , Base
-      >
-  {};
-}
+template <class Derived, class Base>
+struct has_access :
+    public std::integral_constant<bool, (Derived::value & Base::value) == Base::value>
+{};
 
-namespace detail
+} // namespace archetypes
+
+namespace detail {
+
+template <class T>
+struct assign_proxy
 {
-  template <class T>
-  struct assign_proxy
-  {
-      assign_proxy& operator=(T) { return *this; }
-  };
+    assign_proxy& operator=(T) { return *this; }
+};
 
-  template <class T>
-  struct read_proxy
-  {
-      operator T() { return static_object<T>::get(); }
-  };
+template <class T>
+struct read_proxy
+{
+    operator T() { return static_object<T>::get(); }
+};
 
-  template <class T>
-  struct read_write_proxy
-    : read_proxy<T> // Use to inherit from assign_proxy, but that doesn't work. -JGS
-  {
-      read_write_proxy& operator=(T) { return *this; }
-  };
+template <class T>
+struct read_write_proxy :
+    public read_proxy<T> // Used to inherit from assign_proxy, but that doesn't work. -JGS
+{
+    read_write_proxy& operator=(T) { return *this; }
+};
 
-  template <class T>
-  struct arrow_proxy
-  {
-      T const* operator->() const { return 0; }
-  };
+template <class T>
+struct arrow_proxy
+{
+    T const* operator->() const { return 0; }
+};
 
-  struct no_operator_brackets {};
+struct no_operator_brackets {};
 
-  template <class ValueType>
-  struct readable_operator_brackets
-  {
-      read_proxy<ValueType> operator[](std::ptrdiff_t n) const { return read_proxy<ValueType>(); }
-  };
+template <class ValueType>
+struct readable_operator_brackets
+{
+    read_proxy<ValueType> operator[](std::ptrdiff_t n) const { return read_proxy<ValueType>(); }
+};
 
-  template <class ValueType>
-  struct writable_operator_brackets
-  {
-      read_write_proxy<ValueType> operator[](std::ptrdiff_t n) const { return read_write_proxy<ValueType>(); }
-  };
+template <class ValueType>
+struct writable_operator_brackets
+{
+    read_write_proxy<ValueType> operator[](std::ptrdiff_t n) const { return read_write_proxy<ValueType>(); }
+};
 
-  template <class Value, class AccessCategory, class TraversalCategory>
-  struct operator_brackets
-    : mpl::eval_if<
-          is_convertible<TraversalCategory, random_access_traversal_tag>
-        , mpl::eval_if<
-              archetypes::has_access<
-                  AccessCategory
-                , archetypes::writable_iterator_t
-              >
-            , mpl::identity<writable_operator_brackets<Value> >
-            , mpl::if_<
-                  archetypes::has_access<
-                      AccessCategory
-                    , archetypes::readable_iterator_t
-                  >
-                , readable_operator_brackets<Value>
-                , no_operator_brackets
-              >
-          >
-        , mpl::identity<no_operator_brackets>
-      >::type
-  {};
+template <class Value, class AccessCategory, class TraversalCategory>
+struct operator_brackets :
+    public mp11::mp_eval_if_c<
+        !std::is_convertible<TraversalCategory, random_access_traversal_tag>::value,
+        no_operator_brackets,
+        mp11::mp_cond,
+            archetypes::has_access<AccessCategory, archetypes::writable_iterator_t>, writable_operator_brackets<Value>,
+            archetypes::has_access<AccessCategory, archetypes::readable_iterator_t>, readable_operator_brackets<Value>,
+            std::true_type, no_operator_brackets
+    >
+{};
 
-  template <class TraversalCategory>
-  struct traversal_archetype_impl
-  {
-      template <class Derived,class Value> struct archetype;
-  };
+template <class TraversalCategory>
+struct traversal_archetype_impl
+{
+    template <class Derived,class Value> struct archetype;
+};
 
-  // Constructor argument for those iterators that
-  // are not default constructible
-  struct ctor_arg {};
+// Constructor argument for those iterators that
+// are not default constructible
+struct ctor_arg {};
 
-  template <class Derived, class Value, class TraversalCategory>
-  struct traversal_archetype_
-    : traversal_archetype_impl<TraversalCategory>::template archetype<Derived,Value>
-  {
-      typedef typename
-        traversal_archetype_impl<TraversalCategory>::template archetype<Derived,Value>
-      base;
+template <class Derived, class Value, class TraversalCategory>
+struct traversal_archetype_ :
+    public traversal_archetype_impl<TraversalCategory>::template archetype<Derived,Value>
+{
+    using base = typename traversal_archetype_impl<TraversalCategory>::template archetype<Derived,Value>;
 
-      traversal_archetype_() {}
+    traversal_archetype_() {}
 
-      traversal_archetype_(ctor_arg arg)
-        : base(arg)
-      {}
-  };
+    traversal_archetype_(ctor_arg arg) : base(arg)
+    {}
+};
 
-  template <>
-  struct traversal_archetype_impl<incrementable_traversal_tag>
-  {
-      template<class Derived, class Value>
-      struct archetype
-      {
-          explicit archetype(ctor_arg) {}
+template <>
+struct traversal_archetype_impl<incrementable_traversal_tag>
+{
+    template<class Derived, class Value>
+    struct archetype
+    {
+        explicit archetype(ctor_arg) {}
 
-          struct bogus { }; // This use to be void, but that causes trouble for iterator_facade. Need more research. -JGS
-          typedef bogus difference_type;
+        struct bogus { }; // This used to be void, but that causes trouble for iterator_facade. Need more research. -JGS
+        using difference_type = bogus;
 
-          Derived& operator++() { return (Derived&)static_object<Derived>::get(); }
-          Derived  operator++(int) const { return (Derived&)static_object<Derived>::get(); }
-      };
-  };
+        Derived& operator++() { return (Derived&)static_object<Derived>::get(); }
+        Derived  operator++(int) const { return (Derived&)static_object<Derived>::get(); }
+    };
+};
 
-  template <>
-  struct traversal_archetype_impl<single_pass_traversal_tag>
-  {
-      template<class Derived, class Value>
-      struct archetype
-        : public equality_comparable< traversal_archetype_<Derived, Value, single_pass_traversal_tag> >,
-          public traversal_archetype_<Derived, Value, incrementable_traversal_tag>
-      {
-          explicit archetype(ctor_arg arg)
-            : traversal_archetype_<Derived, Value, incrementable_traversal_tag>(arg)
-          {}
+template <>
+struct traversal_archetype_impl<single_pass_traversal_tag>
+{
+    template<class Derived, class Value>
+    struct archetype :
+        public equality_comparable< traversal_archetype_<Derived, Value, single_pass_traversal_tag> >,
+        public traversal_archetype_<Derived, Value, incrementable_traversal_tag>
+    {
+        explicit archetype(ctor_arg arg) :
+            traversal_archetype_<Derived, Value, incrementable_traversal_tag>(arg)
+        {}
 
-          typedef std::ptrdiff_t difference_type;
-      };
-  };
+        using difference_type = std::ptrdiff_t;
+    };
+};
 
-  template <class Derived, class Value>
-  bool operator==(traversal_archetype_<Derived, Value, single_pass_traversal_tag> const&,
-                  traversal_archetype_<Derived, Value, single_pass_traversal_tag> const&) { return true; }
+template <class Derived, class Value>
+bool operator==(
+    traversal_archetype_<Derived, Value, single_pass_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, single_pass_traversal_tag> const&) { return true; }
 
-  template <>
-  struct traversal_archetype_impl<forward_traversal_tag>
-  {
-      template<class Derived, class Value>
-      struct archetype
-        : public traversal_archetype_<Derived, Value, single_pass_traversal_tag>
-      {
-          archetype()
-            : traversal_archetype_<Derived, Value, single_pass_traversal_tag>(ctor_arg())
-          {}
-      };
-  };
+template <>
+struct traversal_archetype_impl<forward_traversal_tag>
+{
+    template<class Derived, class Value>
+    struct archetype :
+        public traversal_archetype_<Derived, Value, single_pass_traversal_tag>
+    {
+        archetype() :
+            traversal_archetype_<Derived, Value, single_pass_traversal_tag>(ctor_arg())
+        {}
+    };
+};
 
-  template <>
-  struct traversal_archetype_impl<bidirectional_traversal_tag>
-  {
-      template<class Derived, class Value>
-      struct archetype
-        : public traversal_archetype_<Derived, Value, forward_traversal_tag>
-      {
-          Derived& operator--() { return static_object<Derived>::get(); }
-          Derived  operator--(int) const { return static_object<Derived>::get(); }
-      };
-  };
+template <>
+struct traversal_archetype_impl<bidirectional_traversal_tag>
+{
+    template<class Derived, class Value>
+    struct archetype :
+        public traversal_archetype_<Derived, Value, forward_traversal_tag>
+    {
+        Derived& operator--() { return static_object<Derived>::get(); }
+        Derived  operator--(int) const { return static_object<Derived>::get(); }
+    };
+};
 
-  template <>
-  struct traversal_archetype_impl<random_access_traversal_tag>
-  {
-      template<class Derived, class Value>
-      struct archetype
-        : public traversal_archetype_<Derived, Value, bidirectional_traversal_tag>
-      {
-          Derived& operator+=(std::ptrdiff_t) { return static_object<Derived>::get(); }
-          Derived& operator-=(std::ptrdiff_t) { return static_object<Derived>::get(); }
-      };
-  };
+template <>
+struct traversal_archetype_impl<random_access_traversal_tag>
+{
+    template<class Derived, class Value>
+    struct archetype :
+        public traversal_archetype_<Derived, Value, bidirectional_traversal_tag>
+    {
+        Derived& operator+=(std::ptrdiff_t) { return static_object<Derived>::get(); }
+        Derived& operator-=(std::ptrdiff_t) { return static_object<Derived>::get(); }
+    };
+};
 
-  template <class Derived, class Value>
-  Derived& operator+(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                     std::ptrdiff_t) { return static_object<Derived>::get(); }
+template <class Derived, class Value>
+Derived& operator+(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    std::ptrdiff_t) { return static_object<Derived>::get(); }
 
-  template <class Derived, class Value>
-  Derived& operator+(std::ptrdiff_t,
-                     traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return static_object<Derived>::get(); }
+template <class Derived, class Value>
+Derived& operator+(
+    std::ptrdiff_t,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return static_object<Derived>::get(); }
 
-  template <class Derived, class Value>
-  Derived& operator-(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                     std::ptrdiff_t)
-      { return static_object<Derived>::get(); }
+template <class Derived, class Value>
+Derived& operator-(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    std::ptrdiff_t) { return static_object<Derived>::get(); }
 
-  template <class Derived, class Value>
-  std::ptrdiff_t operator-(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                           traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return 0; }
+template <class Derived, class Value>
+std::ptrdiff_t operator-(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return 0; }
 
-  template <class Derived, class Value>
-  bool operator<(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                 traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return true; }
+template <class Derived, class Value>
+bool operator<(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return true; }
 
-  template <class Derived, class Value>
-  bool operator>(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                 traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return true; }
+template <class Derived, class Value>
+bool operator>(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return true; }
 
-  template <class Derived, class Value>
-  bool operator<=(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                 traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return true; }
+template <class Derived, class Value>
+bool operator<=(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return true; }
 
-  template <class Derived, class Value>
-  bool operator>=(traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
-                 traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
-      { return true; }
+template <class Derived, class Value>
+bool operator>=(
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&,
+    traversal_archetype_<Derived, Value, random_access_traversal_tag> const&)
+    { return true; }
 
-  struct bogus_type;
+struct bogus_type;
 
-  template <class Value>
-  struct convertible_type
-    : mpl::if_< is_const<Value>,
-                typename remove_const<Value>::type,
-                bogus_type >
-  {};
+template <class Value>
+struct convertible_type
+{
+    using type = bogus_type;
+};
+
+template <class Value>
+struct convertible_type<const Value>
+{
+    using type = Value;
+};
 
 } // namespace detail
 
@@ -297,24 +285,20 @@ struct iterator_access_archetype_impl
 };
 
 template <class Value, class AccessCategory>
-struct iterator_access_archetype
-  : iterator_access_archetype_impl<
-        AccessCategory
-    >::template archetype<Value>
+struct iterator_access_archetype :
+    public iterator_access_archetype_impl<AccessCategory>::template archetype<Value>
 {
 };
 
 template <>
-struct iterator_access_archetype_impl<
-    archetypes::readable_iterator_t
->
+struct iterator_access_archetype_impl<archetypes::readable_iterator_t>
 {
     template <class Value>
     struct archetype
     {
-        typedef typename remove_cv<Value>::type value_type;
-        typedef Value                           reference;
-        typedef Value*                          pointer;
+        using value_type = typename std::remove_cv<Value>::type;
+        using reference = Value;
+        using pointer = Value*;
 
         value_type operator*() const { return static_object<value_type>::get(); }
 
@@ -323,34 +307,28 @@ struct iterator_access_archetype_impl<
 };
 
 template <>
-struct iterator_access_archetype_impl<
-    archetypes::writable_iterator_t
->
+struct iterator_access_archetype_impl<archetypes::writable_iterator_t>
 {
     template <class Value>
     struct archetype
     {
-        BOOST_STATIC_ASSERT(!is_const<Value>::value);
-        typedef void value_type;
-        typedef void reference;
-        typedef void pointer;
+        static_assert(!std::is_const<Value>::value, "Value type must not be const.");
+        using value_type = void;
+        using reference = void;
+        using pointer = void;
 
         detail::assign_proxy<Value> operator*() const { return detail::assign_proxy<Value>(); }
     };
 };
 
 template <>
-struct iterator_access_archetype_impl<
-    archetypes::readable_writable_iterator_t
->
+struct iterator_access_archetype_impl<archetypes::readable_writable_iterator_t>
 {
     template <class Value>
-    struct archetype
-      : public virtual iterator_access_archetype<
-            Value, archetypes::readable_iterator_t
-        >
+    struct archetype :
+        public virtual iterator_access_archetype<Value, archetypes::readable_iterator_t>
     {
-        typedef detail::read_write_proxy<Value>    reference;
+        using reference = detail::read_write_proxy<Value>;
 
         detail::read_write_proxy<Value> operator*() const { return detail::read_write_proxy<Value>(); }
     };
@@ -360,12 +338,10 @@ template <>
 struct iterator_access_archetype_impl<archetypes::readable_lvalue_iterator_t>
 {
     template <class Value>
-    struct archetype
-      : public virtual iterator_access_archetype<
-            Value, archetypes::readable_iterator_t
-        >
+    struct archetype :
+        public virtual iterator_access_archetype<Value, archetypes::readable_iterator_t>
     {
-        typedef Value&    reference;
+        using reference = Value&;
 
         Value& operator*() const { return static_object<Value>::get(); }
         Value* operator->() const { return 0; }
@@ -376,12 +352,10 @@ template <>
 struct iterator_access_archetype_impl<archetypes::writable_lvalue_iterator_t>
 {
     template <class Value>
-    struct archetype
-      : public virtual iterator_access_archetype<
-            Value, archetypes::readable_lvalue_iterator_t
-        >
+    struct archetype :
+        public virtual iterator_access_archetype<Value, archetypes::readable_lvalue_iterator_t>
     {
-        BOOST_STATIC_ASSERT((!is_const<Value>::value));
+        static_assert(!std::is_const<Value>::value, "Value type must not be const.");
     };
 };
 
@@ -390,58 +364,59 @@ template <class Value, class AccessCategory, class TraversalCategory>
 struct iterator_archetype;
 
 template <class Value, class AccessCategory, class TraversalCategory>
-struct traversal_archetype_base
-  : detail::operator_brackets<
-        typename remove_cv<Value>::type
-      , AccessCategory
-      , TraversalCategory
-    >
-  , detail::traversal_archetype_<
-        iterator_archetype<Value, AccessCategory, TraversalCategory>
-      , Value
-      , TraversalCategory
+struct traversal_archetype_base :
+    public detail::operator_brackets<
+        typename std::remove_cv<Value>::type,
+        AccessCategory,
+        TraversalCategory
+    >,
+    public detail::traversal_archetype_<
+        iterator_archetype<Value, AccessCategory, TraversalCategory>,
+        Value,
+        TraversalCategory
     >
 {
 };
 
-namespace detail
-{
-  template <class Value, class AccessCategory, class TraversalCategory>
-  struct iterator_archetype_base
-    : iterator_access_archetype<Value, AccessCategory>
-    , traversal_archetype_base<Value, AccessCategory, TraversalCategory>
-  {
-      typedef iterator_access_archetype<Value, AccessCategory> access;
-
-      typedef typename detail::facade_iterator_category<
-          TraversalCategory
-        , typename mpl::eval_if<
-              archetypes::has_access<
-                  AccessCategory, archetypes::writable_iterator_t
-              >
-            , remove_const<Value>
-            , add_const<Value>
-          >::type
-        , typename access::reference
-      >::type iterator_category;
-
-      // Needed for some broken libraries (see below)
-      struct workaround_iterator_base
-      {
-        typedef typename iterator_archetype_base::iterator_category iterator_category;
-        typedef Value value_type;
-        typedef typename traversal_archetype_base<
-              Value, AccessCategory, TraversalCategory
-          >::difference_type difference_type;
-        typedef typename access::pointer pointer;
-        typedef typename access::reference reference;
-      };
-  };
-}
+namespace detail {
 
 template <class Value, class AccessCategory, class TraversalCategory>
-struct iterator_archetype
-  : public detail::iterator_archetype_base<Value, AccessCategory, TraversalCategory>
+struct iterator_archetype_base :
+    public iterator_access_archetype<Value, AccessCategory>,
+    public traversal_archetype_base<Value, AccessCategory, TraversalCategory>
+{
+    using access = iterator_access_archetype<Value, AccessCategory>;
+
+    using iterator_category = typename detail::facade_iterator_category<
+        TraversalCategory,
+        typename std::conditional<
+            archetypes::has_access<
+                AccessCategory, archetypes::writable_iterator_t
+            >::value,
+            std::remove_const<Value>,
+            std::add_const<Value>
+        >::type::type,
+        typename access::reference
+    >::type;
+
+    // Needed for some broken libraries (see below)
+    struct workaround_iterator_base
+    {
+        using iterator_category = typename iterator_archetype_base::iterator_category;
+        using value_type = Value;
+        using difference_type = typename traversal_archetype_base<
+            Value, AccessCategory, TraversalCategory
+        >::difference_type;
+        using pointer = typename access::pointer;
+        using reference = typename access::reference;
+    };
+};
+
+} // namespace detail
+
+template <class Value, class AccessCategory, class TraversalCategory>
+struct iterator_archetype :
+    public detail::iterator_archetype_base<Value, AccessCategory, TraversalCategory>
 
     // These broken libraries require derivation from std::iterator
     // (or related magic) in order to handle iter_swap and other
@@ -459,28 +434,23 @@ struct iterator_archetype
 # if BOOST_WORKAROUND(BOOST_DINKUMWARE_STDLIB, < 310)           \
     || BOOST_WORKAROUND(_RWSTD_VER, BOOST_TESTED_AT(0x20101))
 
-    typedef detail::iterator_archetype_base<
-        Value,AccessCategory,TraversalCategory
-    > base;
+    using base = detail::iterator_archetype_base<
+        Value, AccessCategory, TraversalCategory
+    >;
 
-    typedef typename base::value_type value_type;
-    typedef typename base::reference reference;
-    typedef typename base::pointer pointer;
-    typedef typename base::difference_type difference_type;
-    typedef typename base::iterator_category iterator_category;
+    using value_type = typename base::value_type;
+    using reference = typename base::reference;
+    using pointer = typename base::pointer;
+    using difference_type = typename base::difference_type;
+    using iterator_category = typename base::iterator_category;
 # endif
 
     iterator_archetype() { }
-    iterator_archetype(iterator_archetype const& x)
-      : detail::iterator_archetype_base<
-            Value
-          , AccessCategory
-          , TraversalCategory
-        >(x)
+    iterator_archetype(iterator_archetype const& x) :
+        detail::iterator_archetype_base<Value, AccessCategory, TraversalCategory>(x)
     {}
 
-    iterator_archetype& operator=(iterator_archetype const&)
-        { return *this; }
+    iterator_archetype& operator=(iterator_archetype const&) { return *this; }
 
 # if 0
     // Optional conversion from mutable

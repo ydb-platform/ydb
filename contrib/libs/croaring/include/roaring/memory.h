@@ -1,3 +1,15 @@
+/*
+ * memory.h
+ *
+ * This header defines CRoaring's memory-allocation abstraction layer. It
+ * declares the function pointer types and hook structure used to override the
+ * library's malloc/realloc/calloc/free and aligned allocation routines, along
+ * with the wrapper functions used throughout the codebase.
+ *
+ * This allows applications to integrate CRoaring with custom allocators,
+ * memory trackers, arenas, or platform-specific aligned allocation policies
+ * without changing the rest of the library code.
+ */
 #ifndef INCLUDE_ROARING_MEMORY_H_
 #define INCLUDE_ROARING_MEMORY_H_
 

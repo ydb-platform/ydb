@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: Interval64('P1DT2H3M4.567888S'), b: 1, count1: 1, count2: 2|>,

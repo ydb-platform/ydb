@@ -1,5 +1,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
+#include "export_data_format.h"
 #include "export_s3_buffer.h"
 #include "backup_restore_traits.h"
 #include "export_s3.h"
@@ -7,6 +8,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -23,6 +25,7 @@
 
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <functional>
 
 namespace NKikimr::NDataShard {
 
@@ -75,11 +78,12 @@ private:
 };
 
 class TS3Buffer: public NExportScan::IBuffer {
+    using TChecksumCreator = std::function<NBackup::IChecksum*()>;
+    using TEncryptionCreator = std::function<TMaybe<NBackup::TEncryptedFileSerializer>()>;
     using TTagToColumn = IExport::TTableColumns;
-    using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
 public:
-    explicit TS3Buffer(TS3ExportBufferSettings&& settings);
+    explicit TS3Buffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat);
 
     void ColumnsOrder(const TVector<ui32>& tags) override;
     bool Collect(const NTable::IScan::TRow& row) override;
@@ -89,13 +93,12 @@ public:
     TString GetError() const override;
 
 private:
-    inline ui64 GetRowsLimit() const { return RowsLimit; }
-    inline ui64 GetBytesLimit() const { return MaxBytes; }
+    bool Append(const char *data, size_t size);
 
-    bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
     virtual TMaybe<TBuffer> Flush(bool last);
 
-    static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
+    static TChecksumCreator GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
+    static TEncryptionCreator GenEncryptionCreator(const TMaybe<TS3ExportBufferSettings::TEncryptionSettings>& settings);
     static TZStdCompressionProcessor* CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings);
 
 private:
@@ -103,46 +106,55 @@ private:
     const ui64 RowsLimit;
     const ui64 MinBytes;
     const ui64 MaxBytes;
-
-    TTagToIndex Indices;
+    std::unique_ptr<IExportDataFormat> DataFormat;
 
 protected:
     ui64 Rows = 0;
     ui64 BytesRead = 0;
     TBuffer Buffer;
 
+    TChecksumCreator ChecksumCreator;
     NBackup::IChecksum::TPtr Checksum;
     TZStdCompressionProcessor::TPtr Compression;
+    TEncryptionCreator EncryptionCreator;
     TMaybe<NBackup::TEncryptedFileSerializer> Encryption;
 
     TString ErrorString;
 }; // TS3Buffer
 
-TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings)
+TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat)
     : Columns(std::move(settings.Columns))
     , RowsLimit(settings.MaxRows)
     , MinBytes(settings.MinBytes)
     , MaxBytes(settings.MaxBytes)
-    , Checksum(CreateChecksum(settings.ChecksumSettings))
+    , DataFormat(std::move(dataFormat))
+    , ChecksumCreator(GenChecksumCreator(settings.ChecksumSettings))
+    , Checksum(ChecksumCreator())
     , Compression(CreateCompression(settings.CompressionSettings))
+    , EncryptionCreator(GenEncryptionCreator(settings.EncryptionSettings))
+    , Encryption(EncryptionCreator())
 {
-    if (settings.EncryptionSettings) {
-        Encryption.ConstructInPlace(
-            std::move(settings.EncryptionSettings->Algorithm),
-            std::move(settings.EncryptionSettings->Key),
-            std::move(settings.EncryptionSettings->IV)
-        );
-    }
 }
 
-NBackup::IChecksum* TS3Buffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
-    if (settings) {
-        switch (settings->ChecksumType) {
-        case TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256:
-            return NBackup::CreateChecksum();
+std::function<NBackup::IChecksum*()> TS3Buffer::GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
+    return [settings]() -> NBackup::IChecksum* {
+        if (settings) {
+            switch (settings->ChecksumType) {
+            case TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256:
+                return NBackup::CreateChecksum();
+            }
         }
-    }
-    return nullptr;
+        return nullptr;
+    };
+}
+
+TS3Buffer::TEncryptionCreator TS3Buffer::GenEncryptionCreator(const TMaybe<TS3ExportBufferSettings::TEncryptionSettings>& settings) {
+    return [settings]() -> TMaybe<NBackup::TEncryptedFileSerializer> {
+        if (settings) {
+            return NBackup::TEncryptedFileSerializer(settings->Algorithm, settings->Key, settings->IV);
+        }
+        return Nothing();
+    };
 }
 
 TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings) {
@@ -156,153 +168,63 @@ TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBu
 }
 
 void TS3Buffer::ColumnsOrder(const TVector<ui32>& tags) {
-    Y_ENSURE(tags.size() == Columns.size());
-
-    Indices.clear();
-    for (ui32 i = 0; i < tags.size(); ++i) {
-        const ui32 tag = tags.at(i);
-        auto it = Columns.find(tag);
-        Y_ENSURE(it != Columns.end());
-        Y_ENSURE(Indices.emplace(tag, i).second);
-    }
+    Y_ENSURE(DataFormat->ColumnsOrder(tags), DataFormat->GetError());
 }
 
-bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
-    bool needsComma = false;
-    for (const auto& [tag, column] : Columns) {
-        auto it = Indices.find(tag);
-        Y_ENSURE(it != Indices.end());
-        Y_ENSURE(it->second < (*row).size());
-        const auto& cell = (*row)[it->second];
+bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
+    ErrorString.clear();
 
+    const size_t beforeSize = Buffer.Size();
+    TBufferOutput out(Buffer);
+
+    if (!DataFormat->Collect(row, out)) {
+        ErrorString = DataFormat->GetError();
+        Buffer.Resize(beforeSize);
+        return false;
+    }
+
+    for (size_t i = 0; i < Columns.size(); ++i) {
+        const auto& cell = row.Get(i);
         BytesRead += cell.Size();
+    }
 
-        if (needsComma) {
-            out << ",";
-        } else {
-            needsComma = true;
+    if (Buffer.Size() > beforeSize) {
+        TStringBuf chunk(Buffer.Data(), Buffer.Size());
+        chunk = chunk.Tail(beforeSize);
+
+        if (Checksum) {
+            Checksum->AddData(chunk);
         }
-
-        if (cell.IsNull()) {
-            out << "null";
-            continue;
-        }
-
-        bool serialized = true;
-        switch (column.Type.GetTypeId()) {
-        case NScheme::NTypeIds::Int32:
-            serialized = cell.ToStream<i32>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Uint32:
-            serialized = cell.ToStream<ui32>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Int64:
-            serialized = cell.ToStream<i64>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Uint64:
-            serialized = cell.ToStream<ui64>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Uint8:
-        //case NScheme::NTypeIds::Byte:
-            out << static_cast<ui32>(cell.AsValue<ui8>());
-            break;
-        case NScheme::NTypeIds::Int8:
-            out << static_cast<i32>(cell.AsValue<i8>());
-            break;
-        case NScheme::NTypeIds::Int16:
-            serialized = cell.ToStream<i16>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Uint16:
-            serialized = cell.ToStream<ui16>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Bool:
-            serialized = cell.ToStream<bool>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Double:
-            serialized = cell.ToStream<double>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Float:
-            serialized = cell.ToStream<float>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Date:
-            out << TInstant::Days(cell.AsValue<ui16>());
-            break;
-        case NScheme::NTypeIds::Datetime:
-            out << TInstant::Seconds(cell.AsValue<ui32>());
-            break;
-        case NScheme::NTypeIds::Timestamp:
-            out << TInstant::MicroSeconds(cell.AsValue<ui64>());
-            break;
-        case NScheme::NTypeIds::Interval:
-            serialized = cell.ToStream<i64>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Date32:
-            serialized = cell.ToStream<i32>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Datetime64:
-        case NScheme::NTypeIds::Timestamp64:
-        case NScheme::NTypeIds::Interval64:
-            serialized = cell.ToStream<i64>(out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Decimal:
-            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString, column.Type);
-            break;
-        case NScheme::NTypeIds::DyNumber:
-            serialized = DyNumberToStream(cell.AsBuf(), out, ErrorString);
-            break;
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-        case NScheme::NTypeIds::Utf8:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Yson:
-            out << '"' << CGIEscapeRet(cell.AsBuf()) << '"';
-            break;
-        case NScheme::NTypeIds::JsonDocument:
-            out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
-            break;
-        case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
-            break;
-        case NScheme::NTypeIds::Uuid:
-            serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
-            break;
-        default:
-            Y_ENSURE(false, "Unsupported type");
-        }
-
-        if (!serialized) {
+        if (Compression && !Compression->AddData(chunk)) {
+            ErrorString = Compression->GetError();
             return false;
         }
     }
 
-    out << "\n";
     ++Rows;
 
     return true;
 }
 
-bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
-    TBufferOutput out(Buffer);
-    ErrorString.clear();
-
-    size_t beforeSize = Buffer.Size();
-    if (!Collect(row, out)) {
-        return false;
+bool TS3Buffer::Append(const char *data, size_t size) {
+    if (!size) {
+        return true;
     }
 
-    TStringBuf data(Buffer.Data(), Buffer.Size());
-    data = data.Tail(beforeSize);
+    TStringBuf chunk(data, size);
 
     // Apply checksum
     if (Checksum) {
-        Checksum->AddData(data);
+        Checksum->AddData(chunk);
     }
 
-    // Compress
-    if (Compression && !Compression->AddData(data)) {
-        ErrorString = Compression->GetError();
-        return false;
+    if (Compression) {
+        if (!Compression->AddData(chunk)) {
+            ErrorString = Compression->GetError();
+            return false;
+        }
+    } else {
+        Buffer.Append(data, size);
     }
 
     return true;
@@ -329,21 +251,34 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 void TS3Buffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    Buffer = TBuffer();
+    // Reset the data format too: on a retry the scan is restarted from scratch,
+    // so any format-internal state (e.g. the Parquet writer and its already
+    // emitted file header) must be discarded, otherwise the regenerated file
+    // would be corrupted.
+    DataFormat->Clear();
+    if (Checksum) {
+        Checksum.reset(ChecksumCreator());
+    }
     if (Compression) {
         Compression->Clear();
     }
+    Encryption = EncryptionCreator();
 }
 
 bool TS3Buffer::IsFilled() const {
-    size_t outputSize = Buffer.Size();
+    size_t readyOutputBytes = Buffer.Size();
     if (Compression) {
-        outputSize = Compression->GetReadyOutputBytes();
+        readyOutputBytes = Compression->GetReadyOutputBytes();
     }
-    if (outputSize < MinBytes) {
+    // Some formats (e.g. Parquet) keep encoded output inside the format itself
+    // until a flush, so it is not yet reflected in Buffer/Compression.
+    readyOutputBytes += DataFormat->GetReadyOutputBytes();
+    if (readyOutputBytes < MinBytes) {
         return false;
     }
-
-    return Rows >= GetRowsLimit() || Buffer.Size() >= GetBytesLimit();
+    const size_t memoryBytes = Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
+    return Rows >= RowsLimit || memoryBytes >= MaxBytes;
 }
 
 TString TS3Buffer::GetError() const {
@@ -353,6 +288,16 @@ TString TS3Buffer::GetError() const {
 TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     Rows = 0;
     BytesRead = 0;
+
+    auto dataFormatBuffer = DataFormat->Flush(last);
+    if (!dataFormatBuffer) {
+        ErrorString = DataFormat->GetError();
+        return Nothing();
+    }
+
+    if (!Append(dataFormatBuffer->Data(), dataFormatBuffer->Size())) {
+        return Nothing();
+    }
 
     // Compression finishes compression frame during Flush
     // so that last table row borders equal to compression frame borders.
@@ -370,8 +315,13 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     }
 
     if (Encryption) {
-        TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
-        Buffer = std::move(encryptedBlock);
+        try {
+            TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+            Buffer = std::move(encryptedBlock);
+        } catch (const std::exception& ex) {
+            ErrorString = ex.what();
+            return Nothing();
+        }
     }
 
     return std::exchange(Buffer, TBuffer());
@@ -407,8 +357,10 @@ TMaybe<TBuffer> TZStdCompressionProcessor::Flush() {
         } while (res != DONE);
     }
 
+    auto buffer = std::exchange(Buffer, TBuffer());
+
     Reset();
-    return std::exchange(Buffer, TBuffer());
+    return buffer;
 }
 
 TZStdCompressionProcessor::ECompressionResult TZStdCompressionProcessor::Compress(ZSTD_inBuffer* input, ZSTD_EndDirective endOp) {
@@ -433,6 +385,7 @@ void TZStdCompressionProcessor::Reset() {
     ZSTD_CCtx_reset(Context.Get(), ZSTD_reset_session_only);
     ZSTD_CCtx_refCDict(Context.Get(), NULL);
     ZSTD_CCtx_setParameter(Context.Get(), ZSTD_c_compressionLevel, CompressionLevel);
+    Buffer = TBuffer();
 }
 
 } // anonymous
@@ -485,11 +438,49 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         );
     }
 
-    return CreateS3ExportBuffer(std::move(bufferSettings));
+    std::unique_ptr<IExportDataFormat> dataFormat;
+    switch (DataFormatFromTask(Task)) {
+    case EDataFormat::YdbDump:
+        {
+            TYdbDumpExportSettings settings;
+            settings
+                .WithColumns(Columns);
+            dataFormat = CreateExportDataFormat(std::move(settings));
+            break;
+        }
+    case EDataFormat::Parquet:
+        {
+            bufferSettings.WithoutCompression();
+
+            auto maybeSettings = ParquetExportSettingsFromTask(Task);
+            auto settings = maybeSettings.value_or(TParquetExportSettings{});
+            settings
+                .WithColumns(Columns);
+
+            switch (CodecFromTask(Task)) {
+            case ECompressionCodec::None:
+                break;
+            case ECompressionCodec::Zstd:
+                settings
+                    .WithCompression(TParquetExportSettings::TCompressionSettings()
+                        .WithAlgorithm(TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd)
+                        .WithLevel(Task.GetCompression().GetLevel()));
+                break;
+            case ECompressionCodec::Invalid:
+                Y_ENSURE(false, "unreachable");
+            }
+            dataFormat = CreateExportDataFormat(std::move(settings));
+            break;
+        }
+    case EDataFormat::Invalid:
+        Y_ENSURE(false, "unreachable");
+    }
+
+    return CreateS3ExportBuffer(std::move(bufferSettings), std::move(dataFormat));
 }
 
-NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {
-    return new TS3Buffer(std::move(settings));
+NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat) {
+    return new TS3Buffer(std::move(settings), std::move(dataFormat));
 }
 
 } // namespace NKikimr::NDataShard

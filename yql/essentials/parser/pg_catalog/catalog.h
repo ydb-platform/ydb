@@ -91,6 +91,32 @@ constexpr ui32 DefaultCollationOid = 100;
 constexpr ui32 C_CollationOid = 950;
 constexpr ui32 PosixCollationOid = 951;
 
+// Oid space reserved for ICU locale collations (name "<locale>-x-icu"), kept clear of the
+// oids used by pg_collation.dat (which top out in the low thousands).
+// A locale's oid is IcuCollationOidBase plus its position in the checked-in, append-only
+// pg_collation_icu.generated.h (see gen_icu_collations) - stable across processes/rebuilds
+// regardless of which ICU library version is actually linked, since it is our own versioned
+// data rather than something derived live from whatever ICU happens to be available.
+constexpr ui32 IcuCollationOidBase = 1'000'000;
+
+// Copied from pg_collation.h, COLLPROVIDER_* constants
+enum class ECollationProvider: char {
+    Default = 'd',
+    Icu = 'i',
+    Libc = 'c',
+};
+
+struct TCollationDesc {
+    ui32 Oid = 0;
+    TString Name;
+    TString Descr;
+    ECollationProvider Provider = ECollationProvider::Libc;
+    i32 Encoding = -1;
+    TString Collate;
+    TString Ctype;
+    TString IcuLocale;
+};
+
 // Copied from pg_type_d.h, TYPTYPE_* constants
 enum class ETypType: char {
     Base = 'b',
@@ -295,6 +321,11 @@ void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
 const TAmDesc& LookupAm(ui32 oid);
 void EnumAm(std::function<void(ui32, const TAmDesc&)> f);
 
+bool HasCollation(const TString& name);
+const TCollationDesc& LookupCollation(const TString& name);
+const TCollationDesc& LookupCollation(ui32 oid);
+void EnumCollation(std::function<void(ui32, const TCollationDesc&)> f);
+
 void EnumConversions(std::function<void(const TConversionDesc&)> f);
 
 const TNamespaceDesc& LookupNamespace(ui32 oid);
@@ -477,16 +508,28 @@ const TExtensionDesc& LookupExtension(ui32 extensionIndex);
 ui32 LookupExtensionByName(const TString& name);
 ui32 LookupExtensionByInstallName(const TString& installName);
 
+class TOperatorNotFoundException : public yexception {};
+class TOperatorAmbiguityException : public yexception {};
+class TProcNotFoundException : public yexception {};
+class TProcAmbiguityException : public yexception {};
+class TAggregateNotFoundException : public yexception {};
+class TAggregateAmbiguityException : public yexception {};
+
 } // namespace NYql::NPg
 
 template <>
-inline void Out<NYql::NPg::ETypType>(IOutputStream& o, NYql::NPg::ETypType typType) {
-    o.Write(static_cast<std::underlying_type<NYql::NPg::ETypType>::type>(typType));
+inline void Out<NYql::NPg::ETypType>(IOutputStream& out, NYql::NPg::ETypType value) {
+    out.Write(static_cast<std::underlying_type<NYql::NPg::ETypType>::type>(value));
 }
 
 template <>
-inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercionCode coercionCode) {
-    o.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(coercionCode));
+inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& out, NYql::NPg::ECoercionCode value) {
+    out.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(value));
+}
+
+template <>
+inline void Out<NYql::NPg::ECollationProvider>(IOutputStream& out, NYql::NPg::ECollationProvider value) {
+    out.Write(static_cast<std::underlying_type<NYql::NPg::ECollationProvider>::type>(value));
 }
 
 template <>

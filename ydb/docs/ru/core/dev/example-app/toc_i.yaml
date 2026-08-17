@@ -1,7 +1,7 @@
 items:
 - name: C++
   href: example-cpp.md
-- name: C# (.NET)
+- name: C#
   href: example-dotnet.md
 - name: Go
   href: go/index.md
@@ -13,5 +13,7 @@ items:
   href: example-php.md
 - name: Python
   href: python/index.md
+- name: Rust
+  href: rust/index.md
 
 

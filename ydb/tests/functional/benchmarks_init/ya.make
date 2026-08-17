@@ -5,13 +5,13 @@ TEST_SRCS(
     test_init.py
 )
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(ram:16 cpu:4)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:16)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(ram:8)
 ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

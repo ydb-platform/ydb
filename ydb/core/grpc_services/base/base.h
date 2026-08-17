@@ -58,6 +58,20 @@ namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
+inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
+    if (!span) {
+        return;
+    }
+
+    if (status == Ydb::StatusIds::SUCCESS) {
+        span.EndOk();
+    } else {
+        span.Attribute("ydb_status", static_cast<int>(status));
+        span.Attribute("ydb_status_name", Ydb::StatusIds_StatusCode_Name(status));
+        span.EndError(Ydb::StatusIds_StatusCode_Name(status));
+    }
+}
+
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 TString DatabaseFromDomain(const TAppData* appdata);
@@ -357,15 +371,17 @@ public:
     using TContextPtr = TIntrusivePtr<NYdbGrpc::IRequestContextBase>;
     using TMessage = NProtoBuf::Message;
 
-    TRespHookCtx(TContextPtr ctx, TMessage* data, const TString& requestName, ui64 ru, ui32 status)
+    TRespHookCtx(TContextPtr ctx, TMessage* data, const TString& requestName, ui64 ru, ui32 status, NWilson::TSpan&& span = {})
         : Ctx_(ctx)
         , RespData_(data)
         , RequestName_(requestName)
         , Ru_(ru)
         , Status_(status)
+        , Span_(std::move(span))
     {}
 
     void Pass() {
+        FinishSpan();
         Ctx_->Reply(RespData_, Status_);
     }
 
@@ -378,11 +394,16 @@ public:
     }
 
 private:
+    void FinishSpan() {
+        EndGrpcRequestSpanWithStatus(Span_, Ydb::StatusIds::StatusCode(Status_));
+    }
+
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TMessage* RespData_; //Allocated on arena owned by implementation of IRequestContextBase
     const TString RequestName_;
     const ui64 Ru_;
     const ui32 Status_;
+    NWilson::TSpan Span_;
 };
 
 using TRespHook = std::function<void(TRespHookCtx::TPtr ctx)>;
@@ -423,6 +444,11 @@ struct TAuditMode {
     }
 };
 
+enum class EEmptyDatabaseMode {
+    EmptyDatabaseAllowed,
+    EmptyDatabaseForbidden,
+};
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing
@@ -438,6 +464,7 @@ struct TRequestAuxSettings {
     void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
+    EEmptyDatabaseMode EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden;
 };
 
 class TGRpcRequestProxySimple;
@@ -469,6 +496,12 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
+    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
+        UserFacingTraceId = std::move(id);
+    }
+    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
+        return NWilson::TTraceId(UserFacingTraceId);
+    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -511,7 +544,14 @@ public:
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
 
+    virtual EEmptyDatabaseMode GetEmptyDatabaseMode() const {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
+    }
+
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    NWilson::TTraceId UserFacingTraceId;
 };
 
 // Request context
@@ -770,6 +810,10 @@ public:
         Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
 
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
+    }
+
     TString GetRpcMethodName() const override {
         return {};
     }
@@ -846,6 +890,7 @@ private:
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), status);
         AuditLogRequestEnd(status);
+        FinishSpan(status);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 
@@ -918,6 +963,7 @@ public:
 
     void ReplyUnauthenticated(const TString& in) override {
         AuditLogRequestEnd(Ydb::StatusIds::UNAUTHORIZED);
+        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, MakeAuthError(in, IssueManager_)));
     }
 
@@ -1034,11 +1080,21 @@ public:
     }
 
     void FinishSpan() override {
-        Span_.End();
+        if (Span_) {
+            Span_.End();
+        }
+    }
+
+    void FinishSpan(Ydb::StatusIds::StatusCode status) {
+        EndGrpcRequestSpanWithStatus(Span_, status);
     }
 
     bool* IsTracingDecided() override {
         return &IsTracingDecided_;
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
     }
 
     // IRequestCtxBase
@@ -1074,16 +1130,19 @@ public:
 
     bool Finish(Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
+        FinishSpan(status);
         return Ctx_->Finish(grpcStatus);
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
+        FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), grpcStatus);
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
+        FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
 
@@ -1258,10 +1317,12 @@ public:
     }
 
     void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override {
+        FinishSpan();
         Ctx_->ReplyError(code, reason, details);
     }
 
     void ReplyUnauthenticated(const TString& in) override {
+        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
     }
 
@@ -1383,6 +1444,9 @@ public:
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
         }
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+            FinishSpan(status);
+        }
         Ctx_->Reply(&data, status, flag);
     }
 
@@ -1390,6 +1454,9 @@ public:
         auto data = MakeByteBufferFromSerializedResult(std::move(in));
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
+        }
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+            FinishSpan(status);
         }
         Ctx_->Reply(&data, status, flag);
     }
@@ -1435,7 +1502,9 @@ public:
 
     void FinishStream(ui32 status) override {
         // End Of Request for streaming requests
-        AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
+        const auto ydbStatus = Ydb::StatusIds::StatusCode(status);
+        AuditLogRequestEnd(ydbStatus);
+        FinishSpan(ydbStatus);
         Ctx_->FinishStreamingOk();
     }
 
@@ -1491,7 +1560,13 @@ public:
     }
 
     void FinishSpan() override {
-        Span_.End();
+        if (Span_) {
+            Span_.End();
+        }
+    }
+
+    void FinishSpan(Ydb::StatusIds::StatusCode status) {
+        EndGrpcRequestSpanWithStatus(Span_, status);
     }
 
     bool* IsTracingDecided() override {
@@ -1499,6 +1574,7 @@ public:
     }
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
+        FinishSpan();
         Ctx_->ReplyError(code, msg, details);
     }
 
@@ -1509,12 +1585,26 @@ public:
 private:
     void Reply(NProtoBuf::Message* resp, ui32 status) override {
         // End Of Request for non streaming requests
-        if (RequestFinished || !Ctx_->IsStreamCall()) {
+        const bool finishRequest = RequestFinished || !Ctx_->IsStreamCall();
+        if (finishRequest) {
             AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         }
         if (RespHook) {
             TRespHook hook = std::move(RespHook);
-            return hook(MakeIntrusive<TRespHookCtx>(Ctx_, resp, GetRequestName(), Ru, status));
+            NWilson::TSpan span;
+            if (finishRequest) {
+                span = std::move(Span_);
+            }
+            return hook(MakeIntrusive<TRespHookCtx>(
+                Ctx_,
+                resp,
+                GetRequestName(),
+                Ru,
+                status,
+                std::move(span)));
+        }
+        if (finishRequest) {
+            FinishSpan(Ydb::StatusIds::StatusCode(status));
         }
         return Ctx_->Reply(resp, status);
     }
@@ -1664,6 +1754,10 @@ public:
 
     bool IsDmlAuditable() const override {
         return AuxSettings.AuditMode.IsModifying && AuxSettings.AuditMode.LogClass == TAuditMode::TLogClassConfig::Dml && !this->IsInternalCall();
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
     }
 
 private:
@@ -1820,7 +1914,7 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1855,6 +1949,7 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         const NActors::TActorContext& ctx = NActors::TActivationContext::AsActorContext();
+        FinishSpan();
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
@@ -1891,7 +1986,9 @@ public:
         Span = std::move(span);
     }
     void FinishSpan() override {
-        Span.End();
+        if (Span) {
+            Span.End();
+        }
     }
 
     bool* IsTracingDecided() override {
@@ -2009,11 +2106,15 @@ public:
         return AuditMode;
     }
 
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseAllowed;
+    }
+
     TString GetRpcMethodName() const override {
         return {};
     }
 
-    TString Database;
+    TString Database; // Raw `database` extracted from the HTTP request
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;

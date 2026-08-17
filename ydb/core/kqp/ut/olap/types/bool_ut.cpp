@@ -1,95 +1,10 @@
-#include "bool_test_enums.h"
+#include "column_type_scenarios.h"
+#include "column_type_test_base.h"
 
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/testlib/common_helper.h>
-#include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/threading/local_executor/local_executor.h>
-#include <util/generic/serialized_enum.h>
-#include <util/string/printf.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
-#include <ydb/core/kqp/ut/common/arrow_builders.h>
-
-#include <functional>
-#include <tuple>
-
-template <class... Es>
-static TString BuildParamTestName(const char* base, const Es&... es) {
-    TString s = base;
-    ((s += "-", s += ToString(es)), ...);
-    return s;
-}
-
-template <class F>
-static void ForEachProductRanges(F&& f) {
-    std::invoke(std::forward<F>(f));
-}
-
-template <class F, class FirstRange, class... RestRanges>
-static void ForEachProductRanges(F&& f, const FirstRange& first, const RestRanges&... rest) {
-    for (auto&& x : first) {
-        auto bound = std::bind_front(std::forward<F>(f), x);
-        ForEachProductRanges(std::move(bound), rest...);
-    }
-}
-
-template <class... Enums, class F>
-static void ForEachEnums(F&& f) {
-    ForEachProductRanges(std::forward<F>(f), GetEnumAllValues<Enums>()...);
-}
-
-template <class Tuple, size_t... I>
-static TString BuildParamTestNameFromTupleImpl(const char* base, const Tuple& t, std::index_sequence<I...>) {
-    return BuildParamTestName(base, std::get<I>(t)...);
-}
-
-template <class Tuple>
-static TString BuildParamTestNameFromTuple(const char* base, const Tuple& t) {
-    return BuildParamTestNameFromTupleImpl(base, t, std::make_index_sequence<std::tuple_size<Tuple>::value>{});
-}
-
-#define Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(N, ...) \
-    struct TTestCase##N: public TCurrentTestCase { \
-        using Types = std::tuple<__VA_ARGS__>; \
-        Types Args; \
-        TString ParametrizedTestName; \
-        explicit TTestCase##N(Types args) \
-            : Args(std::move(args)) \
-            , ParametrizedTestName(BuildParamTestNameFromTuple(#N, Args)) { \
-            Name_ = ParametrizedTestName.c_str(); \
-        } \
-        static THolder<NUnitTest::TBaseTestCase> Create(Types args) { \
-            return ::MakeHolder<TTestCase##N>(std::move(args)); \
-        } \
-        void Execute_(NUnitTest::TTestContext&) override; \
-        template <size_t I> \
-        decltype(auto) Arg() const { \
-            return std::get<I>(Args); \
-        } \
-    }; \
-    struct TTestRegistration##N { \
-        TTestRegistration##N() { \
-            ForEachEnums<__VA_ARGS__>([&](auto... items) { \
-                TCurrentTest::AddTest([=] { \
-                    return TTestCase##N::Create(typename TTestCase##N::Types(items...)); \
-                }); \
-            }); \
-        } \
-    }; \
-    static TTestRegistration##N testRegistration##N; \
-    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 namespace NKikimr {
 namespace NKqp {
@@ -99,114 +14,55 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     namespace {
-    struct TRow {
-        i32 Id;
-        i64 IntVal;
-        std::optional<bool> B;
+
+    struct TBoolTraits {
+        using TValue = bool;
+        static constexpr const char* ColumnName = "b";
+        static constexpr const char* SqlTypeName = "Bool";
+
+        static TKikimrSettings CreateSettings() {
+            return CreateColumnshardSettings([](auto& f) { f.SetEnableColumnshardBool(true); });
+        }
+
+        static auto GetTypeId() { return NScheme::NTypeIds::Bool; }
+
+        static void AppendYdbValue(TValueBuilder& builder, const std::optional<bool>& val) {
+            if (val.has_value()) {
+                builder.BeginOptional().Bool(*val).EndOptional();
+            } else {
+                builder.EmptyOptional(EPrimitiveType::Bool);
+            }
+        }
+
+        static void AppendCsvValue(TStringBuilder& builder, const std::optional<bool>& val) {
+            if (val.has_value()) {
+                builder << (*val ? "true" : "false");
+            }
+        }
+
+        static std::shared_ptr<arrow::Array> MakeArrowArray(const TVector<TTypedRow<bool>>& rows) {
+            using namespace NKikimr::NKqp::NTestArrow;
+            std::vector<std::optional<bool>> bs;
+            bs.reserve(rows.size());
+            for (auto&& r : rows) {
+                bs.push_back(r.TypedVal);
+            }
+
+            return MakeBoolArrayAsUInt8Nullable(bs);
+        }
+
+        static std::shared_ptr<arrow::DataType> ArrowType() { return arrow::uint8(); }
     };
 
-    TKikimrSettings CreateKikimrSettingsWithBoolSupport() {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableColumnshardBool(true);
-        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
-    }
-
-    void CreateDataShardTable(TTestHelper& helper, const TString& name) {
-        auto& session = helper.GetSession();
-        auto res = session
-                       .ExecuteSchemeQuery(TStringBuilder() << R"(
-                CREATE TABLE `)" << name << R"(` (
-                    id Int32 NOT NULL,
-                    int Int64,
-                    b Bool,
-                    PRIMARY KEY (id)
-                );
-            )")
-                       .ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
-    }
-
-    void CreateDataShardTableWithSecondColumn(TTestHelper& helper, const TString& name, const TString& secondName) {
-        auto& session = helper.GetSession();
-        auto res = session
-                       .ExecuteSchemeQuery(TStringBuilder() << R"(
-                CREATE TABLE `)" << name << R"(` (
-                    id Int32 NOT NULL,
-                    )" << secondName << R"( Int64,
-                    b Bool,
-                    PRIMARY KEY (id)
-                );
-            )")
-                       .ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
-    }
-
-    void BulkUpsertRowTableYdbValueWithColumnName(
-        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
-        TValueBuilder builder;
-        builder.BeginList();
-        for (auto&& r : rows) {
-            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember(columnName).Int64(r.IntVal).AddMember("b");
-            if (r.B.has_value()) {
-                builder.BeginOptional().Bool(*r.B).EndOptional();
-            } else {
-                builder.EmptyOptional(EPrimitiveType::Bool);
-            }
-
-            builder.EndStruct();
-        }
-
-        builder.EndList();
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, "int");
-    }
-
-    void BulkUpsertRowTableYdbValueWithSecondColumn(
-        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& secondName) {
-        TValueBuilder builder;
-        builder.BeginList();
-        for (auto&& r : rows) {
-            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember(secondName).Int64(r.IntVal).AddMember("b");
-            if (r.B.has_value()) {
-                builder.BeginOptional().Bool(*r.B).EndOptional();
-            } else {
-                builder.EmptyOptional(EPrimitiveType::Bool);
-            }
-
-            builder.EndStruct();
-        }
-
-        builder.EndList();
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void BulkUpsertRowTableCSV(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        TStringBuilder builder;
-        for (auto&& r : rows) {
-            builder << r.Id << "," << r.IntVal << ",";
-            if (r.B.has_value()) {
-                builder << (*r.B ? "true" : "false");
-            }
-
-            builder << '\n';
-        }
-
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
+    COLUMN_TYPE_TEST_USING(TBoolTraits);
 
     void BulkUpsertRowTableCSVWithFormat(
         TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& trueValue, const TString& falseValue) {
         TStringBuilder builder;
         for (auto&& r : rows) {
             builder << r.Id << "," << r.IntVal << ",";
-            if (r.B.has_value()) {
-                builder << (*r.B ? trueValue : falseValue);
+            if (r.TypedVal.has_value()) {
+                builder << (*r.TypedVal ? trueValue : falseValue);
             }
 
             builder << '\n';
@@ -214,148 +70,6 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
-        using namespace NKikimr::NKqp::NTestArrow;
-        std::vector<int32_t> ids;
-        std::vector<int64_t> vals;
-        std::vector<std::optional<bool>> bs;
-        ids.reserve(rows.size());
-        vals.reserve(rows.size());
-        bs.reserve(rows.size());
-        for (auto&& r : rows) {
-            ids.push_back(r.Id);
-            vals.push_back(r.IntVal);
-            bs.push_back(r.B);
-        }
-
-        auto idArr = MakeInt32Array(ids);
-        auto intArr = MakeInt64Array(vals);
-        auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
-        auto schema = arrow::schema({
-            arrow::field("id", arrow::int32(), /*nullable*/ false),
-            arrow::field(columnName, arrow::int64()),
-            arrow::field("b", arrow::uint8())
-        });
-
-        return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, intArr, boolArr });
-    }
-
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
-        return MakeArrowBatchWithColumnName(rows, "int");
-    }
-
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
-        using namespace NKikimr::NKqp::NTestArrow;
-        std::vector<int32_t> ids;
-        std::vector<int64_t> seconds;
-        std::vector<std::optional<bool>> bs;
-        ids.reserve(rows.size());
-        seconds.reserve(rows.size());
-        bs.reserve(rows.size());
-        for (auto&& r : rows) {
-            ids.push_back(r.Id);
-            seconds.push_back(r.IntVal);
-            bs.push_back(r.B);
-        }
-
-        auto idArr = MakeInt32Array(ids);
-        auto secondArr = MakeInt64Array(seconds);
-        auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
-        auto schema = arrow::schema({
-            arrow::field("id", arrow::int32(), /*nullable*/ false),
-            arrow::field(secondName, arrow::int64()),
-            arrow::field("b", arrow::uint8())
-        });
-
-        return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, secondArr, boolArr });
-    }
-
-    void BulkUpsertRowTableArrow(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        auto batch = MakeArrowBatch(rows);
-        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
-        TString strSchema = NArrow::SerializeSchema(*batch->schema());
-        auto result =
-            helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void BulkUpsertRowTableArrowWithSecondColumn(
-        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& secondName) {
-        auto batch = MakeArrowBatchWithSecondColumn(rows, secondName);
-        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
-        TString strSchema = NArrow::SerializeSchema(*batch->schema());
-        auto result =
-            helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void LoadData(TTestHelper& helper, ETableKind table, ELoadKind load, const TString& name, const TVector<TRow>& rows,
-        TTestHelper::TColumnTable* col = nullptr, const TVector<TTestHelper::TColumnSchema>* schema = nullptr) {
-        switch (table) {
-            case ETableKind::COLUMNSHARD: {
-                Y_ABORT_UNLESS(col && schema);
-                if (load == ELoadKind::ARROW) {
-                    TString columnName = "int";
-                    if (schema->size() >= 2) {
-                        columnName = (*schema)[1].GetName();
-                    }
-
-                    auto batch = MakeArrowBatchWithColumnName(rows, columnName);
-                    helper.BulkUpsert(*col, batch);
-                } else if (load == ELoadKind::YDB_VALUE) {
-                    TString columnName = "int";
-                    if (schema->size() >= 2) {
-                        columnName = (*schema)[1].GetName();
-                    }
-
-                    BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, columnName);
-                } else {
-                    BulkUpsertRowTableCSV(helper, name, rows);
-                }
-
-                break;
-            }
-            case ETableKind::DATASHARD: {
-                if (load == ELoadKind::ARROW) {
-                    BulkUpsertRowTableArrow(helper, name, rows);
-                } else if (load == ELoadKind::YDB_VALUE) {
-                    BulkUpsertRowTableYdbValue(helper, name, rows);
-                } else {
-                    BulkUpsertRowTableCSV(helper, name, rows);
-                }
-
-                break;
-            }
-        }
-    }
-
-    void CheckOrExec(TTestHelper& helper, const TString& query, const TString& expected, EQueryMode scanMode) {
-        if (scanMode == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(query, expected);
-        } else {
-            helper.ReadDataExecQuery(query, expected);
-        }
-    }
-
-    void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
-        TVector<TTestHelper::TColumnSchema>* schemaOut) {
-        if (tableKind == ETableKind::COLUMNSHARD) {
-            TVector<TTestHelper::TColumnSchema> schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
-            };
-
-            *schemaOut = schema;
-            TTestHelper::TColumnTable col;
-            col.SetName(tableName).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
-            helper.CreateTable(col);
-            *colTableOut = col;
-        } else {
-            CreateDataShardTable(helper, tableName);
-        }
     }
 
     bool TryPrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
@@ -378,232 +92,126 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 return false;
             }
         } else {
-            CreateDataShardTable(helper, tableName);
+            Base::CreateDataShardTable(helper, tableName);
             return true;
         }
     }
+
+    TScenario<bool> FilterEqualScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } },
+            {
+                { "SELECT * FROM `/Root/Table1` WHERE b == true", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]" },
+                { "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]" },
+            },
+        };
+    }
+
+    TScenario<bool> FilterNullsScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 5, std::nullopt }, { 6, 6, std::nullopt } },
+            {
+                { "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", "[[#;5;[5]];[#;6;[6]]]" },
+                { "SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
+                  "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]" },
+            },
+        };
+    }
+
+    TScenario<bool> FilterCompareScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } },
+            {
+                { "SELECT * FROM `/Root/Table1` WHERE b < true order by id", "[[[%false];2;[3]]]" },
+                { "SELECT * FROM `/Root/Table1` WHERE b > false order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]" },
+                { "SELECT * FROM `/Root/Table1` WHERE b <= true order by id",
+                  "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]" },
+                { "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]" },
+            },
+        };
+    }
+
+    TScenario<bool> OrderByScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } },
+            {
+                { "SELECT * FROM `/Root/Table1` order by b, id",
+                  "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]" },
+            },
+        };
+    }
+
+    TScenario<bool> GroupByScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 12, true }, { 6, 30, false } },
+            {
+                { "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]" },
+            },
+        };
+    }
+
+    TScenario<bool> AggregationScenario() {
+        return {
+            "/Root/Table1",
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } },
+            {
+                { "SELECT min(b) FROM `/Root/Table1`", "[[[%false]]]" },
+                { "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]" },
+            },
+        };
+    }
+
+    TJoinScenario<bool> JoinByBoolScenario() {
+        return {
+            "/Root/Table1",
+            "/Root/Table2",
+            { { 2, 3, true }, { 4, 1, true } },
+            { { 2, 2, false }, { 4, 4, false }, { 1, 1, true }, { 3, 3, true } },
+            {
+                { "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
+                  R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])" },
+            },
+        };
+    }
+
     }   // namespace
 
-    class TBoolTestCase {
-    public:
-        TBoolTestCase()
-            : TestHelper(CreateKikimrSettingsWithBoolSupport()) {
-        }
-
-        TTestHelper::TUpdatesBuilder Inserter() {
-            return TTestHelper::TUpdatesBuilder(TestTable.GetArrowSchema(Schema));
-        }
-
-        void Upsert(TTestHelper::TUpdatesBuilder& inserter) {
-            TestHelper.BulkUpsert(TestTable, inserter);
-        }
-
-        void CheckQuery(const TString& query, const TString& expected, EQueryMode mode = EQueryMode::SCAN_QUERY) const {
-            switch (mode) {
-                case EQueryMode::SCAN_QUERY:
-                    TestHelper.ReadData(query, expected);
-                    break;
-                case EQueryMode::EXECUTE_QUERY: {
-                    TestHelper.ExecuteQuery(query);
-                    break;
-                }
-            }
-        }
-
-        void ExecuteDataQuery(const TString& query) const {
-            TestHelper.ExecuteQuery(query);
-        }
-
-        void PrepareTable1() {
-            Schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
-            };
-
-            TestTable.SetName("/Root/Table1").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
-            TestHelper.CreateTable(TestTable);
-
-            {
-                TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(4).Add(true);
-                inserter.AddRow().Add(2).Add(3).Add(false);
-                Upsert(inserter);
-            }
-            {
-                TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(4).Add(1).Add(true);
-                inserter.AddRow().Add(3).Add(2).Add(true);
-
-                Upsert(inserter);
-            }
-        }
-
-        void PrepareTable2() {
-            Schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
-            };
-
-            TestTable.SetName("/Root/Table2").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
-            TestHelper.CreateTable(TestTable);
-
-            {
-                TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(1).Add(true);
-                inserter.AddRow().Add(2).Add(1).Add(false);
-                inserter.AddRow().Add(3).Add(2).Add(true);
-                inserter.AddRow().Add(4).Add(2).Add(false);
-                Upsert(inserter);
-            }
-        }
-
-        void PrepareTable3() {
-            Schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool).SetNullable(false),
-            };
-
-            TestTable.SetName("/Root/Table3").SetPrimaryKey({ "b" }).SetSchema(Schema);
-            TestHelper.CreateTable(TestTable);
-
-            {
-                TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(true);
-                inserter.AddRow().Add(2).Add(false);
-                Upsert(inserter);
-            }
-        }
-
-    private:
-        TTestHelper TestHelper;
-        TVector<TTestHelper::TColumnSchema> Schema;
-        TTestHelper::TColumnTable TestTable;
-    };
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
+        Base::PrepareBase(helper, Table, tableName, &col, &schema);
+        Base::LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=1", "[[[%true];1;[4]]]", Scan);
         CheckOrExec(
             helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
+    Y_UNIT_TEST_SCENARIO(TestFilterEqual, FilterEqualScenario);
+    Y_UNIT_TEST_SCENARIO(TestFilterNulls, FilterNullsScenario);
+    Y_UNIT_TEST_SCENARIO(TestFilterCompare, FilterCompareScenario);
+    Y_UNIT_TEST_SCENARIO(TestOrderByBool, OrderByScenario);
+    Y_UNIT_TEST_SCENARIO(TestGroupByBool, GroupByScenario);
+    Y_UNIT_TEST_SCENARIO(TestAggregation, AggregationScenario);
 
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b == true", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName,
-            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 5, std::nullopt }, { 6, 6, std::nullopt } }, &col, &schema);
-        const TString expectedNulls = "[[#;5;[5]];[#;6;[6]]]";
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", expectedNulls, Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
-            "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b < true order by id", "[[[%false];2;[3]]]", Scan);
-        CheckOrExec(
-            helper, "SELECT * FROM `/Root/Table1` WHERE b > false order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b <= true order by id",
-            "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-        CheckOrExec(
-            helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
-        CheckOrExec(
-            helper, "SELECT * FROM `/Root/Table1` order by b, id", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName,
-            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 12, true }, { 6, 30, false } }, &col, &schema);
-        CheckOrExec(helper, "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
-        CheckOrExec(helper, "SELECT min(b) FROM `/Root/Table1`", "[[[%false]]]", Scan);
-        CheckOrExec(helper, "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
         if (Table == ETableKind::COLUMNSHARD) {
@@ -624,19 +232,19 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
             helper.CreateTable(col2);
         } else {
-            CreateDataShardTable(helper, t1);
-            CreateDataShardTableWithSecondColumn(helper, t2, "table1_id");
+            Base::CreateDataShardTable(helper, t1);
+            Base::CreateDataShardTableWithSecondColumn(helper, t2, "table1_id");
         }
 
-        LoadData(helper, Table, Load, t1, { { 1, 4, true }, { 2, 3, true } }, &col1, &s1);
+        Base::LoadData(helper, Table, Load, t1, { { 1, 4, true }, { 2, 3, true } }, &col1, &s1);
         if (Table == ETableKind::COLUMNSHARD) {
-            LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
+            Base::LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
         } else {
             if (Load == ELoadKind::ARROW) {
-                BulkUpsertRowTableArrowWithSecondColumn(
+                Base::BulkUpsertRowTableArrowWithSecondColumn(
                     helper, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, "table1_id");
             } else if (Load == ELoadKind::YDB_VALUE) {
-                BulkUpsertRowTableYdbValueWithSecondColumn(
+                Base::BulkUpsertRowTableYdbValueWithSecondColumn(
                     helper, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, "table1_id");
             } else {
                 TStringBuilder csv;
@@ -651,54 +259,17 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
+    Y_UNIT_TEST_JOIN_SCENARIO(TestJoinByBool, JoinByBoolScenario);
 
-        const TString t1 = "/Root/Table1";
-        const TString t2 = "/Root/Table2";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
-        TTestHelper::TColumnTable col1, col2;
-        TVector<TTestHelper::TColumnSchema> s1, s2;
-        if (Table == ETableKind::COLUMNSHARD) {
-            s1 = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
-            };
-
-            col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
-            helper.CreateTable(col1);
-            s2 = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
-            };
-
-            col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
-            helper.CreateTable(col2);
-        } else {
-            CreateDataShardTable(helper, t1);
-            CreateDataShardTable(helper, t2);
-        }
-
-        LoadData(helper, Table, Load, t1, { { 2, 3, true }, { 4, 1, true } }, &col1, &s1);
-        LoadData(helper, Table, Load, t2, { { 2, 2, false }, { 4, 4, false }, { 1, 1, true }, { 3, 3, true } }, &col2, &s2);
-        CheckOrExec(helper,
-            "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
-            R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", Scan);
-    }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCSVBoolFormats, EQueryMode, ETableKind) {
+    Y_UNIT_TEST(TestCSVBoolFormats, EQueryMode, ETableKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
+        Base::PrepareBase(helper, Table, tableName, &col, &schema);
 
         struct TCSVFormat {
             TString TrueValue;
@@ -722,7 +293,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFeatureFlag, EQueryMode, ETableKind) {
+    Y_UNIT_TEST(TestFeatureFlag, EQueryMode, ETableKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
@@ -737,15 +308,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TVector<TRow> rows = { { 1, 100, true }, { 2, 200, false } };
 
         if (Table == ETableKind::DATASHARD) {
-            PrepareBase(helperDisabled, Table, tableName, &col, &schema);
-            LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+            Base::PrepareBase(helperDisabled, Table, tableName, &col, &schema);
+            Base::LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
             CheckOrExec(
                 helperDisabled, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id", "[[1;[100];[%true]];[2;[200];[%false]]]", Scan);
         } else {
             bool tableCreated = TryPrepareBase(helperDisabled, Table, tableName, &col, &schema);
             if (tableCreated) {
                 try {
-                    LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+                    Base::LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
                     UNIT_ASSERT_C(false, "Expected error for ColumnShard with disabled feature flag");
                 } catch (const std::exception& e) {
                     TString errorMsg = e.what();
@@ -755,15 +326,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             }
         }
 
-        TTestHelper helperEnabled(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helperEnabled(TBoolTraits::CreateSettings());
         TTestHelper::TColumnTable col2;
         TVector<TTestHelper::TColumnSchema> schema2;
-        PrepareBase(helperEnabled, Table, tableName, &col2, &schema2);
-        LoadData(helperEnabled, Table, ELoadKind::ARROW, tableName, rows, &col2, &schema2);
+        Base::PrepareBase(helperEnabled, Table, tableName, &col2, &schema2);
+        Base::LoadData(helperEnabled, Table, ELoadKind::ARROW, tableName, rows, &col2, &schema2);
         CheckOrExec(helperEnabled, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id", "[[1;[100];[%true]];[2;[200];[%false]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolAsPrimaryKey, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolAsPrimaryKey, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -773,7 +344,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                                  const TVector<TRow>& rows,
                                  const TString& selectExpr,
                                  const TString& expectedScan) -> decltype(auto) {
-            TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+            TTestHelper helper(TBoolTraits::CreateSettings());
             TTestHelper::TColumnTable col;
             col.SetName(name).SetPrimaryKey(pkColumns).SetSharding(pkColumns).SetSchema(schema);
             helper.CreateTable(col);
@@ -782,7 +353,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 if (Load == ELoadKind::ARROW) {
                     using namespace NKikimr::NKqp::NTestArrow;
                     std::vector<bool> bs; bs.reserve(rows.size());
-                    for (auto&& r : rows) bs.push_back(r.B.value());
+                    for (auto&& r : rows) bs.push_back(r.TypedVal.value());
                     auto bArr = MakeBoolArrayAsUInt8(bs);
                     auto batch = MakeBatch({ arrow::field("b", arrow::uint8(), /*nullable*/ false) }, { bArr });
                     helper.BulkUpsert(col, batch);
@@ -790,7 +361,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     TValueBuilder builder;
                     builder.BeginList();
                     for (auto&& r : rows) {
-                        builder.AddListItem().BeginStruct().AddMember("b").Bool(r.B.value()).EndStruct();
+                        builder.AddListItem().BeginStruct().AddMember("b").Bool(r.TypedVal.value()).EndStruct();
                     }
 
                     builder.EndList();
@@ -799,7 +370,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 } else {
                     TStringBuilder csv;
                     for (auto&& r : rows) {
-                        csv << (r.B.value() ? "true" : "false") << "\n";
+                        csv << (r.TypedVal.value() ? "true" : "false") << "\n";
                     }
 
                     auto res = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, csv).GetValueSync();
@@ -813,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     std::vector<int32_t> ids; ids.reserve(rows.size());
                     std::vector<uint8_t> bools; bools.reserve(rows.size());
                     std::vector<int64_t> ints; ints.reserve(rows.size());
-                    for (auto&& r : rows) { ids.push_back(r.Id); bools.push_back(r.B.value() ? 1u : 0u); ints.push_back(r.IntVal); }
+                    for (auto&& r : rows) { ids.push_back(r.Id); bools.push_back(r.TypedVal.value() ? 1u : 0u); ints.push_back(r.IntVal); }
                     auto idArr = MakeInt32Array(ids);
                     auto bArr  = MakeUInt8Array(bools);
                     auto iArr  = MakeInt64Array(ints);
@@ -825,7 +396,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     for (auto&& r : rows) {
                         builder.AddListItem().BeginStruct()
                             .AddMember("id").Int32(r.Id)
-                            .AddMember("b").Bool(r.B.value())
+                            .AddMember("b").Bool(r.TypedVal.value())
                             .AddMember("int").Int64(r.IntVal)
                             .EndStruct();
                     }
@@ -836,7 +407,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 } else {
                     TStringBuilder csv;
                     for (auto&& r : rows) {
-                        csv << r.Id << "," << (r.B.value() ? "true" : "false") << "," << r.IntVal << "\n";
+                        csv << r.Id << "," << (r.TypedVal.value() ? "true" : "false") << "," << r.IntVal << "\n";
                     }
 
                     auto res = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, csv).GetValueSync();
@@ -871,18 +442,18 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                       "b, id, int", R"([[%true;1;100];[%false;2;200]])");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        auto settings = CreateKikimrSettingsWithBoolSupport();
+        auto settings = TBoolTraits::CreateSettings();
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TTestHelper helper(settings);
 
         const TString ds = "/Root/RowSrc";
         const TString cs = "/Root/ColSrc";
 
-        CreateDataShardTable(helper, ds);
+        Base::CreateDataShardTable(helper, ds);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -968,11 +539,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT b, id, int FROM `" + dsFromCs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolOperatorsAndAggregations, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolOperatorsAndAggregations, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolOps";
 
@@ -1026,11 +597,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[#;1u];[[%false];1u];[[%true];1u]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBoolWithLimit, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestOrderByBoolWithLimit, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolOrderLimit";
 
@@ -1125,10 +696,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, qDescPk, R"([[%true;1]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolCompare, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolCompare, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolWhereCmp";
 
@@ -1205,10 +776,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         check("b <= true", R"([[%true;1;100];[%false;2;200];[%true;3;300];[%false;4;400]])");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolFilterWithColumns, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolFilterWithColumns, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolFilterCols";
 
@@ -1287,11 +858,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[%true;1];[%true;3]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolWriteComparison, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolWriteComparison, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolWriteCmp";
 
@@ -1342,11 +913,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[[%true];1];[[%false];2]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolNot, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolNot, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolNot";
 
@@ -1388,11 +959,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[%false;1];[%true;2]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolGroupByCounts, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolGroupByCounts, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper helper(TBoolTraits::CreateSettings());
 
         const TString cs = "/Root/BoolGroup";
 

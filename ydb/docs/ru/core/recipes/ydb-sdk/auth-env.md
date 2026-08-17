@@ -1,5 +1,7 @@
 # Аутентификация при помощи переменных окружения
 
+Аутентификация через переменные окружения позволяет не зашивать учётные данные в код: SDK или JDBC-драйвер сам определяет режим по переменным `YDB_*` в окружении процесса. Этот способ удобен для контейнеров, CI/CD и деплоя в облако, где секреты передаются через окружение. Типичные шаги: задать нужные переменные окружения, создать провайдер аутентификации (или подключиться через JDBC без явных свойств) и выполнить запрос. Подробности о порядке выбора режима — в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env); базовое подключение — в рецепте [инициализации драйвера](./init.md). Другие способы: [токен](./auth-access-token.md), [анонимная](./auth-anonymous.md), [метаданные](./auth-metadata.md), [сервисный аккаунт](./auth-service-account.md), [логин и пароль](./auth-static.md).
+
 При использовании данного метода режим аутентификации и его параметры будут определены окружением, в котором запускается приложение, в [описанном здесь порядке](../../reference/ydb-sdk/auth.md#env).
 
 Установив одну из следующих переменных окружения, можно управлять способом аутентификации:
@@ -13,89 +15,172 @@
 
 {% list tabs %}
 
-- Go (native)
+- C++
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
+  - Native SDK
 
-    environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/helpers/helpers.h>
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      environ.WithEnvironCredentials(ctx),
+    NYdb::TDriver CreateDriverFromEnvironment(const std::string& connectionString) {
+        return NYdb::TDriver(NYdb::CreateFromEnvironment(connectionString));
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "os"
+
+      environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        environ.WithEnvironCredentials(ctx),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      environ.WithEnvironCredentials(ctx),
+      environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        environ.WithEnvironCredentials(ctx),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = new EnvironAuthProvider();
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    import tech.ydb.auth.iam.CloudAuthHelper;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-      doWork(queryClient);
+    public class EnvironAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Строка подключения из переменной окружения или локальный {{ ydb-short-name }} по умолчанию
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            // Режим аутентификации определяется переменными окружения YDB_*
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-- Node.js
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Проверка подключения: выводим результат SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
+        }
+    }
+    ```
+
+  - JDBC
+
+    JDBC-драйвер читает переменные окружения `YDB_*` в порядке, описанном в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env). Явно передавать учётные данные не нужно — достаточно пустого объекта `Properties`.
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class EnvironAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Пустые свойства: драйвер сам выберет способ аутентификации по переменным окружения
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, new Properties());
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения; учётные данные из переменных окружения подхватываются драйвером так же, как в примере выше (например, через `spring.datasource.url`).
+
+  {% endlist %}
+
+- JavaScript
 
   ```typescript
     import { Driver, getCredentialsFromEnv } from 'ydb-sdk';
@@ -116,35 +201,47 @@
 
 - Python
 
-  ```python
+  {% list tabs %}
+
+  - Native SDK
+
+    {% include [auth-env](../../_includes/python/auth-env.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-env](../../_includes/python/async/auth-env.md) %}
+
+  - SQLAlchemy
+
+    ```python
     import os
+    import sqlalchemy as sa
     import ydb
 
-    with ydb.Driver(
-        connection_string=os.environ["YDB_CONNECTION_STRING"],
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=5)
-        ...
-  ```
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.credentials_from_env_variables()
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
 
-- Python (asyncio)
+  {% endlist %}
 
-  ```python
-    import os
-    import ydb
-    import asyncio
+- C#
 
-    async def ydb_init():
-        async with ydb.aio.Driver(
-            endpoint=os.environ["YDB_ENDPOINT"],
-            database=os.environ["YDB_DATABASE"],
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            await driver.wait()
-            ...
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-    asyncio.run(ydb_init())
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, FromEnvCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(FromEnvCredentials::new()?)
+      .client()?;
   ```
 
 - PHP

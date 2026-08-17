@@ -12,16 +12,6 @@ def always_return_custom(config, path, base, nxt):
     return "custom"
 
 
-def test_single_value_allowed():
-    """ """
-
-    def strat(name):
-        return name
-
-    sl = StrategyList(strat)
-    assert sl("foo") == "foo"
-
-
 def test_first_working_strategy_is_used():
     """
     In the case where the StrategyList has multiple values,

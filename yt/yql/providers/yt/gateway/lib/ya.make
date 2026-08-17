@@ -9,6 +9,9 @@ SRCS(
     map_builder.cpp
     query_cache.cpp
     query_cache.h
+    reduce_builder.h
+    reduce_builder-inl.h
+    reduce_builder.cpp
     session.h
     session.cpp
     transaction_cache.cpp

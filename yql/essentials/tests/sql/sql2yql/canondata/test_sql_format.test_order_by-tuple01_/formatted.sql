@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     Yql::Sort(
         AsList(3, 2, 1),

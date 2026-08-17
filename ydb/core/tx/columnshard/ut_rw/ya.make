@@ -4,9 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "memory" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "memory")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)
@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/tx_proxy
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata
@@ -32,8 +33,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SRCS(
     ut_columnshard_read_write.cpp
+    ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_backup.cpp
+    ut_flow_control_manager.cpp
 )
 
 END()

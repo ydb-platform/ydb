@@ -108,6 +108,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetVerbose(settings.Verbose);
+    for (const auto& storagePoolType : settings.StoragePoolTypes) {
+        ServerSettings->AddStoragePoolType(storagePoolType);
+    }
+    ServerSettings->SetDynamicNodeCount(settings.DynamicNodeCount);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
@@ -136,11 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetNeedStatsCollectors(settings.NeedsStatsCollectors);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -156,7 +160,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             auto* logStream = settings.LogStream;
             ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
                 });
             });
         } else {
@@ -174,7 +178,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
-    Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
+    if (settings.QueryReplayBackendFactory) {
+        ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
+    }
+
+    Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {
         auto options = settings.GrpcServerOptions;
@@ -204,6 +212,33 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     CountersRoot = settings.CountersRoot;
 
     Initialize(settings);
+}
+
+TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
+    TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(databasePath);
+
+    for (auto& [attrName, attrValue] : attributes) {
+        request.mutable_attributes()->emplace(attrName, attrValue);
+    }
+
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolType);
+    storage.set_count(1);
+
+    if (!Tenants) {
+        Tenants = MakeHolder<Tests::TTenants>(Server);
+    }
+    Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
+
+    // Setup discovery
+    for (auto nodeIdx : Tenants->List(databasePath)) {
+        GetTestServer().EnableGRpc(PortManager.GetPort(), nodeIdx, databasePath);
+    }
+
+    return databasePath;
 }
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,
@@ -627,8 +662,67 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
+static void SplitYsonListAtTopLevel(const TString& yson, std::vector<TString>& items) {
+    int depth = 0;
+    char inQuote = 0;
+    bool escape = false;
+    size_t start = 0;
+    const size_t len = yson.size();
+    for (size_t i = 0; i < len; ++i) {
+        const char c = yson[i];
+        if (inQuote) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && (inQuote == '"' || inQuote == '\'')) {
+                escape = true;
+            } else if (c == inQuote) {
+                inQuote = 0;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            inQuote = c;
+            continue;
+        }
+        if (c == '[') {
+            if (depth == 0) {
+                start = i + 1;
+            }
+            ++depth;
+            continue;
+        }
+        if (c == ']') {
+            if (depth == 1) {
+                TString item = yson.substr(start, i - start);
+                items.push_back(StripString(item));
+            }
+            --depth;
+            continue;
+        }
+        if (c == ';' && depth == 1) {
+            TString item = yson.substr(start, i - start);
+            items.push_back(StripString(item));
+            start = i + 1;
+        }
+    }
+}
+
+TString SortYsonList(const TString& yson) {
+    std::vector<TString> items;
+    SplitYsonListAtTopLevel(yson, items);
+    std::sort(items.begin(), items.end());
+    return "[" + JoinSeq(";", items) + "]";
+}
+
 void CompareYson(const TString& expected, const TString& actual, const TString& message) {
     UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
+}
+
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        ReformatYson(SortYsonList(expected)),
+        ReformatYson(SortYsonList(actual)),
+        message);
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
@@ -739,6 +833,11 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 }
 
 void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
     auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     return AssertTableStats(stats, table, expectedStats);
 }
@@ -1853,7 +1952,7 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 }
 
@@ -1881,6 +1980,10 @@ Tests::TServer& TTestExtEnv::GetServer() const {
 
 Tests::TClient& TTestExtEnv::GetClient() const {
     return *Client;
+}
+
+const TString& TTestExtEnv::GetEndpoint() const {
+    return Endpoint;
 }
 
 void CheckOwner(TSession& session, const TString& path, const TString& name) {

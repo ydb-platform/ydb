@@ -2,9 +2,10 @@ UNITTEST_FOR(ydb/core/blobstorage/nodewarden)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -18,6 +19,7 @@ SRCS(
     blobstorage_node_warden_ut.cpp
     bind_queue_ut.cpp
     distconf_ut.cpp
+    node_warden_cache_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

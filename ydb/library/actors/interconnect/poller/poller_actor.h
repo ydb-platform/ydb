@@ -5,6 +5,10 @@
 
 #include "poller.h"
 
+namespace NMonitoring {
+    struct TDynamicCounters;
+}
+
 namespace NActors {
     struct TEvPollerRegister : TEventLocal<TEvPollerRegister, ui32(ENetwork::EvPollerRegister)> {
         const TIntrusivePtr<TSharedDescriptor> Socket; // socket to watch for
@@ -63,7 +67,7 @@ namespace NActors {
         {}
     };
 
-    IActor* CreatePollerActor();
+    IActor* CreatePollerActor(TIntrusivePtr<NMonitoring::TDynamicCounters> counters = {});
 
     inline TActorId MakePollerActorId() {
         char x[12] = {'I', 'C', 'P', 'o', 'l', 'l', 'e', 'r', '\xDE', '\xAD', '\xBE', '\xEF'};

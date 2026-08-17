@@ -8,14 +8,17 @@ It happens if the tx remains in the deadline queue for too long,
 gets out of there to be cancelled, and at the same time the shard receives
 a TEvCancelTransactionProposal from kqp. So, we have two TTxProposeCancel in the queue.
 */
-class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> {
+class TColumnShard::TTxProposeCancel: public TTransactionBase<TColumnShard> {
 public:
     TTxProposeCancel(TColumnShard* self, const ui64 txId)
         : TTransactionBase(self)
         , TxId(txId)
-    { }
+    {
+    }
 
-    TTxType GetTxType() const override { return TXTYPE_PROPOSE_CANCEL; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PROPOSE_CANCEL;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxProposeCancel.Execute");
@@ -54,4 +57,4 @@ void TColumnShard::CancelTransaction(const ui64 txId) {
     Execute(new TTxProposeCancel(this, txId));
 }
 
-}
+}   // namespace NKikimr::NColumnShard

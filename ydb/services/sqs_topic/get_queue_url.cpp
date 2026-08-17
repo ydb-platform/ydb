@@ -6,6 +6,8 @@
 #include "request.h"
 #include "utils.h"
 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -37,8 +39,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -50,8 +53,9 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
-    class TGetQueueUrlActor:
-        public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>
+    class TGetQueueUrlActor
+        : public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>
+        , public TCdcStreamCompatible
     {
     protected:
         using TBase = TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>;
@@ -79,7 +83,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
-            if (auto check = ValidateQueueName(QueueName); !check.has_value()) {
+            if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
             SendDescribeProposeRequest(ctx);
@@ -96,9 +100,14 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", this->TopicPath);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (ProcessCdc(response)) {
+                        return;
+                    }
+                }
                 if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                     return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
                 }
@@ -109,10 +118,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-            Y_ABORT_UNLESS(response.PQGroupInfo);
+            AFL_ENSURE(response.PQGroupInfo)("path", this->TopicPath);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName);
+            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());
             if (!ConsumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", ConsumerName.c_str())));
             }
@@ -125,10 +134,12 @@ namespace NKikimr::NSqsTopic::V1 {
         void ReplyAndDie(const TActorContext& ctx) {
             Ydb::Ymq::V1::GetQueueUrlResult result;
 
+            const TString consumerInUrl = NPersQueue::ConvertOldConsumerName(ConsumerConfig->GetName(), ctx);
+
             const TRichQueueUrl queueUrl{
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
-                .Consumer = this->ConsumerName,
+                .Consumer = consumerInUrl,
                 .Fifo = QueueName.EndsWith(".fifo"),
             };
 

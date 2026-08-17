@@ -13,6 +13,11 @@ NKikimr::TConclusionStatus TConfirmSessionControl::DoApply(const std::shared_ptr
 NKikimr::TConclusionStatus TAbortSessionControl::DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const {
     auto exportSession = dynamic_pointer_cast<TSession>(session);
     AFL_VERIFY(exportSession);
+    if (exportSession->IsFinished() || exportSession->IsReadyForRemoveOnFinished()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_control_skipped_terminal_session")("is_finished", exportSession->IsFinished())(
+            "is_aborted", exportSession->IsReadyForRemoveOnFinished());
+        return TConclusionStatus::Success();
+    }
     exportSession->Abort("Aborted by user");
     return TConclusionStatus::Success();
 }
@@ -39,7 +44,7 @@ NKikimrColumnShardExportProto::TSessionControlContainer TConfirmSessionControl::
     return result;
 }
 
-TConclusionStatus TConfirmSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
+TConclusionStatus TConfirmSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) {
     return TConclusionStatus::Success();
 }
 
@@ -47,8 +52,8 @@ TString TConfirmSessionControl::GetClassNameStatic() {
     return "CS::EXPORT::CONFIRM";
 }
 
-TConclusionStatus TAbortSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
+TConclusionStatus TAbortSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) {
     return TConclusionStatus::Success();
 }
 
-} // namespace NKikimr::NOlap::NExport
+}   // namespace NKikimr::NOlap::NExport

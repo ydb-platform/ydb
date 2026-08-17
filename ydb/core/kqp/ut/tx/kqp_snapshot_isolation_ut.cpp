@@ -331,7 +331,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST(TSnapshotTwoInsertOlap) {
         TSnapshotTwoInsert tester;
         tester.SetIsOlap(true);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
@@ -339,7 +338,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST(TSnapshotTwoInsertOltp) {
         TSnapshotTwoInsert tester;
         tester.SetIsOlap(false);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
@@ -464,7 +462,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOlap, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(true);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.UpdateAfterInsert = UpdateAfterInsert;
@@ -474,7 +471,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOltp, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(false);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.UpdateAfterInsert = UpdateAfterInsert;
@@ -503,6 +499,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             )"), TTxControl::Tx(*tx1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
 
             // tx1 reads KV2 and sees the row
             result = session1.ExecuteQuery(Q_(R"(
@@ -511,6 +508,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[1u;["val1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
 
             // tx1 commits
             result = tx1->Commit().ExtractValueSync();
@@ -989,6 +987,64 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.SetIsUpdate(IsUpdate);
+        tester.Execute();
+    }
+
+    class TBrokenLocksReadAfterUpsert : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Name == "Paul";
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+            UNIT_ASSERT(tx1->IsActive());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                VALUES (1U, "Paul", "Changed");
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session2.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                VALUES (1U, "Paul", "Changed Other");
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Name == "Paul";
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            if (GetIsOlap()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else  {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            }
+
+            if (GetIsOlap()) {
+                result = session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul";
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TBrokenLocksReadAfterUpsertOltp) {
+        TBrokenLocksReadAfterUpsert tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TBrokenLocksReadAfterUpsertOlap) {
+        TBrokenLocksReadAfterUpsert tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

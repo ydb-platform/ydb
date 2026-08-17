@@ -15,4 +15,10 @@ inline void PermissionToSchemeEntry(const TFrom& from, std::vector<NScheme::TPer
     }
 }
 
+namespace NScheme {
+
+void SchemeEntryToProto(const TSchemeEntry& entry, ::Ydb::Scheme::Entry* proto);
+
+} // namespace NScheme
+
 } // namespace NYdb

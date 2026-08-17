@@ -21,7 +21,7 @@ public:
 
 using TFetchResultPtr = TIntrusivePtr<IFetchResult>;
 
-THttpURL ParseURL(const TStringBuf addr);
+THttpURL ParseURL(TStringBuf addr);
 IRetryPolicy<unsigned>::TPtr GetDefaultPolicy();
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code);
 THttpURL AppendUrlPath(const THttpURL& url, const TString& part);

@@ -2,6 +2,8 @@
 
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -19,14 +21,16 @@ struct TEvKqpSnapshot {
             , Orbit(std::move(orbit))
             , Cookie(cookie) {}
 
-        explicit TEvCreateSnapshotRequest(ui64 cookie, NLWTrace::TOrbit&& orbit = {})
+        explicit TEvCreateSnapshotRequest(TVector<NKikimr::TTableId> tableIds, ui64 cookie, NLWTrace::TOrbit&& orbit = {})
             : Tables({})
             , MvccSnapshot(true)
+            , TableIds(std::move(tableIds))
             , Orbit(std::move(orbit))
             , Cookie(cookie) {}
 
         const TVector<TString> Tables;
         const bool MvccSnapshot;
+        const TVector<NKikimr::TTableId> TableIds;
         NLWTrace::TOrbit Orbit;
         ui64 Cookie;
     };
@@ -34,14 +38,16 @@ struct TEvKqpSnapshot {
     struct TEvCreateSnapshotResponse : public TEventLocal<TEvCreateSnapshotResponse,
         TKqpSnapshotEvents::EvCreateSnapshotResponse>
     {
-        TEvCreateSnapshotResponse(const IKqpGateway::TKqpSnapshot& snapshot,
+        TEvCreateSnapshotResponse(const IKqpGateway::TKqpSnapshot& snapshot, TSnapshotHandle&& snapshotHandle,
             NKikimrIssues::TStatusIds::EStatusCode status, NYql::TIssues&& issues, NLWTrace::TOrbit&& orbit)
             : Snapshot(snapshot)
+            , SnapshotHandle(std::move(snapshotHandle))
             , Status(status)
             , Issues(std::move(issues))
             , Orbit(std::move(orbit)) {}
 
         const IKqpGateway::TKqpSnapshot Snapshot;
+        TSnapshotHandle SnapshotHandle;
         const NKikimrIssues::TStatusIds::EStatusCode Status;
         const NYql::TIssues Issues;
         NLWTrace::TOrbit Orbit;

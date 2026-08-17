@@ -83,7 +83,8 @@ private:
         TString filename(TStringBuf("embedded:"));
         filename += name;
 
-        TPyObjectPtr module, code;
+        TPyObjectPtr module;
+        TPyObjectPtr code;
         if (HasEncodingCookie(source)) {
             code.ResetSteal(Py_CompileString(source.data(), filename.data(), Py_file_input));
         } else {

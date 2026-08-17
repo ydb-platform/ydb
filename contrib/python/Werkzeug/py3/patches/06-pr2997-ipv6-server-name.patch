@@ -1,0 +1,13 @@
+# Backport of https://github.com/pallets/werkzeug/pull/2997 (Werkzeug 3.1.3).
+--- contrib/python/Werkzeug/py3/werkzeug/sansio/utils.py	(index)
++++ contrib/python/Werkzeug/py3/werkzeug/sansio/utils.py	(working tree)
+@@ -79,6 +79,9 @@ def get_host(
+     elif server is not None:
+         host = server[0]
+ 
++        if ":" in host and host[0] != "[":
++            host = f"[{host}]"
++
+         if server[1] is not None:
+             host = f"{host}:{server[1]}"
+ 

@@ -33,13 +33,14 @@ public:
     }
 
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        Callback(Promise, std::move(*ev->Get()));
+        Callback(std::move(Promise), std::move(*ev->Get()));
         this->Die(ctx);
     }
 
     void HandleUnexpectedEvent(const TString& requestType, ui32 eventType) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, "TRequestHandlerBase, unexpected event, request type: "
-            << requestType << ", event type: " << eventType);
+        YDB_LOG_CRIT_COMP(NKikimrServices::KQP_GATEWAY, "TRequestHandlerBase, unexpected event",
+            {"requestType", requestType},
+            {"eventType", eventType});
 
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, TStringBuilder()
             << "Unexpected event in " << requestType << ": " << eventType)));
@@ -68,8 +69,18 @@ public:
         this->Die(ctx);
     }
 
+    ~TRequestHandlerBase() override {
+        if (Promise.Initialized() && !Promise.IsReady()) {
+            Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Shutting down.", {}));
+        }
+    }
+
 protected:
     THolder<TRequest> Request;
+    // Note: Promise must be moved into Callback to avoid racing with
+    // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
 };

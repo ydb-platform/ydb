@@ -19,18 +19,21 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
+
 namespace NMonitoring {
     struct TDynamicCounters;
 } // NMonitoring
 
 namespace NYdbGrpc {
 
-static std::atomic<int> GrpcDead = 0;
+extern std::atomic<bool> GrpcDead;
 struct TSslData {
     TString Cert;
     TString Key;
     TString Root;
     bool DoRequestClientCertificate = false;
+    bool ClientCertificateRequired = false;
 };
 
 struct IExternalListener

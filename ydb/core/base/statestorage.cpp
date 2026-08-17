@@ -250,7 +250,7 @@ bool operator!=(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInf
 }
 
 static void CopyStateStorageRingInfo(
-    const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
+    const NKikimrConfig::TStateStorageConfig::TRing &source,
     TStateStorageInfo::TRingGroup& ringGroup,
     char *serviceId,
     ui32 depth,
@@ -268,7 +268,7 @@ static void CopyStateStorageRingInfo(
         for (ui32 iring = 0, ering = source.RingSize(); iring != ering; ++iring) {
             serviceId[depth] = (iring + 1);
 
-            const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ring = source.GetRing(iring);
+            const NKikimrConfig::TStateStorageConfig::TRing &ring = source.GetRing(iring);
             ringGroup.Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
             ringGroup.Rings[iring].IsDisabled = ring.GetIsDisabled();
 
@@ -314,29 +314,30 @@ static void CopyStateStorageRingInfo(
     Y_ABORT("must have rings or legacy node config");
 }
 
-ERingGroupState GetRingGroupState(const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ringGroup) {
+ERingGroupState GetRingGroupState(const NKikimrConfig::TStateStorageConfig::TRing &ringGroup) {
     if (!ringGroup.HasPileState()) {
         return ERingGroupState::PRIMARY;
     }
     switch (ringGroup.GetPileState()) {
-        case NKikimrConfig::TDomainsConfig::TStateStorage::PRIMARY:
-        case NKikimrConfig::TDomainsConfig::TStateStorage::PROMOTED:
+        case NKikimrConfig::TStateStorageConfig::PRIMARY:
+        case NKikimrConfig::TStateStorageConfig::PROMOTED:
             return ERingGroupState::PRIMARY;
-        case NKikimrConfig::TDomainsConfig::TStateStorage::SYNCHRONIZED:
-        case NKikimrConfig::TDomainsConfig::TStateStorage::DEMOTED:
+        case NKikimrConfig::TStateStorageConfig::SYNCHRONIZED:
+        case NKikimrConfig::TStateStorageConfig::DEMOTED:
             return ERingGroupState::SYNCHRONIZED;
-        case NKikimrConfig::TDomainsConfig::TStateStorage::NOT_SYNCHRONIZED:
+        case NKikimrConfig::TStateStorageConfig::NOT_SYNCHRONIZED:
             return ERingGroupState::NOT_SYNCHRONIZED;
-        case NKikimrConfig::TDomainsConfig::TStateStorage::DISCONNECTED:
+        case NKikimrConfig::TStateStorageConfig::DISCONNECTED:
             return ERingGroupState::DISCONNECTED;
         default:
             Y_ABORT("Unsupported ring group pile state");
     }
 }
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix,
-        const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const TString& namePrefix,
+        const NKikimrConfig::TStateStorageConfig& config) {
     char name[TActorId::MaxServiceIDLength];
-    strcpy(name, namePrefix);
+    Y_ABORT_UNLESS(namePrefix.size() < TActorId::MaxServiceIDLength - sizeof(ui32) * 2);
+    memcpy(name, namePrefix.c_str(), namePrefix.size());
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     info->ClusterStateGeneration = config.GetClusterStateGeneration();
     info->ClusterStateGuid = config.GetClusterStateGuid();
@@ -349,14 +350,13 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
         info->CompatibleVersions.push_back(version);
     }
 
-    const size_t offset = FindIndex(name, char()) + sizeof(ui32);
-    Y_ABORT_UNLESS(offset != NPOS && (offset) < TActorId::MaxServiceIDLength);
+    const size_t offset = namePrefix.size() + sizeof(ui32);
     const ui32 stateStorageGroup = 1;
     memcpy(name + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
-        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId), {}});
+        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), {}});
         CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset, ringGroup.GetRingGroupActorIdOffset());
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
@@ -368,19 +368,19 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
     return info;
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config) {
     return BuildStateStorageInfoImpl("ssr", config);
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config) {
     return BuildStateStorageInfoImpl("ssb", config);
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TStateStorageConfig& config) {
     return BuildStateStorageInfoImpl("sbr", config);
 }
 
-void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)

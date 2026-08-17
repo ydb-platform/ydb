@@ -110,6 +110,27 @@ struct privcmd_irqfd {
 	__u8 pad[2];
 };
 
+/* For privcmd_ioeventfd::flags */
+#define PRIVCMD_IOEVENTFD_FLAG_DEASSIGN (1 << 0)
+
+struct privcmd_ioeventfd {
+	__u64 ioreq;
+	__u64 ports;
+	__u64 addr;
+	__u32 addr_len;
+	__u32 event_fd;
+	__u32 vcpus;
+	__u32 vq;
+	__u32 flags;
+	domid_t dom;
+	__u8 pad[2];
+};
+
+struct privcmd_pcidev_get_gsi {
+	__u32 sbdf;
+	__u32 gsi;
+};
+
 /*
  * @cmd: IOCTL_PRIVCMD_HYPERCALL
  * @arg: &privcmd_hypercall_t
@@ -139,5 +160,9 @@ struct privcmd_irqfd {
 	_IOC(_IOC_NONE, 'P', 7, sizeof(struct privcmd_mmap_resource))
 #define IOCTL_PRIVCMD_IRQFD					\
 	_IOW('P', 8, struct privcmd_irqfd)
+#define IOCTL_PRIVCMD_IOEVENTFD					\
+	_IOW('P', 9, struct privcmd_ioeventfd)
+#define IOCTL_PRIVCMD_PCIDEV_GET_GSI				\
+	_IOC(_IOC_NONE, 'P', 10, sizeof(struct privcmd_pcidev_get_gsi))
 
 #endif /* __LINUX_PUBLIC_PRIVCMD_H__ */

@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    event_loop.cpp
-    event_loop.h
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
     txusage_fixture.cpp

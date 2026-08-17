@@ -165,7 +165,6 @@ struct TKqpScriptExecutionEvents {
         EvScriptFinalizeRequest,
         EvScriptFinalizeResponse,
         EvSaveScriptFinalStatusResponse,
-        EvGetScriptExecutionOperationQueryResponse,
         EvDescribeSecretsResponse,
         EvSaveScriptResultPartFinished,
         EvScriptExecutionsTableCreationFinished,
@@ -179,6 +178,7 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptProgressResponse,
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
+        EvDescribeResourceIdResponse,
     };
 };
 
@@ -189,17 +189,7 @@ struct TKqpResourceInfoExchangerEvents {
     };
 };
 
-struct TKqpWorkloadServiceEvents {
-    enum EKqpWorkloadServiceEvents {
-        EvPlaceRequestIntoPool = EventSpaceBegin(TKikimrEvents::ES_KQP) + 700,
-        EvContinueRequest,
-        EvCleanupRequest,
-        EvCleanupResponse,
-        EvUpdatePoolInfo,
-        EvSubscribeOnPoolChanges,
-        EvFetchDatabaseResponse,
-    };
-};
+
 
 struct TKqpBufferWriterEvents {
     enum EKqpBufferWriterEvents {

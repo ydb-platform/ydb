@@ -41,10 +41,10 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
     virtual double ComputeJoinCost(
-        const NYql::TOptimizerStatistics& leftStats, 
-        const NYql::TOptimizerStatistics& rightStats, 
-        const double outputRows, 
-        const double outputByteSize, 
+        const NYql::TOptimizerStatistics& leftStats,
+        const NYql::TOptimizerStatistics& rightStats,
+        const double outputRows,
+        const double outputByteSize,
         NYql::EJoinAlgoType joinAlgo
     ) const override;
 
@@ -83,19 +83,19 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 
 
 double TDqCBOProviderContext::ComputeJoinCost(
-    const TOptimizerStatistics& leftStats, 
-    const TOptimizerStatistics& rightStats, 
-    const double outputRows, 
-    const double outputByteSize, 
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const double outputRows,
+    const double outputByteSize,
     EJoinAlgoType joinAlgo
 ) const  {
     Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {
         case EJoinAlgoType::MapJoin:
-            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 1.8 * rightStats.ByteSize + outputRows);
         case EJoinAlgoType::GraceJoin:
-            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputRows);
         default:
             Y_ENSURE(false, "Illegal join type encountered");
             return 0;
@@ -166,7 +166,7 @@ protected:
         return DqFlatMapOverExtend(node, ctx);
     }
 
-    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         if (!Config->UseFinalizeByKey.Get().GetOrElse(false) && node.Maybe<TCoAggregate>()) {
             auto aggregate = node.Cast<TCoAggregate>();
             auto input = aggregate.Input().Maybe<TDqConnection>();
@@ -188,8 +188,8 @@ protected:
                 const auto lateArrivalDelay = TDuration::MilliSeconds(Config->WatermarksLateArrivalDelayMs
                     .Get()
                     .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
-                bool defaultWatermarksMode = Config->WatermarksMode.Get() == "default";
-                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
+                bool defaultWatermarksMode = Config->WatermarksMode.Get().GetOrElse("disable") != "disable";
+                return NHopping::RewriteAsHoppingWindow(node, ctx, getParents, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
             } else {
                 NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
                 return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false), spillingSettings.IsAggregationSpillingEnabled());

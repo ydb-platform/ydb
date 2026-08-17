@@ -4,7 +4,6 @@
 #pragma once
 
 #include <stddef.h>
-#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <map>
@@ -60,6 +59,8 @@ public:
   FilteredOrderedAttributeMap(FilteredOrderedAttributeMap &&other)                 = default;
   FilteredOrderedAttributeMap &operator=(const FilteredOrderedAttributeMap &other) = default;
   FilteredOrderedAttributeMap &operator=(FilteredOrderedAttributeMap &&other)      = default;
+
+  ~FilteredOrderedAttributeMap() = default;
 
   //
   // equality operator

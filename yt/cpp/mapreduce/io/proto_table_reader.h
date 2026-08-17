@@ -31,6 +31,8 @@ public:
     TMaybe<size_t> GetReadByteCount() const override;
     bool IsEndOfStream() const override;
     bool IsRawReaderExhausted() const override;
+    void Abort() override;
+    bool IsAborted() const override;
 
 private:
     std::unique_ptr<TNodeTableReader> NodeReader_;
@@ -64,6 +66,8 @@ public:
     TMaybe<size_t> GetReadByteCount() const override;
     bool IsEndOfStream() const override;
     bool IsRawReaderExhausted() const override;
+    void Abort() override;
+    bool IsAborted() const override;
 
 protected:
     void SkipRow() override;

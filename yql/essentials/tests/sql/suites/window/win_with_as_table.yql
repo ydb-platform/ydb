@@ -1,4 +1,3 @@
-/* postgres can not */
 select k,
   SUM(k) over w1 as s1,
   SUM(k) over w2 as s2

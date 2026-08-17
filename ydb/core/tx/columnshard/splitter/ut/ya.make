@@ -4,6 +4,8 @@ SIZE(SMALL)
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow/accessor/dictionary
+    ydb/core/formats/arrow/accessor/plain
     ydb/core/kqp/common
     ydb/core/kqp/session_actor
     ydb/core/mind
@@ -16,7 +18,9 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
+    ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/data_accessor
     ydb/core/tx/tx_proxy
     ydb/library/arrow_kernels

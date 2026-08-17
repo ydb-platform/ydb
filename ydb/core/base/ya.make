@@ -15,6 +15,7 @@ SRCS(
     bridge.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_data_kind.h
     blobstorage_grouptype.cpp
     blobstorage_relevance.cpp
     boot_type.h
@@ -36,6 +37,8 @@ SRCS(
     group_stat.cpp
     group_stat.h
     hive.h
+    http_database_param.cpp
+    http_database_param.h
     interconnect_channels.h
     kmeans_clusters.cpp
     local_user_token.cpp
@@ -46,11 +49,13 @@ SRCS(
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
     nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    request_types.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -74,6 +79,7 @@ SRCS(
     table_index.cpp
     tablet.cpp
     tablet.h
+    tablet_history_cutter.h
     tablet_killer.cpp
     tablet_pipe.h
     tablet_pipecache.h
@@ -106,6 +112,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
+    library/cpp/svnversion
     library/cpp/time_provider
     ydb/core/audit/audit_config
     ydb/core/base/generated
@@ -125,7 +132,10 @@ PEERDIR(
     ydb/public/api/protos/out
     yql/essentials/minikql
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
+
+YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
@@ -135,6 +145,7 @@ ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(auth.h)
 
 END()
 
@@ -142,8 +153,13 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
+    ut_backtrace
     ut_board_subscriber
+    ut_http_database_param
 )
+ENDIF()
+

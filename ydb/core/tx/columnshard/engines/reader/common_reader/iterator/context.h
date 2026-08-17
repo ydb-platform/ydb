@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
@@ -31,6 +32,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, ProcessMemoryGuard);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TScopeGuard>, ProcessScopeGuard);
+    const EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator;
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
@@ -83,6 +85,12 @@ public:
         return ProcessMemoryGuard->GetProcessId();
     }
 
+    bool SendToGroupedMemoryAllocation(const ui64 groupId, const std::vector<std::shared_ptr<NGroupedMemoryManager::IAllocation>>& tasks,
+        const std::optional<ui32>& stageIdx) const {
+        return SendScanToAllocation(
+            GroupedMemoryLimiterOperator, GetProcessMemoryControlId(), GetCommonContext()->GetScanId(), groupId, tasks, stageIdx);
+    }
+
     bool IsActive() const {
         return !CommonContext->IsAborted();
     }
@@ -96,7 +104,8 @@ public:
     }
 
     virtual ~TSpecialReadContext() {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"fetching", DebugString()});
     }
 
     TString DebugString() const;

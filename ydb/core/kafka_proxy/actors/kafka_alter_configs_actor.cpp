@@ -6,6 +6,9 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <ydb/core/persqueue/public/schema/common.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
 
@@ -52,7 +55,10 @@ public:
         , CleanupPolicy(cleanupPolicy)
         , TimestampType(timestampType)
     {
-        KAFKA_LOG_D("Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
+        YDB_LOG_DEBUG("Alter configs actor",
+            {LogPrefix()},
+            {"databaseName", databaseName},
+            {"topicPath", TopicPath});
     };
 
     ~TAlterConfigsActor() = default;
@@ -64,7 +70,6 @@ public:
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(selfInfo);
-        const auto& pqConfig = appData->PQConfig;
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
@@ -88,15 +93,15 @@ public:
                 appData->PQConfig
             );
         } else if (!pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
-            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
-            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
             compConsumer.set_important(true);
-            compConsumer.set_starting_message_timestamp_ms(0);
-            NKikimr::NGRpcProxy::V1::AddReadRuleToConfig(
+            compConsumer.mutable_read_from()->set_seconds(0);
+            NKikimr::NPQ::NSchema::AddConsumer(
                 groupConfig.MutablePQTabletConfig(),
                 compConsumer,
-                NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig),
-                pqConfig,
+                NKikimr::NPQ::NSchema::GetSupportedClientServiceTypes(),
+                false, // checkServiceType
                 nullptr);
         }
     }
@@ -117,7 +122,9 @@ NActors::IActor* CreateKafkaAlterConfigsActor(
 
 void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    KAFKA_LOG_D(InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -267,7 +274,9 @@ void TKafkaAlterConfigsActor::ProcessValidateOnly(const NActors::TActorContext& 
         response->Responses.push_back(responseResource);
     }
 
-    KAFKA_LOG_D("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId == " << CorrelationId);
+    YDB_LOG_DEBUG("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId",
+        {LogPrefix()},
+        {"correlationId", CorrelationId});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, NONE_ERROR));
     Die(ctx);

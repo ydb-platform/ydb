@@ -1998,7 +1998,7 @@ Y_UNIT_TEST(TestPerfValidate) {
 Y_UNIT_TEST(TestPerfParse) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     std::array<NUdf::TUnboxedValue, Steps> v;
@@ -2014,7 +2014,7 @@ Y_UNIT_TEST(TestPerfParse) {
 Y_UNIT_TEST(TestPerfSerialize) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     const auto dom = TryParseYsonDom(yson, &builder);
@@ -2031,7 +2031,7 @@ Y_UNIT_TEST(TestPerfSerialize) {
 Y_UNIT_TEST(TestPerfSerializeText) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     const auto dom = TryParseYsonDom(yson, &builder);
@@ -2048,7 +2048,7 @@ Y_UNIT_TEST(TestPerfSerializeText) {
 Y_UNIT_TEST(TestPerfSerializePrettyText) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     const auto dom = TryParseYsonDom(yson, &builder);
@@ -2065,7 +2065,7 @@ Y_UNIT_TEST(TestPerfSerializePrettyText) {
 Y_UNIT_TEST(TestSerializeJsonNanInf) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     constexpr char yson[] =
@@ -2080,7 +2080,7 @@ Y_UNIT_TEST(TestSerializeJsonNanInf) {
     TString expected(R"({"Inf":"inf","Nan":"nan","NegInf":"-inf"})");
 
     const auto dom = TryParseYsonDom(yson, &builder);
-    TString res = SerializeJsonDom(dom, false, true, true);
+    TString res = SerializeJsonDom(dom, /*skipMapEntity=*/false, /*encodeUtf8=*/true, /*writeNanAsString=*/true);
 
     UNIT_ASSERT_EQUAL(expected, res);
 }

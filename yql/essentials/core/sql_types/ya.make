@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/core/issue
+    yql/essentials/public/decimal
 )
 
 GENERATE_ENUM_SERIALIZATION(hopping.h)

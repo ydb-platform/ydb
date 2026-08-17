@@ -1,12 +1,15 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -64,13 +67,20 @@ public:
             ++CurrentTxIndex;
         }
 
-        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput),
-            TKqpPhysicalQuery(input), std::move(TxResults),
+        SetPlans(input, query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), TKqpPhysicalQuery(input), std::move(TxResults), 
             ctx, Gateway->GetDatabase(), Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
-        query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 
-        TransformCtx->ExplainTransformerInput = nullptr;
         return TStatus::Ok;
+    }
+
+    virtual void SetPlans(NYql::TExprNode::TPtr input, NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+             TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+            const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+            NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
+
+        PhyQuerySetTxPlans(queryProto, query, peepHoleOptimizedQuery, pureTxResults, ctx, database, cluster, tablesData, config, typeCtx, optCtx);
+        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        TransformCtx->ExplainTransformerInput = nullptr;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& /*input*/) override {
@@ -100,7 +110,7 @@ public:
         TxResults.clear();
     }
 
-private:
+protected:
     bool PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx) {
         for (const auto& paramBinding : tx->GetParamBindings()) {
             bool res = TransformCtx->QueryCtx->QueryData->MaterializeParamValue(/*ensure*/ false,
@@ -126,6 +136,47 @@ private:
     TIntrusivePtr<NOpt::TKqpOptimizeContext> OptimizeCtx;
 };
 
+class TKqpRBOExplainPreparedTransformer : public TKqpExplainPreparedTransformer {
+public:
+    TKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
+        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+        TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) :
+            TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optCtx)
+        {}
+
+        void SetPlans(NYql::TExprNode::TPtr input, NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+             TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+            const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+            NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
+
+        Y_UNUSED(peepHoleOptimizedQuery);
+        Y_UNUSED(pureTxResults);
+        Y_UNUSED(database);
+        Y_UNUSED(cluster);
+        Y_UNUSED(tablesData);
+        Y_UNUSED(config);
+        Y_UNUSED(typeCtx);
+        Y_UNUSED(optCtx);
+
+        // PlanJson is a plan for a transaction, we need to reshape it into a query plan
+        if (TransformCtx->PlanJson.has_value()) {
+            //FIXME: We set the plan for the last transaction in the query
+            auto txId = query.Transactions().Size() - 1;
+            auto & txProto = (*queryProto.MutableTransactions())[txId];
+            auto & plan = TransformCtx->PlanJson.value();
+
+            NJsonWriter::TBuf txWriter;
+            txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
+            txProto.SetPlan(txWriter.Str());
+
+            queryProto.SetQueryPlan(SerializeRBOExplainPlan(plan));
+        }
+        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+    }
+
+};
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -134,5 +185,11 @@ TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IK
     return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+TAutoPtr<IGraphTransformer> CreateKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
+    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx)
+{
+    return new TKqpRBOExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
+}
+
+} // namespace NKikimr::NKqp

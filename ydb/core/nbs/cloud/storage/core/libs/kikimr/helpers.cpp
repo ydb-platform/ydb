@@ -8,8 +8,9 @@ using namespace NActors;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NProto::TError MakeKikimrError(NKikimrProto::EReplyStatus status,
-                               TString errorReason)
+NProto::TError MakeKikimrError(
+    NKikimrProto::EReplyStatus status,
+    TString errorReason)
 {
     NProto::TError error;
 
@@ -26,8 +27,9 @@ NProto::TError MakeKikimrError(NKikimrProto::EReplyStatus status,
     return error;
 }
 
-NProto::TError MakeSchemeShardError(NKikimrScheme::EStatus status,
-                                    TString errorReason)
+NProto::TError MakeSchemeShardError(
+    NKikimrScheme::EStatus status,
+    TString errorReason)
 {
     NProto::TError error;
 

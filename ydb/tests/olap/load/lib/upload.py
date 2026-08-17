@@ -107,12 +107,12 @@ class UploadClusterBase(UploadSuiteBase):
     @classmethod
     def __compaction_complete_for_table(cls, table_full_path: str) -> bool:
         sth = ScenarioTestHelper(None)
-        result = sth.execute_scan_query(f'''
+        result = sth.execute_query(f'''
             SELECT COUNT(*)
             FROM `{table_full_path}/.sys/primary_index_optimizer_stats`
             WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0
         ''')
-        return result.result_set.rows[0][0] == 0
+        return result[0].rows[0][0] == 0
 
     @classmethod
     def __compaction_complete(cls) -> bool:
@@ -126,7 +126,7 @@ class UploadClusterBase(UploadSuiteBase):
     def __stats_ready_for_table(cls,  table_full_path: str) -> bool:
         def __max_e_rows(node: dict):
             if node.get('Name') == 'TableFullScan' and node.get('Path') == table_full_path:
-                return int(node.get('E-Rows', 0))
+                return float(node.get('E-Rows', 0))
             children = [__max_e_rows(o) for o in node.get('Operators', [])] + [__max_e_rows(p) for p in node.get('Plans', [])]
             return max(children) if len(children) > 0 else 0
 

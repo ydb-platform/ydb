@@ -52,11 +52,15 @@ def _remove_default_headers(data: "Any") -> "Any":
             "Connection",
             "Content-Encoding",
         ]
+        # HTTP header names are case-insensitive, and HTTP/2 servers send them
+        # lowercase, so match without regard to case.
+        keys_to_remove_lower = {key.lower() for key in keys_to_remove}
         for i, response in enumerate(data["responses"]):
-            for key in keys_to_remove:
-                if key in response["response"]["headers"]:
-                    del data["responses"][i]["response"]["headers"][key]
-            if not response["response"]["headers"]:
+            headers = data["responses"][i]["response"]["headers"]
+            for key in list(headers):
+                if key.lower() in keys_to_remove_lower:
+                    del headers[key]
+            if not headers:
                 del data["responses"][i]["response"]["headers"]
     return data
 

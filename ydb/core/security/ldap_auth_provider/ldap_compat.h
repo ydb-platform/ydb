@@ -24,6 +24,7 @@ enum class EOption {
     TLS_CERTFILE,
     TLS_KEYFILE,
     TLS_REQUIRE_CERT,
+    TLS_NEWCTX,
     PROTOCOL_VERSION,
 };
 

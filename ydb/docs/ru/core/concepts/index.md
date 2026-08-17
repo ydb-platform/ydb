@@ -6,7 +6,8 @@
 
 - [Глоссарий](glossary.md)
 - [Аналитические возможности](./analytics/index.md)
-- [Архитектура](architecture.md)
+- [Потоковая обработка](./streaming-query/index.md)
+- [Архитектура](architecture/index.md)
 - [Соединение с БД](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)

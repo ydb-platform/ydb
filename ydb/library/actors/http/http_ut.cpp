@@ -1,7 +1,7 @@
 #include "http.h"
 #include "http_proxy.h"
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -10,7 +10,12 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/resource/resource.h>
 #include <util/system/tempfile.h>
+#include <util/system/condvar.h>
+#include <util/network/address.h>
+#include <util/network/sock.h>
+#include <netinet/in.h>
 #include <thread>
+#include <atomic>
 
 enum EService : NActors::NLog::EComponent {
     MIN,
@@ -36,6 +41,22 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
         memcpy(request->Pos(), &c, 1);
         request->Advance(1);
     }
+}
+
+std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDescriptor>& socket) {
+    sockaddr_storage ss{};
+    socklen_t slen = sizeof(ss);
+    Y_ABORT_UNLESS(getsockname(socket->GetDescriptor(), reinterpret_cast<sockaddr*>(&ss), &slen) == 0);
+    if (ss.ss_family == AF_INET6) {
+        return {"::1", ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port)};
+    }
+    return {"127.0.0.1", ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)};
+}
+
+void AssertCanConnect(const TString& host, ui16 port) {
+    TNetworkAddress addr(host, port);
+    TSocket sock(addr);
+    UNIT_ASSERT(static_cast<SOCKET>(sock) != INVALID_SOCKET);
 }
 
 }
@@ -136,6 +157,83 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
         UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::ChunkLength);
+    }
+
+    Y_UNIT_TEST(BinaryDataInMethod) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryMethod = "G\x01T";
+        EatPartialString(request, binaryMethod + " /test HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http method");
+    }
+
+    Y_UNIT_TEST(BinaryDataInURL) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryUrl = "/test\x80path";
+        EatPartialString(request, "GET " + binaryUrl + " HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid url");
+    }
+
+    Y_UNIT_TEST(BinaryDataInProtocol) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HT\x01P/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInVersion) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HTTP/1\x02" "\x03" "1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http version");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeader) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Bad\x01Header: value";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeaderValue) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Header: val\x80ue";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(ValidURLWithSpecialChars) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test?key=value&foo=bar%20baz#fragment HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "GET");
+        UNIT_ASSERT_EQUAL(request->URL, "/test?key=value&foo=bar%20baz#fragment");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseProtocol) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        EatPartialString(response, "HT\x01P/1.1 200 OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseStatus) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryStatus = "2\x80" "0";
+        EatPartialString(response, "HTTP/1.1 " + binaryStatus + " OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http status");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseMessage) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryMessage = "O\x01K";
+        EatPartialString(response, "HTTP/1.1 200 " + binaryMessage + "\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http message");
     }
 
     Y_UNIT_TEST(BasicPost) {
@@ -1483,14 +1581,46 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 }
 
 Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
+    // Backend that does not save anything and only signals
+    // when a given substring is written to the log to avoid Sleep().
+    class TSignalingLogBackend : public TLogBackend {
+    public:
+        TSignalingLogBackend(TStringBuf expectedSubstring)
+            : ExpectedSubstring_(expectedSubstring)
+        {
+        }
+
+        void WriteData(const TLogRecord& rec) override {
+            if (TStringBuf(rec.Data, rec.Len).Contains(ExpectedSubstring_)) {
+                Seen_.store(true);
+                TGuard<TMutex> g(Mutex_);
+                CondVar_.Signal();
+            }
+        }
+
+        void ReopenLog() override {}
+
+        void WaitFor(TDuration timeout) {
+            TGuard<TMutex> g(Mutex_);
+            CondVar_.WaitT(Mutex_, timeout, [this] { return Seen_.load(); });
+        }
+
+        bool Seen() const { return Seen_.load(); }
+
+    private:
+        TStringBuf ExpectedSubstring_;
+        std::atomic<bool> Seen_{false};
+        TMutex Mutex_;
+        TCondVar CondVar_;
+    };
+
     struct TMtlsTestSetup {
-        TStringStream LogStream;
         TAutoPtr<TLogBackend> LogBackend;
-        NKikimr::TCertAndKey CaCertAndKey;
-        NKikimr::TCertAndKey ServerCertAndKey;
-        NKikimr::TCertAndKey ClientCertAndKey;
-        NKikimr::TCertAndKey UntrustedCaCertAndKey;
-        NKikimr::TCertAndKey UntrustedClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey CaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ServerCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedCaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedClientCertAndKey;
         TTempFileHandle CaCertFile;
         TTempFileHandle ServerCertFile;
         TTempFileHandle ServerKeyFile;
@@ -1505,22 +1635,29 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         NActors::TActorId ProxyId;
         NActors::TActorId ServerId;
 
-        TMtlsTestSetup(const bool useRealThreads = false, const bool secureConnection = true)
-            : LogBackend(new TStreamLogBackend(&LogStream))
-            , ActorSystem(1, useRealThreads)
+        TMtlsTestSetup(
+            const bool useRealThreads = false,
+            const bool secureConnection = true,
+            TAutoPtr<TLogBackend> customLogBackend = nullptr,
+            const bool clientCertificateRequired = false
+        )
+            : ActorSystem(1, useRealThreads)
         {
+            if (customLogBackend) {
+                LogBackend = std::move(customLogBackend);
+            }
             // Generate certificates
-            CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
-            ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
-            ClientCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsClient());
+            CaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(NKikimr::NCertTestUtils::TProps::AsCA());
+            ServerCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsServer());
+            ClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsClient());
 
-            NKikimr::TProps untrustedCaProps = NKikimr::TProps::AsCA();
+            NKikimr::NCertTestUtils::TProps untrustedCaProps = NKikimr::NCertTestUtils::TProps::AsCA();
             untrustedCaProps.CommonName = "Untrusted " + untrustedCaProps.CommonName;
-            UntrustedCaCertAndKey = NKikimr::GenerateCA(untrustedCaProps);
+            UntrustedCaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(untrustedCaProps);
 
-            NKikimr::TProps untrustedClientProps = NKikimr::TProps::AsClient();
+            NKikimr::NCertTestUtils::TProps untrustedClientProps = NKikimr::NCertTestUtils::TProps::AsClient();
             untrustedClientProps.CommonName = "Untrusted " + untrustedClientProps.CommonName;
-            UntrustedClientCertAndKey = NKikimr::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
+            UntrustedClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
 
             // Write certificates to files
             CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());
@@ -1532,7 +1669,9 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             UntrustedClientCertFile.Write(UntrustedClientCertAndKey.Certificate.c_str(), UntrustedClientCertAndKey.Certificate.size());
             UntrustedClientKeyFile.Write(UntrustedClientCertAndKey.PrivateKey.c_str(), UntrustedClientCertAndKey.PrivateKey.size());
 
-            ActorSystem.SetLogBackend(LogBackend);
+            if (LogBackend) {
+                ActorSystem.SetLogBackend(LogBackend);
+            }
             ActorSystem.Initialize();
 
             NActors::IActor* proxy = NHttp::CreateHttpProxy();
@@ -1545,6 +1684,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
                 add->CertificateFile = ServerCertFile.Name();
                 add->PrivateKeyFile = ServerKeyFile.Name();
                 add->CaFile = CaCertFile.Name(); // enables mTLS
+                add->ClientCertificateRequired = clientCertificateRequired;
             }
             ActorSystem.Send(new NActors::IEventHandle(ProxyId, ActorSystem.AllocateEdgeActor(), add.Release()), 0, true);
             TAutoPtr<NActors::IEventHandle> handle;
@@ -1567,38 +1707,33 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         });
 
         TAutoPtr<NActors::IEventHandle> handle;
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request1->Request->URL, "/test");
-        UNIT_ASSERT(!request1->Request->MTlsClientCertificate.empty());
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
 
         clientThread.join();
     }
 
     Y_UNIT_TEST(UntrustedClientCertificate) {
-        // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
-        TMtlsTestSetup setup(/* useRealThreads */ true);
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
 
-        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
-        std::thread clientThread([&setup, httpRequest]() {
-            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
-            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
-            // client thread blocked waiting for response from server.
-            NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
-        });
+        {
+            // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend));
 
-        const TDuration timeout = TDuration::Seconds(2);
-        const TInstant deadline = TInstant::Now() + timeout;
-        bool errorFound = false;
-        while (TInstant::Now() < deadline) {
-            if (setup.LogStream.Str().Contains("connection closed - error in Accept")) {
-                errorFound = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(50));
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
         }
-        UNIT_ASSERT_C(errorFound, "No connection error happened for untrusted client");
 
-        clientThread.join();
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened for untrusted client");
     }
 
     Y_UNIT_TEST(NoClientCertificate) {
@@ -1620,6 +1755,43 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         clientThread.join();
     }
 
+    Y_UNIT_TEST(RequiredNoClientCertificate) {
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
+
+        {
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend), /* clientCertificateRequired */ true);
+
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, "", "", setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
+        }
+
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened without client certificate");
+    }
+
+    Y_UNIT_TEST(RequiredValidClientCertificate) {
+        TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ true, nullptr, /* clientCertificateRequired */ true);
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.ClientCertFile.Name(), setup.ClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
     Y_UNIT_TEST(NotSecureConnection) {
         TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ false);
 
@@ -1636,6 +1808,51 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         setup.ActorSystem.Send(new NActors::IEventHandle(handle->Sender, setup.ServerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+    }
+
+    Y_UNIT_TEST(SyncBindListensImmediately) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+        UNIT_ASSERT(port != 0);
+        AssertCanConnect(host, port);
+    }
+
+    Y_UNIT_TEST(PreboundSocketServesHttp) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::TActorId proxyId = actorSystem.Register(NHttp::CreateHttpProxy());
+        auto* addPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPort->PreboundSocket = socket;
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPort), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+        UNIT_ASSERT(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        const TString url = host == "::1"
+            ? "http://[::1]:" + ToString(port) + "/test"
+            : "http://127.0.0.1:" + ToString(port) + "/test";
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
     }
 
 }

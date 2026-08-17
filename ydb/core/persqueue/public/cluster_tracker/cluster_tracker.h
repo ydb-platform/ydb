@@ -4,16 +4,10 @@
 
 #include <ydb/core/base/events.h>
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/event_local.h>
-
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/string/builder.h>
 
 #include <vector>
 
@@ -34,22 +28,16 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         bool IsLocal = false;
         ui64 Weight = 1000;
 
-        TString DebugString() const {
-            TStringBuilder builder;
-            builder << "(" << Name << ", " << Datacenter << ", " << Balancer << ", ";
-            builder << (IsEnabled ? "enabled" : "disabled")  << ", ";
-            builder << (IsLocal ? "local" : "remote") << ", ";
-            builder << Weight << ")";
-
-            return TString(builder);
-        }
+        TString DebugString() const;
 
         bool operator==(const TCluster& other) const;
     };
 
     bool operator==(const TClustersList& other) const;
+    TString DebugString() const;
 
     std::vector<TCluster> Clusters;
+    const TCluster* LocalCluster = nullptr;
 
     i64 Version = 0;
 };
@@ -58,6 +46,8 @@ struct TEvClusterTracker {
     enum EEv {
         EvClustersUpdate = EventSpaceBegin(TKikimrEvents::ES_PQ_CLUSTER_TRACKER),
         EvSubscribe,
+        EvGetClustersList,
+        EvGetClustersListResponse,
         EvEnd
     };
 
@@ -67,6 +57,14 @@ struct TEvClusterTracker {
     };
 
     struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
+    };
+
+    struct TEvGetClustersList : public NActors::TEventLocal<TEvGetClustersList, EvGetClustersList> {
+    };
+
+    struct TEvGetClustersListResponse : public NActors::TEventLocal<TEvGetClustersListResponse, EvGetClustersListResponse> {
+        bool Success = true;
+        TClustersList::TConstPtr ClustersList;
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_CLUSTER_TRACKER), "Unexpected TEvClusterTracker event range");

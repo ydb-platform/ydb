@@ -817,14 +817,7 @@ public:
 
             if (checks) {
                 if (srcParentPath.Parent()->IsTableIndex()) {
-                    // Only __ydb_id sequence can be created in the prefixed index
-                    if (srcPath.LeafName() != NTableIndex::NKMeans::IdColumnSequence) {
-                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
-                        return result;
-                    }
-                    if (srcParentPath.IsUnderOperation()) {
-                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
-                    }
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                 } else if (srcParentPath->IsTable()) {
                     // allow immediately inside a normal table
                     checks.IsCommonSensePath();

@@ -54,6 +54,7 @@ enum class EStreamLookupStrategyType {
     LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
+    LockAndLookupRows,
 };
 
 struct TKqpStreamLookupSettings {
@@ -70,6 +71,7 @@ struct TKqpStreamLookupSettings {
     static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
+    static constexpr std::string_view LockAndLookupStrategyName = "LockAndLookupRows"sv;
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
@@ -136,6 +138,9 @@ public:
     static constexpr TStringBuf DefaultOperatorSettingName = "DefaultOperator";
     static constexpr TStringBuf MinimumShouldMatchSettingName = "MinimumShouldMatch";
     static constexpr TStringBuf ModeSettingName = "Mode";
+    static constexpr TStringBuf TokensSettingName = "Tokens";
+    static constexpr TStringBuf PrefixColumnSettingName = "PrefixColumn";
+
     TExprNode::TPtr ItemsLimit;
     TExprNode::TPtr SkipLimit;
     TExprNode::TPtr BFactor;
@@ -143,7 +148,12 @@ public:
     TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
     TExprNode::TPtr Mode;
+    TExprNode::TPtr Tokens;
+    // Equality bindings for the index prefix columns: (column name, value expr).
+    // Value is a parameter or literal resolved at execution; ordered as the index prefix columns.
+    TVector<std::pair<TString, TExprNode::TPtr>> PrefixColumns;
 
+    void AddPrefixColumn(const TString& name, const TExprNode::TPtr& value) { PrefixColumns.emplace_back(name, value); }
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
     void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
     void SetBFactor(const TExprNode::TPtr& expr) { BFactor = expr; }
@@ -151,6 +161,7 @@ public:
     void SetDefaultOperator(const TExprNode::TPtr& expr) { DefaultOperator = expr; }
     void SetMinimumShouldMatch(const TExprNode::TPtr& expr) { MinimumShouldMatch = expr; }
     void SetMode(const TExprNode::TPtr& expr) { Mode = expr; }
+    void SetTokens(const TExprNode::TPtr& expr) { Tokens = expr; }
 
     static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
@@ -218,7 +229,6 @@ struct TKqpUpsertRowsSettings {
     void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
-    static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 

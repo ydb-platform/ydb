@@ -1,16 +1,35 @@
-import os.path as P
+import os
 
-from devtools.yamaker.fileutil import subcopy
+from devtools.yamaker import fileutil
+from devtools.yamaker import pathutil
 from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import NixProject
+
+QUICTLS_SRCS = [
+    "ssl/ssl_quic.c",
+    "ssl/statem_quic.c",
+]
+
+
+def post_build(self):
+    os.remove(f"{self.dstdir}/libssl.map")
+    for hdr in fileutil.files(f"{self.dstdir}/include", rel=False, test=pathutil.is_header):
+        with open(hdr, "rt") as hdr_file:
+            data = hdr_file.read()
+        with open(hdr, "wt") as hdr_file:
+            hdr_file.write("#include <contrib/libs/openssl/redef.h>\n")
+            hdr_file.write(data)
 
 
 def post_install(self):
     def d(s):
         return self.dstdir + "/" + s
 
+    with self.yamakes["."] as openssl:
+        openssl.SRCS |= set(QUICTLS_SRCS)
+
     # Move asm sources to asm/linux.
-    subcopy(self.dstdir, d("asm/linux"), ["**/*.s"], move=True)
+    fileutil.subcopy(self.dstdir, d("asm/linux"), ["**/*.s"], move=True)
     with self.yamakes["crypto"] as m:
         asm = {s for s in m.SRCS if s.endswith(".s")}
         m.SRCS -= asm
@@ -28,7 +47,7 @@ def post_install(self):
         )
         # Shorten paths.
         m.SRCDIR = []
-        m.SRCS = {P.relpath(s, "crypto") for s in m.SRCS}
+        m.SRCS = {os.path.relpath(s, "crypto") for s in m.SRCS}
         m.SRCS -= {"dso/dso_dlfcn.c", "rand/rand_vms.c"}
 
     # Add suppression for ubsan, see also https://github.com/openssl/openssl/issues/22896
@@ -130,13 +149,14 @@ openssl = NixProject(
         "include/**/*.h",
     ],
     platform_dispatchers=[
-        "apps/progs.h",
         "crypto/buildinf.h",
         "include/crypto/bn_conf.h",
         "include/crypto/dso_conf.h",
         "include/openssl/opensslconf.h",
     ],
+    # fmt: off
     keep_paths=[
+        # This asm files were generated manually
         "asm/aarch64/",
         "asm/android/",
         "asm/darwin/",
@@ -144,9 +164,14 @@ openssl = NixProject(
         "asm/ios/",
         "asm/ppc64le/",
         "asm/windows/",
-        "openssl.package.json",
+        # This code is written by us
+        "ar.pyplugin",
         "sanitizers.h",
         "crypto/ubsan.supp",
-    ],
+        "redef.h",
+        "system_openssl.ya.inc",
+    ] + QUICTLS_SRCS,
+    # fmt: on
+    post_build=post_build,
     post_install=post_install,
 )

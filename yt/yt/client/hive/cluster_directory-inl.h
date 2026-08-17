@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "cluster_directory.h"
 #endif
-#undef CLUSTER_DIRECTORY_INL_H_
 
 #include "private.h"
 #include "config.h"
@@ -86,27 +85,40 @@ std::vector<std::string> TClusterDirectoryBase<TConnection>::GetClusterNames() c
 template <std::derived_from<NApi::IConnection> TConnection>
 void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
 {
-    auto guard = Guard(Lock_);
-    auto nameIt = NameToCluster_.find(name);
-    if (nameIt == NameToCluster_.end()) {
-        return;
+    TConnectionPtr removedConnection;
+
+    {
+        auto guard = Guard(Lock_);
+        auto nameIt = NameToCluster_.find(name);
+        if (nameIt == NameToCluster_.end()) {
+            return;
+        }
+        const auto& cluster = nameIt->second;
+        auto cellTags = GetCellTags(cluster);
+        removedConnection = std::move(cluster.Connection);
+        if (auto tvmId = cluster.Connection->GetTvmId()) {
+            auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
+            YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
+            ClusterTvmIds_.erase(tvmIdsIt);
+        }
+        NameToCluster_.erase(nameIt);
+        for (auto cellTag : cellTags) {
+            YT_VERIFY(CellTagToCluster_.erase(cellTag) == 1);
+        }
+        auto Logger = HiveClientLogger;
+        YT_TLOG_DEBUG("Remote cluster unregistered")
+            .With("Name", name)
+            .With("CellTags", cellTags);
     }
-    const auto& cluster = nameIt->second;
-    auto cellTags = GetCellTags(cluster);
-    cluster.Connection->Terminate();
-    if (auto tvmId = cluster.Connection->GetTvmId()) {
-        auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
-        YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
-        ClusterTvmIds_.erase(tvmIdsIt);
+
+    {
+        NConcurrency::TForbidContextSwitchGuard guard;
+        OnClusterUnregistered_.Fire(name);
     }
-    NameToCluster_.erase(nameIt);
-    for (auto cellTag : cellTags) {
-        YT_VERIFY(CellTagToCluster_.erase(cellTag) == 1);
+
+    if (removedConnection) {
+        removedConnection->Terminate();
     }
-    auto Logger = HiveClientLogger;
-    YT_LOG_DEBUG("Remote cluster unregistered (Name: %v, CellTags: %v)",
-        name,
-        cellTags);
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
@@ -118,71 +130,83 @@ void TClusterDirectoryBase<TConnection>::Clear()
     ClusterTvmIds_.clear();
 
     auto Logger = HiveClientLogger;
-    YT_LOG_DEBUG("Cluster directory cleared");
+    YT_TLOG_DEBUG("Cluster directory cleared");
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
-void TClusterDirectoryBase<TConnection>::UpdateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig)
+TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig)
 {
-    auto Logger = HiveClientLogger;
+    try {
+        auto Logger = HiveClientLogger;
 
-    bool fire = false;
-    auto addNewCluster = [&] (const TCluster& cluster) {
-        for (auto cellTag : GetCellTags(cluster)) {
-            if (CellTagToCluster_.contains(cellTag)) {
-                THROW_ERROR_EXCEPTION("Duplicate cell tag %Qv", cellTag)
-                    << TErrorAttribute("first_cluster_name", CellTagToCluster_[cellTag].Name)
-                    << TErrorAttribute("second_cluster_name", name);
+        TConnectionPtr connectionToTerminate;
+
+        bool fire = false;
+        auto addNewCluster = [&] (const TCluster& cluster) {
+            for (auto cellTag : GetCellTags(cluster)) {
+                if (CellTagToCluster_.contains(cellTag)) {
+                    THROW_ERROR_EXCEPTION("Duplicate cell tag %Qv", cellTag)
+                        .With("first_cluster_name", CellTagToCluster_[cellTag].Name)
+                        .With("second_cluster_name", name);
+                }
+                CellTagToCluster_[cellTag] = cluster;
             }
-            CellTagToCluster_[cellTag] = cluster;
-        }
-        NameToCluster_[name] = cluster;
-        if (auto tvmId = cluster.Connection->GetTvmId()) {
-            ClusterTvmIds_.insert(*tvmId);
+            NameToCluster_[name] = cluster;
+            if (auto tvmId = cluster.Connection->GetTvmId()) {
+                ClusterTvmIds_.insert(*tvmId);
+            }
+
+            fire = true;
+        };
+
+        {
+            auto guard = Guard(Lock_);
+            auto nameIt = NameToCluster_.find(name);
+            if (nameIt == NameToCluster_.end()) {
+                auto cluster = CreateCluster(name, connectionConfig);
+                addNewCluster(cluster);
+                auto cellTags = GetCellTags(cluster);
+                YT_TLOG_DEBUG("Remote cluster registered")
+                    .With("Name", name)
+                    .With("CellTags", cellTags);
+            } else if (!AreNodesEqual(nameIt->second.ConnectionConfig, connectionConfig)) {
+                auto cluster = CreateCluster(name, connectionConfig);
+                auto oldTvmId = nameIt->second.Connection->GetTvmId();
+                auto oldCellTags = GetCellTags(nameIt->second);
+                connectionToTerminate = std::move(nameIt->second.Connection);
+                for (auto cellTag : oldCellTags) {
+                    CellTagToCluster_.erase(cellTag);
+                }
+                NameToCluster_.erase(nameIt);
+                if (oldTvmId) {
+                    auto tvmIdsIt = ClusterTvmIds_.find(*oldTvmId);
+                    YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
+                    ClusterTvmIds_.erase(tvmIdsIt);
+                }
+                addNewCluster(cluster);
+                auto cellTags = GetCellTags(cluster);
+                YT_TLOG_DEBUG("Remote cluster updated")
+                    .With("Name", name)
+                    .With("CellTags", cellTags);
+            }
         }
 
-        fire = true;
-    };
-
-    {
-        auto guard = Guard(Lock_);
-        auto nameIt = NameToCluster_.find(name);
-        if (nameIt == NameToCluster_.end()) {
-            auto cluster = CreateCluster(name, connectionConfig);
-            addNewCluster(cluster);
-            auto cellTags = GetCellTags(cluster);
-            YT_LOG_DEBUG("Remote cluster registered (Name: %v, CellTags: %v)",
-                name,
-                cellTags);
-        } else if (!AreNodesEqual(nameIt->second.ConnectionConfig, connectionConfig)) {
-            auto cluster = CreateCluster(name, connectionConfig);
-            auto oldTvmId = nameIt->second.Connection->GetTvmId();
-            auto oldCellTags = GetCellTags(nameIt->second);
-            nameIt->second.Connection->Terminate();
-            for (auto cellTag : oldCellTags) {
-                CellTagToCluster_.erase(cellTag);
-            }
-            NameToCluster_.erase(nameIt);
-            if (oldTvmId) {
-                auto tvmIdsIt = ClusterTvmIds_.find(*oldTvmId);
-                YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
-                ClusterTvmIds_.erase(tvmIdsIt);
-            }
-            addNewCluster(cluster);
-            auto cellTags = GetCellTags(cluster);
-            YT_LOG_DEBUG("Remote cluster updated (Name: %v, CellTags: %v)",
-                name,
-                cellTags);
+        if (fire) {
+            NConcurrency::TForbidContextSwitchGuard guard;
+            OnClusterUpdated_.Fire(name, connectionConfig);
         }
+        if (connectionToTerminate) {
+            connectionToTerminate->Terminate();
+        }
+    } catch (const std::exception& ex) {
+        return TError(ex);
     }
 
-    if (fire) {
-        OnClusterUpdated_.Fire(name, connectionConfig);
-    }
+    return TError();
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
-void TClusterDirectoryBase<TConnection>::UpdateDirectory(const NProto::TClusterDirectory& protoDirectory)
+TClusterDirectoryUpdateResult TClusterDirectoryBase<TConnection>::TryUpdateDirectory(const NProto::TClusterDirectory& protoDirectory)
 {
     THashMap<std::string, NYTree::INodePtr> nameToConfig;
     for (const auto& item : protoDirectory.items()) {
@@ -191,19 +215,21 @@ void TClusterDirectoryBase<TConnection>::UpdateDirectory(const NProto::TClusterD
             NYTree::ConvertToNode(NYson::TYsonString(item.config()))).second);
     }
 
-    UpdateDirectory(nameToConfig);
+    return TryUpdateDirectory(nameToConfig);
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
-void TClusterDirectoryBase<TConnection>::UpdateDirectory(const TClusterDirectoryConfigPtr& config)
+TClusterDirectoryUpdateResult TClusterDirectoryBase<TConnection>::TryUpdateDirectory(const TClusterDirectoryConfigPtr& config)
 {
-    UpdateDirectory(config->PerClusterConnectionConfig);
+    return TryUpdateDirectory(config->PerClusterConnectionConfig);
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
-void TClusterDirectoryBase<TConnection>::UpdateDirectory(
+TClusterDirectoryUpdateResult TClusterDirectoryBase<TConnection>::TryUpdateDirectory(
     const THashMap<std::string, NYTree::INodePtr>& nameToConfig)
 {
+    TClusterDirectoryUpdateResult result;
+
     for (const auto& name : GetClusterNames()) {
         if (nameToConfig.find(name) == nameToConfig.end()) {
             RemoveCluster(name);
@@ -211,8 +237,38 @@ void TClusterDirectoryBase<TConnection>::UpdateDirectory(
     }
 
     for (const auto& [name, config] : nameToConfig) {
-        UpdateCluster(name, config);
+        result.ClusterToErrorMapping[name] = TryUpdateCluster(name, config);
     }
+
+    return result;
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+void TClusterDirectoryBase<TConnection>::UpdateDirectory(const NProto::TClusterDirectory& protoDirectory)
+{
+    auto cumulativeError = TryUpdateDirectory(protoDirectory)
+        .GetCumulativeError();
+    if (cumulativeError.IsOK()) {
+        return;
+    }
+
+    auto Logger = HiveClientLogger;
+    YT_TLOG_ALERT_AND_THROW("Failed to update cluster directory")
+        .With(cumulativeError);
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+void TClusterDirectoryBase<TConnection>::UpdateDirectory(const TClusterDirectoryConfigPtr& config)
+{
+    auto cumulativeError = TryUpdateDirectory(config)
+        .GetCumulativeError();
+    if (cumulativeError.IsOK()) {
+        return;
+    }
+
+    auto Logger = HiveClientLogger;
+    YT_TLOG_ALERT_AND_THROW("Failed to update cluster directory")
+        .With(cumulativeError);
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
@@ -237,7 +293,7 @@ TClusterDirectoryBase<TConnection>::TCluster TClusterDirectoryBase<TConnection>:
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error creating connection to cluster %Qv",
             name)
-            << ex;
+            .With(ex);
     }
     return cluster;
 }

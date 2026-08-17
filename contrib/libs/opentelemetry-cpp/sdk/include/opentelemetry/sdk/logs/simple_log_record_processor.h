@@ -31,6 +31,12 @@ class SimpleLogRecordProcessor : public LogRecordProcessor
 
 public:
   explicit SimpleLogRecordProcessor(std::unique_ptr<LogRecordExporter> &&exporter);
+
+  SimpleLogRecordProcessor(const SimpleLogRecordProcessor &)            = delete;
+  SimpleLogRecordProcessor(SimpleLogRecordProcessor &&)                 = delete;
+  SimpleLogRecordProcessor &operator=(const SimpleLogRecordProcessor &) = delete;
+  SimpleLogRecordProcessor &operator=(SimpleLogRecordProcessor &&)      = delete;
+
   ~SimpleLogRecordProcessor() override;
 
   std::unique_ptr<Recordable> MakeRecordable() noexcept override;
@@ -42,6 +48,13 @@ public:
 
   bool Shutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept override;
+
+  bool HasEnabledFilter() const noexcept override { return false; }
+
+  bool RecordableEnforcesLogRecordLimits() const noexcept override
+  {
+    return exporter_ != nullptr && exporter_->RecordableEnforcesLogRecordLimits();
+  }
 
   bool IsShutdown() const noexcept;
 

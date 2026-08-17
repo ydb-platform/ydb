@@ -14,8 +14,7 @@
 #include <arrow/compute/registry.h>
 #include <arrow/compute/registry_internal.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -178,40 +177,40 @@ private:
 
     TVector<std::pair<TString, const TKernelFamily*>> GetAllKernelFamilies() const final;
 
-    TFunctionsMap Functions;
-    TFunctionParamMetadataList ArgumentsMetadata;
-    std::optional<ui64> MetadataEtag;
-    TKernelFamilyMap KernelFamilyMap;
+    TFunctionsMap Functions_;
+    TFunctionParamMetadataList ArgumentsMetadata_;
+    std::optional<ui64> MetadataEtag_;
+    TKernelFamilyMap KernelFamilyMap_;
 };
 
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
 {
-    RegisterDefaultOperations(*this, KernelFamilyMap);
+    RegisterDefaultOperations(*this, KernelFamilyMap_);
     CalculateMetadataEtag();
 }
 
 void TBuiltinFunctionRegistry::Register(const std::string_view& name, const TFunctionDescriptor& description)
 {
-    Functions[TString(name)].push_back(description);
+    Functions_[TString(name)].push_back(description);
 }
 
 void TBuiltinFunctionRegistry::RegisterAll(TFunctionsMap&& functions, TFunctionParamMetadataList&& arguments)
 {
-    Functions = std::move(functions);
-    ArgumentsMetadata = std::move(arguments);
+    Functions_ = std::move(functions);
+    ArgumentsMetadata_ = std::move(arguments);
     CalculateMetadataEtag();
 }
 
 const TFunctionsMap& TBuiltinFunctionRegistry::GetFunctions() const {
-    return Functions;
+    return Functions_;
 }
 
 const TDescriptionList& TBuiltinFunctionRegistry::FindCandidates(const std::string_view& name) const {
-    if (const auto it = Functions.find(TString(name)); it != Functions.cend()) {
+    if (const auto it = Functions_.find(TString(name)); it != Functions_.cend()) {
         return it->second;
     }
 
-    ythrow yexception() << "Not found builtin function: '" << name << "' in " << Functions.size() << " total.";
+    ythrow yexception() << "Not found builtin function: '" << name << "' in " << Functions_.size() << " total.";
 }
 
 std::optional<TFunctionDescriptor> TBuiltinFunctionRegistry::FindBuiltin(
@@ -260,14 +259,14 @@ TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(
 }
 
 bool TBuiltinFunctionRegistry::HasBuiltin(const std::string_view& name) const {
-    return Functions.find(TString(name)) != Functions.cend();
+    return Functions_.find(TString(name)) != Functions_.cend();
 }
 
 void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
     using TFunctionPair = std::pair<std::string_view, const TDescriptionList*>;
 
     std::vector<TFunctionPair> operations;
-    for (const auto& func : Functions) {
+    for (const auto& func : Functions_) {
         operations.emplace_back(func.first, &func.second);
     }
 
@@ -291,15 +290,15 @@ void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
         }
     }
 
-    MetadataEtag = hash;
+    MetadataEtag_ = hash;
 }
 
 ui64 TBuiltinFunctionRegistry::GetMetadataEtag() const {
-    return *MetadataEtag;
+    return *MetadataEtag_;
 }
 
 void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const {
-    for (const auto& f : Functions) {
+    for (const auto& f : Functions_) {
         out << f.first << ": [\n";
 
         for (const TFunctionDescriptor& desc : f.second) {
@@ -316,8 +315,8 @@ const TKernel* TBuiltinFunctionRegistry::FindKernel(
     const NUdf::TDataTypeId* argTypes,
     size_t argTypesCount,
     NUdf::TDataTypeId returnType) const {
-    auto fit = KernelFamilyMap.find(TString(name));
-    if (fit == KernelFamilyMap.end()) {
+    auto fit = KernelFamilyMap_.find(TString(name));
+    if (fit == KernelFamilyMap_.end()) {
         return nullptr;
     }
 
@@ -327,12 +326,12 @@ const TKernel* TBuiltinFunctionRegistry::FindKernel(
 void TBuiltinFunctionRegistry::RegisterKernelFamily(
     const std::string_view& name,
     std::unique_ptr<TKernelFamily>&& family) {
-    Y_ENSURE(KernelFamilyMap.emplace(TString(name), std::move(family)).second);
+    Y_ENSURE(KernelFamilyMap_.emplace(TString(name), std::move(family)).second);
 }
 
 TVector<std::pair<TString, const TKernelFamily*>> TBuiltinFunctionRegistry::GetAllKernelFamilies() const {
     TVector<std::pair<TString, const TKernelFamily*>> ret;
-    for (const auto& f : KernelFamilyMap) {
+    for (const auto& f : KernelFamilyMap_) {
         ret.emplace_back(std::make_pair(f.first, f.second.get()));
     }
 
@@ -345,5 +344,4 @@ IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry() {
     return MakeIntrusive<TBuiltinFunctionRegistry>();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

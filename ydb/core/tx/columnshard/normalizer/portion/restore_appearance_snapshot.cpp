@@ -14,7 +14,8 @@ private:
 
 public:
     TPortionsWriting(THashMap<TPortionAddress, NKikimrTxColumnShard::TIndexPortionMeta>&& portions)
-        : Portions(std::move(portions)) {
+        : Portions(std::move(portions))
+    {
     }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {

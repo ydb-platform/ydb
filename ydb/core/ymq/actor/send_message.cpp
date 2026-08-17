@@ -5,9 +5,15 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include "topic_pqrb_metrics.h"
+
+#include <ydb/core/persqueue/public/mlp/mlp.h>
+
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/base/utils.h>
 #include <ydb/core/ymq/actor/sha256.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 
@@ -156,10 +162,140 @@ private:
         return IsBatch_ ? Response_.MutableSendMessageBatch()->MutableError() : Response_.MutableSendMessage()->MutableError();
     }
 
-    // coverity[var_deref_model]: false positive
     void DoAction() override {
-        Become(&TThis::StateFunc);
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
+        if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
+            if (IsFifoQueue() && !FeatureFlags_.EnableSQSMigrationFinished_) {
+                DoActionDeduplicateTopicImplementation();
+            } else {
+                DoActionTopicImplementation();
+            }
+        } else {
+            DoActionTableImplementation();
+        }
+    }
+
+    void DoActionDeduplicateTopicImplementation() {
+        Become(&TThis::StateFunc);
+
+        auto req = MakeHolder<TSqsEvents::TEvDeduplicateMessageBatch>();
+        req->RequestId = RequestId_;
+        req->SenderId = UserSID_;
+
+        for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
+
+            try {
+                req->DeduplicationMessageIds.push_back(GetDeduplicationMessageId(*currentRequest));
+            } catch (const std::exception& ex) {
+                RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+            }
+        }
+
+        if (req->DeduplicationMessageIds.empty()) {
+            DoActionTopicImplementation();
+        } else {
+            Send(QueueLeader_, std::move(req));
+        }
+    }
+
+    TString GetDeduplicationMessageId(auto& request) {
+        if (!IsFifoQueue()) {
+            return {};
+        }
+
+        const auto& dedupParam = request.GetMessageDeduplicationId();
+        if (dedupParam) {
+            return dedupParam;
+        }
+
+        if (QueueAttributes_->ContentBasedDeduplication) {
+            return CalcSHA256(request.GetMessageBody());
+        }
+
+        return {};
+    }
+
+    void DoActionTopicImplementation() {
+        Become(&TThis::StateFunc);
+
+        NPQ::NMLP::TWriterSettings writerSettings;
+        writerSettings.DatabasePath = GetDatabaseName();
+        writerSettings.TopicName = GetTopicName();
+        writerSettings.Messages.reserve(IsBatch_ ? BatchRequest().EntriesSize() : 1);
+
+        for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
+            auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->AddEntries() : Response_.MutableSendMessage();
+
+            currentResponse->SetId(currentRequest->GetId());
+            if (!ValidateSingleRequest(*currentRequest, currentResponse)) {
+                continue;
+            }
+
+            TString deduplicationId;
+            if (IsFifoQueue()) {
+                try {
+                    deduplicationId = GetDeduplicationMessageId(*currentRequest);
+                } catch (const std::exception& ex) {
+                    RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                    continue;
+                }
+
+                auto it = BlockedDeduplicationMessageIds_.find(deduplicationId);
+                if (it != BlockedDeduplicationMessageIds_.end()) {
+                    const auto& [messageId, sequenceNumber] = it->second;
+                    AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
+                    AccumulateTopicSendMetrics(Ydb::StatusIds::ALREADY_EXISTS, 0);
+                    continue;
+                }
+            }
+
+            RequestToReplyIndexMapping_.push_back(i);
+
+            writerSettings.Messages.emplace_back();
+            auto& message = writerSettings.Messages.back();
+            message.Index = i;
+            message.MessageBody = std::move(currentRequest->GetMessageBody());
+            message.Delay = GetDelay(*currentRequest);
+            if (!deduplicationId.empty()) {
+                message.MessageDeduplicationId = std::move(deduplicationId);
+            }
+            message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
+
+           {
+                Ydb::Ymq::V1::SendMessageBatchRequestEntry entry;
+                for (const auto& attr : currentRequest->GetMessageAttributes()) {
+                    Ydb::Ymq::V1::MessageAttribute dstAttribute;
+                    dstAttribute.set_data_type(std::move(attr.GetDataType()));
+                    if (const auto& value = attr.GetStringValue()) {
+                        dstAttribute.set_string_value(std::move(value));
+                    } else if (const auto& value = attr.GetBinaryValue()) {
+                        dstAttribute.set_binary_value(std::move(value));
+                    }
+                    entry.mutable_message_attributes()->emplace(std::move(attr.GetName()), dstAttribute);
+                }
+
+                auto [attributes, md5] = NSQS::SerializeUserAttributes(entry);
+                message.Attributes = std::move(attributes);
+            }
+
+            message.Attributes.emplace("sender_id", UserSID_);
+        }
+
+        if (writerSettings.Messages.size() > 0) {
+            Register(NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings)));
+        } else {
+            ReportTopicSendCounters();
+            ReportTopicSendMetricsToPqrb(0);
+            SendReplyAndDie();
+        }
+    }
+
+    // coverity[var_deref_model]: false positive
+    void DoActionTableImplementation() {
+        Become(&TThis::StateFunc);
 
         const bool isFifo = IsFifoQueue();
         THolder<TSqsEvents::TEvSendMessageBatch> req;
@@ -174,17 +310,12 @@ private:
 
             TString deduplicationId;
             if (isFifo) {
-                const TString& dedupParam = currentRequest->GetMessageDeduplicationId();
-                if (dedupParam) {
-                    deduplicationId = dedupParam;
-                } else if (QueueAttributes_->ContentBasedDeduplication) {
-                    try {
-                        deduplicationId = CalcSHA256(currentRequest->GetMessageBody());
-                    } catch (const std::exception& ex) {
-                        RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
-                        MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
-                        continue;
-                    }
+                try {
+                    deduplicationId = GetDeduplicationMessageId(*currentRequest);
+                } catch (const std::exception& ex) {
+                    RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                    continue;
                 }
             }
 
@@ -234,11 +365,128 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,         HandleWakeup);
-            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponse);
+            hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
+            hFunc(TSqsEvents::TEvDeduplicateMessageBatchResponse, Handle);
+            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseTableImplementation);
         }
     }
 
-    void HandleSendResponse(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
+    void AddResponse(const auto* currentRequest, auto* currentResponse, const TString& messageId, ui64 sequenceNumber) {
+        currentResponse->SetMessageId(messageId);
+        if (IsFifoQueue()) {
+            currentResponse->SetSequenceNumber(sequenceNumber);
+        }
+        currentResponse->SetMD5OfMessageBody(MD5::Calc(currentRequest->GetMessageBody()));
+        if (currentRequest->MessageAttributesSize() > 0) {
+            const TString md5 = CalcMD5OfMessageAttributes(currentRequest->GetMessageAttributes());
+            currentResponse->SetMD5OfMessageAttributes(md5);
+            RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
+        }
+    }
+
+    void AccumulateTopicSendMetrics(Ydb::StatusIds::StatusCode status, size_t bodySize) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            ++TopicSendWrittenCount_;
+            TopicSendBytesWritten_ += bodySize;
+        } else if (status == Ydb::StatusIds::ALREADY_EXISTS) {
+            ++TopicSendDedupCount_;
+        }
+    }
+
+    void ReportTopicSendCounters() {
+        if (ShouldReportTopicActionMetricsToPqrb()) {
+            return;
+        }
+        if (!QueueCounters_ || (TopicSendWrittenCount_ == 0 && TopicSendDedupCount_ == 0)) {
+            return;
+        }
+
+        if (TopicSendWrittenCount_ > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second, TopicSendWrittenCount_);
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, TopicSendBytesWritten_);
+        }
+        if (TopicSendDedupCount_ > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second, TopicSendDedupCount_);
+        }
+    }
+
+    void ReportTopicSendMetricsToPqrb(ui64 balancerTabletId) {
+        if (TopicSendWrittenCount_ == 0 && TopicSendDedupCount_ == 0) {
+            return;
+        }
+
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        auto* send = IsBatch_ ? metrics.MutableSendMessageBatch() : metrics.MutableSendMessage();
+        if (TopicSendWrittenCount_ > 0) {
+            send->SetSendMessageCount(TopicSendWrittenCount_);
+            send->SetBytesWritten(TopicSendBytesWritten_);
+        }
+        if (TopicSendDedupCount_ > 0) {
+            send->SetDeduplicationCount(TopicSendDedupCount_);
+        }
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
+    }
+
+    void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
+        const auto* response = ev->Get();
+        const auto& messages = response->Messages;
+
+        for (size_t i = 0, size = messages.size(); i < size; ++i) {
+            const auto& message = messages[i];
+
+            auto* currentResponse = IsBatch_ ?
+                  Response_.MutableSendMessageBatch()->MutableEntries(RequestToReplyIndexMapping_[i])
+                : Response_.MutableSendMessage();
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
+
+            if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+                if (response->DescribeStatus == NPQ::NDescriber::EStatus::NOT_FOUND) {
+                    // The topic is temporarily missing (the queue is being deleted or
+                    // recreated). Report a generic retryable internal failure instead of
+                    // leaking the internal topic path.
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                } else {
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
+                        NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
+                }
+            } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
+                AccumulateTopicSendMetrics(message.Status, currentRequest->GetMessageBody().size());
+                AddResponse(
+                    currentRequest,
+                    currentResponse,
+                    ToMessageId(message.MessageId.value()),
+                    message.MessageId->Offset // TODO: как быть с несколькими партициями?
+                );
+            } else {
+                MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+            }
+        }
+
+        ReportTopicSendCounters();
+        SetBalancerTabletId(response->BalancerTabletId);
+        ReportTopicSendMetricsToPqrb(response->BalancerTabletId);
+        SendReplyAndDie();
+    }
+
+    void Handle(TSqsEvents::TEvDeduplicateMessageBatchResponse::TPtr& ev) {
+        if (ev->Get()->StatusCode == Ydb::StatusIds::SUCCESS) {
+            BlockedDeduplicationMessageIds_ = std::move(ev->Get()->BlockedDeduplicationMessageIds);
+            DoActionTopicImplementation();
+        } else {
+            RLOG_SQS_DEBUG("Message deduplication error");
+            if (IsBatch_) {
+                for (size_t i = 0, size = BatchRequest().EntriesSize(); i < size; ++i) {
+                    auto* currentResponse = Response_.MutableSendMessageBatch()->MutableEntries(i);
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                }
+            } else {
+                MakeError(Response_.MutableSendMessage(), NErrors::INTERNAL_FAILURE);
+            }
+            SendReplyAndDie();
+        }
+    }
+
+    void HandleSendResponseTableImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
             const auto& status = ev->Get()->Statuses[i];
@@ -277,6 +525,11 @@ private:
     std::vector<size_t> RequestToReplyIndexMapping_;
 
     const bool IsBatch_;
+    // deduplication message id -> sequenceNumber
+    std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
+    ui64 TopicSendWrittenCount_ = 0;
+    ui64 TopicSendBytesWritten_ = 0;
+    ui64 TopicSendDedupCount_ = 0;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

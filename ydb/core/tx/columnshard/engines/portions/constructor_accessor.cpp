@@ -2,33 +2,30 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap {
 
 void TPortionAccessorConstructor::ChunksValidation() const {
     AFL_VERIFY(Records.size());
     CheckChunksOrder(Records);
     CheckChunksOrder(Indexes);
-    if (BlobIdxs.size()) {
-        AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
-                                                           "indexes", Indexes.size());
+    std::set<ui32> blobIdxs;
+    for (auto&& i : Records) {
+        TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    for (auto&& i : Indexes) {
+        if (i.HasBlobRange()) {
+            TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
+            blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+        }
+    }
+    if (GetBlobIdsCount()) {
+        AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
+        AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
     } else {
-        std::set<ui32> blobIdxs;
-        for (auto&& i : Records) {
-            TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-        }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobRange()) {
-                TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
-                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            }
-        }
-        if (GetBlobIdsCount()) {
-            AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
-            AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
-        } else {
-            AFL_VERIFY(blobIdxs.empty());
-        }
+        AFL_VERIFY(blobIdxs.empty());
     }
 }
 
@@ -51,7 +48,8 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
     if (needChunksNormalization) {
         ReorderChunks();
     }
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", PortionInfo->GetPortionIdVerified());
+    YDB_LOG_CREATE_CONTEXT(
+        {"portionId", PortionInfo->GetPortionIdVerified()});
     if (BlobIdxs.size()) {
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
@@ -108,8 +106,8 @@ void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuild
     BlobIds = buildInfo.DetachBlobIds();
     for (auto&& rec : buildInfo.DetachRecords()) {
         AFL_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
-        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))(
-            "blobs", JoinSeq(",", GetBlobIds()))("range", rec.GetBlobRange().ToString());
+        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))("blobs", JoinSeq(",", GetBlobIds()))(
+            "range", rec.GetBlobRange().ToString());
         Records.push_back(std::move(rec));
     }
 }
@@ -123,8 +121,8 @@ void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext
     }
 }
 
-std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(const TPortionInfo::TConstPtr& portion,
-    TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(
+    const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
@@ -145,8 +143,7 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoadi
     }
     std::vector<TIndexChunk> indexChunks;
     {
-
-        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) ->bool {
+        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) -> bool {
             return l.GetAddress() < r.GetAddress();
         };
         bool needSort = false;

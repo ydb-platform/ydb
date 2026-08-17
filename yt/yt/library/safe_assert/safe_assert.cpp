@@ -15,9 +15,9 @@ using namespace NCoreDump;
 ////////////////////////////////////////////////////////////////////////////////
 
 TAssertionFailedException::TAssertionFailedException(
-    const TString& expression,
-    const TString& stackTrace,
-    const std::optional<TString>& corePath)
+    const std::string& expression,
+    const std::string& stackTrace,
+    const std::optional<std::string>& corePath)
     : Expression_(expression)
     , StackTrace_(stackTrace)
     , CorePath_(corePath)
@@ -123,7 +123,7 @@ void MaybeThrowSafeAssertionException(TStringBuf message)
     }
 
     auto semaphore = GetSafeAssertionsCoreSemaphore();
-    std::optional<TString> corePath;
+    std::optional<std::string> corePath;
     if (auto semaphoreGuard = TAsyncSemaphoreGuard::TryAcquire(semaphore)) {
         try {
             std::vector<TString> coreNotes{"Reason: SafeAssertion"};
@@ -141,7 +141,7 @@ void MaybeThrowSafeAssertionException(TStringBuf message)
     DumpBacktrace([&] (TStringBuf str) {
         stackTrace.AppendString(str);
     });
-    TString expression(message);
+    std::string expression(message);
     throw TAssertionFailedException(std::move(expression), stackTrace.Flush(), std::move(corePath));
 }
 

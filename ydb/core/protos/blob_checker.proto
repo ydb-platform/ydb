@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+import "ydb/core/protos/base.proto";
+
+package NKikimrBlobChecker;
+
+message TBlobCheckerGroupStatus {
+    uint64 ShortStatus = 1;
+    uint64 LastScanFinishedTimestamp = 2;  // TMonotonic
+    NKikimrProto.TLogoBlobID MaxCheckedBlob = 3;
+};

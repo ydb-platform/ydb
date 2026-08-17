@@ -1,39 +1,114 @@
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-
+#include <ydb/core/tx/columnshard/backup/import/session.h>
+#include <ydb/core/tx/columnshard/backup/import/task.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <library/cpp/testing/hook/hook.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
-#include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/wrappers/fake_storage.h>
-#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
-#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 
 namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
 
-Y_UNIT_TEST_SUITE(Restore) {
+Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
+    static std::shared_ptr<NOlap::NImport::TSession> MakeSession() {
+        NKikimrSchemeOp::TRestoreTask restoreTask;
+        restoreTask.MutableS3Settings()->SetBucket("test");
+        restoreTask.MutableS3Settings()->SetEndpoint("localhost:9000");
+        restoreTask.SetTableId(1);
+        using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
+        THashMap<ui32, TNameTypeInfo> emptyColumns;
+        auto task = std::make_shared<NOlap::NImport::TImportTask>(NColumnShard::TSchemeShardLocalPathId::FromRawValue(1),
+            /*columns=*/emptyColumns, restoreTask, /*schemaVersion=*/std::optional<ui64>{ 1 }, /*txId=*/std::optional<ui64>{ 42 });
+        return std::make_shared<NOlap::NImport::TSession>(task);
+    }
 
-    [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
-        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            txKind, sender, txId, txBody);
+    Y_UNIT_TEST(SessionIsNotStartedAfterAbort) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("simulated error: downloader timed out");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnConfirmedIsLegal) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        session->Abort("abort from confirmed state");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(IsStartedReturnsFalseForNonStartedStates) {
+        auto session = MakeSession();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Confirm();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("abort");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(DoubleAbortDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: timeout");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("second abort: racing error batch");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnFinishedSessionDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("abort on confirmed");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("abort again");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortSessionControlOnAlreadyAbortedIsNoOp) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: operation timed out");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        const bool shouldCallAbort = !session->IsFinished() && !session->IsReadyForRemoveOnFinished();
+        UNIT_ASSERT_C(!shouldCallAbort, "TAbortSessionControl::DoApply would call Abort() on an already-Aborted "
+                                        "session, reproducing the crash at session.cpp:33");
+    }
+}
+
+Y_UNIT_TEST_SUITE(Restore) {
+    [[nodiscard]] TPlanStep ProposeTx(
+        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
         UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
-        UNIT_ASSERT_EQUAL(res.GetStatus(),  NKikimrTxColumnShard::PREPARED);
-        return TPlanStep{res.GetMinStep()};
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        return TPlanStep{ res.GetMinStep() };
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
+    void PlanTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap,
+        bool waitResult = true) {
         auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
         tx->SetTxId(snap.GetTxId());
@@ -51,7 +126,8 @@ Y_UNIT_TEST_SUITE(Restore) {
     }
 
     template <class TChecker>
-    void TestWaitCondition(TTestBasicRuntime& runtime, const TString& title, const TChecker& checker, const TDuration d = TDuration::Seconds(10)) {
+    void TestWaitCondition(
+        TTestBasicRuntime & runtime, const TString& title, const TChecker& checker, const TDuration d = TDuration::Seconds(10)) {
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start < d && !checker()) {
             Cerr << "waiting " << title << Endl;
@@ -70,11 +146,9 @@ Y_UNIT_TEST_SUITE(Restore) {
             TTester::Setup(runtime);
 
             const ui64 tableId = 1;
-            const std::vector<NArrow::NTest::TTestColumn> schema = {
-                                                                        NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-                                                                        NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-                                                                        NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
-                                                                    };
+            const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);
             ui64 txId = 111;
@@ -84,16 +158,15 @@ Y_UNIT_TEST_SUITE(Restore) {
 
             {
                 std::vector<ui64> writeIds;
-                UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 5}, schema), schema, true, &writeIds));
+                UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
                 planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
                 PlanCommit(runtime, sender, planStep, txId);
             }
 
-            TestWaitCondition(runtime, "insert compacted",
-                [&]() {
+            TestWaitCondition(runtime, "insert compacted", [&]() {
                 ++writeId;
                 std::vector<ui64> writeIds;
-                WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 5, (writeId + 1) * 5}, schema), schema, true, &writeIds);
+                WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 5, (writeId + 1) * 5 }, schema), schema, true, &writeIds);
                 planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
                 PlanCommit(runtime, sender, planStep, txId);
                 return true;
@@ -129,22 +202,31 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
-            TestWaitCondition(runtime, "export",
-                [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
+            TestWaitCondition(runtime, "export", [&]() {
+                return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+            });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
         }
-        
+
         // restore
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
 
             const ui64 tableId = 1;
-            const std::vector<NArrow::NTest::TTestColumn> schema = {
-                                                                        NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-                                                                        NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-                                                                        NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
-                                                                    };
+            const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);
             ui64 txId = 111;
@@ -176,7 +258,7 @@ Y_UNIT_TEST_SUITE(Restore) {
             col3.SetType("Utf8");
             col3.SetId(3);
             col3.SetTypeId(NScheme::NTypeIds::Utf8);
-            
+
             schemaRestore.AddKeyColumnNames("key1");
             schemaRestore.AddKeyColumnNames("key2");
             schemaRestore.AddKeyColumnIds(1);
@@ -185,12 +267,24 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
-            TestWaitCondition(runtime, "import",
-                [&]() { return true; });
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
+            TestWaitCondition(runtime, "import", [&]() {
+                return true;
+            });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
             {
-                NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
+                YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+                    {"TESTSTEP", 8});
                 TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
                 reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
                 auto rb = reader.ReadAll();
@@ -199,10 +293,15 @@ Y_UNIT_TEST_SUITE(Restore) {
                 Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(schema)));
                 UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(schema).size());
                 UNIT_ASSERT(rb->num_rows());
-                UNIT_ASSERT_VALUES_EQUAL(rb->ToString(), "key1:   [\n    0,\n    1,\n    2,\n    3,\n    4,\n    15,\n    16,\n    17,\n    18,\n    19,\n    20,\n    21,\n    22,\n    23,\n    24\n  ]\nkey2:   [\n    0,\n    1,\n    2,\n    3,\n    4,\n    15,\n    16,\n    17,\n    18,\n    19,\n    20,\n    21,\n    22,\n    23,\n    24\n  ]\nfield:   [\n    \"0\",\n    \"1\",\n    \"2\",\n    \"3\",\n    \"4\",\n    \"15\",\n    \"16\",\n    \"17\",\n    \"18\",\n    \"19\",\n    \"20\",\n    \"21\",\n    \"22\",\n    \"23\",\n    \"24\"\n  ]\n");
+                UNIT_ASSERT_VALUES_EQUAL(rb->ToString(),
+                    "key1:   [\n    0,\n    1,\n    2,\n    3,\n    4,\n    15,\n    16,\n    17,\n    18,\n    19,\n    20,\n    21,\n    "
+                    "22,\n    23,\n    24\n  ]\nkey2:   [\n    0,\n    1,\n    2,\n    3,\n    4,\n    15,\n    16,\n    17,\n    18,\n    "
+                    "19,\n    20,\n    21,\n    22,\n    23,\n    24\n  ]\nfield:   [\n    \"0\",\n    \"1\",\n    \"2\",\n    \"3\",\n    "
+                    "\"4\",\n    \"15\",\n    \"16\",\n    \"17\",\n    \"18\",\n    \"19\",\n    \"20\",\n    \"21\",\n    \"22\",\n    "
+                    "\"23\",\n    \"24\"\n  ]\n");
             }
         }
     }
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

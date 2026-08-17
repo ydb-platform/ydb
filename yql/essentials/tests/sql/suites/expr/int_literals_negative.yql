@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select -9223372036854775808 as i64_min;
 select  9223372036854775807 as i64_max;
 select  9223372036854775808 as u64;

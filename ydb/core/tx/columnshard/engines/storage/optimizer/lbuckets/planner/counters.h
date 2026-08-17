@@ -36,7 +36,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr OptimizersCount;
 
     TGlobalCounters()
-        : TBase("BucketsStorageOptimizer") {
+        : TBase("BucketsStorageOptimizer")
+    {
         PortionsForMerge = std::make_shared<TPortionCategoryCounterAgents>(*this, "for_merge");
         PortionsAlone = std::make_shared<TPortionCategoryCounterAgents>(*this, "alone");
         SmallPortions = std::make_shared<TPortionCategoryCounterAgents>(*this, "small");
@@ -129,7 +130,8 @@ public:
         , MergeCoefficient(TGlobalCounters::BuildMergeCoefficientAggregation())
         , HistogramDiffSnapshots(TGlobalCounters::BuildHistogramDiffSnapshots())
         , BucketsForMerge(Singleton<TGlobalCounters>()->BucketsForMerge->GetClient())
-        , OptimizersCount(std::make_shared<NColumnShard::TValueGuard>(Singleton<TGlobalCounters>()->OptimizersCount)) {
+        , OptimizersCount(std::make_shared<NColumnShard::TValueGuard>(Singleton<TGlobalCounters>()->OptimizersCount))
+    {
         OldestCriticalActuality = TGlobalCounters::BuildOldestCriticalActualityAggregation();
     }
 

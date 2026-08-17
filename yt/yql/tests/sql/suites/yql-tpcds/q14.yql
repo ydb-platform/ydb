@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: sql panic')
-;
-/*
 $cross_items = (
     SELECT
         i_item_sk AS ss_item_sk
@@ -438,4 +433,3 @@ ORDER BY
     this_year.i_class_id,
     this_year.i_category_id
 LIMIT 100;
-*/

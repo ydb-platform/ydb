@@ -1,7 +1,6 @@
 #pragma once
 
 #include "guid.h"
-#include "mpl.h"
 #include "object_pool.h"
 #include "serialize.h"
 
@@ -11,6 +10,8 @@
 #include <yt/yt_proto/yt/core/misc/proto/protobuf_helpers.pb.h>
 
 #include <library/cpp/yt/memory/ref.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
@@ -451,9 +452,9 @@ class TRefCountedProto
 public:
     TRefCountedProto() = default;
     TRefCountedProto(const TRefCountedProto<TProto>& other);
-    TRefCountedProto(TRefCountedProto<TProto>&& other);
+    TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept;
     explicit TRefCountedProto(const TProto& other);
-    explicit TRefCountedProto(TProto&& other);
+    explicit TRefCountedProto(TProto&& other) noexcept;
     ~TRefCountedProto();
 
     i64 GetSize() const;

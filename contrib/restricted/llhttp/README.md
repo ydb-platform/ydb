@@ -112,7 +112,7 @@ The following callbacks can return `0` (proceed normally), `-1` (error) or `HPE_
 * `on_message_complete`: Invoked when a request/response has been completedly parsed.
 * `on_url_complete`: Invoked after the URL has been parsed.
 * `on_method_complete`: Invoked after the HTTP method has been parsed.
-* `on_protocol_complete`: Invoked after the HTTP version has been parsed.
+* `on_protocol_complete`: Invoked after the protocol has been parsed.
 * `on_version_complete`: Invoked after the HTTP version has been parsed.
 * `on_status_complete`: Invoked after the status code has been parsed.
 * `on_header_field_complete`: Invoked after a header name has been parsed.
@@ -397,6 +397,16 @@ With this flag this check is disabled.
 
 **Enabling this flag can pose a security issue since you will be exposed to request smuggling attacks. USE WITH CAUTION!**
 
+### `void llhttp_set_lenient_header_value_relaxed(llhttp_t* parser, int enabled)`
+
+Enables/disables relaxed handling of control characters in header values.
+
+Normally `llhttp` would error when header values contain characters not in the valid set (HTAB, SP, VCHAR, OBS_TEXT). With
+this flag, control characters (except for NULL, CR & LF) will be accepted in header values.
+
+This does not create any known security issue, but does allow content considered 'invalid' by
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#name-field-values) and so should be avoided by default.
+
 ## Build Instructions
 
 Make sure you have [Node.js](https://nodejs.org/), npm and npx installed. Then under project directory run:
@@ -435,13 +445,15 @@ If you want to use this library in a CMake project as a static library, you can 
 FetchContent_Declare(llhttp
   URL "https://github.com/nodejs/llhttp/archive/refs/tags/release/v8.1.0.tar.gz")
 
-set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
-set(BUILD_STATIC_LIBS ON CACHE INTERNAL "")
+set(LLHTTP_BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+set(LLHTTP_BUILD_STATIC_LIBS ON CACHE INTERNAL "")
 FetchContent_MakeAvailable(llhttp)
 
 # Link with the llhttp_static target
 target_link_libraries(${EXAMPLE_PROJECT_NAME} ${PROJECT_LIBRARIES} llhttp_static ${PROJECT_NAME})
 ```
+
+If using a version prior to 9.3.0, the `LLHTTP_BUILD_SHARED_LIBS` and `LLHTTP_BUILD_STATIC_LIBS` options are known as `BUILD_SHARED_LIBS` and `BUILD_STATIC_LIBS` and should be used instead.
 
 _Note that using the git repo directly (e.g., via a git repo url and tag) will not work with FetchContent_Declare because [CMakeLists.txt](./CMakeLists.txt) requires string replacements (e.g., `_RELEASE_`) before it will build._
 

@@ -15,8 +15,18 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
 
     const auto& exceptionName = error.GetExceptionName();
     if (exceptionName == "TooManyRequests" ||
-        exceptionName == "OperationAborted") {
+        exceptionName == "OperationAborted" ||
+        exceptionName == "InvalidPart" ||
+        exceptionName == "InvalidPartOrder") {
         return true;
+    }
+
+    switch (error.GetResponseCode()) {
+        case Aws::Http::HttpResponseCode::REQUEST_NOT_MADE:
+        case Aws::Http::HttpResponseCode::BAD_GATEWAY:
+            return true;
+        default:
+            break;
     }
 
     return false;

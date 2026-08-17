@@ -59,9 +59,21 @@ Y_FORCE_INLINE const std::string& TTraceContext::GetSpanName() const
     return SpanName_;
 }
 
-Y_FORCE_INLINE const std::string& TTraceContext::GetLoggingTag() const
+template <class TValue>
+void TTraceContext::AddLoggingTag(NLogging::TLoggingTagKey key, const TValue& value)
 {
-    return LoggingTag_;
+    LoggingTags_.Add(key, value);
+}
+
+template <class... TArgs>
+void TTraceContext::AddLoggingTagFormat(NLogging::TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    LoggingTags_.AddFormat(key, format, std::forward<TArgs>(args)...);
+}
+
+Y_FORCE_INLINE const NLogging::TLoggingTagList& TTraceContext::GetLoggingTags() const
+{
+    return LoggingTags_;
 }
 
 Y_FORCE_INLINE const std::optional<std::string>& TTraceContext::GetTargetEndpoint() const
@@ -152,7 +164,7 @@ Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContex
     }
 }
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other) noexcept
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
 {
@@ -189,7 +201,7 @@ Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
     , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
 { }
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other) noexcept
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
 {
@@ -273,7 +285,7 @@ inline TTraceContextFinishGuard::~TTraceContextFinishGuard()
     Release();
 }
 
-inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceContextFinishGuard&& other)
+inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceContextFinishGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -283,7 +295,7 @@ inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceConte
 }
 
 inline void TTraceContextFinishGuard::Release(
-    std::optional<NProfiling::TCpuInstant> finishTime)
+    std::optional<NProfiling::TCpuInstant> finishTime) noexcept
 {
     if (TraceContext_) {
         TraceContext_->Finish(finishTime);
@@ -324,6 +336,18 @@ void AnnotateTraceContext(TFn&& fn)
     if (auto* traceContext = TryGetCurrentTraceContext(); traceContext && traceContext->IsRecorded()) {
         fn(traceContext);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// [[gnu::used]] forces the compiler to emit an out-of-line copy of the
+// otherwise-inlined body so that the GDB fiber printer
+// (devtools/gdb/yt_fibers_printer.py) can resolve the symbol at runtime.
+[[gnu::used]] inline TTraceContext* TryGetTraceContextFromPropagatingStorage(
+    const NConcurrency::TPropagatingStorage& storage)
+{
+    auto* ptr = storage.Find<TTraceContextPtr>();
+    return ptr ? ptr->Get() : nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

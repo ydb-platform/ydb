@@ -6,167 +6,150 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#ifndef BOOST_FUNCTION_INPUT_ITERATOR
-#define BOOST_FUNCTION_INPUT_ITERATOR
+#ifndef BOOST_ITERATOR_FUNCTION_INPUT_ITERATOR_HPP_INCLUDED_
+#define BOOST_ITERATOR_FUNCTION_INPUT_ITERATOR_HPP_INCLUDED_
 
-#include <boost/config.hpp>
-#include <boost/assert.hpp>
-#include <boost/core/addressof.hpp>
-#include <boost/type_traits/conditional.hpp>
-#include <boost/function_types/is_function_pointer.hpp>
-#include <boost/function_types/result_type.hpp>
+#include <memory>
+#include <type_traits>
+
 #include <boost/iterator/iterator_facade.hpp>
-#include <boost/none.hpp>
+#include <boost/iterator/iterator_categories.hpp>
+#include <boost/iterator/detail/type_traits/conjunction.hpp>
 #include <boost/optional/optional.hpp>
-#include <boost/utility/result_of.hpp>
-
-#ifdef BOOST_RESULT_OF_USE_TR1
-#include <boost/type_traits/is_function.hpp>
-#endif
 
 namespace boost {
-
 namespace iterators {
 
-    template <class Function, class Input>
-    class function_input_iterator;
+template< typename Function, typename Input >
+class function_input_iterator;
 
-    namespace impl {
+namespace detail {
 
-        // Computes the return type of an lvalue-call with an empty argument,
-        // i.e. decltype(declval<F&>()()). F should be a nullary lvalue-callable
-        // or function.
-        template <class F>
-        struct result_of_nullary_lvalue_call
-        {
-            typedef typename result_of<
-#ifdef BOOST_RESULT_OF_USE_TR1
-                typename boost::conditional<is_function<F>::value, F&, F>::type()
-#else
-                F&()
-#endif
-            >::type type;
-        };
+template< typename Function, typename Input >
+using function_input_iterator_facade_base_t = iterator_facade<
+    iterators::function_input_iterator< Function, Input >,
+    decltype(std::declval< Function& >()()),
+    single_pass_traversal_tag,
+    decltype(std::declval< Function& >()()) const&
+>;
 
-        template <class Function, class Input>
-        class function_object_input_iterator :
-            public iterator_facade<
-                iterators::function_input_iterator<Function, Input>,
-                typename result_of_nullary_lvalue_call<Function>::type,
-                single_pass_traversal_tag,
-                typename result_of_nullary_lvalue_call<Function>::type const &
-            >
-        {
-        public:
-            function_object_input_iterator() {}
-            function_object_input_iterator(Function & f_, Input state_ = Input())
-                : f(boost::addressof(f_)), state(state_) {}
+template< typename Function, typename Input >
+class function_object_input_iterator :
+    public function_input_iterator_facade_base_t< Function, Input >
+{
+private:
+    using base_type = function_input_iterator_facade_base_t< Function, Input >;
 
-            void increment() {
-                if (value)
-                    value = none;
-                else
-                    (*f)();
-                ++state;
-            }
+protected:
+    using function_arg_type = Function&;
 
-            typename result_of_nullary_lvalue_call<Function>::type const &
-                dereference() const {
-                if (!value)
-                    value = (*f)();
-                return value.get();
-            }
+public:
+    using value_type = typename base_type::value_type;
 
-            bool equal(function_object_input_iterator const & other) const {
-                return f == other.f && state == other.state;
-            }
+public:
+    function_object_input_iterator(function_arg_type f, Input state) :
+        m_f(std::addressof(f)), m_state(state)
+    {}
 
-        private:
-            Function * f;
-            Input state;
-            mutable optional<typename result_of_nullary_lvalue_call<Function>::type> value;
-        };
+protected:
+    typename std::add_pointer< Function >::type m_f;
+    Input m_state;
+    mutable optional< value_type > m_value;
+};
 
-        template <class Function, class Input>
-        class function_pointer_input_iterator :
-            public iterator_facade<
-                iterators::function_input_iterator<Function, Input>,
-                typename function_types::result_type<Function>::type,
-                single_pass_traversal_tag,
-                typename function_types::result_type<Function>::type const &
-            >
-        {
-        public:
-            function_pointer_input_iterator() {}
-            function_pointer_input_iterator(Function &f_, Input state_ = Input())
-                : f(f_), state(state_) {}
+template< typename Function, typename Input >
+class function_pointer_input_iterator :
+    public function_input_iterator_facade_base_t< Function, Input >
+{
+private:
+    using base_type = function_input_iterator_facade_base_t< Function, Input >;
 
-            void increment() {
-                if (value)
-                    value = none;
-                else
-                    (*f)();
-                ++state;
-            }
+protected:
+    using function_arg_type = Function;
 
-            typename function_types::result_type<Function>::type const &
-                dereference() const {
-                if (!value)
-                    value = (*f)();
-                return value.get();
-            }
+public:
+    using value_type = typename base_type::value_type;
 
-            bool equal(function_pointer_input_iterator const & other) const {
-                return f == other.f && state == other.state;
-            }
+public:
+    function_pointer_input_iterator(function_arg_type f, Input state) :
+        m_f(f), m_state(state)
+    {}
 
-        private:
-            Function f;
-            Input state;
-            mutable optional<typename function_types::result_type<Function>::type> value;
-        };
+protected:
+    Function m_f;
+    Input m_state;
+    mutable optional< value_type > m_value;
+};
 
-    } // namespace impl
+template< typename Function, typename Input >
+using function_input_iterator_base_t = typename std::conditional<
+    detail::conjunction<
+        std::is_pointer< Function >,
+        std::is_function< typename std::remove_pointer< Function >::type >
+    >::value,
+    detail::function_pointer_input_iterator< Function, Input >,
+    detail::function_object_input_iterator< Function, Input >
+>::type;
 
-    template <class Function, class Input>
-    class function_input_iterator :
-        public boost::conditional<
-            function_types::is_function_pointer<Function>::value,
-            impl::function_pointer_input_iterator<Function,Input>,
-            impl::function_object_input_iterator<Function,Input>
-        >::type
+} // namespace detail
+
+template< typename Function, typename Input >
+class function_input_iterator :
+    public detail::function_input_iterator_base_t< Function, Input >
+{
+private:
+    using base_type = detail::function_input_iterator_base_t< Function, Input >;
+    using function_arg_type = typename base_type::function_arg_type;
+
+public:
+    using reference = typename base_type::reference;
+
+public:
+    function_input_iterator(function_arg_type f, Input i) :
+        base_type(f, i)
+    {}
+
+    void increment()
     {
-        typedef typename boost::conditional<
-            function_types::is_function_pointer<Function>::value,
-            impl::function_pointer_input_iterator<Function,Input>,
-            impl::function_object_input_iterator<Function,Input>
-        >::type base_type;
-    public:
-        function_input_iterator(Function & f, Input i)
-            : base_type(f, i) {}
-    };
-
-    template <class Function, class Input>
-    inline function_input_iterator<Function, Input>
-        make_function_input_iterator(Function & f, Input state) {
-            typedef function_input_iterator<Function, Input> result_t;
-            return result_t(f, state);
+        if (this->m_value)
+            this->m_value.reset();
+        else
+            (*this->m_f)();
+        ++this->m_state;
     }
 
-    template <class Function, class Input>
-    inline function_input_iterator<Function*, Input>
-        make_function_input_iterator(Function * f, Input state) {
-            typedef function_input_iterator<Function*, Input> result_t;
-            return result_t(f, state);
+    reference dereference() const
+    {
+        if (!this->m_value)
+            this->m_value = (*this->m_f)();
+        return this->m_value.get();
     }
 
-    struct infinite
+    bool equal(function_input_iterator const& other) const
     {
-        infinite & operator++() { return *this; }
-        infinite & operator++(int) { return *this; }
-        bool operator==(infinite &) const { return false; };
-        bool operator==(infinite const &) const { return false; };
-    };
+        return this->m_f == other.m_f && this->m_state == other.m_state;
+    }
+};
+
+template< typename Function, typename Input >
+inline function_input_iterator< Function, Input > make_function_input_iterator(Function& f, Input state)
+{
+    return function_input_iterator< Function, Input >(f, state);
+}
+
+template< typename Function, typename Input >
+inline function_input_iterator< Function*, Input > make_function_input_iterator(Function* f, Input state)
+{
+    return function_input_iterator< Function*, Input >(f, state);
+}
+
+struct infinite
+{
+    infinite& operator++() { return *this; }
+    infinite& operator++(int) { return *this; }
+    bool operator==(infinite&) const { return false; };
+    bool operator==(infinite const&) const { return false; };
+};
 
 } // namespace iterators
 
@@ -176,5 +159,4 @@ using iterators::infinite;
 
 } // namespace boost
 
-#endif
-
+#endif // BOOST_ITERATOR_FUNCTION_INPUT_ITERATOR_HPP_INCLUDED_

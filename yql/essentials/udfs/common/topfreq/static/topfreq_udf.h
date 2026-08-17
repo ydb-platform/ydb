@@ -10,6 +10,7 @@
 #include "topfreq.h"
 #include <algorithm>
 #include <array>
+#include <utility>
 
 using namespace NYql;
 using namespace NUdf;
@@ -57,8 +58,8 @@ private:
 
 public:
     TTopFreqCreate(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -117,8 +118,8 @@ private:
 
 public:
     TTopFreqDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -147,8 +148,8 @@ private:
 
 public:
     TTopFreqMerge(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -203,12 +204,12 @@ UDF_TYPE_ID_MAP(MAKE_RESOURCE)
         topFreqType = builder.Resource(TopFreqResourceName##slot); \
         break;
 
-static const auto CreateName = TStringRef::Of("TopFreq_Create");
-static const auto AddValueName = TStringRef::Of("TopFreq_AddValue");
-static const auto SerializeName = TStringRef::Of("TopFreq_Serialize");
-static const auto DeserializeName = TStringRef::Of("TopFreq_Deserialize");
-static const auto MergeName = TStringRef::Of("TopFreq_Merge");
-static const auto GetName = TStringRef::Of("TopFreq_Get");
+const auto CreateName = TStringRef::Of("TopFreq_Create");
+const auto AddValueName = TStringRef::Of("TopFreq_AddValue");
+const auto SerializeName = TStringRef::Of("TopFreq_Serialize");
+const auto DeserializeName = TStringRef::Of("TopFreq_Deserialize");
+const auto MergeName = TStringRef::Of("TopFreq_Merge");
+const auto GetName = TStringRef::Of("TopFreq_Get");
 
 class TTopFreqModule: public IUdfModule {
 public:
@@ -363,7 +364,8 @@ public:
             }
 
             if (name == GetName) {
-                ui32 indexF, indexV;
+                ui32 indexF;
+                ui32 indexV;
                 auto itemType = builder.Struct()->AddField<ui64>("Frequency", &indexF).AddField("Value", valueType, &indexV).Build();
                 auto resultType = builder.List()->Item(itemType).Build();
 

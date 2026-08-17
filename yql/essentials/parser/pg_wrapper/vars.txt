@@ -247,6 +247,7 @@ LockMethodLocalHash
 LockMethodLockHash
 LockMethodProcLockHash
 LockTimeout
+LogMemoryContextInProgress
 LogMemoryContextPending
 LogRepWorkerWalRcvConn
 Log_RotationAge
@@ -397,7 +398,9 @@ ProcLastRecPtr
 ProcSignal
 ProcSignalBarrierPending
 ProcStructLock
-ProcessStandbyReplyMessage.fullyAppliedLastTime
+ProcessStandbyReplyMessage.prevApplyPtr
+ProcessStandbyReplyMessage.prevFlushPtr
+ProcessStandbyReplyMessage.prevWritePtr
 ProcessSyncRequests.sync_in_progress
 ProcessUtilitySlow.validnsps
 ProcessUtility_hook
@@ -857,9 +860,11 @@ executeDateTimeMethod.fmt_txt
 expectedTLEs
 explain_get_index_name_hook
 exportedSnapshots
+ext_sibling_list
 extensible_node_methods
 external_pid_file
 extra_float_digits
+file_extend_method
 file_list
 file_tail
 find_rendezvous_variable.rendezvousHash
@@ -926,6 +931,7 @@ in_remote_transaction
 in_restore_command
 in_streamed_transaction
 incoming_message
+inplaceInvalInfo
 integer_datetimes
 internal_flush.last_reported_send_errno
 invalid_page_tab
@@ -960,6 +966,7 @@ lastUsedParser
 last_assigned_kind
 last_checkpoint_time
 last_csv_file_name
+last_initialized_offsets_page
 last_json_file_name
 last_processing
 last_reply_timestamp
@@ -1241,6 +1248,7 @@ pq_mq_busy
 pq_mq_handle
 pq_mq_parallel_leader_backend_id
 pq_mq_parallel_leader_pid
+pre_initialized_offsets_page
 prepareGID
 prepared_queries
 prevWalUsage
@@ -1252,6 +1260,7 @@ process_shared_preload_libraries_in_progress
 process_shmem_requests_in_progress
 process_syncing_tables_for_apply.last_start_times
 promote_signaled
+protocol_openssl_dummy_variable
 provider
 provider_failed_loading
 provider_successfully_loaded

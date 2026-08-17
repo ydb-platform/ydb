@@ -112,7 +112,7 @@ private:
       return SpanContext::GetInvalid();
     }
 
-    uint8_t flags;
+    uint8_t flags{0};
     if (!detail::HexToBinary(flags_hex, &flags, sizeof(flags)))
     {
       return SpanContext::GetInvalid();

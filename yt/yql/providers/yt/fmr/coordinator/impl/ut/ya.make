@@ -6,6 +6,8 @@ SRCS(
     yql_yt_ordered_partitioner_ut.cpp
     yql_yt_fmr_partitioner_ut.cpp
     yql_yt_sorted_partitioner_ut.cpp
+    yql_yt_sorted_partitioner_base_ut.cpp
+    yql_yt_reduce_partitioner_ut.cpp
     yql_yt_fmr_boundary_keys_ut.cpp
 )
 
@@ -21,7 +23,6 @@ PEERDIR(
     yt/yql/providers/yt/fmr/test_tools/mock_time_provider
     yt/yql/providers/yt/fmr/test_tools/sorted_partitioner
     yt/yql/providers/yt/fmr/test_tools/table_data_service
-    yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/gateway/fmr
     yt/yql/providers/yt/gateway/file
     yt/yql/providers/yt/codec/codegen/llvm16

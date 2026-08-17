@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: flaky: Name not found: days')
-;
-/*
 SELECT
     s_store_name,
     s_company_id,
@@ -94,4 +89,3 @@ ORDER BY
     s_state,
     s_zip
 LIMIT 100;
-*/

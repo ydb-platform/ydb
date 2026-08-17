@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <yt/yt/library/tracing/jaeger/config.h>
 #include <yt/yt/library/tracing/jaeger/sampler.h>
 
 #include <yt/yt/core/tracing/trace_context.h>

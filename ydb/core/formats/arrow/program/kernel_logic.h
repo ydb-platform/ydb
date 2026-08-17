@@ -3,15 +3,17 @@
 #include "collection.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <library/cpp/object_factory/object_factory.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
 
 enum class ECalculationHardness {
     JustAccessorUsage = 1,
     NotSpecified = 3,
-    Equals = 5,
+    Compare = 5,
     StringMatching = 10,
     Unknown = 8
 };
@@ -188,7 +190,7 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
 };
 
-class TLogicEquals: public IKernelLogic {
+class TCompareKernel: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
@@ -196,21 +198,47 @@ private:
         return false;
     }
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
-        return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
+        return TIndexCheckOperation(Op, true);
     }
     const bool IsSimpleFunction;
+    const TIndexCheckOperation::EOperation Op;
 
     virtual ECalculationHardness GetWeight() const override {
-        return ECalculationHardness::Equals;
+        return ECalculationHardness::Compare;
     }
 
 public:
-    TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction) {
-    }
+    TCompareKernel(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
+        : IKernelLogic([&] {
+            {
+                using enum TIndexCheckOperation::EOperation;
+                
+                AFL_VERIFY(op == Less || op == LessOrEqual || 
+                    op == Greater || op == GreaterOrEqual || op == Equals
+                );
+            }
+        
+            switch(op) {
+                case TIndexCheckOperation::EOperation::Equals:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
+                case TIndexCheckOperation::EOperation::Less:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less;
+                case TIndexCheckOperation::EOperation::Greater:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater;
+                case TIndexCheckOperation::EOperation::LessOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual;
+                case TIndexCheckOperation::EOperation::GreaterOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
+                default:
+                    AFL_VERIFY(false);
+            }
+        }()),
+          IsSimpleFunction(isSimpleFunction)
+        , Op(op)
+    {}
 
     virtual TString GetClassName() const override {
-        return "EQUALS";
+        return TStringBuilder() << "TCompareKernel{" << Op << "}";
     }
 
     virtual bool IsBoolInResult() const override {
@@ -267,7 +295,9 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        // Here we should have the valid path (the validation is done in KQP, so do no check it here)
+        if (const auto pathValidation = NAccessor::NSubColumns::ValidateJsonPath(svPath); pathValidation.IsFail()) {
+            return pathValidation;
+        }
 
         return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
     }

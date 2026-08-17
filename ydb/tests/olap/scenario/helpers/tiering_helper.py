@@ -3,6 +3,7 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import (
     ScenarioTestHelper,
     TestContext,
 )
+from ydb.tests.olap.scenario.helpers.drop_helper import DropSecret
 from abc import abstractmethod
 
 from typing import override, Dict
@@ -43,6 +44,29 @@ class UpsertSecret(ScenarioTestHelper.IYqlble):
         return {"name": self._name}
 
 
+class CreateSecret(ScenarioTestHelper.IYqlble):
+    """Create secret.
+
+     See {ScenarioTestHelper.IYqlble}.
+    """
+
+    def __init__(self, name: str, value: str):
+        self._name = name
+        self._value = value
+
+    @override
+    def title(self):
+        return 'Create secret'
+
+    @override
+    def to_yql(self, ctx: TestContext) -> str:
+        return f'CREATE SECRET `{ScenarioTestHelper(ctx).get_full_path(self._name)}` WITH (value="{self._value}")'
+
+    @override
+    def params(self) -> Dict[str, str]:
+        return {"name": self._name}
+
+
 class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
     """Create an external data source.
 
@@ -65,8 +89,8 @@ class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
                 '    SOURCE_TYPE="ObjectStorage",' \
                f'    LOCATION="{self._config.endpoint}/{self._config.bucket}",' \
                 '    AUTH_METHOD="AWS",' \
-               f'    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.access_key_secret}",' \
-               f'    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.secret_key_secret}",' \
+               f'    AWS_ACCESS_KEY_ID_SECRET_PATH="{self._config.access_key_secret}",' \
+               f'    AWS_SECRET_ACCESS_KEY_SECRET_PATH="{self._config.secret_key_secret}",' \
                 '    AWS_REGION="ru-central1"' \
                 ')'
 
@@ -109,25 +133,3 @@ class DropExternalDataSource(DropObjectBase):
     def _get_object_type(self):
         return 'EXTERNAL DATA SOURCE'
 
-
-class DropSecret(ScenarioTestHelper.IYqlble):
-    """Drop secret.
-
-     See {ScenarioTestHelper.IYqlble}.
-    """
-
-    def __init__(self, name: str, missing_ok: bool = False):
-        self._name = name
-        self._missing_ok = missing_ok
-
-    @override
-    def title(self):
-        return 'Drop secret'
-
-    @override
-    def to_yql(self, ctx: TestContext) -> str:
-        return f'DROP OBJECT {self._name}{' IF EXISTS' if self._missing_ok else ''} (TYPE SECRET)'
-
-    @override
-    def params(self) -> Dict[str, str]:
-        return {"name": self._name}

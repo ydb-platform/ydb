@@ -29,7 +29,6 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) override;
 
     NActors::TActorId SchemeCache;
-    NKikimr::NGRpcProxy::V1::IClustersCfgProvider* ClustersCfgProvider = nullptr;
 };
 
 } // namespace V1

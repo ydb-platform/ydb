@@ -28,7 +28,8 @@ public:
 protected:
     // table - metadata of table
     TUniqBuildHelper(const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
-        const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool insertMode);
+        const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
+        const TKqpOptimizeContext& kqpCtx, bool insertMode);
     size_t CalcComputeKeysStageOutputNum() const;
 
     struct TUniqCheckNodes {
@@ -61,7 +62,7 @@ private:
 
     static TUniqCheckNodes MakeUniqCheckNodes(const NYql::NNodes::TCoLambda& selector,
         const NYql::NNodes::TExprBase& rowsListArg, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
-    static TVector<TUniqCheckNodes> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
+    TVector<TUniqCheckNodes> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
         const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
         const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
         NYql::TExprContext& ctx, bool skipPkCheck);
@@ -74,15 +75,18 @@ private:
 protected:
     const NYql::NNodes::TCoArgument RowsListArg;
     const NYql::TExprNode::TPtr False;
+    const bool EnableOnlineAddUniqueIndex;
 private:
     const TChecks Checks;
     const NYql::TExprNode::TPtr RowsToPass;
 };
 
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
-    const TMaybe<THashSet<TStringBuf>>& inputColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const TMaybe<THashSet<TStringBuf>>& inputColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
 
 TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
     const TMaybe<THashSet<TStringBuf>>& inputColumns,
-    const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
 }

@@ -3,7 +3,6 @@ import sys
 from shutil import copyfileobj as copy
 import os.path
 
-
 PY3 = sys.version_info[0] == 3
 
 

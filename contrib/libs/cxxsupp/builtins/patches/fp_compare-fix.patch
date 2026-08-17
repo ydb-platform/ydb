@@ -1,7 +1,7 @@
-diff --git a/lib/builtins/fp_compare_impl.inc b/lib/builtins/fp_compare_impl.inc
+diff --git a/compiler-rt/lib/builtins/fp_compare_impl.inc b/compiler-rt/lib/builtins/fp_compare_impl.inc
 index f883338..6ff4051 100644
---- a/lib/builtins/fp_compare_impl.inc
-+++ b/lib/builtins/fp_compare_impl.inc
+--- a/compiler-rt/lib/builtins/fp_compare_impl.inc
++++ b/compiler-rt/lib/builtins/fp_compare_impl.inc
 @@ -12,7 +12,7 @@
  // functions. We need to ensure that the return value is sign-extended in the
  // same way as GCC expects (since otherwise GCC-generated __builtin_isinf

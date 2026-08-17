@@ -1178,10 +1178,16 @@ class CallableMixin(Base):
         # handle call_args
         # needs to be set here so assertions on call arguments pass before
         # execution in the case of awaited calls
-        _call = _Call((args, kwargs), two=True)
-        self.call_args = _call
-        self.call_args_list.append(_call)
-        self.call_count = len(self.call_args_list)
+        with NonCallableMock._lock:
+            # Lock is used here so that call_args_list and call_count are
+            # set atomically otherwise it is possible that by the time call_count
+            # is set another thread may have appended to call_args_list.
+            # The rest of this function relies on list.append being atomic and
+            # skips locking.
+            _call = _Call((args, kwargs), two=True)
+            self.call_args = _call
+            self.call_args_list.append(_call)
+            self.call_count = len(self.call_args_list)
 
         # initial stuff for method_calls:
         do_method_calls = self._mock_parent is not None
@@ -2985,7 +2991,7 @@ def mock_open(mock=None, read_data=''):
             return handle.readline.return_value
         return next(_state[0])
 
-    def _exit_side_effect(exctype, excinst, exctb):
+    def _exit_side_effect(*args):
         handle.close()
 
     global file_spec
@@ -3095,6 +3101,10 @@ class ThreadingMixin(Base):
         self._mock_event.set()
 
         return ret_value
+
+    def _increment_mock_call(self, /, *args, **kwargs):
+        with self._mock_calls_events_lock:
+            super()._increment_mock_call(*args, **kwargs)
 
     def wait_until_called(self, *, timeout=_timeout_unset):
         """Wait until the mock object is called.

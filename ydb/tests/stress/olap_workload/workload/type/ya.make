@@ -5,6 +5,7 @@ PY_SRCS(
     insert_delete.py
     transactions.py
     rename_tables.py
+    encodings.py
 )
 
 PEERDIR(

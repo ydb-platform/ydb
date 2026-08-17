@@ -4,6 +4,10 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+#include <library/cpp/yt/misc/source_location.h>
+#endif
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,15 +256,11 @@ private:
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class TFunctor,
     class... TBs>
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     TFunctor&& functor,
     TBs&&... bound);
 
@@ -269,21 +269,17 @@ auto Bind(
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class T
 >
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     const TCallback<T>& callback);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate, ::NYT::TCurrentTranslationUnitTag, __COUNTER__>(YT_CURRENT_SOURCE_LOCATION, __VA_ARGS__)
+    #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate, YT_CURRENT_SOURCE_LOCATION_LITE>(__VA_ARGS__)
 #else
     #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate>(__VA_ARGS__)
 #endif

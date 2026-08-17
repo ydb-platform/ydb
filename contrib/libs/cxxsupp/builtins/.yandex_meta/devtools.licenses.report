@@ -42,30 +42,6 @@ BELONGS ya.make
     Files with this license:
         README.txt [7:8]
 
-KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2
-BELONGS ya.make
-    License text:
-        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [237:237]
-
-KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
-BELONGS ya.make
-    # any - just word, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE.TXT [295:311]
-
 KEEP     NCSA AND MIT         72d4e9e6f06ffb6f0c77cb800c3ac442
 BELONGS ya.make
 FILE_INCLUDE LICENSE.TXT found in files: extendhftf2.c at line 6, trunctfhf2.c at line 6
@@ -147,6 +123,7 @@ BELONGS ya.make
         arm/comparesf2.S [3:4]
         arm/divdf3vfp.S [3:4]
         arm/divmodsi4.S [3:4]
+        arm/divsf3.S [3:4]
         arm/divsf3vfp.S [3:4]
         arm/divsi3.S [3:4]
         arm/eqdf2vfp.S [3:4]
@@ -160,7 +137,10 @@ BELONGS ya.make
         arm/floatsisfvfp.S [3:4]
         arm/floatunssidfvfp.S [3:4]
         arm/floatunssisfvfp.S [3:4]
+        arm/fnan2.c [3:4]
+        arm/fnorm2.c [3:4]
         arm/fp_mode.c [3:4]
+        arm/funder.c [3:4]
         arm/gedf2vfp.S [3:4]
         arm/gesf2vfp.S [3:4]
         arm/gtdf2vfp.S [3:4]
@@ -171,6 +151,7 @@ BELONGS ya.make
         arm/ltsf2vfp.S [3:4]
         arm/modsi3.S [3:4]
         arm/muldf3vfp.S [3:4]
+        arm/mulsf3.S [3:4]
         arm/mulsf3vfp.S [3:4]
         arm/nedf2vfp.S [3:4]
         arm/negdf2vfp.S [3:4]
@@ -206,6 +187,7 @@ BELONGS ya.make
         arm/sync_fetch_and_xor_4.S [3:4]
         arm/sync_fetch_and_xor_8.S [3:4]
         arm/sync_synchronize.S [3:4]
+        arm/thumb1/mulsf3.S [3:4]
         arm/truncdfsf2vfp.S [3:4]
         arm/udivmodsi4.S [3:4]
         arm/udivsi3.S [3:4]
@@ -368,6 +350,7 @@ BELONGS ya.make
         i386/ashldi3.S [1:2]
         i386/ashrdi3.S [1:2]
         i386/chkstk.S [1:2]
+        i386/chkstk2.S [1:2]
         i386/divdi3.S [1:2]
         i386/floatdidf.S [1:2]
         i386/floatdisf.S [1:2]
@@ -484,6 +467,8 @@ BELONGS ya.make
         unwind-ehabi-helpers.h [3:4]
         ve/grow_stack.S [1:2]
         ve/grow_stack_align.S [1:2]
+        wasm/__c_longjmp.S [3:4]
+        wasm/__cpp_exception.S [3:4]
         x86_64/chkstk.S [1:2]
         x86_64/floatdidf.c [1:2]
         x86_64/floatdisf.c [1:2]
@@ -544,6 +529,7 @@ BELONGS ya.make
         arm/comparesf2.S [3:4]
         arm/divdf3vfp.S [3:4]
         arm/divmodsi4.S [3:4]
+        arm/divsf3.S [3:4]
         arm/divsf3vfp.S [3:4]
         arm/divsi3.S [3:4]
         arm/eqdf2vfp.S [3:4]
@@ -557,7 +543,10 @@ BELONGS ya.make
         arm/floatsisfvfp.S [3:4]
         arm/floatunssidfvfp.S [3:4]
         arm/floatunssisfvfp.S [3:4]
+        arm/fnan2.c [3:4]
+        arm/fnorm2.c [3:4]
         arm/fp_mode.c [3:4]
+        arm/funder.c [3:4]
         arm/gedf2vfp.S [3:4]
         arm/gesf2vfp.S [3:4]
         arm/gtdf2vfp.S [3:4]
@@ -568,6 +557,7 @@ BELONGS ya.make
         arm/ltsf2vfp.S [3:4]
         arm/modsi3.S [3:4]
         arm/muldf3vfp.S [3:4]
+        arm/mulsf3.S [3:4]
         arm/mulsf3vfp.S [3:4]
         arm/nedf2vfp.S [3:4]
         arm/negdf2vfp.S [3:4]
@@ -603,6 +593,7 @@ BELONGS ya.make
         arm/sync_fetch_and_xor_4.S [3:4]
         arm/sync_fetch_and_xor_8.S [3:4]
         arm/sync_synchronize.S [3:4]
+        arm/thumb1/mulsf3.S [3:4]
         arm/truncdfsf2vfp.S [3:4]
         arm/udivmodsi4.S [3:4]
         arm/udivsi3.S [3:4]
@@ -765,6 +756,7 @@ BELONGS ya.make
         i386/ashldi3.S [1:2]
         i386/ashrdi3.S [1:2]
         i386/chkstk.S [1:2]
+        i386/chkstk2.S [1:2]
         i386/divdi3.S [1:2]
         i386/floatdidf.S [1:2]
         i386/floatdisf.S [1:2]
@@ -881,6 +873,8 @@ BELONGS ya.make
         unwind-ehabi-helpers.h [3:4]
         ve/grow_stack.S [1:2]
         ve/grow_stack_align.S [1:2]
+        wasm/__c_longjmp.S [3:4]
+        wasm/__cpp_exception.S [3:4]
         x86_64/chkstk.S [1:2]
         x86_64/floatdidf.c [1:2]
         x86_64/floatdisf.c [1:2]
@@ -888,6 +882,21 @@ BELONGS ya.make
         x86_64/floatundidf.S [3:4]
         x86_64/floatundisf.S [1:2]
         x86_64/floatundixf.S [1:2]
+
+KEEP     NCSA                 7e1c6e0177b0a462d79445a1e2d85892
+BELONGS ya.make
+    License text:
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+        ==============================================================================
+        University of Illinois/NCSA
+        Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [237:240]
 
 KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
 BELONGS ya.make
@@ -912,24 +921,6 @@ BELONGS ya.make
     Files with this license:
         LICENSE.TXT [5:205]
 
-KEEP     NCSA AND MIT         acaf5a1ddffd6829f7ebecb9e50c6c5f
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [240:245]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE.TXT [240:245]
-
 KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
 BELONGS ya.make
     # any and list - just words, not file reference
@@ -940,7 +931,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
     Files with this license:
-        LICENSE.TXT [264:289]
+        LICENSE.TXT [253:278]
 
 KEEP     Apache-2.0 AND LLVM-exception b7566a1930e050e1090162bf1d543650
 BELONGS ya.make
@@ -999,6 +990,7 @@ BELONGS ya.make
         arm/comparesf2.S [5:5]
         arm/divdf3vfp.S [5:5]
         arm/divmodsi4.S [5:5]
+        arm/divsf3.S [5:5]
         arm/divsf3vfp.S [5:5]
         arm/divsi3.S [5:5]
         arm/eqdf2vfp.S [5:5]
@@ -1012,7 +1004,10 @@ BELONGS ya.make
         arm/floatsisfvfp.S [5:5]
         arm/floatunssidfvfp.S [5:5]
         arm/floatunssisfvfp.S [5:5]
+        arm/fnan2.c [5:5]
+        arm/fnorm2.c [5:5]
         arm/fp_mode.c [5:5]
+        arm/funder.c [5:5]
         arm/gedf2vfp.S [5:5]
         arm/gesf2vfp.S [5:5]
         arm/gtdf2vfp.S [5:5]
@@ -1023,6 +1018,7 @@ BELONGS ya.make
         arm/ltsf2vfp.S [5:5]
         arm/modsi3.S [5:5]
         arm/muldf3vfp.S [5:5]
+        arm/mulsf3.S [5:5]
         arm/mulsf3vfp.S [5:5]
         arm/nedf2vfp.S [5:5]
         arm/negdf2vfp.S [5:5]
@@ -1058,6 +1054,7 @@ BELONGS ya.make
         arm/sync_fetch_and_xor_4.S [5:5]
         arm/sync_fetch_and_xor_8.S [5:5]
         arm/sync_synchronize.S [5:5]
+        arm/thumb1/mulsf3.S [5:5]
         arm/truncdfsf2vfp.S [5:5]
         arm/udivmodsi4.S [5:5]
         arm/udivsi3.S [5:5]
@@ -1220,6 +1217,7 @@ BELONGS ya.make
         i386/ashldi3.S [3:3]
         i386/ashrdi3.S [3:3]
         i386/chkstk.S [3:3]
+        i386/chkstk2.S [3:3]
         i386/divdi3.S [3:3]
         i386/floatdidf.S [3:3]
         i386/floatdisf.S [3:3]
@@ -1336,6 +1334,8 @@ BELONGS ya.make
         unwind-ehabi-helpers.h [5:5]
         ve/grow_stack.S [3:3]
         ve/grow_stack_align.S [3:3]
+        wasm/__c_longjmp.S [5:5]
+        wasm/__cpp_exception.S [5:5]
         x86_64/chkstk.S [3:3]
         x86_64/floatdidf.c [3:3]
         x86_64/floatdisf.c [3:3]
@@ -1396,6 +1396,7 @@ BELONGS ya.make
         arm/comparesf2.S [5:5]
         arm/divdf3vfp.S [5:5]
         arm/divmodsi4.S [5:5]
+        arm/divsf3.S [5:5]
         arm/divsf3vfp.S [5:5]
         arm/divsi3.S [5:5]
         arm/eqdf2vfp.S [5:5]
@@ -1409,7 +1410,10 @@ BELONGS ya.make
         arm/floatsisfvfp.S [5:5]
         arm/floatunssidfvfp.S [5:5]
         arm/floatunssisfvfp.S [5:5]
+        arm/fnan2.c [5:5]
+        arm/fnorm2.c [5:5]
         arm/fp_mode.c [5:5]
+        arm/funder.c [5:5]
         arm/gedf2vfp.S [5:5]
         arm/gesf2vfp.S [5:5]
         arm/gtdf2vfp.S [5:5]
@@ -1420,6 +1424,7 @@ BELONGS ya.make
         arm/ltsf2vfp.S [5:5]
         arm/modsi3.S [5:5]
         arm/muldf3vfp.S [5:5]
+        arm/mulsf3.S [5:5]
         arm/mulsf3vfp.S [5:5]
         arm/nedf2vfp.S [5:5]
         arm/negdf2vfp.S [5:5]
@@ -1455,6 +1460,7 @@ BELONGS ya.make
         arm/sync_fetch_and_xor_4.S [5:5]
         arm/sync_fetch_and_xor_8.S [5:5]
         arm/sync_synchronize.S [5:5]
+        arm/thumb1/mulsf3.S [5:5]
         arm/truncdfsf2vfp.S [5:5]
         arm/udivmodsi4.S [5:5]
         arm/udivsi3.S [5:5]
@@ -1617,6 +1623,7 @@ BELONGS ya.make
         i386/ashldi3.S [3:3]
         i386/ashrdi3.S [3:3]
         i386/chkstk.S [3:3]
+        i386/chkstk2.S [3:3]
         i386/divdi3.S [3:3]
         i386/floatdidf.S [3:3]
         i386/floatdisf.S [3:3]
@@ -1733,6 +1740,8 @@ BELONGS ya.make
         unwind-ehabi-helpers.h [5:5]
         ve/grow_stack.S [3:3]
         ve/grow_stack_align.S [3:3]
+        wasm/__c_longjmp.S [5:5]
+        wasm/__cpp_exception.S [5:5]
         x86_64/chkstk.S [3:3]
         x86_64/floatdidf.c [3:3]
         x86_64/floatdisf.c [3:3]
@@ -1740,19 +1749,6 @@ BELONGS ya.make
         x86_64/floatundidf.S [5:5]
         x86_64/floatundisf.S [3:3]
         x86_64/floatundixf.S [3:3]
-
-KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943
-BELONGS ya.make
-    License text:
-        University of Illinois/NCSA
-        Open Source License
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
-        LICENSE.TXT [249:250]
 
 KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
 BELONGS ya.make

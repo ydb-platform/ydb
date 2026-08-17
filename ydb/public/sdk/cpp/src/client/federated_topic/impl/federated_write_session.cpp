@@ -135,7 +135,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                         return;
                     }
 
-                    Y_ABORT_UNLESS(!self->PendingToken.has_value());
+                    Y_ABORT_UNLESS(!self->PendingToken.has_value(), "Continuation token is required");
                     self->PendingToken = std::move(ev.ContinuationToken);
                     self->MaybeWriteImpl();
                 }
@@ -160,7 +160,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                     }
                 }
 
-                self->ClientEventsQueue->PushEvent(std::move(ev));
+                self->ClientEventsQueue->PushEvent(ev);
                 self->IssueTokenIfAllowed();
             }
         })

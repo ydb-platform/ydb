@@ -45,7 +45,8 @@ public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , MemoryBytes(memoryBytes) {
+        , MemoryBytes(memoryBytes)
+    {
     }
 };
 
@@ -73,9 +74,11 @@ protected:
     std::optional<ui64> UsedRawBytes;
 
     virtual void DoAbort() = 0;
+
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
+
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
@@ -105,10 +108,7 @@ public:
         }
     }
 
-    void ClearMemoryGuards() {
-        ResourceGuards.clear();
-        SourceGroupGuard.reset();
-    }
+    void ClearMemoryGuards();
 
     ui32 GetPurposeSyncPointIndex() const {
         AFL_VERIFY(PurposeSyncPointIndex);
@@ -141,6 +141,10 @@ public:
         return *UsedRawBytes;
     }
 
+    virtual ui64 GetUsedRawBytesOptional() const override {
+        return UsedRawBytes.value_or(0);
+    }
+
     void SetUsedRawBytes(const ui64 value) {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;
@@ -171,8 +175,7 @@ public:
         ClearStageData();
         MutableExecutionContext().Stop();
         StageResult.reset();
-        ResourceGuards.clear();
-        SourceGroupGuard = nullptr;
+        ClearMemoryGuards();
     }
 
     void SetIsStartedByCursor() {
@@ -196,10 +199,11 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual TInternalPathId GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const override = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
+
     bool HasFetchingPlan() const {
         return !!FetchingPlan;
     }
@@ -298,7 +302,9 @@ private:
         result.InsertValue("read_memory", GetColumnRawBytes(GetPortionAccessor().GetColumnIds()));
         return result;
     }
+
     virtual void DoAbort() override;
+
     virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
@@ -331,9 +337,14 @@ public:
         return Schema;
     }
 
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return Schema;
+    }
+
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
+
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
@@ -421,6 +432,8 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
+    const ui64 LastDeprecatedPortionId;
+    const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
         const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
@@ -438,6 +451,7 @@ private:
         AFL_VERIFY(false);
         return true;
     }
+
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& /*columns*/, const bool /*sequential*/) override {
         AFL_VERIFY(false);
     }
@@ -453,26 +467,32 @@ private:
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) override {
         return TConclusionStatus::Fail("not implemented DoStartReserveMemory for TAggregationDataSource");
     }
+
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchIndex for TAggregationDataSource");
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
         const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckIndex for TAggregationDataSource");
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchHeader for TAggregationDataSource");
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckHeader for TAggregationDataSource");
     }
+
     virtual void DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchData for TAggregationDataSource");
@@ -520,6 +540,14 @@ public:
 
     ui64 GetLastSourceRecordsCount() const {
         return LastSourceRecordsCount;
+    }
+
+    ui64 GetLastDeprecatedPortionId() const {
+        return LastDeprecatedPortionId;
+    }
+
+    const std::optional<ui64>& GetLastPortionIdOptional() const {
+        return LastPortionIdOptional;
     }
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
@@ -591,10 +619,12 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
+        , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());
     }

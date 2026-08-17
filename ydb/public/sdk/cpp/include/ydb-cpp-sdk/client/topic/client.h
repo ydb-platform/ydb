@@ -3,6 +3,7 @@
 #include "control_plane.h"
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -49,11 +50,14 @@ public:
     //! Create write session.
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings);
 
-    //! Create simple blocking keyed write session. Experimental feature. DO NOT USE IN PRODUCTION.
-    std::shared_ptr<ISimpleBlockingKeyedWriteSession> CreateSimpleBlockingKeyedWriteSession(const TKeyedWriteSessionSettings& settings);
+    //! Create producer. Experimental feature. DO NOT USE IN PRODUCTION.
+    std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
 
-    //! Create keyed write session. Experimental feature. DO NOT USE IN PRODUCTION.
-    std::shared_ptr<IKeyedWriteSession> CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings);
+    //! Create typed producer.
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        return std::make_shared<TTypedProducer<T>>(CreateProducer(settings));
+    }
 
     //! Create write session.
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);

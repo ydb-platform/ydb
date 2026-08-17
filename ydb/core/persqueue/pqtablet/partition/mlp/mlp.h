@@ -18,6 +18,7 @@ struct TMetrics {
     size_t UnprocessedMessageCount = 0;
     size_t LockedMessageCount = 0;
     size_t LockedMessageGroupCount = 0;
+    size_t InflightMessageGroupCount = 0;
     size_t DelayedMessageCount = 0;
     size_t CommittedMessageCount = 0;
     size_t DeadlineExpiredMessageCount = 0;
@@ -45,6 +46,7 @@ NActors::IActor* CreateConsumerActor(
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
+    ui64 partitionGeneration,
     const NKikimrPQ::TPQTabletConfig& topicConfig,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> retentionPeriod,

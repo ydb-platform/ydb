@@ -1,9 +1,21 @@
 #pragma once
 
-#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
+#include <util/system/types.h>
+
+#include <functional>
+#include <memory>
 #include <optional>
+#include <vector>
+
+namespace NActors {
+
+class TTestActorRuntimeBase;
+
+} //namespace NActors
 
 namespace NTestUtils {
 
@@ -38,7 +50,7 @@ public:
 
     virtual void AddEvent(NYdb::NTopic::TReadSessionEvent::TEvent&& ev) = 0;
 
-    virtual void AddStartSessionEvent() = 0;
+    virtual void AddStartSessionEvent(ui64 endOffset = 0) = 0;
 
     virtual void AddDataReceivedEvent(ui64 offset, const TString& data) = 0;
 
@@ -91,7 +103,7 @@ public:
 struct TMockPqGatewaySettings {
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
-    NActors::TTestActorRuntime* Runtime = nullptr;
+    NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
 };
 

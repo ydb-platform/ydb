@@ -2,10 +2,10 @@ RECURSE(
     actors
     common
     comp_nodes
+    constraints
     expr_nodes
     opt
     runtime
-    state
     tasks
     transform
     type_ann

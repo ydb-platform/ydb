@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NYPath {
@@ -68,8 +69,8 @@ public:
 
     TTrie(const TTrie& other);
     TTrie& operator=(const TTrie& other);
-    TTrie(TTrie&&) = default;
-    TTrie& operator=(TTrie&&) = default;
+    TTrie(TTrie&&) noexcept = default;
+    TTrie& operator=(TTrie&&) noexcept = default;
 
     void AddPath(TYPath path);
     void Merge(const TTrie& other);

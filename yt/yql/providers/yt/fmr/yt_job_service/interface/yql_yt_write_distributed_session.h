@@ -18,6 +18,10 @@ public:
 
     virtual void Finish(
         const std::vector<TString>& fragmentResultsYson) = 0;
+
+    virtual bool HasPingError() const = 0;
+
+    virtual TString GetPingError() const = 0;
 };
 
 } // namespace NYql::NFmr

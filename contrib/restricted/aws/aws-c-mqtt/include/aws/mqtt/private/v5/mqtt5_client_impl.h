@@ -252,6 +252,17 @@ struct aws_mqtt5_client_operational_state {
      */
     aws_mqtt5_packet_id_t next_mqtt_packet_id;
 
+    /*
+     * One more than the most recently used control packet id.
+     */
+    uint64_t next_mqtt5_pub_ack_control_id;
+    /* These tables are used for fast search of a packet_id and control_id pair. They both set an
+     * aws_mqtt5_manual_pub_ack_entry as its value */
+    struct aws_hash_table manual_pub_ack_packet_id_table;
+    struct aws_hash_table manual_pub_ack_control_id_table;
+    /* This table contains control ids known to be cancelled due to client disconnect for better failure messaging */
+    struct aws_hash_table manual_pub_ack_cancelled_control_id_table;
+
     struct aws_linked_list queued_operations;
     struct aws_mqtt5_operation *current_operation;
     struct aws_hash_table unacked_operations_table;

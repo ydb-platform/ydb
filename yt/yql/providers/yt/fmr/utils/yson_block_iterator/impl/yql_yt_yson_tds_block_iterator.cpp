@@ -3,12 +3,13 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 
+#include <yql/essentials/utils/log/log.h>
 #include <util/stream/mem.h>
 #include <util/generic/hash_set.h>
 
 namespace NYql::NFmr {
 
-TTDSBlockIterator::TTDSBlockIterator(
+TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     TString tableId,
     std::vector<TTableRange> tableRanges,
     ITableDataService::TPtr tableDataService,
@@ -17,8 +18,11 @@ TTDSBlockIterator::TTDSBlockIterator(
     std::vector<TString> neededColumns,
     TString serializedColumnGroupsSpec,
     TMaybe<bool> isFirstRowKeysInclusive,
+    TMaybe<bool> isLastRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
-    TMaybe<TString> lastRowKeys
+    TMaybe<TString> lastRowKeys,
+    ui64 readAheadChunks,
+    TMaybe<size_t> numBoundaryKeyColumns
 )
     : TableId_(std::move(tableId))
     , TableRanges_(std::move(tableRanges))
@@ -27,6 +31,8 @@ TTDSBlockIterator::TTDSBlockIterator(
     , SortOrders_(std::move(sortOrders))
     , NeededColumns_(std::move(neededColumns))
     , SerializedColumnGroupsSpec_(std::move(serializedColumnGroupsSpec))
+    , ReadAheadChunks_(readAheadChunks)
+    , NumBoundaryKeyColumns_(numBoundaryKeyColumns.GetOrElse(KeyColumns_.size()))
 {
     if (SortOrders_.empty()) {
         SortOrders_.assign(KeyColumns_.size(), ESortOrder::Ascending);
@@ -34,58 +40,206 @@ TTDSBlockIterator::TTDSBlockIterator(
     if (SortOrders_.size() != KeyColumns_.size()) {
         ythrow yexception() << "SortOrders and KeyColumns sizes are different";
     }
+    Y_ENSURE(NumBoundaryKeyColumns_ <= KeyColumns_.size(), "numBoundaryKeyColumns must not exceed keyColumns size");
 
     if (firstRowKeys) {
-        FirstBound_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
-        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Bound");
+        FirstBoundary_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Boundary");
         IsFirstBoundInclusive_ = *isFirstRowKeysInclusive;
     }
     if (lastRowKeys) {
-        LastBound_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isLastRowKeysInclusive.Defined(), "isLastRowKeysInclusive must be defined for Last Boundary");
+        IsLastBoundInclusive_ = *isLastRowKeysInclusive;
+    }
+
+    if (SerializedColumnGroupsSpec_.empty()) {
+        GroupNamesToRead_.push_back(TString());
+    } else {
+        const auto spec = GetColumnGroupsFromSpec(SerializedColumnGroupsSpec_);
+
+        if (NeededColumns_.empty()) {
+            for (const auto& [groupName, cols] : spec.ColumnGroups) {
+                GroupNamesToRead_.push_back(groupName);
+            }
+            GroupNamesToRead_.push_back(spec.DefaultColumnGroupName);
+        } else {
+            THashSet<TString> allNeeded(NeededColumns_.begin(), NeededColumns_.end());
+            allNeeded.insert(KeyColumns_.begin(), KeyColumns_.end());
+
+            THashSet<TString> groupNames;
+            for (const auto& col : allNeeded) {
+                groupNames.insert(FindGroupForColumn(col, spec));
+            }
+            GroupNamesToRead_.assign(groupNames.begin(), groupNames.end());
+        }
     }
 
     SetMinChunkInNewRange();
-} // namespace NYql::NFmr
 
-TTDSBlockIterator::~TTDSBlockIterator() = default;
+    PrefetchRange_ = CurrentRange_;
+    PrefetchChunk_ = CurrentChunk_;
 
-void TTDSBlockIterator::SetMinChunkInNewRange() {
+    FillPrefetchQueue();
+}
+
+TTableDataServiceBlockIterator::~TTableDataServiceBlockIterator() = default;
+
+TString TTableDataServiceBlockIterator::FindGroupForColumn(const TString& col, const TParsedColumnGroupSpec& spec) {
+    for (const auto& [groupName, cols] : spec.ColumnGroups) {
+        if (cols.contains(col)) {
+            return groupName;
+        }
+    }
+    return spec.DefaultColumnGroupName;
+}
+
+void TTableDataServiceBlockIterator::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
         CurrentChunk_ = TableRanges_[CurrentRange_].MinChunk;
     }
 }
 
-bool TTDSBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
-    if (FirstBound_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+bool TTableDataServiceBlockIterator::TrySchedulePrefetch() {
+    while (PrefetchRange_ < TableRanges_.size()) {
+        const auto& range = TableRanges_[PrefetchRange_];
+        if (PrefetchChunk_ < range.MaxChunk) {
+            const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
+            TPrefetchEntry entry;
+            entry.Futures.reserve(GroupNamesToRead_.size());
+            for (const auto& gname : GroupNamesToRead_) {
+                const TString dataChunkId = GetTableDataServiceChunkId(PrefetchChunk_, gname);
+                YQL_CLOG(DEBUG, FastMapReduce) << "TTableDataServiceBlockIterator::Prefetch: group=" << group
+                    << " chunkId=" << dataChunkId << " (gname='" << gname << "' chunk=" << PrefetchChunk_ << ")";
+                entry.Futures.push_back(TableDataService_->Get(group, dataChunkId));
+            }
+            PrefetchQueue_.push_back(std::move(entry));
+            ++PrefetchChunk_;
+            return true;
+        }
+        ++PrefetchRange_;
+        if (PrefetchRange_ < TableRanges_.size()) {
+            PrefetchChunk_ = TableRanges_[PrefetchRange_].MinChunk;
+        }
+    }
+    return false;
+}
+
+void TTableDataServiceBlockIterator::FillPrefetchQueue() {
+    while (PrefetchQueue_.size() < ReadAheadChunks_) {
+        if (!TrySchedulePrefetch()) {
+            break;
+        }
+    }
+}
+
+namespace {
+
+// A key column's value is considered null either because the row's binary yson genuinely omits
+// it (IsValid()==false - e.g. a nullable column that a sparse writer drops rather than encoding
+// as an explicit entity) or because it IS encoded, but as the explicit '#' entity marker (e.g.
+// boundary blobs built from a NYT::TNode map, which always sets every key, and represents a NULL
+// value as an entity rather than omitting the key).
+bool IsNullColumnValue(TStringBuf blob, const TColumnOffsetRange& range) {
+    if (!range.IsValid()) {
+        return true;
+    }
+    return SliceRange(blob, range) == TStringBuf(&EntitySymbol, 1);
+}
+
+// FirstRowKeys/LastRowKeys boundaries are built by the coordinator from a task's chunk-stats,
+// i.e. from an actual physical row's real key - for MapReduce reduce tasks over joins that key
+// is [_yql_key_hash, ...ReduceBy, ...SortBy tiebreaker] in full, tiebreaker included, because
+// that's what TReducePartitioner sorts intermediate data by (see
+// yql_yt_map_reduce_stage_operation_manager.cpp). It is NOT reliably a strict prefix that omits
+// the tiebreaker: whichever physical row happens to land on a task cut contributes its own real
+// tiebreaker value to the boundary blob. So this can't stop at "wherever the boundary blob runs
+// out of valid columns" (that already-invalid range doesn't reliably appear here) - it must be
+// told explicitly, via numBoundaryKeyColumns, how many leading columns actually define a reduce
+// group, and ignore everything past that. Comparing the tiebreaker as a real bound column would
+// silently split a reduce group in half whenever a task cut lands between two physical rows that
+// share a reduce key but differ in tiebreaker (e.g. a join's build-side row vs. its probe-side
+// rows) - each side would look like it's on the "wrong side" of the other's boundary.
+int CompareRowToBoundaryPrefix(
+    TStringBuf rowBlob,
+    const TRowIndexMarkup& row,
+    TStringBuf boundaryBlob,
+    const TRowIndexMarkup& boundaryMarkup,
+    const std::vector<ESortOrder>& sortOrders,
+    size_t numBoundaryKeyColumns
+) {
+    const size_t limit = std::min<size_t>(numBoundaryKeyColumns, boundaryMarkup.empty() ? 0 : boundaryMarkup.size() - 1);
+    for (ui64 colIdx = 0; colIdx < limit; ++colIdx) {
+        const auto& boundaryRange = boundaryMarkup[colIdx];
+        if (!boundaryRange.IsValid()) {
+            // Boundary doesn't encode this column (or any further one, since it's a prefix) -
+            // no constraint from here on.
+            break;
+        }
+        const auto& rowRange = row[colIdx];
+
+        // Both sides null (whichever way each happens to encode it) - equal at this column,
+        // keep comparing the remaining columns instead of declaring the row out of bounds.
+        const bool rowIsNull = IsNullColumnValue(rowBlob, rowRange);
+        const bool boundaryIsNull = IsNullColumnValue(boundaryBlob, boundaryRange);
+        if (rowIsNull && boundaryIsNull) {
+            continue;
+        }
+        if (rowIsNull) {
+            return -1;
+        }
+        if (boundaryIsNull) {
+            return 1;
+        }
+
+        int result = CompareYsonValuesImpl(SliceRange(rowBlob, rowRange), SliceRange(boundaryBlob, boundaryRange));
+        if (sortOrders[colIdx] == ESortOrder::Descending) {
+            result = -result;
+        }
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
+bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
+    if (FirstBoundary_) {
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
-            FirstBound_->Row,
-            FirstBound_->Markup,
-            SortOrders_
+            FirstBoundary_->Row,
+            FirstBoundary_->Markup,
+            SortOrders_,
+            NumBoundaryKeyColumns_
         );
-        if (c < 0) { // if row < first bound
+        if (c < 0) { // if row < first boundary
             return false;
-        } else if (!IsFirstBoundInclusive_ && c == 0) { // if row == first bound
+        } else if (!IsFirstBoundInclusive_ && c == 0) { // if row == first boundary
             return false;
         }
     }
-    if (LastBound_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+    if (LastBoundary_) {
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
-            LastBound_->Row,
-            LastBound_->Markup,
-            SortOrders_
+            LastBoundary_->Row,
+            LastBoundary_->Markup,
+            SortOrders_,
+            NumBoundaryKeyColumns_
         );
-        if (c > 0) { // if row > last bound
+        if (c > 0) { // if row > last boundary
+            return false;
+        } else if (!IsLastBoundInclusive_ && c == 0) {
             return false;
         }
     }
     return true;
 }
 
-bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
+bool TTableDataServiceBlockIterator::NextBlock(TIndexedBlock& out) {
     out = {};
 
     while (true) {
@@ -100,55 +254,39 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
             continue;
         }
 
-        const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
-
-        THashSet<TString> allNeeded;
-        for (const auto& c : NeededColumns_) {
-            allNeeded.insert(c);
-        }
-        for (const auto& c : KeyColumns_) {
-            allNeeded.insert(c);
-        }
-
-        std::vector<TString> groupNamesToRead;
-        if (SerializedColumnGroupsSpec_.empty()) {
-            groupNamesToRead.push_back(TString());
-        } else {
-            const auto spec = GetColumnGroupsFromSpec(SerializedColumnGroupsSpec_);
-            THashSet<TString> groupNames;
-
-            auto findGroupForColumn = [&spec](const TString& col) -> TString {
-                for (const auto& [groupName, cols] : spec.ColumnGroups) {
-                    if (cols.contains(col)) {
-                        return groupName;
-                    }
-                }
-                return spec.DefaultColumnGroupName;
-            };
-
-            for (const auto& col : allNeeded) {
-                groupNames.insert(findGroupForColumn(col));
-            }
-
-            groupNamesToRead.assign(groupNames.begin(), groupNames.end());
-        }
-
         std::vector<TString> groupYsons;
-        groupYsons.reserve(groupNamesToRead.size());
-        for (const auto& gname : groupNamesToRead) {
-            const TString dataChunkId = GetTableDataServiceChunkId(CurrentChunk_, gname);
-            auto data = TableDataService_->Get(group, dataChunkId).GetValueSync();
-            groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+        groupYsons.reserve(GroupNamesToRead_.size());
+
+        if (!PrefetchQueue_.empty()) {
+            auto& entry = PrefetchQueue_.front();
+            for (auto& future : entry.Futures) {
+                auto data = future.GetValueSync();
+                groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+            }
+            PrefetchQueue_.pop_front();
+            FillPrefetchQueue();
+        } else {
+            const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
+            for (const auto& gname : GroupNamesToRead_) {
+                const TString dataChunkId = GetTableDataServiceChunkId(CurrentChunk_, gname);
+                auto data = TableDataService_->Get(group, dataChunkId).GetValueSync();
+                groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+            }
         }
 
-        const TString unionYson = GetYsonUnion(groupYsons, NeededColumns_);
+        TString unionYson;
+        if (groupYsons.size() == 1 && NeededColumns_.empty()) {
+            unionYson = std::move(groupYsons[0]);
+        } else {
+            unionYson = GetYsonUnionRaw(groupYsons, NeededColumns_);
+        }
 
         TParserFragmentListIndex parser(unionYson, KeyColumns_);
         parser.Parse();
         const auto& rows = parser.GetRows();
 
         out.Data = unionYson;
-        if (FirstBound_ || LastBound_) {
+        if (FirstBoundary_ || LastBoundary_) {
             std::vector<TRowIndexMarkup> filtered;
             filtered.reserve(rows.size());
             for (const auto& r : rows) {
@@ -165,4 +303,8 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
     }
 }
 
+std::vector<ESortOrder> TTableDataServiceBlockIterator::GetSortOrder() {
+    return SortOrders_;
 }
+
+} // namespace NYql::NFmr

@@ -116,6 +116,10 @@ $test_status = SELECT
     -- Дополнительные поля
     CASE WHEN LastKind = 'Stability' THEN JSON_VALUE(LastStats, '$.table_type') ELSE NULL END AS TableType,
     CASE WHEN LastKind = 'Stability' THEN CAST(JSON_VALUE(LastStats, '$.test_timestamp') AS Uint64) ELSE NULL END AS TestTimestamp,
+
+    -- Фазы прогона (main / recoverability) из Stats.phases
+    CASE WHEN LastKind = 'Stability' THEN JSON_QUERY(LastStats, '$.phases') ELSE NULL END AS Phases,
+    CASE WHEN LastKind = 'Stability' THEN CAST(JSON_VALUE(LastStats, '$.phases_count') AS Int32) ELSE NULL END AS PhasesCount,
     
     -- Информация о кластере
     JSON_VALUE(LastInfo, '$.cluster.version') AS ClusterVersion,
@@ -188,6 +192,8 @@ $final_metrics = SELECT
     WorkloadWarnings,
     TableType,
     TestTimestamp,
+    Phases,
+    PhasesCount,
     ClusterVersion,
     ClusterVersionLink,
     ClusterEndpoint,
@@ -290,6 +296,8 @@ SELECT
     -- Дополнительные поля
     TableType,
     TestTimestamp,
+    Phases,
+    PhasesCount,
     
     -- Информация об ошибках ClusterCheck
     CASE WHEN LastKind = 'ClusterCheck' THEN JSON_VALUE(LastStats, '$.issue_type') ELSE NULL END AS ClusterIssueType,

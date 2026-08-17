@@ -1,5 +1,3 @@
 #include "write.h"
 
-namespace NKikimr::NOlap::NTxInteractions {
-
-}
+namespace NKikimr::NOlap::NTxInteractions {}

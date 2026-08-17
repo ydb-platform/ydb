@@ -14,7 +14,7 @@ class TAttributeConsumer
     : public NYson::TForwardingYsonConsumer
 {
 public:
-    explicit TAttributeConsumer(IAttributeDictionary* attributes, std::optional<THashSet<TString>> keyWhitelist = {});
+    explicit TAttributeConsumer(IAttributeDictionary* attributes, std::optional<THashSet<std::string>> keyWhitelist = {});
     IAttributeDictionary* GetAttributes() const;
 
 protected:
@@ -35,7 +35,7 @@ protected:
 private:
     IAttributeDictionary* const Attributes_;
 
-    const std::optional<THashSet<TString>> KeyWhitelist_;
+    const std::optional<THashSet<std::string>> KeyWhitelist_;
 
     TStringStream Output_;
     std::unique_ptr<NYson::TBufferedBinaryYsonWriter> Writer_;

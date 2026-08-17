@@ -48,9 +48,13 @@ class Shard(object):
         def __init__(self, labels, kind="DGAUGE", timestamps=[], values=[]):
             self.labels = labels
             self.kind = kind
-            self.data = []
+            self.points = {}
             for i in range(len(timestamps)):
-                self.data.append((int(timestamps[i] * 1000), values[i]))
+                self.add_point(int(timestamps[i] * 1000), values[i])
+
+        @property
+        def data(self):
+            return self.points.items()
 
         def match(self, selectors):
             for key, value in selectors.items():
@@ -73,7 +77,7 @@ class Shard(object):
             return True
 
         def add_point(self, ts, value):
-            self.data.append((ts, value))
+            self.points[ts] = value
 
     def __init__(self, project, cluster, service):
         self._project = project

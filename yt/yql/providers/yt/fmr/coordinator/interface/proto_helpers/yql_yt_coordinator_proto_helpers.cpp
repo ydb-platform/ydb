@@ -65,7 +65,7 @@ THeartbeatResponse HeartbeatResponseFromProto(const NProto::THeartbeatResponse& 
 
 NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperationRequest& startOperationRequest) {
     NProto::TStartOperationRequest protoStartOperationRequest;
-    protoStartOperationRequest.SetTaskType(static_cast<NProto::ETaskType>(startOperationRequest.TaskType));
+    protoStartOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(startOperationRequest.OperationType));
     auto protoOperationParams = OperationParamsToProto(startOperationRequest.OperationParams);
     protoStartOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
 
@@ -93,11 +93,16 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
         protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
     }
+    if (startOperationRequest.FmrJob) {
+        auto protoFmrJob = YtResourceInfoToProto(*startOperationRequest.FmrJob);
+        protoStartOperationRequest.MutableFmrJob()->Swap(&protoFmrJob);
+    }
     return protoStartOperationRequest;
 }
 
 TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoPrepareOperationRequest) {
     TPrepareOperationRequest PrepareOperationRequest;
+    PrepareOperationRequest.OperationType = static_cast<EOperationType>(protoPrepareOperationRequest.GetOperationType());
     PrepareOperationRequest.OperationParams = OperationParamsFromProto(protoPrepareOperationRequest.GetOperationParams());
     std::unordered_map<TFmrTableId, TClusterConnection> PrepareOperationRequestClusterConnections;
     for (auto& [tableName, conn]: protoPrepareOperationRequest.GetClusterConnections()) {
@@ -112,6 +117,7 @@ TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepare
 
 NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& PrepareOperationRequest) {
     NProto::TPrepareOperationRequest protoPrepareOperationRequest;
+    protoPrepareOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(PrepareOperationRequest.OperationType));
     auto protoOperationParams = OperationParamsToProto(PrepareOperationRequest.OperationParams);
     protoPrepareOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
 
@@ -129,16 +135,27 @@ NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepare
     NProto::TPrepareOperationResponse protoPrepareOperationResponse;
     protoPrepareOperationResponse.SetPartitionId(PrepareOperationResponse.PartitionId);
     protoPrepareOperationResponse.SetTasksNum(PrepareOperationResponse.TasksNum);
+    for (const auto& errorMessage : PrepareOperationResponse.ErrorMessages) {
+        auto* curError = protoPrepareOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
     return protoPrepareOperationResponse;
 }
 
 TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoPrepareOperationResponse) {
-    return TPrepareOperationResponse{.PartitionId = protoPrepareOperationResponse.GetPartitionId(), .TasksNum = protoPrepareOperationResponse.GetTasksNum()};
+    TPrepareOperationResponse prepareOperationResponse;
+    prepareOperationResponse.PartitionId = protoPrepareOperationResponse.GetPartitionId();
+    prepareOperationResponse.TasksNum = protoPrepareOperationResponse.GetTasksNum();
+    for (size_t i = 0; i < protoPrepareOperationResponse.ErrorMessagesSize(); ++i) {
+        prepareOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoPrepareOperationResponse.GetErrorMessages(i)));
+    }
+    return prepareOperationResponse;
 }
 
 TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
     TStartOperationRequest startOperationRequest;
-    startOperationRequest.TaskType = static_cast<ETaskType>(protoStartOperationRequest.GetTaskType());
+    startOperationRequest.OperationType = static_cast<EOperationType>(protoStartOperationRequest.GetOperationType());
     startOperationRequest.OperationParams = OperationParamsFromProto(protoStartOperationRequest.GetOperationParams());
     startOperationRequest.SessionId = protoStartOperationRequest.GetSessionId();
     if (protoStartOperationRequest.HasIdempotencyKey()) {
@@ -162,6 +179,9 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
         startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
     }
+    if (protoStartOperationRequest.HasFmrJob()) {
+        startOperationRequest.FmrJob = YtResourceInfoFromProto(protoStartOperationRequest.GetFmrJob());
+    }
     return startOperationRequest;
 }
 
@@ -169,14 +189,22 @@ NProto::TStartOperationResponse StartOperationResponseToProto(const TStartOperat
     NProto::TStartOperationResponse protoStartOperationResponse;
     protoStartOperationResponse.SetOperationId(startOperationResponse.OperationId);
     protoStartOperationResponse.SetStatus(static_cast<NProto::EOperationStatus>(startOperationResponse.Status));
+    for (const auto& errorMessage : startOperationResponse.ErrorMessages) {
+        auto* curError = protoStartOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
     return protoStartOperationResponse;
 }
 
 TStartOperationResponse StartOperationResponseFromProto(const NProto::TStartOperationResponse& protoStartOperationResponse) {
-    return TStartOperationResponse{
-        .Status = static_cast<EOperationStatus>(protoStartOperationResponse.GetStatus()),
-        .OperationId = protoStartOperationResponse.GetOperationId()
-    };
+    TStartOperationResponse startOperationResponse;
+    startOperationResponse.Status = static_cast<EOperationStatus>(protoStartOperationResponse.GetStatus());
+    startOperationResponse.OperationId = protoStartOperationResponse.GetOperationId();
+    for (size_t i = 0; i < protoStartOperationResponse.ErrorMessagesSize(); ++i) {
+        startOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoStartOperationResponse.GetErrorMessages(i)));
+    }
+    return startOperationResponse;
 }
 
 NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationResponse& getOperationResponse) {
@@ -195,6 +223,13 @@ NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationRes
     for (auto& operationResult: getOperationResponse.OperationResultsYson) {
         protoGetOperationResponse.AddOperationResultsYson(operationResult);
     }
+    auto* protoJobCounters = protoGetOperationResponse.MutableJobCounters();
+    protoJobCounters->SetTotal(getOperationResponse.JobCounters.Total);
+    protoJobCounters->SetPending(getOperationResponse.JobCounters.Pending);
+    protoJobCounters->SetRunning(getOperationResponse.JobCounters.Running);
+    protoJobCounters->SetCompleted(getOperationResponse.JobCounters.Completed);
+    protoJobCounters->SetFailed(getOperationResponse.JobCounters.Failed);
+    protoJobCounters->SetLost(getOperationResponse.JobCounters.Lost);
     return protoGetOperationResponse;
 }
 
@@ -219,6 +254,17 @@ TGetOperationResponse GetOperationResponseFromProto(const NProto::TGetOperationR
     getOperationResponse.ErrorMessages = errorMessages;
     getOperationResponse.OutputTablesStats = outputTableStats;
     getOperationResponse.OperationResultsYson = operationResultsYson;
+    if (protoGetOperationReponse.HasJobCounters()) {
+        const auto& protoJobCounters = protoGetOperationReponse.GetJobCounters();
+        getOperationResponse.JobCounters = TJobCounters{
+            .Total = protoJobCounters.GetTotal(),
+            .Pending = protoJobCounters.GetPending(),
+            .Running = protoJobCounters.GetRunning(),
+            .Completed = protoJobCounters.GetCompleted(),
+            .Failed = protoJobCounters.GetFailed(),
+            .Lost = protoJobCounters.GetLost(),
+        };
+    }
     return getOperationResponse;
 }
 
@@ -372,6 +418,77 @@ TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsR
         response.SessionIds.push_back(protoResponse.GetSessionIds(i));
     }
     return response;
+}
+
+NProto::TWaitForOperationsRequest WaitForOperationsRequestToProto(const TWaitForOperationsRequest& request) {
+    NProto::TWaitForOperationsRequest protoRequest;
+    for (const auto& operationId : request.OperationIds) {
+        protoRequest.AddOperationIds(operationId);
+    }
+    protoRequest.SetTimeoutMs(request.Timeout.MilliSeconds());
+    return protoRequest;
+}
+
+TWaitForOperationsRequest WaitForOperationsRequestFromProto(const NProto::TWaitForOperationsRequest& protoRequest) {
+    TWaitForOperationsRequest request;
+    for (ui64 i = 0; i < protoRequest.OperationIdsSize(); ++i) {
+        request.OperationIds.push_back(protoRequest.GetOperationIds(i));
+    }
+    request.Timeout = TDuration::MilliSeconds(protoRequest.GetTimeoutMs());
+    return request;
+}
+
+NProto::TWaitForOperationsResponse WaitForOperationsResponseToProto(const TWaitForOperationsResponse& response) {
+    NProto::TWaitForOperationsResponse protoResponse;
+    for (const auto& opStatus : response.FinalizedOperations) {
+        auto* protoOpStatus = protoResponse.AddFinalizedOperations();
+        protoOpStatus->SetOperationId(opStatus.OperationId);
+        protoOpStatus->SetStatus(static_cast<NProto::EOperationStatus>(opStatus.Status));
+        for (const auto& error : opStatus.ErrorMessages) {
+            auto protoError = FmrErrorToProto(error);
+            protoOpStatus->AddErrorMessages()->Swap(&protoError);
+        }
+    }
+    return protoResponse;
+}
+
+TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWaitForOperationsResponse& protoResponse) {
+    TWaitForOperationsResponse response;
+    for (ui64 i = 0; i < protoResponse.FinalizedOperationsSize(); ++i) {
+        const auto& protoOpStatus = protoResponse.GetFinalizedOperations(i);
+        TOperationIdWithStatus opStatus;
+        opStatus.OperationId = protoOpStatus.GetOperationId();
+        opStatus.Status = static_cast<EOperationStatus>(protoOpStatus.GetStatus());
+        for (ui64 j = 0; j < protoOpStatus.ErrorMessagesSize(); ++j) {
+            opStatus.ErrorMessages.push_back(FmrErrorFromProto(protoOpStatus.GetErrorMessages(j)));
+        }
+        response.FinalizedOperations.push_back(std::move(opStatus));
+    }
+    return response;
+}
+
+NProto::TWaitForTasksRequest WaitForTasksRequestToProto(const TWaitForTasksRequest& request) {
+    NProto::TWaitForTasksRequest protoRequest;
+    protoRequest.SetAvailableSlots(request.AvailableSlots);
+    protoRequest.SetTimeoutMs(request.Timeout.MilliSeconds());
+    return protoRequest;
+}
+
+TWaitForTasksRequest WaitForTasksRequestFromProto(const NProto::TWaitForTasksRequest& protoRequest) {
+    return TWaitForTasksRequest{
+        .AvailableSlots = protoRequest.GetAvailableSlots(),
+        .Timeout = TDuration::MilliSeconds(protoRequest.GetTimeoutMs()),
+    };
+}
+
+NProto::TWaitForTasksResponse WaitForTasksResponseToProto(const TWaitForTasksResponse& response) {
+    NProto::TWaitForTasksResponse protoResponse;
+    protoResponse.SetAvailableTasksCount(response.AvailableTasksCount);
+    return protoResponse;
+}
+
+TWaitForTasksResponse WaitForTasksResponseFromProto(const NProto::TWaitForTasksResponse& protoResponse) {
+    return TWaitForTasksResponse{.AvailableTasksCount = protoResponse.GetAvailableTasksCount()};
 }
 
 } // namespace NYql::NFmr

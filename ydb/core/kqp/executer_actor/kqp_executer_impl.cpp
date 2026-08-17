@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/actors/core/log.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -38,7 +39,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     if (rows.RowCount()) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
-            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()), NDq::FromProto(rows.Proto.GetValuePackerVersion()));
+            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()), NDq::FromProto(rows.Proto.GetValuePackerVersion()), DefaultDatumValidationMode);
         dataSerializer.Deserialize(std::move(rows), result.MkqlItemType, result.Rows);
     }
 }
@@ -77,11 +78,11 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -91,7 +92,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             userRequestContext, statementResultIndex,
             federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
             shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-            channelService
+            channelService, useKqpTasksGraphV2,
+            std::move(tableIdsForSnapshot)
         );
     }
 
@@ -116,14 +118,16 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-                channelService
+                channelService, useKqpTasksGraphV2,
+                std::move(tableIdsForSnapshot)
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
-                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService
+                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService,
+                txManager, useKqpTasksGraphV2
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
@@ -133,7 +137,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-                channelService
+                channelService, useKqpTasksGraphV2,
+                std::move(tableIdsForSnapshot)
             );
 
         default:

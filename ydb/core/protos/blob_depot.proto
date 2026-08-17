@@ -204,6 +204,7 @@ message TEvCommitBlobSeqResult {
 message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
+    optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -278,4 +279,23 @@ message TEvPrepareWriteS3Result {
     }
 
     repeated TItem Items = 1;
+}
+
+message TEvPushS3RouterMetrics {
+    optional uint32 NodeId = 1;
+    optional uint64 BalancerRequests = 2;
+    optional uint64 BalancerErrors = 3;
+    optional uint64 NonBalancerRequests = 4;
+    optional uint64 NonBalancerErrors = 5;
+    optional uint64 NonBalancerBytesRead = 6;
+    optional uint64 NonBalancerBytesWritten = 7;
+    optional uint64 BalancerResolveRequests = 8;
+    optional uint64 BalancerResolveSuccesses = 9;
+    optional uint64 BalancerResolveFailures = 10;
+    optional uint64 EndpointSwitches = 11;
+    optional uint64 FiveXxRefreshTriggers = 12;
+    optional bool IsUsingProxy = 13;
+    repeated uint64 BalancerLatencyHistogram = 14;
+    repeated uint64 NonBalancerLatencyHistogram = 15;
+    repeated uint64 BalancerResolveLatencyHistogram = 16;
 }

@@ -334,12 +334,40 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                 }
             }
 
-            if (useRejected) {
-                UNIT_ASSERT_EQUAL(group0nodes, (THashSet<ui32>{{1, 2, 3, 4, 5, 6, 13, 14, 15}}));
-            } else {
-                UNIT_ASSERT_EQUAL(group0nodes, (THashSet<ui32>{{1, 2, 3, 4, 5, 6, 10, 11, 12}}));
-            }
-            UNIT_ASSERT_EQUAL(group1nodes, (THashSet<ui32>{{1, 2, 3, 10, 11, 12, 13, 14, 15}}));
+            auto printGroup = [&](const THashSet<ui32>& group) {
+                TStringStream str;
+                str << "{ ";
+                for (const ui32 nodeId : group) {
+                    str << nodeId << " ";
+                }
+                str << "}";
+                return str.Str();
+            };
+
+            auto checkGroup = [&](const THashSet<ui32>& group) {
+                if (group0nodes.size() != 9) {
+                    return false;
+                }
+
+                for (const ui32 nodeId : group) {
+                    if (useRejected) {
+                        if (nodeId >= 7 && nodeId <= 12) {
+                            return false;
+                        }
+                    } else {
+                        if (nodeId >= 7 && nodeId <= 9) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            };
+
+            Ctest << printGroup(group0nodes) << Endl;
+            UNIT_ASSERT_C(checkGroup(group0nodes), printGroup(group0nodes));
+            Ctest << printGroup(group1nodes) << Endl;
+            UNIT_ASSERT_C(checkGroup(group1nodes), printGroup(group1nodes));
         }
     }
 

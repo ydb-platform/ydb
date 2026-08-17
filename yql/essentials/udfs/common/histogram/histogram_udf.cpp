@@ -127,7 +127,7 @@ public:
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Create";
@@ -179,7 +179,7 @@ public:
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_AddValue";
@@ -231,7 +231,7 @@ public:
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Serialize";
@@ -284,7 +284,7 @@ public:
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
@@ -338,7 +338,7 @@ public:
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Merge";
@@ -408,7 +408,7 @@ struct THistogramIndexes {
 template <typename THistogramType, const char* ResourceName>
 class THistogram_GetResult: public TBoxedValue {
 public:
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     THistogram_GetResult(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
         : HistogramIndexes_(histogramIndexes)

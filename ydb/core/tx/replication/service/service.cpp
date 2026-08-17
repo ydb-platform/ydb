@@ -1,7 +1,7 @@
-#include "logging.h"
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
+#include "topic_reader_stats.h"
 #include "transfer_writer_factory.h"
 #include "worker.h"
 
@@ -10,9 +10,12 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -21,27 +24,138 @@
 
 #include <tuple>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
+
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
-    struct TWorkerInfo {
+    using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
+
+    class TWorkerInfo {
+        friend class TSessionInfo;
+
+    public:
         const TActorId ActorId;
+        const TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
-        explicit TWorkerInfo(const TActorId& actorId)
+        explicit TWorkerInfo(const TActorId& actorId, const NKikimrReplication::TReplicationLocationConfig& location, TMetricsConfig::EMetricsLevel metricsLevel,
+            ui64 workerId, NMonitoring::TDynamicCounterPtr& countersRoot)
             : ActorId(actorId)
+            , MetricsLevel(metricsLevel)
+            , Location(location)
+            , WorkerId(workerId)
         {
+            StartTime = Now();
+            EnsureCounters(countersRoot);
+            if (HasCounters()) {
+                WorkerCounters->Uptime->Set(0);
+                WorkerCounters->Restarts->Add(1);
+            }
         }
 
         operator TActorId() const {
             return ActorId;
         }
+
+        bool HasCounters() const {
+            return MetricsLevel == TMetricsConfig::LEVEL_DETAILED && !Location.GetPath().empty();
+        }
+
+        void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
+            if (!HasCounters()) {
+                return;
+            }
+
+            auto subgroup = countersRoot->GetSubgroup("transfer_id", Location.GetPath())
+                ->GetSubgroup("database_id", Location.GetYcResourceId())
+                ->GetSubgroup("folder_id", Location.GetYcFolderId())
+                ->GetSubgroup("cloud_id", Location.GetYcCloudId())
+                ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());
+
+            WorkerCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"), WorkerId);
+            HostCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"));
+        }
+
+        void ApplyStats(const TWorkerDetailedStats& stats) {
+            if (!HasCounters()) {
+                return;
+            }
+
+            if (stats.ReaderStats) {
+                HostCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
+                WorkerCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
+                WorkerCounters->ReadTime->Add(stats.ReaderStats->ReadTime.MilliSeconds());
+            }
+
+            if (stats.WriterStats) {
+                HostCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
+                WorkerCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
+                WorkerCounters->ProcessingTime->Add(stats.WriterStats->ProcessingTime.MilliSeconds());
+                WorkerCounters->WriteTime->Add(stats.WriterStats->WriteDuration.MilliSeconds());
+                WorkerCounters->WriteRows->Add(stats.WriterStats->WriteRows);
+                WorkerCounters->WriteBytes->Add(stats.WriterStats->WriteBytes);
+                WorkerCounters->WriteErrors->Add(stats.WriterStats->WriteErrors);
+            }
+
+            WorkerCounters->Uptime->Set((Now() - StartTime).MilliSeconds());
+        }
+
+    private:
+        struct TWorkerCounters {
+            NMonitoring::TDynamicCounterPtr WorkerCounters;
+            NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
+            NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteRows;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteBytes;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
+            NMonitoring::TDynamicCounters::TCounterPtr Uptime;
+            NMonitoring::TDynamicCounters::TCounterPtr Restarts;
+
+            TWorkerCounters(NMonitoring::TDynamicCounterPtr subgroup, ui64 workerId)
+                : WorkerCounters(subgroup->GetSubgroup("host", "")->GetSubgroup("worker", ToString(workerId)))
+                , ReadTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.read.duration_milliseconds", true))
+                , ProcessingTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.processing.duration_milliseconds", true))
+                , WriteTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write.duration_milliseconds", true))
+                , DecompressCpu(WorkerCounters->GetExpiringNamedCounter("name", "transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(WorkerCounters->GetExpiringNamedCounter("name", "transfer.process.cpu_elapsed_microseconds", true))
+                , WriteRows(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write_rows", true))
+                , WriteBytes(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write_bytes", true))
+                , WriteErrors(WorkerCounters->GetNamedCounter("name", "transfer.write_errors", true))
+                , Uptime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.worker_uptime_milliseconds", false))
+                , Restarts(WorkerCounters->GetNamedCounter("name", "transfer.worker_restarts", true))
+            {
+            }
+        };
+
+        struct THostCounters {
+            NMonitoring::TDynamicCounterPtr HostCounters;
+            NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
+
+            THostCounters(NMonitoring::TDynamicCounterPtr subgroup)
+                : HostCounters(subgroup)
+                , DecompressCpu(HostCounters->GetExpiringNamedCounter("name", "transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(HostCounters->GetExpiringNamedCounter("name", "transfer.process.cpu_elapsed_microseconds", true))
+            {
+            }
+        };
+
+        TMaybe<TWorkerCounters> WorkerCounters;
+        TMaybe<THostCounters> HostCounters;
+        const NKikimrReplication::TReplicationLocationConfig Location;
+        ui64 WorkerId;
+        TInstant StartTime;
     };
 
 public:
-    explicit TSessionInfo(const TActorId& actorId)
+    explicit TSessionInfo(const TActorId& actorId, ui64 controllerTabletId)
         : ActorId(actorId)
         , Generation(0)
+        , ControllerTabletId(controllerTabletId)
     {
     }
 
@@ -99,11 +213,26 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId) {
-        auto res = Workers.emplace(id, ops->Register(actor, TMailboxType::HTSwap, poolId));
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+    {
+        auto res = Workers.emplace(id, TWorkerInfo{
+            ops->Register(actor, TMailboxType::HTSwap, poolId),
+            replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
+        });
+
+        const auto& worker = res.first->second;
+        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
+            PendingStatsValues[id];
+        }
+
+        if (PendingStatsValues.size() == 1) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(ControllerTabletId, 0));
+        }
+
         Y_ABORT_UNLESS(res.second);
 
-        const auto actorId = res.first->second;
+        const auto actorId = worker.ActorId;
         ActorIdToWorkerId.emplace(actorId, id);
 
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
@@ -118,6 +247,11 @@ public:
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
 
         ActorIdToWorkerId.erase(it->second);
+        PendingStatsValues.erase(id);
+        if (PendingStatsValues.empty()) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
+        }
+
         Workers.erase(it);
     }
 
@@ -130,12 +264,63 @@ public:
         SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
 
         Workers.erase(it->second);
+
+        PendingStatsValues.erase(it->second);
+        if (PendingStatsValues.empty()) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
+        }
+
         ActorIdToWorkerId.erase(it);
     }
 
     template <typename... Args>
     void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
         ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
+    }
+
+    void ApplyWorkerStats(const TWorkerId& id, const std::unique_ptr<TWorkerDetailedStats>& stats) {
+        UpdateWorkerMetrics(id, *stats);
+        auto& statsValues = PendingStatsValues[id];
+        if (stats->ReaderStats) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_TIME)] += stats->ReaderStats->ReadTime.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU)] += stats->ReaderStats->DecompressCpu.MicroSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_MESSAGES)] += stats->ReaderStats->Messages;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_BYTES)] += stats->ReaderStats->Bytes;
+
+            if (stats->ReaderStats->Partition != -1) {
+                statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_PARTITION)] = stats->ReaderStats->Partition;
+                statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_OFFSET)] = stats->ReaderStats->Offset;
+            }
+
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_ERRORS)] += stats->ReaderStats->Errors;
+        }
+
+        if (stats->WriterStats) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_TIME)] += stats->WriterStats->WriteDuration.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_BYTES)] += stats->WriterStats->WriteBytes;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_ROWS)] += stats->WriterStats->WriteRows;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU)] += stats->WriterStats->ProcessingCpu.MicroSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_TIME)] += stats->WriterStats->ProcessingTime.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_ERRORS)] += stats->WriterStats->ProcessingErrors;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_ERRORS)] += stats->WriterStats->WriteErrors;
+        }
+
+        if (stats->CurrentOperation.has_value()) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WORK_OPERATION)] = static_cast<ui64>(*stats->CurrentOperation);
+        }
+    }
+
+    void SendWorkersStats(IActorOps* ops) {
+        for (auto& [id, values] : PendingStatsValues) {
+            auto workerIter = Workers.find(id);
+            if (workerIter.IsEnd()) {
+                continue;
+            }
+            workerIter->second.ApplyStats({}); // Update timestamps;
+            auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(values));
+            ops->Send(ActorId, ev);
+            values.clear();
+        }
     }
 
     void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
@@ -154,6 +339,14 @@ public:
         }
 
         ops->Send(ActorId, ev.Release());
+    }
+
+    void UpdateWorkerMetrics(const TWorkerId& id, const TWorkerDetailedStats& stats) {
+        auto it = Workers.find(id);
+        Y_ABORT_UNLESS(it != Workers.end());
+        if (it->second.MetricsLevel == TMetricsConfig::LEVEL_DETAILED && !it->second.Location.GetPath().empty()) {
+            it->second.ApplyStats(stats);
+        }
     }
 
     void Handle(IActorOps* ops, TEvService::TEvGetTxId::TPtr& ev) {
@@ -264,8 +457,10 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
+    const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
+    THashMap<TWorkerId, TMap<ui64, i64>> PendingStatsValues;
 
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
@@ -331,14 +526,12 @@ namespace NKikimr::NReplication {
 namespace NService {
 
 class TReplicationService: public TActorBootstrapped<TReplicationService> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[Service]"
-                << SelfId() << " ";
-        }
 
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TReplicationService"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     void RunBoardPublisher() {
@@ -354,22 +547,23 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvHandshake::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            it = Sessions.emplace(controller.GetTabletId(), ev->Sender).first;
+            it = Sessions.emplace(controller.GetTabletId(), TSessionInfo{ev->Sender, controller.GetTabletId()}).first;
         }
 
         auto& session = it->second;
 
         if (session.GetGeneration() > controller.GetGeneration()) {
-            LOG_W("Ignore stale controller"
-                << ": controller# " << controller.GetTabletId()
-                << ", generation# " << controller.GetGeneration());
+            YDB_LOG_WARN("Ignore stale controller",
+                {"controller", controller.GetTabletId()},
+                {"generation", controller.GetGeneration()});
             return;
         }
 
@@ -382,7 +576,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                ? CreateLocalYdbProxy(std::move(database))
+                ? CreateLocalYdbProxy(database)
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
@@ -393,7 +587,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
+    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
+        bool autoCommit, bool reportStats
+    ) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -414,10 +610,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
             .AutoCommit(autoCommit)
+            .ReportStats(reportStats)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
             );
+
+        if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
+            topicReaderSettings.Decompress(false);
+        }
 
         return [ydbProxy, settings = std::move(topicReaderSettings)]() {
             return CreateRemoteTopicReader(ydbProxy, settings);
@@ -463,7 +664,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvRunWorker::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
@@ -471,20 +673,20 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot run worker"
-                << ": controller# " << controller.GetTabletId()
-                << ", worker# " << id
-                << ", reason# " << R"("unknown session")");
+            YDB_LOG_WARN("Cannot run worker",
+                {"controller", controller.GetTabletId()},
+                {"worker", id},
+                {"reason", R"("unknown session")"});
             return;
         }
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot run worker"
-                << ": controller# " << controller.GetTabletId()
-                << ", generation# " << controller.GetGeneration()
-                << ", worker# " << id
-                << ", reason# " << R"("generation mismatch")");
+            YDB_LOG_WARN("Cannot run worker",
+                {"controller", controller.GetTabletId()},
+                {"generation", controller.GetGeneration()},
+                {"worker", id},
+                {"reason", R"("generation mismatch")"});
             return;
         }
 
@@ -492,13 +694,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         }
 
-        LOG_I("Run worker"
-            << ": worker# " << id);
+        YDB_LOG_INFO("Run worker",
+            {"worker", id});
 
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         bool autoCommit = true;
+        bool reportStats = false;
         ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
         if (cmd.HasLocalTableWriter()) {
@@ -509,22 +712,31 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const auto& writerSettings = cmd.GetTransferWriter();
             const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
             if (!transferWriterFactory) {
-                LOG_C("Run transfer but TransferWriterFactory does not exists.");
+                YDB_LOG_CRIT("Run transfer but TransferWriterFactory does not exists");
                 return;
             }
             autoCommit = false;
+            reportStats = true;
             poolId = AppData()->BatchPoolId;
             writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)), poolId);
+            CreateWorker(
+                SelfId(),
+                ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
+                std::move(writerFn)),
+            poolId,
+            cmd.GetReplicationLocation(),
+            cmd.GetMetricsLevel()
+        );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
@@ -532,20 +744,20 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot stop worker"
-                << ": controller# " << controller.GetTabletId()
-                << ", worker# " << id
-                << ", reason# " << R"("unknown session")");
+            YDB_LOG_WARN("Cannot stop worker",
+                {"controller", controller.GetTabletId()},
+                {"worker", id},
+                {"reason", R"("unknown session")"});
             return;
         }
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot stop worker"
-                << ": controller# " << controller.GetTabletId()
-                << ", generation# " << controller.GetGeneration()
-                << ", worker# " << id
-                << ", reason# " << R"("generation mismatch")");
+            YDB_LOG_WARN("Cannot stop worker",
+                {"controller", controller.GetTabletId()},
+                {"generation", controller.GetGeneration()},
+                {"worker", id},
+                {"reason", R"("generation mismatch")"});
             return;
         }
 
@@ -553,14 +765,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
         }
 
-        LOG_I("Stop worker"
-            << ": worker# " << id);
+        YDB_LOG_INFO("Stop worker",
+            {"worker", id});
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
     }
 
     void Handle(TEvService::TEvGetTxId::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -568,8 +781,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
-                << ": worker# " << ev->Sender);
+            YDB_LOG_ERROR("Cannot find worker",
+                {"worker", ev->Sender});
             return;
         }
 
@@ -577,25 +790,26 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot process tx id result"
-                << ": controller# " << controller.GetTabletId()
-                << ", reason# " << R"("unknown session")");
+            YDB_LOG_WARN("Cannot process tx id result",
+                {"controller", controller.GetTabletId()},
+                {"reason", R"("unknown session")"});
             return;
         }
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot process tx id result"
-                << ": controller# " << controller.GetTabletId()
-                << ", generation# " << controller.GetGeneration()
-                << ", reason# " << R"("generation mismatch")");
+            YDB_LOG_WARN("Cannot process tx id result",
+                {"controller", controller.GetTabletId()},
+                {"generation", controller.GetGeneration()},
+                {"reason", R"("generation mismatch")"});
             return;
         }
 
@@ -603,7 +817,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -611,19 +826,20 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
-                << ": worker# " << ev->Sender);
+            YDB_LOG_ERROR("Cannot find worker",
+                {"worker", ev->Sender});
             return;
         }
 
-        LOG_I("Heartbeat"
-            << ": worker# " << ev->Sender
-            << ", version# " << TRowVersion::FromProto(ev->Get()->Record.GetVersion()));
+        YDB_LOG_INFO("Heartbeat",
+            {"worker", ev->Sender},
+            {"version", TRowVersion::FromProto(ev->Get()->Record.GetVersion())});
         session->Handle(this, ev);
     }
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -631,19 +847,48 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
-                << ": worker# " << ev->Sender);
+            YDB_LOG_ERROR("Cannot find worker",
+                {"worker", ev->Sender});
             return;
         }
 
-        LOG_I("Worker has ended"
-            << ": worker# " << ev->Sender);
+        YDB_LOG_INFO("Worker has ended",
+            {"worker", ev->Sender});
         session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId,
             std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
     }
 
+    void Handle(TEvWorker::TEvStatsWakeup::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        if (ev->Get()->SessionToAdd) {
+            SessionsToWake.insert(ev->Get()->SessionToAdd);
+        } else if (ev->Get()->SessionToRemove) {
+            SessionsToWake.erase(ev->Get()->SessionToRemove);
+        } else {
+            StatsWakeupScheduled = false;
+        }
+
+        if (!SessionsToWake.empty() && !StatsWakeupScheduled) {
+            Schedule(StatsWakeupInterval, new TEvWorker::TEvStatsWakeup());
+            StatsWakeupScheduled = true;
+        }
+
+        if (!NextStatsUpdate || NextStatsUpdate <= Now()) {
+            for (const auto& sessionId : SessionsToWake) {
+                auto sessionIter = Sessions.find(sessionId);
+                if (sessionIter != Sessions.end()) {
+                    sessionIter->second.SendWorkersStats(this);
+                }
+            }
+            NextStatsUpdate = Now() + StatsWakeupInterval;
+        }
+    }
+
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -651,39 +896,45 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
-                << ": worker# " << ev->Sender);
+            YDB_LOG_ERROR("Cannot find worker",
+                {"worker", ev->Sender});
             return;
         }
 
-        LOG_I("Worker has gone"
-            << ": worker# " << ev->Sender);
+        YDB_LOG_INFO("Worker has gone",
+            {"worker", ev->Sender});
         WorkerActorIdToSession.erase(ev->Sender);
         session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
-            session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+            const auto& workerId = session->GetWorkerId(ev->Sender);
+            if (ev->Get()->DetailedStats) {
+                session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
+            } else {
+                session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
+            }
         }
     }
 
     TSessionInfo* SessionFromWorker(const TActorId& id) {
         auto wit = WorkerActorIdToSession.find(id);
         if (wit == WorkerActorIdToSession.end()) {
-            LOG_W("Unknown worker has gone"
-                << ": worker# " << id);
+            YDB_LOG_WARN("Unknown worker has gone",
+                {"worker", id});
             return nullptr;
         }
 
         auto it = Sessions.find(wit->second);
         if (it == Sessions.end()) {
-            LOG_E("Cannot find session"
-                << ": worker# " << id
-                << ", session# " << wit->second);
+            YDB_LOG_ERROR("Cannot find session",
+                {"worker", id},
+                {"session", wit->second});
             return nullptr;
         }
 
@@ -700,6 +951,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         if (auto actorId = std::exchange(BoardPublisher, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -725,11 +977,14 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Become(&TThis::StateWork);
         RunBoardPublisher();
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvService::TEvHandshake, Handle);
             hFunc(TEvService::TEvRunWorker, Handle);
@@ -738,6 +993,7 @@ public:
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Handle);
             hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvStatsWakeup, Handle)
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -745,7 +1001,6 @@ public:
     }
 
 private:
-    mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
 
@@ -766,7 +1021,13 @@ private:
 
     THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
+
     mutable TMaybe<TActorId> CompilationService;
+
+    bool StatsWakeupScheduled = false;
+    TInstant NextStatsUpdate = TInstant::Zero();
+    constexpr const static TDuration StatsWakeupInterval = TDuration::Seconds(1);
+    THashSet<ui64> SessionsToWake;
 
 }; // TReplicationService
 

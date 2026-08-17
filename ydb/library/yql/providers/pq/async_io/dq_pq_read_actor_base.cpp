@@ -28,7 +28,8 @@ TInstant TrimToMillis(TInstant instant) {
 }
 
 // StartingMessageTimestamp is serialized as milliseconds, so drop microseconds part to be consistent with storage
-TInstant InitStartingMessageTimestamp(const NPq::NProto::StreamingDisposition& disposition) {
+TInstant InitStartingMessageTimestamp(const NPq::NProto::TDqPqTopicSource& source) {
+    const auto& disposition = source.GetDisposition();
     return TrimToMillis([&]() -> TInstant {
         switch (disposition.GetDispositionCase()) {
             case NPq::NProto::StreamingDisposition::kOldest:
@@ -62,7 +63,7 @@ TDqPqReadActorBase::TDqPqReadActorBase(
     : InputIndex(inputIndex)
     , TxId(txId)
     , SourceParams(std::move(sourceParams))
-    , StartingMessageTimestamp(InitStartingMessageTimestamp(SourceParams.GetDisposition()))
+    , StartingMessageTimestamp(InitStartingMessageTimestamp(SourceParams))
     , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
     , ReadParams(std::move(readParams))
     , ComputeActorId(computeActorId)
@@ -78,13 +79,16 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     topic->SetDatabase(SourceParams.GetDatabase());
     topic->SetTopicPath(SourceParams.GetTopicPath());
 
-    for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
+    for (const auto& [clusterAndPartition, info] : Partitions) {
+        if (!info.Offset) {
+            continue;
+        }
         const auto& [cluster, partition] = clusterAndPartition;
         NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
         partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
-        partitionState->SetOffset(offset);
+        partitionState->SetOffset(*info.Offset);
     }
 
     SRC_LOG_D("SessionId: " << GetSessionId() << " SaveState, offsets: " << LogPartitionToOffset());
@@ -112,11 +116,11 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
         YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
         YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
 
-        PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
+        Partitions.reserve(Partitions.size() + stateProto.PartitionsSize());
         for (const auto& partitionProto : stateProto.GetPartitions()) {
-            ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
+            auto& offset = Partitions[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}].Offset;
             if (offset) {
-                offset = Min(offset, partitionProto.GetOffset());
+                offset = Min(*offset, partitionProto.GetOffset());
             } else {
                 offset = partitionProto.GetOffset();
             }
@@ -177,8 +181,8 @@ void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime
 
 TString TDqPqReadActorBase::LogPartitionToOffset() const {
     TStringBuilder str;
-    for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
-        str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << offset << "},";
+    for (const auto& [clusterAndPartition, info] : Partitions) {
+        str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << info.Offset << "},";
     }
     return str;
 }

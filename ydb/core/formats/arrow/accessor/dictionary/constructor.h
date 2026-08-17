@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NArrow::NAccessor::NDictionary {
@@ -23,7 +24,7 @@ private:
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstruct(
         const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const override;
 
-    virtual TString DoSerializeToString(
+    virtual TBlobWithAdditionalAccessorData DoSerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const override;
     virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoDeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const override;
@@ -34,6 +35,9 @@ private:
 
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
+
+    static TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyReader(
+        const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);
 
     TConstructor()
         : TBase(IChunkedArray::EType::Dictionary) {

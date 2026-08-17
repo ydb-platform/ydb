@@ -38,12 +38,12 @@
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/debug/trace.h"
+#include "src/core/lib/gpr/time_precise.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/iomgr_fwd.h"
-#include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/promise/arena_promise.h"
 #include "src/core/lib/promise/context.h"
 #include "src/core/lib/resource_quota/arena.h"
@@ -73,6 +73,7 @@ typedef struct grpc_call_create_args {
   y_absl::optional<grpc_core::Slice> authority;
 
   grpc_core::Timestamp send_deadline;
+  bool registered_method;  // client_only
 } grpc_call_create_args;
 
 namespace grpc_core {
@@ -107,6 +108,7 @@ class CallContext {
 
   // Update the deadline (if deadline < the current deadline).
   void UpdateDeadline(Timestamp deadline);
+  Timestamp deadline() const;
 
   // Run some action in the call activity context. This is needed to adapt some
   // legacy systems to promises, and will likely disappear once that conversion
@@ -126,7 +128,7 @@ class CallContext {
 
   grpc_call_stats* call_stats() { return &call_stats_; }
   gpr_atm* peer_string_atm_ptr();
-  grpc_polling_entity* polling_entity() { return &pollent_; }
+  gpr_cycle_counter call_start_time() { return start_time_; }
 
   ServerCallContext* server_call_context();
 
@@ -137,12 +139,10 @@ class CallContext {
   friend class PromiseBasedCall;
   // Call final info.
   grpc_call_stats call_stats_;
-  // Pollset stuff, can't wait to remove.
-  // TODO(ctiller): bring forth EventEngine.
-  grpc_polling_entity pollent_;
   // TODO(ctiller): remove this once transport APIs are promise based and we
   // don't need refcounting here.
   PromiseBasedCall* const call_;
+  gpr_cycle_counter start_time_ = gpr_get_cycle_counter();
   // Is this call traced?
   bool traced_ = false;
 };

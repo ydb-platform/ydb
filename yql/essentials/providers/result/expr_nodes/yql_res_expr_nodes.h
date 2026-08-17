@@ -36,16 +36,18 @@ public:
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h>
 
+#include <utility>
+
 template <typename TParent>
 class TNodeBuilder<TParent, TResultDataSink>: TNodeBuilderBase {
 public:
-    typedef std::function<TParent&(const TResultDataSink&)> BuildFuncType;
-    typedef std::function<TExprBase(const TStringBuf& arg)> GetArgFuncType;
-    typedef TResultDataSink ResultType;
+    using BuildFuncType = std::function<TParent&(const TResultDataSink&)>;
+    using GetArgFuncType = std::function<TExprBase(const TStringBuf& arg)>;
+    using ResultType = TResultDataSink;
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 

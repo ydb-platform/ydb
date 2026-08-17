@@ -1,7 +1,7 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
-/* custom error: Error while processing RANGE bound: Cannot add type Int32 and Optional<String> */
+/* custom error: Error while processing RANGE bound */
+/* custom error: Cannot add type Int32 and Optional<String> */
 $data = [
     <|a: 1, count: 1|>,
     <|a: 2, count: 1|>,

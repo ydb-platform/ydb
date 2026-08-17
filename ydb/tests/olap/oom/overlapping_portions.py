@@ -25,8 +25,8 @@ class TestOverlappingPortions(object):
             column_shard_config={"compaction_enabled": False},
             deduplication_grouped_memory_limiter_config={
                 "enabled": True,
-                "memory_limit": 1024 * 1024,
-                "hard_memory_limit": 1024 * 1024,
+                "memory_limit": 32 * 1024,
+                "hard_memory_limit": 32 * 1024,
             },
         )
         cls.cluster = KiKiMR(config)
@@ -34,6 +34,11 @@ class TestOverlappingPortions(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
+
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
 
     def write_data(
         self,

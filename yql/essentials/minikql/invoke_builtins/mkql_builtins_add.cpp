@@ -5,8 +5,9 @@
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -37,20 +38,7 @@ using TAggrAdd = TAdd<TType, TType, TType>;
 template <ui8 Precision>
 struct TDecimalAdd {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        const auto a = SafeAdd(l, r);
-
-        using namespace NYql::NDecimal;
-
-        if (IsNormal<Precision>(l) && IsNormal<Precision>(r) && IsNormal<Precision>(a)) {
-            return NUdf::TUnboxedValuePod(a);
-        }
-        if (IsNan(l) || IsNan(r) || !a) {
-            return NUdf::TUnboxedValuePod(Nan());
-        } else {
-            return NUdf::TUnboxedValuePod(a > 0 ? +Inf() : -Inf());
-        }
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::Add(left.GetInt128(), right.GetInt128(), Precision));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -147,8 +135,8 @@ struct TDateTimeAddT {
         const auto zero = ConstantInt::get(type, 0);
 
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(type, APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(
                 (std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() ||
                  std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>())
@@ -461,5 +449,4 @@ void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {
     NDecimal::RegisterAggregateFunctionForAllPrecisions<TDecimalAdd, TBinaryArgsSameOpt>(registry, "AggrAdd_");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

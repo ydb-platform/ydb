@@ -1,6 +1,10 @@
 import os
 import pytest
 import time
+import tempfile
+import math
+from datetime import timedelta
+from uuid import UUID
 
 import logging
 import yatest.common
@@ -70,7 +74,7 @@ class YdbWorkloadOverload:
     # threads - Number of parallel threads in workload
     # rows - Number of rows to upsert
     def bulk_upsert(self, seconds: int, threads: int, rows: int, wait: bool = False):
-        self._insert_rows(operation_name="bulk_upsert", seconds=seconds, threads=threads, rows=rows, wait=wait)
+        self._insert_rows(operation_name="bulk-upsert", seconds=seconds, threads=threads, rows=rows, wait=wait)
 
     def __del__(self):
         command: list[str] = self.begin_command + ["clean"]
@@ -294,3 +298,196 @@ class TestLogScenario(object):
         _, rejectProbabilityCount = monitor.get_by_name('Deriviative/Overload/RejectProbability/Count')[0]
 
         assert rejectProbabilityCount > 0
+
+
+class TestSqlExportImportFormats(object):
+
+    @classmethod
+    def setup_class(cls):
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_immediate_writing_on_bulk_upsert": True,
+                "enable_cs_overloads_subscription_retries": True,
+                "enable_columnshard_bool": True,
+                "enable_columnshard_interval": True,
+                "enable_columnshard_uuid": True,
+                "enable_columnshard_dy_number": True,
+            },
+            column_shard_config={
+                "alter_object_enabled": True,
+                "writing_in_flight_requests_count_limit": 1000,
+                "writing_in_flight_request_bytes_limit": 10000,
+            },
+        )
+
+        cls.cluster = KiKiMR(config)
+        cls.cluster.start()
+        node = cls.cluster.nodes[1]
+        cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
+        cls.ydb_client.wait_connection(timeout=60)
+
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
+    def _ydb_cli_base_cmd(self):
+        return [
+            yatest.common.binary_path(os.environ["YDB_CLI_BINARY"]),
+            "-e",
+            self.ydb_client.endpoint,
+            "-d",
+            self.ydb_client.database,
+        ]
+
+    def _create_table(self, path: str):
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{path}` (
+                id Uint64 NOT NULL,
+                name Utf8,
+                val Int32,
+                flag Bool,
+                duration Interval,
+                uid Uuid,
+                dyn DyNumber,
+                PRIMARY KEY (id)
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1
+            )
+            """
+        )
+
+    def _drop_table(self, path: str):
+        self.ydb_client.query(f"DROP TABLE `{path}`")
+
+    def _fetch_ordered_rows(self, path: str):
+        rs = self.ydb_client.query(
+            f"SELECT id, name, val, flag, duration, uid, dyn FROM `{path}` ORDER BY id"
+        )[0]
+        return [dict(r) for r in rs.rows]
+
+    def _assert_rows_equal(self, got, exp):
+        assert got["id"] == exp["id"]
+        assert got["name"] == exp["name"]
+        assert got["val"] == exp["val"]
+        assert got["flag"] == exp["flag"]
+        assert got["duration"] == timedelta(microseconds=exp["duration"])
+        assert got["uid"] == exp["uid"]
+        assert math.isclose(float(got["dyn"]), float(exp["dyn"]), rel_tol=1e-3)
+
+    @pytest.mark.parametrize("export_kind", ["csv", "json"])
+    def test_sql_export_then_import_roundtrip(self, export_kind):
+        base = f"{self.ydb_client.database}/sql_export_import_{export_kind}"
+        source = f"{base}/source"
+        dest = f"{base}/dest"
+
+        self._create_table(source)
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("name", ydb.PrimitiveType.Utf8)
+        column_types.add_column("val", ydb.PrimitiveType.Int32)
+        column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        column_types.add_column("duration", ydb.PrimitiveType.Interval)
+        column_types.add_column("uid", ydb.PrimitiveType.UUID)
+        column_types.add_column("dyn", ydb.PrimitiveType.DyNumber)
+
+        expected_rows = [
+            {
+                "id": 1,
+                "name": "a",
+                "val": 10,
+                "flag": True,
+                "duration": 1_000_000,
+                "uid": UUID("30015678-e89b-12d3-a456-556642440000"),
+                "dyn": "1e1",
+            },
+            {
+                "id": 2,
+                "name": "b",
+                "val": 20,
+                "flag": False,
+                "duration": 2_000_000,
+                "uid": UUID("30025678-e89b-12d3-a456-556642440000"),
+                "dyn": "2e1",
+            },
+            {
+                "id": 3,
+                "name": "c",
+                "val": 30,
+                "flag": True,
+                "duration": 3_000_000,
+                "uid": UUID("30035678-e89b-12d3-a456-556642440000"),
+                "dyn": "3e1",
+            },
+        ]
+
+        self.ydb_client.bulk_upsert(source, column_types, expected_rows)
+
+        source_rows = self._fetch_ordered_rows(source)
+        assert len(source_rows) == len(expected_rows)
+        for got, exp in zip(source_rows, expected_rows):
+            self._assert_rows_equal(got, exp)
+
+        select_sql = (
+            f"SELECT `id`, `name`, `val`, `flag`, `duration`, `uid`, `dyn` "
+            f"FROM `{source}` ORDER BY `id`"
+        )
+        fmt = "csv" if export_kind == "csv" else "json-unicode"
+        export_cmd = self._ydb_cli_base_cmd() + ["sql", "-s", select_sql, "--format", fmt]
+        export_res = yatest.common.execute(export_cmd, wait=True)
+        assert export_res.returncode == 0, export_res.stderr.decode("utf-8")
+        payload = export_res.stdout.decode("utf-8")
+        assert payload.strip(), f"empty export for format {export_kind}"
+
+        suffix = ".csv" if export_kind == "csv" else ".json"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as tmp:
+            tmp.write(payload)
+            export_path = tmp.name
+
+        # Column-table DescribeColumns order may differ from CREATE/SELECT order,
+        # so CSV import must get an explicit column list matching the export.
+        csv_columns = "id,name,val,flag,duration,uid,dyn"
+
+        try:
+            self._create_table(dest)
+            if export_kind == "csv":
+                import_cmd = self._ydb_cli_base_cmd() + [
+                    "import",
+                    "file",
+                    "csv",
+                    "-p",
+                    dest,
+                    "--columns",
+                    csv_columns,
+                    export_path,
+                ]
+            else:
+                import_cmd = self._ydb_cli_base_cmd() + [
+                    "import",
+                    "file",
+                    "json",
+                    "-p",
+                    dest,
+                    export_path,
+                ]
+
+            import_res = yatest.common.execute(import_cmd, wait=True)
+            assert import_res.returncode == 0, import_res.stderr.decode("utf-8")
+
+            imported = self._fetch_ordered_rows(dest)
+            assert len(imported) == len(expected_rows)
+            for got, exp in zip(imported, expected_rows):
+                self._assert_rows_equal(got, exp)
+        finally:
+            try:
+                os.unlink(export_path)
+            except OSError:
+                pass
+            self._drop_table(dest)
+            self._drop_table(source)

@@ -5,8 +5,6 @@
 #include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/mpl.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
@@ -15,7 +13,11 @@
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/tls.h>
+
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <util/generic/algorithm.h>
 
@@ -50,10 +52,6 @@ namespace NYT::NYTree {
  * In order to speed up compilation it is possible to use DECLARE_YSON_STRUCT(TYourClass) in the class body
  * and supplement it with DEFINE_YSON_STRUCT(TYourClass) in the .cpp file. Similar DECLARE_YSON_STRUCT_LITE
  * macro is available for non-ref-counted structs.
- *
- * The key difference from TYsonSerializable is that the latter builds the whole meta every time
- * an instance of the class is being constructed
- * while TYsonStruct builds meta only once just before construction of the first instance.
  */
 class TYsonStructBase
 {
@@ -64,9 +62,9 @@ public:
     TYsonStructBase();
 
     TYsonStructBase(const TYsonStructBase& that) = default;
-    TYsonStructBase(TYsonStructBase&& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) noexcept = default;
     TYsonStructBase& operator=(const TYsonStructBase& that);
-    TYsonStructBase& operator=(TYsonStructBase&& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that) noexcept;
 
     virtual ~TYsonStructBase() = default;
 
@@ -210,8 +208,8 @@ public:
     TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
     TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
 
-    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
-    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
 
     bool IsSet(const std::string& key) const;
 
@@ -370,7 +368,7 @@ public:
 
     //! TODO(arkady-e1ppa): restore these constraints once clang-14 usage is completely abolished.
     //! For Pre-/Post- processors write
-    //! template <CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
+    //! template <NMpl::CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
     //! (and TExternalPostprocessor in case of ExternalPostprocessor) and remove
     //! these exposition-only "requires" statements
 
@@ -382,11 +380,11 @@ public:
     TYsonStructParameter<TValue>& ExternalBaseClassParameter(const std::string& key, TValue(TBase::*field));
 
     template <class TExternalPreprocessor>
-        // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+        // requires (NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPreprocessor(TExternalPreprocessor preprocessor);
 
     template <class TExternalPostprocessor>
-        // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+        // requires (NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPostprocessor(TExternalPostprocessor postprocessor);
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
@@ -413,10 +411,38 @@ void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 
+} // namespace NYT::NYTree
+
+// Serialize and Deserialize for CExternallySerializable types are placed in NYT::NYson
+// to ensure ADL lookup via |consumer| and |cursor| arguments respectively,
+// since |value| may be declared outside of the NYT namespace.
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CExternallySerializable T>
+void Serialize(const T& value, IYsonConsumer* consumer);
+
+template <NYTree::CExternallySerializable T>
+void Deserialize(
+    T& value,
+    TYsonPullParserCursor* cursor,
+    bool postprocess = true,
+    bool setDefaults = true,
+    std::optional<NYTree::EUnrecognizedStrategy> strategy = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYson
+
+namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <CExternallySerializable T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer);
-template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
+void Deserialize(T& value, INodePtr node, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

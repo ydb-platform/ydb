@@ -536,7 +536,8 @@ public:
                         .IsInsideTableIndexPath();
                     // Not build index impl tables can be dropped only as part of drop index
                     // build index impl tables dropped multiple times during index construction
-                    if (!NTableIndex::IsBuildImplTable(name)) {
+                    // Internal operations (e.g. rebuild index) are allowed to drop impl tables
+                    if (!NTableIndex::IsBuildImplTable(name) && !Transaction.GetInternal()) {
                         checks
                             .IsUnderDeleting()
                             .IsUnderTheSameOperation(OperationId.GetTxId());
@@ -584,8 +585,8 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
-        for (auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
+        for (const auto* shard : table->GetPartitions()) {
+            auto shardIdx = shard->ShardIdx;
             context.MemChanges.GrabShard(context.SS, shardIdx);
             context.DbChanges.PersistShard(shardIdx);
 

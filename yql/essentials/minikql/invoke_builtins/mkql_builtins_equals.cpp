@@ -5,8 +5,7 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -274,9 +273,7 @@ struct TCustomEquals: public TAggrEquals {
 
 struct TDecimalEquals {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsComparable(l) && l == r);
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsEqual(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -346,5 +343,4 @@ void RegisterEquals(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Equals"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

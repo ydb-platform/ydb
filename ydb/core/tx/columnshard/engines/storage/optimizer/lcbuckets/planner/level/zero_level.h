@@ -12,7 +12,10 @@ private:
     const ui64 PortionsCountAvailable;
     const ui64 HighPriorityContribution;
     const bool CompactAtLevel;
+    const std::optional<ui64> SkipLevelMinBlobSize;
     const ui64 Concurrency;
+    std::optional<ui64> CompactionTaskMemoryLimit;
+    std::optional<ui64> CompactionTaskPortionsCountLimit;
 
     std::set<TOrderedPortion> Portions;
 
@@ -21,7 +24,7 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
+        const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/, const TMayUsePortion& /*mayUsePortion*/) const override {
         return std::nullopt;
     }
 
@@ -74,18 +77,24 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const override;
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
-    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const override;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const override;
+
     virtual ui64 GetExpectedPortionSize() const override {
         return ExpectedBlobsSize;
     }
-    
+
+    virtual std::optional<ui64> GetSkipLevelMinBlobSize() const override {
+        return SkipLevelMinBlobSize;
+    }
+
     ui64 GetMaxConcurrency() const;
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
         const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName,
-        const ui64 concurrency, const ui64 highPriorityContribution = 0, bool compactAtLevel = false);
+        const ui64 concurrency, std::optional<ui64> compactionTaskMemoryLimit, std::optional<ui64> compactionTaskPortionsCountLimit,
+        const ui64 highPriorityContribution = 0, bool compactAtLevel = false, std::optional<ui64> skipLevelMinBlobSize = std::nullopt);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -102,15 +102,18 @@ TReplicationCardFetchOptions::operator size_t() const
     return MultiHash(
         IncludeCoordinators,
         IncludeProgress,
-        IncludeHistory);
+        IncludeHistory,
+        IncludeReplicatedTableOptions);
 }
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/)
 {
-    builder->AppendFormat("{IncludeCoordinators: %v, IncludeProgress: %v, IncludeHistory: %v}",
+    builder->AppendFormat(
+        "{IncludeCoordinators: %v, IncludeProgress: %v, IncludeHistory: %v, IncludeReplicatedTableOptions: %v}",
         options.IncludeCoordinators,
         options.IncludeProgress,
-        options.IncludeHistory);
+        options.IncludeHistory,
+        options.IncludeReplicatedTableOptions);
 }
 
 bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& other) const
@@ -183,7 +186,8 @@ void FormatValue(
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v}",
+    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, "
+        "TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v, SecondaryIndices: %v}",
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
@@ -200,10 +204,11 @@ void FormatValue(
         replicationCard.TablePath,
         replicationCard.TableClusterName,
         replicationCard.CurrentTimestamp,
-        replicationCard.ReplicationCardCollocationId);
+        replicationCard.ReplicationCardCollocationId,
+        ConvertToYsonString(replicationCard.SecondaryIndices, NYson::EYsonFormat::Text));
 }
 
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
@@ -220,6 +225,11 @@ void TReplicationProgress::TSegment::Persist(const TStreamPersistenceContext& co
 
     Persist(context, LowerKey);
     Persist(context, Timestamp);
+}
+
+bool TReplicationProgress::TSegment::operator==(const TReplicationProgress::TSegment& other) const
+{
+    return LowerKey == other.LowerKey && Timestamp == other.Timestamp;
 }
 
 void TReplicationProgress::Persist(const TStreamPersistenceContext& context)
@@ -257,6 +267,18 @@ int TReplicaInfo::FindHistoryItemIndex(TTimestamp timestamp) const
             return lhs < rhs.Timestamp;
         });
     return std::distance(History.begin(), it) - 1;
+}
+
+bool operator==(const TReplicaInfo& lhs, const TReplicaInfo& rhs)
+{
+    return rhs.ClusterName == lhs.ClusterName &&
+        rhs.ReplicaPath == lhs.ReplicaPath &&
+        rhs.ContentType == lhs.ContentType &&
+        rhs.Mode == lhs.Mode &&
+        rhs.State == lhs.State &&
+        rhs.ReplicationProgress == lhs.ReplicationProgress &&
+        rhs.History == lhs.History &&
+        rhs.EnableReplicatedTableTracker == lhs.EnableReplicatedTableTracker;
 }
 
 TReplicaInfo* TReplicationCard::FindReplica(TReplicaId replicaId)
@@ -331,6 +353,11 @@ ETableReplicaState GetTargetReplicaState(ETableReplicaState state)
     return (state == ETableReplicaState::Enabled || state == ETableReplicaState::Enabling)
         ? ETableReplicaState::Enabled
         : ETableReplicaState::Disabled;
+}
+
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode)
+{
+    return mode == ETableReplicaMode::Sync || mode == ETableReplicaMode::AsyncToSync;
 }
 
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update)
@@ -574,6 +601,16 @@ TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progre
     return maxTimestamp;
 }
 
+std::pair<TTimestamp, TTimestamp> GetReplicationProgressMinMaxTimestamp(const TReplicationProgress& progress)
+{
+    auto result = std::make_pair(MaxTimestamp, MinTimestamp);
+    for (const auto& segment : progress.Segments) {
+        result.first = std::min(segment.Timestamp, result.first);
+        result.second = std::max(segment.Timestamp, result.second);
+    }
+    return result;
+}
+
 std::optional<TTimestamp> FindReplicationProgressTimestampForKey(
     const TReplicationProgress& progress,
     TUnversionedValueRange key)
@@ -602,7 +639,7 @@ TTimestamp GetReplicationProgressTimestampForKeyOrThrow(
 {
     auto timestamp = FindReplicationProgressTimestampForKey(progress, key.Elements());
     if (!timestamp) {
-        THROW_ERROR_EXCEPTION("Key %v is out or replication progress range", key);
+        THROW_ERROR_EXCEPTION("Key %v is out of replication progress range", key);
     }
     return *timestamp;
 }

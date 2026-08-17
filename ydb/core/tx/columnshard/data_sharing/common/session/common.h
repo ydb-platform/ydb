@@ -1,9 +1,9 @@
 #pragma once
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
@@ -15,10 +15,11 @@ class TColumnShard;
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TPortionDataAccessor;
+
 namespace NDataLocks {
 class TManager;
 }
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -45,20 +46,23 @@ private:
 
 protected:
     TTransferContext TransferContext;
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) = 0;
+    virtual TConclusionStatus DoStart(
+        NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) = 0;
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const = 0;
 
 public:
     virtual ~TCommonSession() = default;
 
     TCommonSession(const TString& info)
-        : Info(info) {
+        : Info(info)
+    {
     }
 
     TCommonSession(const TString& sessionId, const TString& info, const TTransferContext& transferContext)
         : SessionId(sessionId)
         , Info(info)
-        , TransferContext(transferContext) {
+        , TransferContext(transferContext)
+    {
         AFL_VERIFY(!!SessionId);
     }
 
@@ -124,4 +128,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_TIERING
+
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
@@ -22,14 +24,21 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
             bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")(
-            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
-        TString err = TStringBuilder() << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage();
+        const auto& error = ev->GetError();
+        const bool isRetriable = error.ShouldRetry() || error.GetExceptionName() == "SlowDown" || error.GetExceptionName() == "TooManyRequests";
+        YDB_LOG_DEBUG("",
+            {"event", "s3_request_failed"},
+            {"requestType", "get_object"},
+            {"exception", error.GetExceptionName()},
+            {"message", error.GetMessage()},
+            {"storageId", StorageId},
+            {"blob", logoBlobId},
+            {"retriable", isRetriable});
+        TString err = TStringBuilder() << error.GetExceptionName() << ", " << error.GetMessage();
         ErrorCollector->OnReadError(StorageId, err);
 
-        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR,
-            TStringBuilder() << ev->Result, err, false,
-            StorageId);
+        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
+            bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, err, false, StorageId, isRetriable);
     }
 }
 
@@ -43,8 +52,13 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<TEvBlobStorage::TEvPutResult>(
             NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "put_object")(
-            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
+        YDB_LOG_DEBUG("",
+            {"event", "s3_request_failed"},
+            {"requestType", "put_object"},
+            {"exception", ev->GetError().GetExceptionName()},
+            {"message", ev->GetError().GetMessage()},
+            {"storageId", StorageId},
+            {"blob", logoBlobId});
         TString err = TStringBuilder() << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage();
         ErrorCollector->OnWriteError(StorageId, err);
 

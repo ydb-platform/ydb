@@ -256,6 +256,9 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
+            query_stat_mode = get_external_param('query-stat-mode', None)
+            if query_stat_mode:
+                cmd += ['--stats', query_stat_mode]
             return cmd
 
         def run(self) -> bool:
@@ -448,8 +451,11 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int):
+    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int, compact: bool):
         cmd = cls.get_cli_command(remote_cli_path) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
+        if compact:
+            cmd.append('--compact')
+
         with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
             while exec.is_running():
                 sleep(10)
@@ -491,24 +497,29 @@ class YdbCliHelper:
             try:
                 res.stdout = exec.stdout
                 res.stderr = exec.stderr
-                if exec.return_code != 0:
-                    res.add_error(f'ydb cli failed with code {exec.return_code}.')
-                    ans = {}
-                else:
-                    ans = json.loads(res.stdout)
+                assert exec.return_code == 0, f'ydb cli failed with code {exec.return_code}.'
+                ans = json.loads(res.stdout)
                 summary = ans.get('summary', {})
                 res.add_stat('test', 'tpcc_json', ans)
                 res.add_stat('test', 'tpcc_tpmc', summary.get('tpmc', 0))
                 res.add_stat('test', 'tpcc_warehouses', summary.get('warehouses', 0))
                 res.add_stat('test', 'tpcc_efficiency', summary.get('efficiency', 0))
                 res.add_stat('test', 'tpcc_time_seconds', summary.get('time_seconds', 0))
+                res.add_stat('test', 'tpcc_max_sessions', summary.get('max_sessions', 0))
+                res.add_stat('test', 'tpcc_threads', summary.get('threads', 0))
+                res.add_stat('test', 'tpcc_warmup_seconds', summary.get('warmup_seconds', 0))
                 for tr, stats in ans.get('transactions', {}).items():
                     res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
                     res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))
                     for p, t in stats.get('percentiles', {}).items():
                         res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_ms', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_ms_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_pure', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_pure_perc_{p.replace(".", "_")}', t)
             except BaseException as e:
                 res.add_error(str(e))
+                res.traceback = e.__traceback__
             results[user] = res
 
         return results

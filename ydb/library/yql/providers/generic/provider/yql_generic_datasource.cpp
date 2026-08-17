@@ -3,7 +3,7 @@
 #include "yql_generic_provider_impl.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -25,7 +25,7 @@ namespace NYql {
                 : State_(state)
                 , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{GenericProviderName}))
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
-                , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_))
+                , LoadMetaDataTransformer_(CreateGenericDescribeTableTransformer(State_))
                 , TypeAnnotationTransformer_(CreateGenericDataSourceTypeAnnotationTransformer(State_))
                 , DqIntegration_(CreateGenericDqIntegration(State_))
             {
@@ -162,6 +162,10 @@ namespace NYql {
                     const TString& token = properties.Value("token", "");
                     const TString& tokenReference = properties.Value("tokenReference", "");
                     structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(tokenReference, token);
+                } else if (authMethod == "IAM") {
+                    const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
+                    const TString& resourceId = properties.Value("iamResourceId", "");
+                    structuredToken = ComposeStructuredTokenJsonForIamAuth(serviceAccountId, resourceId);
                 } else {
                     ythrow yexception() << "Unknown auth method: " << authMethod;
                 }

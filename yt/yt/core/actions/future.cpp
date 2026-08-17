@@ -51,7 +51,7 @@ TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
             return NullFutureCallbackCookie;
         } else {
             HasHandlers_ = true;
-            return VoidResultHandlers_.Add(std::move(handler));
+            return EncodeFutureCallbackCookie(VoidResultHandlers_.Insert(std::move(handler)), VoidResultHandlerCookieBase);
         }
     }
 }
@@ -140,7 +140,7 @@ bool TFutureState<void>::OnCanceled(TCancelHandler handler)
     }
 }
 
-bool TFutureState<void>::Wait(TInstant deadline) const
+bool TFutureState<void>::BlockingWait(TInstant deadline) const
 {
     // Fast path.
     if (Set_ || AbandonedUnset_) {
@@ -162,9 +162,9 @@ bool TFutureState<void>::Wait(TInstant deadline) const
     return ReadyEvent_->Wait(deadline);
 }
 
-bool TFutureState<void>::Wait(TDuration timeout) const
+bool TFutureState<void>::BlockingWait(TDuration timeout) const
 {
-    return Wait(timeout.ToDeadLine());
+    return BlockingWait(timeout.ToDeadLine());
 }
 
 void TFutureState<void>::InstallAbandonedError() const
@@ -205,7 +205,7 @@ void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading:
 bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
-    return VoidResultHandlers_.TryRemove(cookie, guard);
+    return TryUnsubscribe(&VoidResultHandlers_, cookie, VoidResultHandlerCookieBase, guard);
 }
 
 void TFutureState<void>::WaitUntilSet() const
@@ -294,7 +294,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
         error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
-        TrySetError(std::move(error));
+        TrySetError(error);
         // Kill the fake weak reference.
         UnrefFuture();
     }));

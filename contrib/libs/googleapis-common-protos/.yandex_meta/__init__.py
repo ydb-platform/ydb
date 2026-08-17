@@ -19,6 +19,7 @@ def post_install(self):
     )
     self.yamakes["."].before("END", "EXCLUDE_TAGS(GO_PROTO)\n")
     self.yamakes["."].before("END", "INCLUDE_TAGS(DOCS_PROTO)\n")
+    self.yamakes["."].after("GRPC", "IF (NOT OPENSOURCE)\nWITH_KOTLIN_GRPC()\nENDIF()")
 
 
 googleapis_common_protos = NixSourceProject(

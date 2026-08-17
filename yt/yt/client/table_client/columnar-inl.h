@@ -33,7 +33,7 @@ inline std::pair<i64, i64> DecodeStringRange(
     ui32 avgLength,
     i64 index)
 {
-    if (Y_UNLIKELY(index == 0)) {
+    if (index == 0) [[unlikely]] {
         return {
             0,
             static_cast<i64>(avgLength + ZigZagDecode64(offsets[0]))

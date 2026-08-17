@@ -3,6 +3,11 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+$const_3 = cast(3 as decimal(35,2));
+$const_100 = cast(100 as decimal(35,2));
+$const_0_9 = cast("0.9" as decimal(35,2));
+$const_1_1 = cast("1.1" as decimal(35,2));
+
 $ss_items = (
     SELECT
         i_item_id AS item_id,
@@ -102,12 +107,12 @@ $ws_items = (
 SELECT
     ss_items.item_id,
     ss_item_rev,
-    ss_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 AS ss_dev,
+    ss_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / $const_3) * $const_100 AS ss_dev,
     cs_item_rev,
-    cs_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 AS cs_dev,
+    cs_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / $const_3) * $const_100 AS cs_dev,
     ws_item_rev,
-    ws_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 AS ws_dev,
-    (ss_item_rev + cs_item_rev + ws_item_rev) / 3 AS average
+    ws_item_rev / ((ss_item_rev + cs_item_rev + ws_item_rev) / $const_3) * $const_100 AS ws_dev,
+    (ss_item_rev + cs_item_rev + ws_item_rev) / $const_3 AS average
 FROM
     $ss_items AS ss_items
 ,
@@ -117,12 +122,12 @@ FROM
 WHERE
     ss_items.item_id == cs_items.item_id
     AND ss_items.item_id == ws_items.item_id
-    AND ss_item_rev BETWEEN 0.9 * cs_item_rev AND 1.1 * cs_item_rev
-    AND ss_item_rev BETWEEN 0.9 * ws_item_rev AND 1.1 * ws_item_rev
-    AND cs_item_rev BETWEEN 0.9 * ss_item_rev AND 1.1 * ss_item_rev
-    AND cs_item_rev BETWEEN 0.9 * ws_item_rev AND 1.1 * ws_item_rev
-    AND ws_item_rev BETWEEN 0.9 * ss_item_rev AND 1.1 * ss_item_rev
-    AND ws_item_rev BETWEEN 0.9 * cs_item_rev AND 1.1 * cs_item_rev
+    AND ss_item_rev BETWEEN $const_0_9 * cs_item_rev AND $const_1_1 * cs_item_rev
+    AND ss_item_rev BETWEEN $const_0_9 * ws_item_rev AND $const_1_1 * ws_item_rev
+    AND cs_item_rev BETWEEN $const_0_9 * ss_item_rev AND $const_1_1 * ss_item_rev
+    AND cs_item_rev BETWEEN $const_0_9 * ws_item_rev AND $const_1_1 * ws_item_rev
+    AND ws_item_rev BETWEEN $const_0_9 * ss_item_rev AND $const_1_1 * ss_item_rev
+    AND ws_item_rev BETWEEN $const_0_9 * cs_item_rev AND $const_1_1 * cs_item_rev
 ORDER BY
     ss_items.item_id,
     ss_item_rev

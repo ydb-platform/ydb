@@ -194,10 +194,8 @@ Y_UNIT_TEST(MultiTxStatsFullScan) {
     MultiTxStatsFull<NYdb::NTable::TScanQueryPartIterator>(GetScanStreamIterator);
 }
 
-Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DeferredEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     TString planJson;
@@ -241,7 +239,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     result = session.ExecuteDataQuery(R"(
         SELECT * FROM `/Root/TwoShard`;
@@ -251,7 +249,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());
@@ -259,10 +257,8 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1);
 }
 
-Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DataQueryWithEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -279,13 +275,8 @@ Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    if (UseSink) {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
-    } else {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
-    }
+    auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(DataQueryMulti) {
@@ -308,6 +299,90 @@ Y_UNIT_TEST(DataQueryMulti) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(TxIdInFullStatsPlan) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    // Executer TxId is reported per execution phase, so that the plan can be matched with
+    // the TxId written by LWTrace probes.
+    const auto& plans = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
+    UNIT_ASSERT_C(!plans.empty(), result.GetQueryPlan());
+
+    bool txIdFound = false;
+    for (const auto& phase : plans) {
+        const auto* txId = phase.GetMapSafe().FindPtr("TxId");
+        if (txId) {
+            UNIT_ASSERT_C(txId->GetUIntegerSafe() > 0, result.GetQueryPlan());
+            txIdFound = true;
+        }
+    }
+    UNIT_ASSERT_C(txIdFound, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(NoTxIdWhenFeatureFlagDisabled) {
+    // EnableTxIdInStats defaults to false: TxId must not appear in the plan.
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
+Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    // Literal-only execution never reaches shards and gets no executer TxId,
+    // so nothing must be reported (and nothing must crash).
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT 1;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
 }
 
 Y_UNIT_TEST(RequestUnitForBadRequestExecute) {
@@ -390,6 +465,88 @@ Y_UNIT_TEST(RequestUnitForExecute) {
     }
 }
 
+Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    const auto execute = [&](const TString& query) {
+        auto result = session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+        return plan.GetMapSafe().at("SimplifiedPlan");
+    };
+
+    const auto fullScanPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )");
+    const auto fullScan = FindPlanNodeByKv(fullScanPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), fullScanPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, fullScanPlan);
+
+    const auto limitedPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard` LIMIT 3;
+    )");
+    const auto limitNode = FindPlanNodeByKv(limitedPlan, "Node Type", "Limit");
+    UNIT_ASSERT_C(limitNode.IsDefined(), limitedPlan);
+
+    const auto limit = FindPlanNodeByKv(limitNode, "Name", "Limit");
+    UNIT_ASSERT_C(limit.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limit.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(limit.GetMapSafe().at("A-Rows").GetDoubleSafe(), 3, limitedPlan);
+
+    const auto limitedScan = FindPlanNodeByKv(limitNode, "Name", "TableFullScan");
+    UNIT_ASSERT_C(limitedScan.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Size"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, limitedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
+        *result.GetStats()->GetPlan());
+    const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
+    const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), simplifiedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, simplifiedPlan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
@@ -408,11 +565,8 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
-
-    //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "ResultSet");
+    UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
 }
 
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
@@ -621,10 +775,8 @@ Y_UNIT_TEST(SysViewCancelled) {
     }
 }
 
-Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(OneShardLocalExec) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -662,10 +814,8 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
 }
 
-Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
+Y_UNIT_TEST(OneShardNonLocalExec) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

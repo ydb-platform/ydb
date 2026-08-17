@@ -1,6 +1,8 @@
 #include "type_ann_dict.h"
 #include "type_ann_types.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 
 namespace NYql::NTypeAnnImpl {
 
@@ -51,12 +53,17 @@ const TDictExprType* GetCachedMutDictType(const TStringBuf& resourceTag, const T
 
 IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -71,9 +78,15 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto dictType = type->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));
@@ -82,7 +95,7 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
 
 IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -90,14 +103,25 @@ IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureDictType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     auto dictType = input->Head().GetTypeAnn()->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));
@@ -106,7 +130,7 @@ IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprN
 
 IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -135,12 +159,17 @@ IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExp
 template <bool WithPayload>
 IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 2 + (WithPayload ? 1 : 0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -170,12 +199,17 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
 
 IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -202,12 +236,17 @@ IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExpr
 
 IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -234,12 +273,17 @@ IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, 
 
 IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -261,12 +305,17 @@ IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, 
 
 IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -288,12 +337,17 @@ IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TE
 
 IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -321,12 +375,17 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
 
 IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -352,12 +411,17 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
 
 IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -384,7 +448,7 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
 template <bool WithPayload>
 IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -458,4 +522,3 @@ template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::T
 
 
 } // namespace NYql::NTypeAnnImpl
-

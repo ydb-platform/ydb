@@ -65,6 +65,7 @@ Real-world usage
 - [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
 - [mamba](https://github.com/mamba-org/mamba)
 - [Ladybird Browser](https://ladybird.org)
+- [SereneDB](https://github.com/serenedb/serenedb)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
@@ -188,6 +189,7 @@ We distinguish between "bindings" (which just wrap the C++ code) and a port to a
 - [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
 - [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.
 - [simdjson-java](https://github.com/simdjson/simdjson-java): Java port.
+- [mruby-fast-json](https://github.com/Asmod4n/mruby-fast-json): mruby binding with high API coverage.
 
 About simdjson
 --------------
@@ -210,9 +212,15 @@ We have an in-depth paper focused on the UTF-8 validation:
 
 We also have an informal [blog post providing some background and context](https://branchfree.org/2019/02/25/paper-parsing-gigabytes-of-json-per-second/).
 
-For the video inclined, <br />
+For the video inclined, we had a talk at QCon San Francisco 2019<br />
 [![simdjson at QCon San Francisco 2019](http://img.youtube.com/vi/wlvKAT7SZIQ/0.jpg)](http://www.youtube.com/watch?v=wlvKAT7SZIQ)<br />
 (It was the best voted talk, we're kinda proud of it.)
+
+We also had a CppCon 2025 talk. We show how C++26 reflection allows for one-line serialization (to_json(player)) or deserialization—without invasive macros or manual mapping—using nothing but the C++ standard library. Whether you’re a performance junkie or simply interested in the roadmap for the next decade of C++ development, watch our full talk!
+
+[![simdjson at CppCon 2025](http://img.youtube.com/vi/Mcgk3CxHYMs/0.jpg)](http://www.youtube.com/watch?v=Mcgk3CxHYMs)<br />
+
+
 
 Citing this work
 -----------------

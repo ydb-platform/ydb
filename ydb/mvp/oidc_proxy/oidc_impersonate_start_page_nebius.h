@@ -1,12 +1,18 @@
 #pragma once
 
+#include <ydb/mvp/core/mvp_log.h>
 #include "oidc_settings.h"
 #include "context.h"
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 namespace NMVP::NOIDC {
 
-class THandlerImpersonateStart : public NActors::TActorBootstrapped<THandlerImpersonateStart> {
+class THandlerImpersonateStart
+    : public NActors::TActorBootstrapped<THandlerImpersonateStart>
+    , protected TMvpLogContextProvider {
 private:
     using TBase = NActors::TActorBootstrapped<THandlerImpersonateStart>;
 

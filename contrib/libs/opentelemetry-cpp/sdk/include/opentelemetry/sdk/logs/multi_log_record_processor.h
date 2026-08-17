@@ -26,6 +26,12 @@ class MultiLogRecordProcessor : public LogRecordProcessor
 {
 public:
   MultiLogRecordProcessor(std::vector<std::unique_ptr<LogRecordProcessor>> &&processors);
+
+  MultiLogRecordProcessor(const MultiLogRecordProcessor &)            = delete;
+  MultiLogRecordProcessor(MultiLogRecordProcessor &&)                 = delete;
+  MultiLogRecordProcessor &operator=(const MultiLogRecordProcessor &) = delete;
+  MultiLogRecordProcessor &operator=(MultiLogRecordProcessor &&)      = delete;
+
   ~MultiLogRecordProcessor() override;
 
   void AddProcessor(std::unique_ptr<LogRecordProcessor> &&processor);
@@ -56,6 +62,10 @@ public:
   bool Shutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept override;
 
+  bool HasEnabledFilter() const noexcept override;
+
+  bool RecordableEnforcesLogRecordLimits() const noexcept override;
+
 protected:
   /**
    * Exports all log records that have not yet been exported to the configured Exporter.
@@ -74,6 +84,13 @@ protected:
    */
   bool InternalShutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept;
+
+  bool EnabledImplementation(
+      const opentelemetry::nostd::variant<opentelemetry::trace::SpanContext,
+                                          opentelemetry::context::Context> &context_or_span,
+      const opentelemetry::sdk::instrumentationscope::InstrumentationScope &instrumentation_scope,
+      opentelemetry::logs::Severity severity,
+      opentelemetry::nostd::string_view event_name) const noexcept override;
 
 private:
   std::vector<std::unique_ptr<LogRecordProcessor>> processors_;

@@ -234,50 +234,8 @@ The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2009-2015 by the contributors listed in CREDITS.TXT
-
-
-====================COPYRIGHT====================
-Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
-
-
-====================File: CREDITS.TXT====================
-This file is a partial list of people who have contributed to the LLVM/CompilerRT
-project.  If you have contributed a patch or made some other contribution to
-LLVM/CompilerRT, please submit a patch to this file to add yourself, and it will be
-done!
-
-The list is sorted by surname and formatted to allow easy grepping and
-beautification by scripts.  The fields are: name (N), email (E), web-address
-(W), PGP key ID and fingerprint (P), description (D), and snail-mail address
-(S).
-
-N: Craig van Vliet
-E: cvanvliet@auroraux.org
-W: http://www.auroraux.org
-D: Code style and Readability fixes.
-
-N: Edward O'Callaghan
-E: eocallaghan@auroraux.org
-W: http://www.auroraux.org
-D: CMake'ify Compiler-RT build system
-D: Maintain Solaris & AuroraUX ports of Compiler-RT
-
-N: Howard Hinnant
-E: hhinnant@apple.com
-D: Architect and primary author of compiler-rt
-
-N: Guan-Hong Liu
-E: koviankevin@hotmail.com
-D: IEEE Quad-precision functions
-
-N: Joerg Sonnenberger
-E: joerg@NetBSD.org
-D: Maintains NetBSD port.
-
-N: Matt Thomas
-E: matt@NetBSD.org
-D: ARM improvements.
+Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
+All rights reserved.
 
 
 ====================File: LICENSE.TXT====================
@@ -519,21 +477,10 @@ mechanisms:
 ==============================================================================
 Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
 ==============================================================================
-
-The compiler_rt library is dual licensed under both the University of Illinois
-"BSD-Like" license and the MIT license.  As a user of this code you may choose
-to use it under either license.  As a contributor, you agree to allow your code
-to be used under both.
-
-Full text of the relevant licenses is included below.
-
-==============================================================================
-
 University of Illinois/NCSA
 Open Source License
 
-Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
-
+Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
 All rights reserved.
 
 Developed by:
@@ -571,47 +518,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
 SOFTWARE.
 
-==============================================================================
 
-Copyright (c) 2009-2015 by the contributors listed in CREDITS.TXT
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-
-====================MIT====================
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 
 ====================NCSA====================
 Compiler-RT is open source software. You may freely distribute it under the
@@ -620,6 +527,9 @@ terms of the license agreement found in LICENSE.txt.
 
 ====================NCSA====================
 Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+==============================================================================
+University of Illinois/NCSA
+Open Source License
 
 
 ====================NCSA====================
@@ -651,20 +561,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
 SOFTWARE.
 
 
-====================NCSA====================
-University of Illinois/NCSA
-Open Source License
-
-
 ====================NCSA AND MIT====================
 // This file is dual licensed under the MIT and the University of Illinois Open
 // Source Licenses. See LICENSE.TXT for details.
-
-
-====================NCSA AND MIT====================
-The compiler_rt library is dual licensed under both the University of Illinois
-"BSD-Like" license and the MIT license.  As a user of this code you may choose
-to use it under either license.  As a contributor, you agree to allow your code
-to be used under both.
-
-Full text of the relevant licenses is included below.

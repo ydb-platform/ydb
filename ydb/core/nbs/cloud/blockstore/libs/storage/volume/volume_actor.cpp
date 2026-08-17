@@ -10,8 +10,9 @@ namespace NYdb::NBS::NStorage {
 using namespace NActors;
 using namespace NKikimr;
 
-TVolumeActor::TVolumeActor(const TActorId& tablet,
-                           NKikimr::TTabletStorageInfo* info)
+TVolumeActor::TVolumeActor(
+    const TActorId& tablet,
+    NKikimr::TTabletStorageInfo* info)
     : TTabletExecutedFlat(info, tablet, new NKikimr::NMiniKQL::TMiniKQLFactory)
 {}
 
@@ -19,31 +20,36 @@ void TVolumeActor::Bootstrap(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(ctx, NKikimrServices::NBS_VOLUME,
-             "Started NBS volume: tablet id %s", SelfId().ToString().data());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Started NBS volume: tablet id %s",
+        SelfId().ToString().data());
 }
 
 void TVolumeActor::OnDetach(const TActorContext& ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "OnDetach");
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "OnDetach");
     Die(ctx);
 }
 
-void TVolumeActor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev,
-                                const TActorContext& ctx)
+void TVolumeActor::OnTabletDead(
+    TEvTablet::TEvTabletDead::TPtr& ev,
+    const TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "OnTabletDead");
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "OnTabletDead");
     Die(ctx);
 }
 
 void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 {
     // RunTxInitSchema(ctx);
-    LOG_INFO(ctx, NKikimrServices::NBS_VOLUME,
-             "OnActivateExecutor: tablet id %lu", TabletID());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "OnActivateExecutor: tablet id %lu",
+        TabletID());
 
     // allow pipes to connect
     SignalTabletActive(ctx);
@@ -53,8 +59,7 @@ void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 
 void TVolumeActor::DefaultSignalTabletActive(const TActorContext& ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "DefaultSignalTabletActive");
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "DefaultSignalTabletActive");
 }
 
 void TVolumeActor::ReportTabletState(const TActorContext& ctx)
@@ -62,9 +67,10 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
     auto service =
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
-    auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(), STATE_WORK);
+    auto request =
+        std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
+            TabletID(),
+            STATE_WORK);
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }
@@ -72,9 +78,12 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
 STFUNC(TVolumeActor::StateWork)
 {
     auto ctx = NActors::TActivationContext::AsActorContext();
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "Processing event: %s from sender: %lu", ev->GetTypeName().data(),
-              ev->Sender.LocalId());
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Processing event: %s from sender: %lu",
+        ev->GetTypeName().data(),
+        ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -83,10 +92,12 @@ STFUNC(TVolumeActor::StateWork)
         HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
         HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
 
-        HFunc(NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
-              HandleUpdateVolumeConfig);
-        HFunc(NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse,
-              HandleUpdateVolumeConfigResponse);
+        HFunc(
+            NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
+            HandleUpdateVolumeConfig);
+        HFunc(
+            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse,
+            HandleUpdateVolumeConfigResponse);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -101,13 +112,17 @@ STFUNC(TVolumeActor::StateWork)
 }
 
 void TVolumeActor::HandleServerConnected(
-    const TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
+    const TEvTabletPipe::TEvServerConnected::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "Pipe client %s server %s connected to volume",
-              ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Pipe client %s server %s connected to volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TVolumeActor::HandleServerDisconnected(
@@ -116,19 +131,26 @@ void TVolumeActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
-              "Pipe client %s server %s disconnected from volume",
-              ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Pipe client %s server %s disconnected from volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TVolumeActor::HandleServerDestroyed(
-    const TEvTabletPipe::TEvServerDestroyed::TPtr& ev, const TActorContext& ctx)
+    const TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
+    const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(ctx, NKikimrServices::NBS_VOLUME,
-             "Pipe client %s server %s got destroyed for volume",
-             ToString(msg->ClientId).c_str(), ToString(msg->ServerId).c_str());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Pipe client %s server %s got destroyed for volume",
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TVolumeActor::HandleUpdateVolumeConfig(
@@ -149,7 +171,9 @@ void TVolumeActor::HandleUpdateVolumeConfig(
 
     // Store request info
     auto requestInfo = CreateRequestInfo(
-        ev->Sender, ev->Cookie, MakeIntrusive<NBlockStore::TCallContext>());
+        ev->Sender,
+        ev->Cookie,
+        MakeIntrusive<NBlockStore::TCallContext>());
 
     TUpdateVolumeConfigRequest& request = UpdateVolumeConfigRequests[txId];
     request.RequestInfo = std::move(requestInfo);
@@ -175,9 +199,10 @@ void TVolumeActor::HandleUpdateVolumeConfig(
         // Create pipe client and send the event
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        auto pipeClient = ctx.Register(
-            NTabletPipe::CreateClient(ctx.SelfID, partitionTabletId,
-                                      clientConfig));
+        auto pipeClient = ctx.Register(NTabletPipe::CreateClient(
+            ctx.SelfID,
+            partitionTabletId,
+            clientConfig));
         NTabletPipe::SendData(ctx, pipeClient, forwardEvent.release());
 
         // Store pipe client for later cleanup

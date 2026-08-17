@@ -35,6 +35,7 @@ PEERDIR(
     ydb/services/metadata/manager
     ydb/services/metadata/optimization
     yql/essentials/core
+    yql/essentials/core/sql_types
     yql/essentials/providers/common/provider
 )
 

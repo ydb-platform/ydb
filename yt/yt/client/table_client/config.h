@@ -129,6 +129,15 @@ DEFINE_REFCOUNTED_TYPE(TSlimVersionedWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCompactionHintWriterConfig
+{
+    // Both being overwritten by mount config, not registered in TChunkWriterConfig.
+    TTDigestConfigPtr RowDigest;
+    TMinHashDigestConfigPtr MinHashDigest;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkWriterConfig
     : public NChunkClient::TEncodingWriterConfig
 {
@@ -159,10 +168,8 @@ struct TChunkWriterConfig
 
     TSlimVersionedWriterConfigPtr Slim;
 
-    TVersionedRowDigestConfigPtr VersionedRowDigest;
-
     // Being overwritten by mount config, not registered in TChunkWriterConfig.
-    TMinHashDigestConfigPtr MinHashDigest;
+    TCompactionHintWriterConfig CompactionHintWriter;
 
     TChunkWriterTestingOptionsPtr TestingOptions;
 
@@ -378,6 +385,21 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Queues have no legacy of null-to-entity conversion to preserve, so an explicit null
+//! written into an `any` column of a queue stays a null instead of silently becoming
+//! a YSON entity.
+struct TPushQueueProducerFormatConfig
+    : public TInsertRowsFormatConfig
+{
+    REGISTER_YSON_STRUCT(TPushQueueProducerFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TPushQueueProducerFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {
@@ -448,26 +470,11 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TVersionedRowDigestConfig
-    : public NYTree::TYsonStruct
-{
-    bool Enable;
-    TTDigestConfigPtr TDigest;
-
-    REGISTER_YSON_STRUCT(TVersionedRowDigestConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
 struct TMinHashDigestConfig
     : public NYTree::TYsonStruct
 {
-    int WriteCount;
-    int DeleteTombstoneCount;
+    int WriteTimestampCount;
+    int DeleteTimestampCount;
 
     REGISTER_YSON_STRUCT(TMinHashDigestConfig);
 

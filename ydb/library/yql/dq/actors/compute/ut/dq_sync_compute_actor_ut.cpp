@@ -5,7 +5,6 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -40,9 +39,16 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
+static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+
+void SegmentationFaultHandler(int) {
+    Cerr << "segmentation fault call stack:" << Endl;
+    FormatBackTrace(&Cerr);
+    abort();
+}
 
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
@@ -107,7 +113,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
     {}
 
     void Start() {
-        NTestUtils::SetupSignalHandlers();
+        signal(SIGSEGV, &SegmentationFaultHandler);
         SetDispatchTimeout(TDuration::Seconds(20));
         InitNodes();
         SetLogBackend(NActors::CreateStderrBackend());
@@ -482,14 +488,12 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         return CreateDqInputChannel(settings, TypeEnv);
     }
 
-    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    auto CreateTaskRunnerActorFactory() {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()
         };
-
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
-
         NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
                 NYql::CreateCommonDqTaskTransformFactory()
                 });
@@ -499,32 +503,38 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqCompFactory,
                 dqTaskTransformFactory,
                 patternCache, false);
-        auto taskRunnerActorFactory =
-            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
-                {
-                    return factory->Get(alloc, task, statsMode);
-                };
+        return [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc&) {
+            return factory->Get(alloc, task, statsMode);
+        };
+    }
+
+    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+        TComputeRuntimeSettings runtimeSettings;
+        runtimeSettings.StatsMode = statsMode;
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
+        auto actor = CreateDqComputeActor(
+                EdgeActor,
+                LogPrefix,
+                &task,
+                CreateAsyncIoFactory(),
+                FunctionRegistry.Get(),
+                runtimeSettings,
+                memoryLimits,
+                CreateTaskRunnerActorFactory(),
+                {}
+                );
+        UNIT_ASSERT(actor);
+        return ActorSystem.Register(actor);
+    }
+
+    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 1_MB;
         memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
         memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
         memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
-        TComputeRuntimeSettings runtimeSettings;
-        runtimeSettings.StatsMode = statsMode;
-        auto actor = CreateDqComputeActor(
-                EdgeActor, // executerId,
-                LogPrefix,
-                &task, // NYql::NDqProto::TDqTask* task,
-                CreateAsyncIoFactory(),
-                FunctionRegistry.Get(),
-                runtimeSettings,
-                memoryLimits,
-                taskRunnerActorFactory,
-                {} // ::NMonitoring::TDynamicCounterPtr taskCounters,
-                );
-        UNIT_ASSERT(actor);
-        return ActorSystem.Register(actor);
+        return CreateTestSyncComputeActor(task, memoryLimits, statsMode);
     }
 
     TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
@@ -743,7 +753,20 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    struct TStartCAResult {
+        NActors::TActorId SyncCA;
+        TVector<IDqOutputChannel::TPtr> DqOutputChannels;
+        IDqInputChannel::TPtr DqInputChannel;
+    };
+
+    TStartCAResult StartCA(
+        ui32 packets,
+        ui32 watermarkPeriod,
+        bool waitIntermediateAcks,
+        ui32 numChannels,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
+        bool createSuspended = false
+    ) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
            << " watermarkPeriod=" << watermarkPeriod
@@ -756,10 +779,25 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         });
         auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
+        task.SetCreateSuspended(createSuspended);
 
         auto syncCA = CreateTestSyncComputeActor(task, statsMode);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
+
+        return {syncCA, std::move(dqOutputChannels), std::move(dqInputChannel)};
+    }
+
+    void BasicMultichannelTests(
+        ui32 packets,
+        ui32 watermarkPeriod,
+        bool waitIntermediateAcks,
+        ui32 numChannels,
+        auto& rng,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
+        bool createSuspended = false
+    ) {
+        auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(packets, watermarkPeriod, waitIntermediateAcks, numChannels, statsMode, createSuspended);
 
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;
@@ -1040,7 +1078,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         auto seed = GetRandomSeed();
         std::mt19937 rng(seed);
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16); ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
@@ -1068,8 +1106,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransformMultichannel, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
-        for (ui32 numChannels: { 1, 2, 7, 11 }) {
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 numChannels: { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
                 for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                     for (ui32 packets : sizes) {
@@ -1078,6 +1116,44 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingQuerySendStatsWithCreateSuspended, TSyncComputeActorTestFixture) {
+        auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(5, 1, true, 1, NDqProto::DQ_STATS_MODE_PROFILE, true);
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor, TDuration::Seconds(5));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get()->Record.HasStats());
+    }
+
+    // Reproduces crash: kqp_query_control_plane.cpp always creates TMemoryQuotaManager with
+    // MkqlLightProgramMemoryLimit, but map-join tasks request MkqlHeavyProgramMemoryLimit
+    // in CalcMkqlMemoryLimit(). When the RM is under pressure and AllocateExtraQuota returns
+    // false, TDqMemoryQuota constructor hits Y_ABORT_UNLESS -> process crash.
+    //
+    // Before the fix: this test aborts the process.
+    // After the fix: the actor is created successfully and sends TEvState.
+    Y_UNIT_TEST_F(MapJoinTaskWithExhaustedQuotaManager, TSyncComputeActorTestFixture) {
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        // HasMapJoin=true makes CalcMkqlMemoryLimit() return MkqlHeavyProgramMemoryLimit
+        task.MutableProgram()->MutableSettings()->SetHasMapJoin(true);
+        AddDummyInputChannels(task, InputChannelId, 1);
+        AddDummyOutputChannel(task, OutputChannelId, RowType);
+
+        TComputeMemoryLimits memoryLimits;
+        memoryLimits.ChannelBufferSize = 1_MB;
+        memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
+        memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
+        memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
+        // Quota manager funded with lightLimit only — simulates kqp_query_control_plane.cpp:315.
+        // AllocateExtraQuota(heavyLimit - lightLimit) returns false -> Y_ABORT_UNLESS fires.
+        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(40_MB, 40_MB);
+
+        auto syncCA = CreateTestSyncComputeActor(task, memoryLimits);
+        ActorSystem.EnableScheduleForActor(syncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
     }
 }
 

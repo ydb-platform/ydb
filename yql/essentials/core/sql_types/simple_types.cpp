@@ -9,13 +9,16 @@
 namespace NYql {
 
 namespace {
+
 struct TSimpleType {
     std::string_view CanonicalSqlName;
     std::string_view YqlName;
     std::string_view Kind;
 };
 
-static const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
+// NOLINTBEGIN(modernize-use-designated-initializers)
+
+const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
     {"void", {"Void", "Void", "Void"}},
     {"unit", {"Unit", "Unit", "Unit"}},
     {"generic", {"Generic", "Generic", "Generic"}},
@@ -75,10 +78,12 @@ static const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
     {"tztimestamp64", {"TzTimestamp64", "TzTimestamp64", "Data"}}};
 
 // new types (or aliases) should be added here
-static const std::unordered_map<std::string_view, TSimpleType> NewSimpleTypes = {
+const std::unordered_map<std::string_view, TSimpleType> NewSimpleTypes = {
     {"text", {"", "Utf8", ""}},
     {"bytes", {"", "String", ""}}};
 } // namespace
+
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_view& alias, bool flexibleTypesEnabled) {
     auto normalized = to_lower(ToString(alias));

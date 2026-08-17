@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    util
     ydb/public/sdk/cpp/src/client/iam
     library/cpp/digest/crc32c
     ydb/public/sdk/cpp/src/client/types/credentials

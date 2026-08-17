@@ -29,6 +29,7 @@
 #endif
 
 #include <cerrno>
+#include <utility>
 
 namespace NYql {
 
@@ -46,7 +47,7 @@ TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
         std::array<char, MAX_PATH> tempDir;
-        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+        if (MakeTempDir(tempDir.data(), /*prefix=*/nullptr) != 0) {
             ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
         }
         return tempDir.data();
@@ -59,11 +60,11 @@ constexpr const char* FileLocksDir = "locks";
 constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
-    : Path_(path)
-    , StorageFileName_(storageFileName)
+TFileLink::TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy)
+    : Path_(std::move(path))
+    , StorageFileName_(std::move(storageFileName))
     , Size_(size)
-    , Md5_(md5)
+    , Md5_(std::move(md5))
     , DeleteOnDestroy_(deleteOnDestroy)
 {
 }
@@ -355,7 +356,7 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
                 ++actualFiles;
                 actualSize += stat.Size;
@@ -416,9 +417,9 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
-                files.push_back(TFileObject{name, stat.MTime, stat.Size});
+                files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;
                 actualSize += stat.Size;
             }

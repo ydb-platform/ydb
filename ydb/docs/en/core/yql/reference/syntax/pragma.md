@@ -459,7 +459,7 @@ The default level is 2
 
 ### `ydb.OptimizerHints` {#optimizerhints}
 
-The pragma for query hints is desicribed in [a separate section](../../../dev/query-hints.md).
+The pragma for query hints is desicribed in [a separate section](../../../dev/query-execution-optimization/query-hints.md).
 
 ### `kikimr.IsolationLevel`
 

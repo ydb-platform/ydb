@@ -45,7 +45,6 @@
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
 Восстановление схемных объектов базы данных происходит также, как и описано в разделе [Объекты схемы данных](#schema-objects).

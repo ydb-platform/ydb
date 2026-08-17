@@ -14,11 +14,14 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+import re
 import textwrap
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from optparse import SUPPRESS_HELP, Option, OptionGroup, OptionParser, Values
 from textwrap import dedent
-from typing import Any, Callable
+from typing import Any
 
 from pip._vendor.packaging.utils import canonicalize_name
 
@@ -62,6 +65,37 @@ def make_option_group(group: dict[str, Any], parser: ConfigOptionParser) -> Opti
     return option_group
 
 
+def check_only_deps_option_does_not_conflict(options: Values) -> None:
+    """Function for determining if --only-deps and other incompatible options are
+    specified.
+
+    :param options: The OptionParser options.
+    """
+    if not options.only_dependencies:
+        return
+    conflicts = []
+    if options.ignore_dependencies:
+        conflicts.append("'--no-deps'")
+    if "legacy-resolver" in options.deprecated_features_enabled:
+        conflicts.append("'--use-deprecated legacy-resolver'")
+    if options.requirements:
+        conflicts.append("'--requirement'")
+    if options.requirements_from_scripts:
+        conflicts.append("'--requirements-from-script'")
+    if options.dependency_groups:
+        conflicts.append("'--group'")
+    if conflicts:
+        if len(conflicts) > 1:
+            conflicts[-1] = "or " + conflicts[-1]
+        conflict_message = ", ".join(conflicts)
+        raise CommandError(
+            f"Cannot use '--only-dependencies' in combination with {conflict_message}. "
+            "If this is unexpected, please refer to the user guide:\n"
+            "\n"
+            "    https://pip.pypa.io/en/stable/user_guide/#installing-only-dependencies"
+        )
+
+
 def check_dist_restriction(options: Values, check_target: bool = False) -> None:
     """Function for determining if custom platform options are allowed.
 
@@ -100,6 +134,18 @@ def check_dist_restriction(options: Values, check_target: bool = False) -> None:
                 "Can not use any platform or abi specific options unless "
                 "installing via '--target' or using '--dry-run'"
             )
+
+    if dist_restriction_set:
+        # Lazy import to keep CLI startup fast
+        from pip._internal.utils import pylock as pylock_utils
+
+        for filename in options.requirements:
+            if pylock_utils.is_valid_pylock_filename(filename):
+                raise CommandError(
+                    "Platform and interpreter constraints using "
+                    "--python-version, --platform, --abi, or --implementation, "
+                    f"are not supported when selecting requirements from {filename!r}"
+                )
 
 
 def check_build_constraints(options: Values) -> None:
@@ -299,8 +345,17 @@ proxy: Callable[..., Option] = partial(
     "--proxy",
     dest="proxy",
     type="str",
-    default="",
+    default=None,
     help="Specify a proxy in the form scheme://[user:passwd@]proxy.server:port.",
+)
+
+no_proxy_env: Callable[..., Option] = partial(
+    Option,
+    "--no-proxy-env",
+    dest="no_proxy_env",
+    action="store_true",
+    default=False,
+    help="Do not read proxy configuration from environment variables.",
 )
 
 retries: Callable[..., Option] = partial(
@@ -434,8 +489,9 @@ def _handle_uploaded_prior_to(
     """
     This is an optparse.Option callback for the --uploaded-prior-to option.
 
-    Parses an ISO 8601 datetime string. If no timezone is specified in the string,
-    local timezone is used.
+    Accepts either an ISO 8601 datetime string (e.g., '2023-01-01T00:00:00Z')
+    or a strict subset of ISO 8601 durations: PnD where n is a number of days
+    (e.g., 'P7D' for 7 days ago).
 
     Note: This option only works with indexes that provide upload-time metadata
     as specified in the simple repository API:
@@ -443,6 +499,18 @@ def _handle_uploaded_prior_to(
     """
     if value is None:
         return None
+
+    # Try ISO 8601 duration in PnD format. The leading 'P' disambiguates
+    # from absolute datetimes. Only whole days are supported; the format may
+    # be extended to more of the ISO 8601 duration syntax in the future if
+    # a real need is presented.
+    match = re.match(r"^P(\d+)D$", value, re.ASCII)
+    if match:
+        days = int(match.group(1))
+        parser.values.uploaded_prior_to = datetime.now(timezone.utc) - timedelta(
+            days=days
+        )
+        return
 
     try:
         uploaded_prior_to = parse_iso_datetime(value)
@@ -453,8 +521,9 @@ def _handle_uploaded_prior_to(
     except ValueError as exc:
         msg = (
             f"invalid value: {value!r}: {exc}. "
-            f"Expected an ISO 8601 datetime string, "
-            f"e.g '2023-01-01' or '2023-01-01T00:00:00Z'"
+            f"Expected an ISO 8601 datetime string "
+            f"(e.g., '2023-01-01' or '2023-01-01T00:00:00Z') "
+            f"or a duration in days (e.g., 'P3D')"
         )
         raise_option_error(parser, option=option, msg=msg)
 
@@ -463,15 +532,17 @@ def uploaded_prior_to() -> Option:
     return Option(
         "--uploaded-prior-to",
         dest="uploaded_prior_to",
-        metavar="datetime",
+        metavar="datetime_or_duration",
         action="callback",
         callback=_handle_uploaded_prior_to,
         type="str",
         help=(
-            "Only consider packages uploaded prior to the given date time. "
-            "Accepts ISO 8601 strings (e.g., '2023-01-01T00:00:00Z'). "
-            "Uses local timezone if none specified. Only effective when "
-            "installing from indexes that provide upload-time metadata."
+            "Only consider packages uploaded prior to the given value. "
+            "Accepts an ISO 8601 datetime (e.g., '2023-01-01T00:00:00Z', "
+            "uses local timezone if none specified) or a duration in days "
+            "(e.g., 'P3D' for packages uploaded at least 3 days ago). "
+            "Only effective when using indexes that provide "
+            "upload-time metadata."
         ),
     )
 
@@ -524,8 +595,12 @@ def requirements() -> Option:
         action="append",
         default=[],
         metavar="file",
-        help="Install from the given requirements file. "
-        "This option can be used multiple times.",
+        help=(
+            "Install from the given requirements file. "
+            "The file or URL can be in pip's requirements.txt format, "
+            "or pylock.toml format. pylock.toml support is experimental. "
+            "This option can be used multiple times."
+        ),
     )
 
 
@@ -536,7 +611,7 @@ def requirements_from_scripts() -> Option:
         default=[],
         dest="requirements_from_scripts",
         metavar="file",
-        help="Install dependencies of the given script file"
+        help="Install dependencies of the given script file "
         "as defined by PEP 723 inline metadata. ",
     )
 
@@ -615,12 +690,13 @@ def no_binary() -> Option:
         callback=_handle_no_binary,
         type="str",
         default=format_control,
-        help="Do not use binary packages. Can be supplied multiple times, and "
-        'each time adds to the existing value. Accepts either ":all:" to '
-        'disable all binary packages, ":none:" to empty the set (notice '
-        "the colons), or one or more package names with commas between "
-        "them (no colons). Note that some packages are tricky to compile "
-        "and may fail to install when this option is used on them.",
+        help="Do not download binary packages. Cached binary packages may still "
+        "be used. Can be supplied multiple times, and each time adds to "
+        "the existing value. Accepts either ':all:' to disable all binary "
+        "packages, ':none:' to empty the set (notice the colons), or one "
+        "or more package names with commas between them (no colons). "
+        "Note that some packages are tricky to compile and may fail to "
+        "install when this option is used on them.",
     )
 
 
@@ -790,15 +866,13 @@ python_version: Callable[..., Option] = partial(
     callback=_handle_python_version,
     type="str",
     default=None,
-    help=dedent(
-        """\
+    help=dedent("""\
     The Python interpreter version to use for wheel and "Requires-Python"
     compatibility checks. Defaults to a version derived from the running
     interpreter. The version can be specified using up to three dot-separated
     integers (e.g. "3" for 3.0.0, "3.7" for 3.7.0, or "3.7.3"). A major-minor
     version can also be given as a string without dots (e.g. "37" for 3.7.0).
-    """
-    ),
+    """),
 )
 
 
@@ -924,6 +998,60 @@ no_deps: Callable[..., Option] = partial(
     action="store_true",
     default=False,
     help="Don't install package dependencies.",
+)
+
+
+def _handle_refresh_package(
+    option: Option, opt_str: str, value: str, parser: OptionParser
+) -> None:
+    if value.startswith("-"):
+        raise CommandError("--refresh-package option requires 1 argument.")
+
+    existing: set[str] = getattr(parser.values, option.dest)
+
+    new = value.split(",")
+    while ":all:" in new:
+        existing.clear()
+        existing.add(":all:")
+        del new[: new.index(":all:") + 1]
+        if ":none:" not in new:
+            return
+
+    for name in new:
+        if name == ":none:":
+            existing.clear()
+        else:
+            existing.add(canonicalize_name(name))
+
+
+def refresh_package() -> Option:
+    return Option(
+        "--refresh-package",
+        dest="refresh_package",
+        action="callback",
+        callback=_handle_refresh_package,
+        type="str",
+        default=set(),
+        help="Refresh package index information for the given packages instead "
+        "of using cached responses. Accepts ':all:' to apply "
+        "to all packages, or a comma-separated list of package names.",
+    )
+
+
+only_deps: Callable[..., Option] = partial(
+    Option,
+    "--only-deps",
+    "--only-dependencies",
+    dest="only_dependencies",
+    action="store_true",
+    default=False,
+    help=(
+        "Take only the dependencies of the provided requirements into account, "
+        "not the requirements themselves. Cannot be used in combination with "
+        "--no-deps, --group, --requirement, or --requirements-from-script. "
+        "No user-supplied requirements will be handled, even if they were "
+        "dependencies of other user-supplied requirements."
+    ),
 )
 
 
@@ -1134,6 +1262,17 @@ require_hashes: Callable[..., Option] = partial(
 )
 
 
+no_require_hashes: Callable[..., Option] = partial(
+    Option,
+    "--no-require-hashes",
+    dest="no_require_hashes",
+    action="store_true",
+    default=False,
+    help="Do not automatically enable --require-hashes "
+    "when encountering a requirement with hashes.",
+)
+
+
 list_path: Callable[..., Option] = partial(
     PipOption,
     "--path",
@@ -1175,6 +1314,7 @@ no_python_version_warning: Callable[..., Option] = partial(
 ALWAYS_ENABLED_FEATURES = [
     "truststore",  # always on since 24.2
     "no-binary-enable-wheel-cache",  # always on since 23.1
+    "build-constraint",  # always on since 26.2
 ]
 
 use_new_feature: Callable[..., Option] = partial(
@@ -1186,8 +1326,8 @@ use_new_feature: Callable[..., Option] = partial(
     default=[],
     choices=[
         "fast-deps",
-        "build-constraint",
         "inprocess-build-deps",
+        "venv-isolation",
     ]
     + ALWAYS_ENABLED_FEATURES,
     help="Enable new functionality, that may be backward incompatible.",
@@ -1226,6 +1366,7 @@ general_group: dict[str, Any] = {
         no_input,
         keyring_provider,
         proxy,
+        no_proxy_env,
         retries,
         timeout,
         exists_action,
@@ -1249,6 +1390,7 @@ index_group: dict[str, Any] = {
         index_url,
         extra_index_url,
         no_index,
+        refresh_package,
         find_links,
         uploaded_prior_to,
     ],

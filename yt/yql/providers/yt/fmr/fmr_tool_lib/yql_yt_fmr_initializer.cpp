@@ -27,7 +27,10 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     // initializing fmr file metadata and upload services
     TString coordinatorUrl = fmrConfiguration.GetCoordinatorUrl();
     if (!fmrConfiguration.HasFileRemoteCacheName()) {
-        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr, TFmrDistributedCacheSettings(), tvmSettings};
+        return TFmrInitializationOptions{
+            .FmrCoordinatorUrl = coordinatorUrl,
+            .FmrTvmSettings = tvmSettings,
+        };
     }
     TString fmrRemoteCacheName = fmrConfiguration.GetFileRemoteCacheName();
 
@@ -84,12 +87,25 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
 }
 
 std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
-    TFmrCoordinatorSettings coordinatorSettings{};
+    TMaybe<NYT::TNode> fmrOperationSpec;
     TString fmrOperationSpecFilePath = fmrServices->FmrOperationSpecFilePath;
     if (!fmrOperationSpecFilePath.empty()) {
         TFileInput input(fmrOperationSpecFilePath);
-        auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
-        coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
+        fmrOperationSpec = NYT::NodeFromYsonStream(&input);
+    }
+    TMaybe<NYT::TNode> coordinatorConfig;
+    if (!fmrServices->CoordinatorYsonPath.empty()) {
+        TFileInput input(fmrServices->CoordinatorYsonPath);
+        coordinatorConfig = NYT::NodeFromYsonStream(&input);
+    }
+    TMaybe<NYT::TNode> workerConfig;
+    if (!fmrServices->WorkerYsonPath.empty()) {
+        TFileInput input(fmrServices->WorkerYsonPath);
+        workerConfig = NYT::NodeFromYsonStream(&input);
+    }
+    TFmrCoordinatorSettings coordinatorSettings = GetDefaultCoordinatorSettings(coordinatorConfig, fmrOperationSpec);
+    if (fmrServices->YtServerForUpload) {
+        coordinatorSettings.RequireFmrJob = true;
     }
 
     auto tvmSettings = fmrServices->TvmSettings;
@@ -106,7 +122,11 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
 
     IFmrCoordinator::TPtr coordinator;
 
-    if (!coordinatorServerUrl.empty()) {
+    if (fmrServices->VanillaCoordinatorClientSettings.Defined()) {
+        coordinator = MakeVanillaFmrCoordinatorClient(*fmrServices->VanillaCoordinatorClientSettings);
+        YQL_CLOG(INFO, FastMapReduce) << "Created vanilla FMR coordinator client for operation "
+            << fmrServices->VanillaCoordinatorClientSettings->OperationId;
+    } else if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;
         if (parsedUrl.Parse(coordinatorServerUrl) != THttpURL::ParsedOK) {
@@ -139,13 +159,14 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto fmrYtJobSerivce = fmrServices->YtJobService;
         auto jobLauncher = fmrServices->JobLauncher;
         auto func = [tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
-            return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
+            auto discovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
+            return RunJob(task, discovery, Nothing(), fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
-        NFmr::TFmrJobFactorySettings settings{.Function=func};
-        auto jobFactory = MakeFmrJobFactory(settings);
-        NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
-            .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
+        auto workerSettings = NFmr::GetDefaultWorkerSettings(workerConfig);
+        workerSettings.WorkerId = 0;
+        workerSettings.JobFactorySettings.Function = func;
+        auto jobFactory = MakeFmrJobFactory(workerSettings.JobFactorySettings);
 
         worker = MakeFmrWorker(coordinator, jobFactory, fmrServices->JobPreparer, workerSettings);
         worker->Start();

@@ -446,7 +446,6 @@ const std::vector<TCreatePathOp> CreatePathOperations({
         //TODO: proper check
         .CreateRequest = nullptr,
         // .SetupFlags = [](TTestEnvOptions& options) {
-        //     options.EnableTopicTransfer(true);
         // },
         // .CreateRequest = [](const TString& workingDir, const TString& path) {
         //     const TString modifyScheme = Sprintf(
@@ -495,6 +494,23 @@ const std::vector<TCreatePathOp> CreatePathOperations({
             return CreateStreamingQueryRequest(/* txId */ 0, workingDir, modifyScheme);
         }
     },
+    {
+        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet,
+        .CreateRequest = [](const TString& workingDir, const TString& path) {
+            const TString modifyScheme = Sprintf(R"(
+                Name: "%s"
+                Count: 1
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )",
+            path.c_str()
+            );
+            return CreateTestShardSetRequest(/* txId */ 0, workingDir, modifyScheme);
+        }
+    }
 
     //NOTE: ADD NEW ENTRY ABOVE THIS LINE
 });

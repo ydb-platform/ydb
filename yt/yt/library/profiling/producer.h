@@ -20,13 +20,13 @@ struct ISensorWriter
     virtual void PushTag(TTag tag) = 0;
     virtual void PopTag() = 0;
 
-    virtual void AddGauge(const std::string& name, double value) = 0;
+    virtual void AddGauge(TStringBuf name, double value) = 0;
 
     //! AddCounter emits single counter value.
     /*!
      *  #value MUST be monotonically increasing.
      */
-    virtual void AddCounter(const std::string& name, i64 value) = 0;
+    virtual void AddCounter(TStringBuf name, i64 value) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,12 +42,12 @@ public:
     explicit TWithTagGuard(ISensorWriter* writer);
     // NB: For convenience.
     [[nodiscard]]
-    TWithTagGuard(ISensorWriter* writer, const std::string& tagKey, const std::string& tagValue);
+    TWithTagGuard(ISensorWriter* writer, TStringBuf tagKey, TStringBuf tagValue);
 
     ~TWithTagGuard();
 
     void AddTag(TTag tag);
-    void AddTag(const std::string& tagKey, const std::string& tagValue);
+    void AddTag(TStringBuf tagKey, TStringBuf tagValue);
 
 private:
     ISensorWriter* const Writer_;
@@ -63,8 +63,8 @@ public:
     void PushTag(TTag tag) override;
     void PopTag() override;
 
-    void AddGauge(const std::string& name, double value) override;
-    void AddCounter(const std::string& name, i64 value) override;
+    void AddGauge(TStringBuf name, double value) override;
+    void AddCounter(TStringBuf name, i64 value) override;
 
     void WriteTo(ISensorWriter* writer);
 

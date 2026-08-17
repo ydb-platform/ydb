@@ -25,7 +25,7 @@ public:
 
     const char* Peek(size_t* length) override
     {
-        if (Y_UNLIKELY(Position_ < Length_)) {
+        if (Position_ < Length_) [[unlikely]] {
             *length = Length_ - Position_;
             return Buffer_.begin() + Position_;
         } else {
@@ -35,7 +35,7 @@ public:
 
     void Skip(size_t length) override
     {
-        if (Y_UNLIKELY(Position_ < Length_)) {
+        if (Position_ < Length_) [[unlikely]] {
             auto delta = std::min(length, Length_ - Position_);
             Position_ += delta;
             length -= delta;
@@ -67,7 +67,7 @@ void SnappyCompress(TSource* source, TBlob* output)
     // Snappy implementation relies on entire input length to fit into an integer.
     if (source->Available() > std::numeric_limits<int>::max()) {
         THROW_ERROR_EXCEPTION("Snappy compression failed: input size is too big")
-            << TErrorAttribute("size", source->Available());
+            .With("size", source->Available());
     }
 
     output->Resize(snappy::MaxCompressedLength(source->Available()), /*initializeStorage*/ false);

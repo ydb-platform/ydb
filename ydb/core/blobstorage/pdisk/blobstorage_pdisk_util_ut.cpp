@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_chunk_id_formatter.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_driveestimator.h"
+#include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
@@ -25,6 +26,24 @@
 namespace NKikimr { namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
+
+    Y_UNIT_TEST(FreeChunksSortingCanBeToggled) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        auto counter = counters->GetCounter("FreeChunks");
+        TFreeChunks freeChunks(counter, 3);
+
+        freeChunks.SetSortingEnabled(false);
+        freeChunks.Push(5);
+        freeChunks.Push(1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 5);
+
+        freeChunks.Push(4);
+        freeChunks.Push(2);
+        freeChunks.Push(3);
+        freeChunks.SetSortingEnabled(true);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 2);
+    }
 
     Y_UNIT_TEST(AtomicBlockCounterFunctional) {
         TAtomicBlockCounter counter;
@@ -111,7 +130,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(Light) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
@@ -240,7 +259,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     Y_UNIT_TEST(LightOverflow) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
-        l.Initialize(c, "l");
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
@@ -266,7 +285,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
 void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedLastSector,
         ui64 expectedSectorOffset) {
-    TDiskFormat format;
+    TDiskFormat format = {};
     format.Clear(true);
     format.SectorSize = 4096;
     format.FormatFlags &= ~EFormatFlags::FormatFlagErasureEncodeUserChunks;
@@ -286,7 +305,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
 }
 
     Y_UNIT_TEST(OffsetParsingCorrectness) {
-        TDiskFormat format;
+        TDiskFormat format = {};
         format.Clear(true);
         format.SectorSize = 4096;
         const ui64 sectorPayload = format.SectorPayloadSize();
@@ -310,7 +329,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
 
 void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui64 expectedPayloadSize,
         ui64 expectedPayloadOffset) {
-    TDiskFormat format;
+    TDiskFormat format = {};
     format.Clear(true);
     format.SectorSize = 4096;
     format.FormatFlags &= ~EFormatFlags::FormatFlagErasureEncodeUserChunks;
@@ -326,7 +345,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 }
 
     Y_UNIT_TEST(PayloadParsingTest) {
-        TDiskFormat format;
+        TDiskFormat format = {};
         format.Clear(true);
         format.SectorSize = 4096;
         const ui64 sectorPayload = format.SectorPayloadSize();
@@ -346,7 +365,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorRestorator) {
         const bool enableSectorEncryption = true;
-        TDiskFormat format;
+        TDiskFormat format = {};
         format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, LogErasureDataParts + 1);
         constexpr ui64 magic = 0x123951924;
@@ -361,10 +380,10 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 NPDisk::TPDiskHashCalculator hasher(useT1haHash);
                 if (i < LogErasureDataParts) {
                     ui64 offset = format.SectorSize * i;
-                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size(), {});
                 }
             }
-            TSectorRestorator restorator(false, LogErasureDataParts, true, format);
+            TSectorRestorator restorator(false, LogErasureDataParts, true, format, {});
             restorator.Restore(sectors.Data(), 0, magic, 0, 0);
             UNIT_ASSERT_C(restorator.GoodSectorCount == LogErasureDataParts + 1,
                     "restorator.GoodSectorCount# " << restorator.GoodSectorCount);
@@ -373,7 +392,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorRestoratorOldNewHash) {
         const bool enableSectorEncryption = true;
-        TDiskFormat format;
+        TDiskFormat format = {};
         format.Clear(enableSectorEncryption);
         TSectorsWithData sectors(format.SectorSize, 3);
         const ui64 magic = 0x123951924;
@@ -395,12 +414,12 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                     footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
                     break;
                 case 2:
-                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
+                    footer->Hash = hasher.HashSector(offset, magic, sectors[i].Begin(), sectors[i].Size(), {});
                     break;
                 default:
                     UNIT_ASSERT(false);
                 }
-                TSectorRestorator restorator(false, 1, false, format);
+                TSectorRestorator restorator(false, 1, false, format, {});
                 restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
                 UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
                         << " GoodSectorCount# " << restorator.GoodSectorCount);
@@ -507,6 +526,29 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         device->PwriteSync(data.Get(), size, 0, {}, {});
         device->PreadSync(readData.Get(), size, 0, {}, {});
         UNIT_ASSERT(memcmp(data.Get(), readData.Get(), size) == 0);
+    }
+
+    Y_UNIT_TEST(TPDiskMonWriteOpCounters) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+
+        mon->CountLogWriteOpRequest(TWriteSource::WriteLogEntry, 100);
+        mon->CountLogWriteOpRequest(TWriteSource::SyncLogCommitterCommit, 200);
+        mon->CountLogWriteOpRequest(TWriteSource::Unknown, 300);
+
+        auto pdiskGroup = counters->GetSubgroup("subsystem", "pdisk");
+        auto getCounterValue = [&](const TString& opName, const TString& counterName) -> i64 {
+            return pdiskGroup->GetSubgroup("op", opName)->GetCounter(counterName, true)->Val();
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("WriteLogEntry", "LogBytesByOp"), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("SyncLogCommitterCommit", "LogBytesByOp"), 200);
+
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogRequestsByOp"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounterValue("Unknown", "LogBytesByOp"), 300);
     }
 
     Y_UNIT_TEST(FormatSectorMap) {

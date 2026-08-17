@@ -15,17 +15,28 @@ namespace NYT::NYPath {
 
 void TYPathStack::Push(TStringBuf key)
 {
-    PreviousPathLengths_.push_back(Path_.size());
-    Path_ += "/";
-    Path_ += ToYPathLiteral(key);
-    Items_.emplace_back(TString(key));
+    auto keyLiteral = ToYPathLiteral(key);
+    PushLiteral(std::move(keyLiteral));
+}
+
+void TYPathStack::PushLiteral(std::string key)
+{
+    if (PathMaterialized_) {
+        PreviousPathLengths_.push_back(Path_.size());
+        Path_.reserve(key.length() + 1);
+        Path_ += "/";
+        Path_ += key;
+    }
+    Items_.push_back(std::move(key));
 }
 
 void TYPathStack::Push(int index)
 {
-    PreviousPathLengths_.push_back(Path_.size());
-    Path_ += "/";
-    Path_ += ToString(index);
+    if (PathMaterialized_) {
+        PreviousPathLengths_.push_back(Path_.size());
+        Path_ += "/";
+        Path_ += std::to_string(index);
+    }
     Items_.emplace_back(index);
 }
 
@@ -43,8 +54,10 @@ void TYPathStack::Pop()
 {
     YT_VERIFY(!Items_.empty());
     Items_.pop_back();
-    Path_.resize(PreviousPathLengths_.back());
-    PreviousPathLengths_.pop_back();
+    if (PathMaterialized_) {
+        Path_.resize(PreviousPathLengths_.back());
+        PreviousPathLengths_.pop_back();
+    }
 }
 
 bool TYPathStack::IsEmpty() const
@@ -54,20 +67,36 @@ bool TYPathStack::IsEmpty() const
 
 const TYPath& TYPathStack::GetPath() const
 {
+    if (!PathMaterialized_) {
+        PreviousPathLengths_.reserve(Items_.size());
+        Path_.reserve(Items_.size() * 2);
+        for (const auto& entry : Items_) {
+            PreviousPathLengths_.push_back(Path_.size());
+            Path_ += "/";
+            Visit(entry,
+                [&] (const std::string& value) {
+                    Path_ += value;
+                },
+                [&] (int value) {
+                    Path_ += std::to_string(value);
+                });
+        }
+        PathMaterialized_ = true;
+    }
     return Path_;
 }
 
-TString TYPathStack::GetHumanReadablePath() const
+std::string TYPathStack::GetHumanReadablePath() const
 {
     auto path = GetPath();
     if (path.empty()) {
-        static const TString Root("(root)");
+        static const std::string Root("(root)");
         return Root;
     }
     return path;
 }
 
-std::optional<TString> TYPathStack::TryGetStringifiedLastPathToken() const
+std::optional<std::string> TYPathStack::TryGetStringifiedLastPathToken() const
 {
     if (Items_.empty()) {
         return {};
@@ -75,14 +104,14 @@ std::optional<TString> TYPathStack::TryGetStringifiedLastPathToken() const
     return ToString(Items_.back());
 }
 
-TString TYPathStack::ToString(const TYPathStack::TEntry& item)
+std::string TYPathStack::ToString(const TYPathStack::TEntry& item)
 {
     return Visit(item,
-        [&] (const TString& string) {
+        [&] (const std::string& string) {
             return string;
         },
-        [&] (int integer) {
-            return ::ToString(integer);
+        [&] (int integer) -> std::string {
+            return std::to_string(integer);
         });
 }
 
@@ -91,6 +120,7 @@ void TYPathStack::Reset()
     PreviousPathLengths_.clear();
     Path_.clear();
     Items_.clear();
+    PathMaterialized_ = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

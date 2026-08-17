@@ -1,5 +1,9 @@
 #include "kqp_worker_common.h"
 
+#include <ydb/library/security/util.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SLOW_LOG
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -112,9 +116,9 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
         }
 
         Y_DEBUG_ABORT_UNLESS(extractQueryText);
-        auto queryText = extractQueryText();
+        auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(extractQueryText());
 
-        auto paramsText = TStringBuilder()
+        auto paramsSize = TStringBuilder()
             << ToString(parametersSize)
             << 'b';
 
@@ -123,13 +127,14 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             resultsSize += result.ByteSize();
         }
 
-        LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SLOW_LOG, requestInfo
-            << "Slow query, duration: " << duration.ToString()
-            << ", status: " << status
-            << ", user: " << username
-            << ", results: " << resultsSize << 'b'
-            << ", text: \"" << EscapeC(queryText) << '"'
-            << ", parameters: " << paramsText);
+        YDB_LOG_CTX(ctx, priority, "Slow query, b",
+            {"requestInfo", requestInfo},
+            {"duration", duration},
+            {"status", status},
+            {"user", username},
+            {"results", resultsSize},
+            {"text", EscapeC(protectedQueryText)},
+            {"parameters", paramsSize});
     }
 }
 

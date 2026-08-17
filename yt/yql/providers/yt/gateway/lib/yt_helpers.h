@@ -31,6 +31,13 @@ class TOperationResult;
 
 }
 
+namespace NPrivate {
+    Y_HAS_MEMBER(SecureParams);
+    Y_HAS_MEMBER(AdditionalSecurityTags);
+    Y_HAS_MEMBER(LayersPaths);
+    Y_HAS_MEMBER(PublicId);
+}
+
 TMaybe<ui64> GetUsedRows(const NYT::TRichYPath& table, ui64 tableRowCount);
 TMaybe<ui64> GetUncompressedFileSize(NYT::ITransactionPtr tx, const TString& path);
 
@@ -41,9 +48,9 @@ void TransferTableAttributes(const NYT::TNode& attributes, const std::function<v
 NYT::TNode FilterYqlAttributes(const NYT::TNode& attributes);
 
 bool IterateYamredRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const bool supportRLSTables, const TMaybe<TSampleParams>& sampling = {});
 bool IterateYsonRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const bool supportRLSTables, const TMaybe<TSampleParams>& sampling = {});
 bool SelectRows(NYT::IClientPtr client, const TString& table, ui32 tableIndex, TMkqlIOCache& specsCache,
     IExecuteResOrPull& exec, TTableLimiter& limiter);
 
@@ -72,7 +79,7 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
 
 TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos = {}, bool shortErrors = false);
 
-TString GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
+TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
 
 TString UploadBinarySnapshotToYt(const TString& remotePath, NYT::IClientPtr client, NYT::ITransactionPtr snapshotTx,
     const TString& localPath, TDuration expirationInterval, const TMaybe<NYT::TNode>& transactionSpec = Nothing());

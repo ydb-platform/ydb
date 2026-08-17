@@ -29,7 +29,17 @@ struct TControllerSchema: NIceDb::Schema {
         struct Database: Column<9, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId, DesiredState, Database>;
+        using TColumns = TableColumns<
+            Id,
+            PathOwnerId,
+            PathLocalId,
+            Config,
+            State,
+            Issue,
+            NextTargetId,
+            DesiredState,
+            Database
+        >;
     };
 
     struct Targets: Table<3> {
@@ -48,12 +58,25 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct Issue: Column<9, NScheme::NTypeIds::Utf8> {};
-        struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {};
-        struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {};
-        struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {};
+        struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
 
         using TKey = TableKey<ReplicationId, Id>;
-        using TColumns = TableColumns<ReplicationId, Id, Kind, SrcPath, DstPath, DstState, DstPathOwnerId, DstPathLocalId, Issue, TransformLambda, RunAsUser, DirectoryPath>;
+        using TColumns = TableColumns<
+            ReplicationId,
+            Id,
+            Kind,
+            SrcPath,
+            DstPath,
+            DstState,
+            DstPathOwnerId,
+            DstPathLocalId,
+            Issue,
+            TransformLambda,
+            RunAsUser,
+            DirectoryPath
+        >;
     };
 
     struct SrcStreams: Table<4> {

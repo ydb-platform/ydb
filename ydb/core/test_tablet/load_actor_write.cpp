@@ -1,6 +1,8 @@
 #include "load_actor_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     void TLoadActor::GenerateKeyValue(TString *key, TString *value, bool *isInline) {
@@ -31,7 +33,11 @@ namespace NKikimr::NTestShard {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
 
-        STLOG(PRI_INFO, TEST_SHARD, TS12, "writing data", (TabletId, TabletId), (Key, key), (Size, value.size()));
+        YDB_LOG_INFO("Writing data",
+            {"marker", "TS12"},
+            {"tabletId", TabletId},
+            {"key", key},
+            {"size", value.size()});
 
         NWilson::TTraceId traceId;
         if (RandomNumber(1000000u) < Settings.GetPutTraceFractionPPM()) {
@@ -124,10 +130,14 @@ namespace NKikimr::NTestShard {
         if (const auto wifIt = WritesInFlight.find(cookie); wifIt != WritesInFlight.end()) {
             TWriteInfo& info = wifIt->second;
             const TDuration latency = TDuration::Seconds(info.Timer.Passed());
-            STLOG(PRI_DEBUG, TEST_SHARD, TS29, "data written", (TabletId, TabletId), (Key, info.KeysInQuery),
-                (Latency, latency));
+            YDB_LOG_DEBUG("Data written",
+                {"marker", "TS29"},
+                {"tabletId", TabletId},
+                {"key", info.KeysInQuery},
+                {"latency", latency});
             WriteLatency.Add(TActivationContext::Monotonic(), latency);
             Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            WriteCounters.RecordOk(info.KeysInQuery.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 const auto& res = results[i];
                 Y_VERIFY_S(res.GetStatus() == NKikimrProto::OK, "TabletId# " << TabletId << " CmdWrite failed Status# "
@@ -150,6 +160,7 @@ namespace NKikimr::NTestShard {
             const auto& res = results[0];
             Y_VERIFY_S(res.GetStatus() == NKikimrProto::OK, "TabletId# " << TabletId << " CmdPatch failed Status# "
                 << NKikimrProto::EReplyStatus_Name(NKikimrProto::EReplyStatus(res.GetStatus())));
+            PatchCounters.RecordOk();
             const TString& key = nh.mapped();
             const auto it = Keys.find(key);
             Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");

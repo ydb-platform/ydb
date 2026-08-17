@@ -6,8 +6,6 @@
 
 namespace NYql::NResult {
 
-constexpr TStringBuf TYsonResultWriter::VoidString;
-
 void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     if (!IsUtf8(value)) {
         TString encoded = Base64Encode(value);

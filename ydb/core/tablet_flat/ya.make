@@ -15,6 +15,7 @@ SRCS(
     flat_database.h
     flat_dbase_scheme.cpp
     flat_dbase_apply.cpp
+    flat_direct_part_writer.h
     flat_exec_broker.cpp
     flat_exec_commit.cpp
     flat_exec_commit_mgr.cpp
@@ -23,6 +24,8 @@ SRCS(
     flat_executor.h
     flat_executor_backup.cpp
     flat_executor_backup.h
+    flat_executor_backup_common.cpp
+    flat_executor_backup_common.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
@@ -112,7 +115,7 @@ PEERDIR(
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
@@ -121,12 +124,14 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
+    library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/control/lib
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos
     ydb/core/util
+    ydb/core/io_formats/json
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     ydb/library/mkql_proto/protos

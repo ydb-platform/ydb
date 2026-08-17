@@ -2,6 +2,7 @@
 
 #include "mkql_function_metadata.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/public/udf/udf_registrator.h>
@@ -48,7 +49,7 @@ using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf p
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionRegistry: public TThrRefBase {
 public:
-    typedef TIntrusivePtr<IFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IFunctionRegistry>;
 
     ~IFunctionRegistry() override = default;
 
@@ -58,6 +59,7 @@ public:
 
     virtual TStatus FindFunctionTypeInfo(
         NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         NUdf::ICountersProvider* countersProvider,
@@ -84,9 +86,10 @@ public:
 
     struct TFunctionProperties {
         bool IsTypeAwareness = false;
+        TMaybe<TString> PolyArgs;
     };
 
-    typedef std::map<TString, TFunctionProperties> TFunctionsMap;
+    using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
 
@@ -137,7 +140,8 @@ bool SplitModuleAndFuncName(
 TString FullName(const TStringBuf& module, const TStringBuf& func);
 
 inline TStringBuf ModuleName(const TStringBuf& name) {
-    TStringBuf moduleName, _;
+    TStringBuf moduleName;
+    TStringBuf _;
     if (SplitModuleAndFuncName(name, moduleName, _)) {
         return moduleName;
     }

@@ -22,8 +22,7 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId &actorId,
-                          const TPortionAddress &internalAddress);
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress);
 
     bool operator==(const TGlobalPortionAddress& item) const;
 
@@ -61,5 +60,5 @@ public:
 }   // namespace NKikimr::NOlap::NGeneralCache
 
 namespace NKikimr::NOlap::NDataAccessorControl {
-    using TGeneralCache = NKikimr::NGeneralCache::TServiceOperator<NKikimr::NOlap::NGeneralCache::TPortionsMetadataCachePolicy>;
+using TGeneralCache = NKikimr::NGeneralCache::TServiceOperator<NKikimr::NOlap::NGeneralCache::TPortionsMetadataCachePolicy>;
 }

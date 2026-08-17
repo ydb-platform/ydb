@@ -27,7 +27,7 @@ void FromProto(TOperationIdOrAlias* operationIdOrAlias, const TProtoClass& enclo
             const auto& operationAlias = enclosingProtoMessage.operation_alias();
             if (!operationAlias.StartsWith(OperationAliasPrefix)) {
                 THROW_ERROR_EXCEPTION("Operation alias should start with %Qv", OperationAliasPrefix)
-                    << TErrorAttribute("operation_alias", operationAlias);
+                    .With("operation_alias", operationAlias);
             }
             operationIdOrAlias->Payload = operationAlias;
             break;
@@ -47,7 +47,7 @@ void ToProto(TProtoClassPtr enclosingProtoMessage, const TOperationIdOrAlias& op
         [&] (const TOperationId& operationId) {
             ToProto(enclosingProtoMessage->mutable_operation_id(), operationId);
         },
-        [&] (const TString& alias) {
+        [&] (const std::string& alias) {
             enclosingProtoMessage->set_operation_alias(alias);
         });
 }

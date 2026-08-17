@@ -113,7 +113,9 @@ NApi::TTransactionStartOptions SerializeOptionsForStartTransaction(
 
 NApi::TTransactionAbortOptions SerializeOptionsForAbortTransaction(TMutationId& mutationId);
 
-NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(TMutationId& mutationId);
+NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(
+    TMutationId& mutationId,
+    const TCommitTransactionOptions& options);
 
 NApi::TStartOperationOptions SerializeOptionsForStartOperation(
     TMutationId& mutationId,
@@ -214,6 +216,9 @@ NApi::TGetColumnarStatisticsOptions SerializeOptionsForGetTableColumnarStatistic
 NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TGetTablePartitionsOptions& options);
+
+NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
 
 NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
     TMutationId& mutationId,

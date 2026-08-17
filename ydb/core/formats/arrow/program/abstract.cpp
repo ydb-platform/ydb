@@ -10,18 +10,16 @@ namespace NKikimr::NArrow::NSSA {
 NJson::TJsonValue IResourceProcessor::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (Input.size()) {
-        result.InsertValue("i", JoinSeq(",", Input));
+        result.InsertValue("input_columns", JoinSeq(",", Input));
     }
     if (Output.size()) {
-        result.InsertValue("o", JoinSeq(",", Output));
+        result.InsertValue("output_columns", JoinSeq(",", Output));
     }
-    result.InsertValue("t", ::ToString(ProcessorType));
-    if (IsAggregation()) {
-        result.InsertValue("a", IsAggregation());
-    }
+    result.InsertValue("processor_type", ::ToString(ProcessorType));
+    result.InsertValue("is_aggregation", IsAggregation());
     auto internalJson = DoDebugJson();
     if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
-        result.InsertValue("p", std::move(internalJson));
+        result.InsertValue("extra_data", std::move(internalJson));
     }
     return result;
 }

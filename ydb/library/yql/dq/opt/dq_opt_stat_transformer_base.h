@@ -23,15 +23,16 @@ protected:
     virtual bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
     virtual bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
 
-    bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
-    bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
-    bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
-
     TTypeAnnotationContext* TypeCtx;
-    const IProviderContext& Pctx;
+    const IProviderContext* Pctx;
     TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
     const bool UseFSMForSortElimination;
+
+private:
+    bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+    bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
+    bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
 };
 
 } // namespace NYql::NDq

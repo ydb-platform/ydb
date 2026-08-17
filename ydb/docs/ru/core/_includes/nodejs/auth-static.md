@@ -1,17 +1,13 @@
 ```typescript
-import { Driver, StaticCredentialsAuthService } from 'ydb-sdk';
+import { Driver } from "@ydbjs/core";
+import { StaticCredentialsProvider } from "@ydbjs/auth/static";
 
-export async function connect(endpoint: string, database: string, user: string, password: string) {
-    const authService = new StaticCredentialsAuthService(user, password, endpoint, {
-        tokenExpirationTimeout: 20000,
-    })
-    const driver = new Driver({endpoint, database, authService});
-    const timeout = 10000;
-    if (!await driver.ready(timeout)) {
-        console.log(`Driver has not become ready in ${timeout}ms!`);
-        process.exit(1);
-    }
-    console.log('Driver connected')
-    return driver
-}
+const driver = new Driver("grpc://localhost:2136/local", {
+  credentialsProvider: new StaticCredentialsProvider(
+    { username: user, password: password },
+    "grpc://localhost:2136",
+  ),
+});
+
+await driver.ready();
 ```

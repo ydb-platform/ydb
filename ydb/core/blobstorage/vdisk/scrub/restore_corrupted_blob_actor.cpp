@@ -1,6 +1,8 @@
 #include "restore_corrupted_blob_actor.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+
 namespace NKikimr {
 
     class TRestoreCorruptedBlobActor : public TActorBootstrapped<TRestoreCorruptedBlobActor> {
@@ -30,11 +32,14 @@ namespace NKikimr {
             TDiskPart Location;
             TEvRestoreCorruptedBlobResult::TItem *Item;
             NMatrix::TVectorType Parts;
+            TLogoBlobID HugeBlobId;
 
-            TReadCmd(TDiskPart location, TEvRestoreCorruptedBlobResult::TItem *item, NMatrix::TVectorType parts)
+            TReadCmd(TDiskPart location, TEvRestoreCorruptedBlobResult::TItem *item, NMatrix::TVectorType parts,
+                    TLogoBlobID hugeBlobId)
                 : Location(location)
                 , Item(item)
                 , Parts(parts)
+                , HugeBlobId(hugeBlobId)
             {}
         };
 
@@ -51,7 +56,7 @@ namespace NKikimr {
                 Item = item;
             }
 
-            void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
+            void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
                     ui64 /*circaLsn*/, const void* /*sst*/) {
                 const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
                 if ((local & Item->Needed).Empty()) {
@@ -62,13 +67,15 @@ namespace NKikimr {
                 switch (extr.BlobType) {
                     case TBlobType::DiskBlob:
                     case TBlobType::HugeBlob:
-                        ReadQ.emplace_back(extr.SwearOne(), Item, local);
+                        ReadQ.emplace_back(extr.SwearOne(), Item, local, TLogoBlobID());
                         break;
 
                     case TBlobType::ManyHugeBlobs:
                         for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++extr.Begin) {
                             if (Item->Needed.Get(i)) {
-                                ReadQ.emplace_back(*extr.Begin, Item, NMatrix::TVectorType::MakeOneHot(i, local.GetSize()));
+                                const TLogoBlobID partId(key.LogoBlobID(), i + 1);
+                                ReadQ.emplace_back(*extr.Begin, Item, NMatrix::TVectorType::MakeOneHot(i,
+                                    local.GetSize()), partId);
                             }
                         }
                         break;
@@ -122,8 +129,9 @@ namespace NKikimr {
         }
 
         void Bootstrap() {
-            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS09, VDISKP(LogPrefix, "bootstrapping TRestoreCorruptedBlobActor"),
-                (SelfId, SelfId()));
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "bootstrapping TRestoreCorruptedBlobActor"),
+                {"marker", "VDS09"},
+                {"selfId", SelfId()});
             Send(SkeletonId, new TEvTakeHullSnapshot(false));
             Become(&TThis::StateFunc, Deadline, new TEvents::TEvWakeup);
         }
@@ -157,10 +165,15 @@ namespace NKikimr {
                 IssueQuery();
             } else { // some data to read, generate reads
                 for (auto& cmd : ReadQ) {
-                    STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS18, VDISKP(LogPrefix, "sending read to PDisk"),
-                        (SelfId, SelfId()), (Location, cmd.Location), (BlobId, cmd.Item->BlobId), (Parts, cmd.Parts));
+                    YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending read to PDisk"),
+                        {"marker", "VDS18"},
+                        {"selfId", SelfId()},
+                        {"location", cmd.Location},
+                        {"blobId", cmd.Item->BlobId},
+                        {"parts", cmd.Parts});
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                         cmd.Location.ChunkIdx, cmd.Location.Offset, cmd.Location.Size, NPriRead::HullLow, &cmd);
+                    msg->BlobId = cmd.HugeBlobId;
                     Send(PDiskCtx->PDiskId, msg.release());
                     ++ReadsPending;
                 }
@@ -187,9 +200,13 @@ namespace NKikimr {
                     item.Status = NKikimrProto::OK; // item has been fully read from local sources
                 }
             } else {
-                STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS26, VDISKP(LogPrefix, "failed to read data from PDisk"),
-                    (SelfId, SelfId()), (Location, cmd->Location), (BlobId, cmd->Item->BlobId), (Parts, cmd->Parts),
-                    (Status, msg->Status));
+                YDB_LOG_WARN(VDISKP(LogPrefix, "failed to read data from PDisk"),
+                    {"marker", "VDS26"},
+                    {"selfId", SelfId()},
+                    {"location", cmd->Location},
+                    {"blobId", cmd->Item->BlobId},
+                    {"parts", cmd->Parts},
+                    {"status", msg->Status});
             }
 
             if (!ReadsPending) {
@@ -199,7 +216,9 @@ namespace NKikimr {
         }
 
         void IssueQuery() {
-            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS00, VDISKP(LogPrefix, "IssueQuery"), (SelfId, SelfId()));
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery"),
+                {"marker", "VDS00"},
+                {"selfId", SelfId()});
 
             std::unique_ptr<TEvRecoverBlob> ev;
             for (size_t i = 0; i < Items.size(); ++i) {
@@ -210,8 +229,12 @@ namespace NKikimr {
                         ev->Deadline = Deadline;
                     }
                     ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
-                    STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS17, VDISKP(LogPrefix, "IssueQuery item"), (SelfId, SelfId()),
-                        (BlobId, item.BlobId), (PartsMask, item.PartsMask), (Needed, item.Needed));
+                    YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery item"),
+                        {"marker", "VDS17"},
+                        {"selfId", SelfId()},
+                        {"blobId", item.BlobId},
+                        {"partsMask", item.PartsMask},
+                        {"needed", item.Needed});
                 }
             }
             if (ev) {
@@ -229,7 +252,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvRecoverBlobResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS24, VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult)"), (SelfId, SelfId()));
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult)"),
+                {"marker", "VDS24"},
+                {"selfId", SelfId()});
 
             for (auto& item : ev->Get()->Items) {
                 auto& myItem = Items[item.Cookie];
@@ -242,8 +267,12 @@ namespace NKikimr {
                         IssueWrite(myItem, item.Cookie);
                     }
                 }
-                STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS43, VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult) item"),
-                    (SelfId, SelfId()), (BlobId, item.BlobId), (Status, item.Status), (PartsMask, item.PartsMask));
+                YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult) item"),
+                    {"marker", "VDS43"},
+                    {"selfId", SelfId()},
+                    {"blobId", item.BlobId},
+                    {"status", item.Status},
+                    {"partsMask", item.PartsMask});
             }
             for (const auto& item : Items) {
                 if (item.Status == NKikimrProto::UNKNOWN) {
@@ -261,7 +290,7 @@ namespace NKikimr {
                 Y_VERIFY_S(buffer.size() == Info->Type.PartSize(blobId), VCtx->VDiskLogPrefix);
                 Y_VERIFY_S(WriteRestoredParts, VCtx->VDiskLogPrefix);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
-                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
+                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::RestoredCorruptedBlob);
                 ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
@@ -269,8 +298,10 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS37, VDISKP(LogPrefix, "received TEvVPutResult"), (SelfId, SelfId()),
-                (Msg, ev->Get()->ToString()));
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVPutResult"),
+                {"marker", "VDS37"},
+                {"selfId", SelfId()},
+                {"msg", ev->Get()->ToString()});
             Y_VERIFY_S(WritesPending, VCtx->VDiskLogPrefix);
             --WritesPending;
             const auto& record = ev->Get()->Record;
@@ -280,8 +311,10 @@ namespace NKikimr {
                 case NKikimrProto::ERROR:
                 case NKikimrProto::OUT_OF_SPACE:
                 case NKikimrProto::VDISK_ERROR_STATE:
-                    STLOG(PRI_ERROR, BS_VDISK_SCRUB, VDS10, VDISKP(LogPrefix, "failed to restore blob"),
-                        (SelfId, SelfId()), (Msg, ev->Get()->ToString()));
+                    YDB_LOG_ERROR(VDISKP(LogPrefix, "failed to restore blob"),
+                        {"marker", "VDS10"},
+                        {"selfId", SelfId()},
+                        {"msg", ev->Get()->ToString()});
                     if (item.Status == NKikimrProto::OK) {
                         item.Status = NKikimrProto::ERROR;
                     }
@@ -301,8 +334,9 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS15, VDISKP(LogPrefix, "TRestoreCorruptedBlobActor terminating"),
-                (SelfId, SelfId()));
+            YDB_LOG_DEBUG(VDISKP(LogPrefix, "TRestoreCorruptedBlobActor terminating"),
+                {"marker", "VDS15"},
+                {"selfId", SelfId()});
             ReduceStatus(NKikimrProto::ERROR);
 
             if (ReportNonrestoredParts) {

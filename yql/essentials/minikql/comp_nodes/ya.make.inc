@@ -1,6 +1,9 @@
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes/")
+
 SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes)
 
 SET(ORIG_SOURCES
@@ -17,8 +20,13 @@ SET(ORIG_SOURCES
     mkql_block_coalesce.cpp
     mkql_block_container.cpp
     mkql_block_decimal.cpp
+    mkql_block_dynamic_variant.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
+    mkql_block_guess.cpp
+    mkql_block_variant.cpp
+    mkql_block_variant_item.cpp
+    mkql_block_way.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp
@@ -46,6 +54,7 @@ SET(ORIG_SOURCES
     mkql_element.cpp
     mkql_ensure.cpp
     mkql_enumerate.cpp
+    mkql_erased.cpp
     mkql_exists.cpp
     mkql_expand_map.cpp
     mkql_extend.cpp
@@ -76,6 +85,7 @@ SET(ORIG_SOURCES
     mkql_length.cpp
     mkql_linear.cpp
     mkql_listfromrange.cpp
+    mkql_list_join.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
     mkql_map.cpp
@@ -92,6 +102,7 @@ SET(ORIG_SOURCES
     mkql_next_value.cpp
     mkql_nop.cpp
     mkql_now.cpp
+    mkql_runtime_feature.cpp
     mkql_null.cpp
     mkql_pickle.cpp
     mkql_prepend.cpp
@@ -126,6 +137,7 @@ SET(ORIG_SOURCES
     mkql_tooptional.cpp
     mkql_tostring.cpp
     mkql_udf.cpp
+    mkql_udf_profile.cpp
     mkql_unwrap.cpp
     mkql_varitem.cpp
     mkql_visitall.cpp
@@ -139,6 +151,8 @@ SET(ORIG_SOURCES
     mkql_wide_filter.cpp
     mkql_wide_map.cpp
     mkql_wide_top_sort.cpp
+    mkql_window_range_pg_caller.cpp
+    mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
 )
@@ -164,13 +178,16 @@ COPY(
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/xxhash
+    library/cpp/hyperloglog
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/minikql/runtime_settings
     yql/essentials/core/sql_types
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/public/issue/protos
 )
 

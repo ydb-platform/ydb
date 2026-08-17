@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD030 -->
 # ALTER TRANSFER
 
 The `ALTER TRANSFER` statement modifies the parameters and state of a [transfer](../../../concepts/transfer.md) instance.
@@ -22,6 +23,10 @@ where:
 * `ACTIVE` — resumes a paused transfer.
 
 * {% include [x](../_includes/transfer_flush.md) %}
+
+* Authentication settings for the topic database (one of the following):
+
+  {% include [x](_includes/async_replication_authentification.md) %}
 
 ## Permissions
 
@@ -57,6 +62,14 @@ The following query modifies the batching parameters:
 ALTER TRANSFER my_transfer SET (
     BATCH_SIZE_BYTES = 1048576,
     FLUSH_INTERVAL = Interval('PT60S')
+);
+```
+
+The following query changes the secret:
+
+```yql
+ALTER TRANSFER my_transfer SET (
+    TOKEN_SECRET_PATH = "my_token"
 );
 ```
 

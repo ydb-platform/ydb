@@ -1,14 +1,17 @@
+#pragma once
+
 #include "kqp_operator.h"
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
 namespace NKikimr::NKqp::NOpt {
 
-struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
+struct TRBORelOptimizerNode : public TRelOptimizerNode {
 
-    TRBORelOptimizerNode(TVector<TString> labels, NYql::TOptimizerStatistics stats, TIntrusivePtr<IOperator> op) :
+    TRBORelOptimizerNode(TVector<TString> labels, TOptimizerStatistics stats, TIntrusivePtr<IOperator> op, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& map) :
         TRelOptimizerNode(labels[0], std::move(stats)),
         _Labels(labels),
-        Op(op)
+        Op(op),
+        CBOToColumns(map)
         {}
 
     TVector<TString> Labels() override {
@@ -20,7 +23,7 @@ struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
             stream << "    ";
         }
         stream << "Rels: ";
-        
+
         for (auto r : _Labels ) {
             stream << r << ", ";
         }
@@ -34,23 +37,20 @@ struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
 
     TVector<TString> _Labels;
     TIntrusivePtr<IOperator> Op;
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> CBOToColumns;
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
-    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel) : TKqpProviderContext(kqpCtx, optLevel) {}
+    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin) : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin) {}
 
     virtual bool IsJoinApplicable(
-        const std::shared_ptr<NYql::IBaseOptimizerNode>& left, 
-        const std::shared_ptr<NYql::IBaseOptimizerNode>& right, 
-        const TVector<NYql::NDq::TJoinColumn>& leftJoinKeys, 
-        const TVector<NYql::NDq::TJoinColumn>& rightJoinKeys,
-        NYql::EJoinAlgoType joinAlgo,  
-        NYql::EJoinKind joinKind
-    ) override {
-        if (joinAlgo == EJoinAlgoType::LookupJoin || joinAlgo == EJoinAlgoType::LookupJoinReverse) {
-            return false;
-        }
-        return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
-    }
+        const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys,
+        NKqp::EJoinAlgoType joinAlgo,
+        EJoinKind joinKind
+    ) override;
+
 };
 }

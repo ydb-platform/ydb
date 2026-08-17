@@ -1,7 +1,6 @@
 // -*- mode: c++ -*-
 
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -13,7 +12,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -129,6 +128,9 @@ class Module {
 
     // Inlined call sites belonging to this functions.
     vector<std::unique_ptr<Inline>> inlines;
+
+    // If this symbol has been folded with other symbols in the linked binary.
+    bool is_multiple = false;
   };
 
   struct InlineOrigin {
@@ -242,6 +244,8 @@ class Module {
     explicit Extern(const Address& address_input) : address(address_input) {}
     const Address address;
     string name;
+    // If this symbol has been folded with other symbols in the linked binary.
+    bool is_multiple = false;
   };
 
   // A map from register names to postfix expressions that recover
@@ -288,15 +292,32 @@ class Module {
   };
 
   struct ExternCompare {
-    bool operator() (const Extern* lhs, const Extern* rhs) const {
+    // Defining is_transparent allows
+    // std::set<std::unique_ptr<Extern>, ExternCompare>::find() to be called
+    // with an Extern* and have set use the overloads below.
+    using is_transparent = void;
+    bool operator() (const std::unique_ptr<Extern>& lhs,
+                     const std::unique_ptr<Extern>& rhs) const {
+      return lhs->address < rhs->address;
+    }
+    bool operator() (const Extern* lhs, const std::unique_ptr<Extern>& rhs) const {
+      return lhs->address < rhs->address;
+    }
+    bool operator() (const std::unique_ptr<Extern>& lhs, const Extern* rhs) const {
       return lhs->address < rhs->address;
     }
   };
 
   // Create a new module with the given name, operating system,
   // architecture, and ID string.
-  Module(const string& name, const string& os, const string& architecture,
-         const string& id, const string& code_id = "");
+  // NB: `enable_multiple_field` is temporary while transitioning to enabling
+  // writing the multiple field permanently.
+  Module(const string& name,
+         const string& os,
+         const string& architecture,
+         const string& id,
+         const string& code_id = "",
+         bool enable_multiple_field = false);
   ~Module();
 
   // Set the module's load address to LOAD_ADDRESS; addresses given
@@ -330,12 +351,12 @@ class Module {
   // Add STACK_FRAME_ENTRY to the module.
   // This module owns all StackFrameEntry objects added with this
   // function: destroying the module destroys them as well.
-  void AddStackFrameEntry(StackFrameEntry* stack_frame_entry);
+  void AddStackFrameEntry(std::unique_ptr<StackFrameEntry> stack_frame_entry);
 
   // Add PUBLIC to the module.
   // This module owns all Extern objects added with this function:
   // destroying the module destroys them as well.
-  void AddExtern(Extern* ext);
+  void AddExtern(std::unique_ptr<Extern> ext);
 
   // If this module has a file named NAME, return a pointer to it. If
   // it has none, then create one and return a pointer to the new
@@ -455,23 +476,32 @@ class Module {
   typedef set<Function*, FunctionCompare> FunctionSet;
 
   // A set containing Extern structures, sorted by address.
-  typedef set<Extern*, ExternCompare> ExternSet;
+  typedef set<std::unique_ptr<Extern>, ExternCompare> ExternSet;
 
   // The module owns all the files and functions that have been added
   // to it; destroying the module frees the Files and Functions these
   // point to.
   FileByNameMap files_;    // This module's source files.
   FunctionSet functions_;  // This module's functions.
+  // Used to quickly look up whether a function exists at a particular address.
+  unordered_set<Address> function_addresses_;
 
   // The module owns all the call frame info entries that have been
   // added to it.
-  vector<StackFrameEntry*> stack_frame_entries_;
+  vector<std::unique_ptr<StackFrameEntry>> stack_frame_entries_;
 
   // The module owns all the externs that have been added to it;
   // destroying the module frees the Externs these point to.
   ExternSet externs_;
 
   unordered_set<string> common_strings_;
+
+  // Whether symbols sharing an address should be collapsed into a single entry
+  // and marked with an `m` in the output. See
+  // https://bugs.chromium.org/p/google-breakpad/issues/detail?id=751 and docs
+  // at
+  // https://chromium.googlesource.com/breakpad/breakpad/+/master/docs/symbol_files.md#records-3
+  bool enable_multiple_field_;
 };
 
 }  // namespace google_breakpad

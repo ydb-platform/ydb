@@ -1,11 +1,16 @@
 LIBRARY()
 
 SRCS(
+    blob_checker.cpp
+    blob_checker_actors.cpp
+    blob_checker_events.cpp
+    blob_checker_planner.cpp
     bsc.cpp
     bsc.h
     bsc_audit.h
     bsc_audit.cpp
     bridge.cpp
+    cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
     cmds_bridge.cpp
@@ -65,6 +70,7 @@ SRCS(
     sys_view.cpp
     sys_view.h
     table_merger.h
+    types.cpp
     types.h
     update_group_latencies.cpp
     update_last_seen_ready.cpp

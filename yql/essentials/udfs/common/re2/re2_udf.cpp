@@ -1,3 +1,4 @@
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -8,6 +9,8 @@
 #include <util/system/env.h>
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
+
+#include <utility>
 
 using namespace re2;
 using namespace NKikimr;
@@ -51,7 +54,7 @@ ui64 GetFailProbability() {
 }
 
 bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
-    if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+    if (currentLangVersion >= NYql::NFeature::ValidateRegexp.MinLangVer) {
         return true;
     }
     THashType hash = GetStringHash(regexp) % 100;
@@ -124,11 +127,11 @@ public:
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentlangVersion,
-            const TRegexpGroups& regexpGroups = TRegexpGroups())
+            TRegexpGroups regexpGroups = TRegexpGroups())
             : Mode_(mode)
             , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , RegexpGroups_(regexpGroups)
+            , RegexpGroups_(std::move(regexpGroups))
             , CurrentLangVersion_(currentlangVersion)
         {
         }
@@ -233,7 +236,7 @@ private:
                     anchor = RE2::ANCHOR_BOTH;
                     [[fallthrough]];
                 case GREP:
-                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, nullptr, 0));
+                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, /*submatch=*/nullptr, 0));
                 case CAPTURE: {
                     const int count = Regexp_->NumberOfCapturingGroups() + 1;
                     TUnboxedValue* items = nullptr;
@@ -269,7 +272,7 @@ private:
                     StringPiece text(piece);
                     std::vector<TUnboxedValue> matches;
                     for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp_, &w);) {
-                        if (w.size() == 0 && !text.empty()) {
+                        if (w.empty() && !text.empty()) {
                             text.remove_prefix(1);
                         }
                         matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));
@@ -322,7 +325,7 @@ TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& buil
     TOptionsSchema ret;
     auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-    OPTIONS_MAP(FIELD_HANDLE)
+    OPTIONS_MAP(FIELD_HANDLE) // NOLINT(readability-container-data-pointer)
 #undef FIELD_HANDLE
 
     ret.StructType = structBuilder->Build();
@@ -395,7 +398,7 @@ template <bool posix>
 class TIsValidRegexp: public TBoxedValue {
 public:
     explicit TIsValidRegexp(const TOptionsSchema optionsSchema)
-        : OptionsSchema_(std::move(optionsSchema))
+        : OptionsSchema_(optionsSchema)
     {
     }
 
@@ -527,7 +530,37 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::MATCH));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::GREP));
-        sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE))->SetTypeAwareness();
+        auto capture = sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE));
+        capture->SetTypeAwareness();
+        capture->SetPolyArgs(R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalStructType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["TupleType";[
+                        ["DataType";"String"];
+                        ["OptionalType";["StructType";[
+                            ["CaseSensitive";["DataType";"Bool"]];
+                            ["DotNl";["DataType";"Bool"]];
+                            ["Literal";["DataType";"Bool"]];
+                            ["LogErrors";["DataType";"Bool"]];
+                            ["LongestMatch";["DataType";"Bool"]];
+                            ["MaxMem";["DataType";"Uint64"]];
+                            ["NeverCapture";["DataType";"Bool"]];
+                            ["NeverNl";["DataType";"Bool"]];
+                            ["OneLine";["DataType";"Bool"]];
+                            ["PerlClasses";["DataType";"Bool"]];
+                            ["PosixSyntax";["DataType";"Bool"]];
+                            ["Utf8";["DataType";"Bool"]];
+                            ["WordBoundary";["DataType";"Bool"]]
+                        ]]]
+                    ]]
+                }
+            ]]
+        )");
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::REPLACE));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::COUNT));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::FIND_AND_CONSUME));

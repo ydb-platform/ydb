@@ -91,12 +91,11 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcJsonrpcErrorCode =
     "rpc.jsonrpc.error_code";
 
 /**
-  Deprecated, use span status description or @code error.message @endcode attribute on other
-  signals.
+  Deprecated, use the span status description when reporting JSON-RPC spans.
 
   @deprecated
-  {"note": "Use the span status description or @code error.message @endcode attribute on other
-  signals.", "reason": "uncategorized"}
+  {"note": "Use the span status description when reporting JSON-RPC spans.", "reason":
+  "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcJsonrpcErrorMessage =
     "rpc.jsonrpc.error_message";
@@ -122,25 +121,40 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcJsonrpcVersion = "rpc.
 
 /**
   Compressed size of the message in bytes.
+
+  @deprecated
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
-static constexpr const char *kRpcMessageCompressedSize = "rpc.message.compressed_size";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcMessageCompressedSize =
+    "rpc.message.compressed_size";
 
 /**
   MUST be calculated as two different counters starting from @code 1 @endcode one for sent messages
-  and one for received message. <p> This way we guarantee that the values will be consistent between
-  different implementations.
+  and one for received message.
+
+  @deprecated
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
+  <p>
+  This way we guarantee that the values will be consistent between different implementations.
  */
-static constexpr const char *kRpcMessageId = "rpc.message.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcMessageId = "rpc.message.id";
 
 /**
   Whether this is a received or sent message.
+
+  @deprecated
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
-static constexpr const char *kRpcMessageType = "rpc.message.type";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcMessageType = "rpc.message.type";
 
 /**
   Uncompressed size of the message in bytes.
+
+  @deprecated
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
-static constexpr const char *kRpcMessageUncompressedSize = "rpc.message.uncompressed_size";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcMessageUncompressedSize =
+    "rpc.message.uncompressed_size";
 
 /**
   The fully-qualified logical name of the method from the RPC interface perspective.

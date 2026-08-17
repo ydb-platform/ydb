@@ -231,6 +231,8 @@ struct TBlackboard {
 
     void MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
 
+    void MoveBlobToDone(const TLogoBlobID& id);
+
     TBlobState& operator [](const TLogoBlobID& id);
 };
 

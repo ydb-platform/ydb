@@ -8,11 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SUBSCRIBER(g:cpp-contrib)
 
-VERSION(21.1.8)
-
-PEERDIR(
-    contrib/libs/afl/llvm_mode
-)
+VERSION(22.1.8)
 
 NO_COMPILER_WARNINGS()
 

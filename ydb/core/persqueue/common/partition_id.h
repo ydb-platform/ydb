@@ -1,16 +1,15 @@
 #pragma once
 
 #include <ydb/core/persqueue/public/write_id.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h> // TODO remove include - wrong dependency
 
 #include <util/generic/maybe.h>
-#include <util/stream/output.h>
+#include <util/stream/fwd.h>
 #include <util/system/types.h>
-#include <util/digest/multi.h>
 #include <util/str_stl.h>
-#include <util/string/builder.h>
 
+#include <compare>
 #include <functional>
+#include <tuple>
 
 namespace NKikimr::NPQ {
 
@@ -27,56 +26,24 @@ public:
     TPartitionId(ui32 originalPartitionId, const TMaybe<TWriteId>& writeId, ui32 internalPartitionId) :
         OriginalPartitionId(originalPartitionId),
         WriteId(writeId),
-        KafkaProducerId({}),
         InternalPartitionId(internalPartitionId)
     {
     }
 
-    TPartitionId(ui32 originalPartitionId, const TMaybe<NKafka::TProducerInstanceId>& kafkaProducerId, ui32 internalPartitionId) :
-        OriginalPartitionId(originalPartitionId),
-        WriteId({}),
-        KafkaProducerId(kafkaProducerId),
-        InternalPartitionId(internalPartitionId)
-    {
-    }
+    size_t GetHash() const;
 
-    size_t GetHash() const
-    {
-        return MultiHash(MultiHash(OriginalPartitionId, WriteId), InternalPartitionId);
-    }
-
-    bool IsEqual(const TPartitionId& rhs) const
-    {
-        return
-            (OriginalPartitionId == rhs.OriginalPartitionId) &&
-            (WriteId == rhs.WriteId) &&
-            (InternalPartitionId == rhs.InternalPartitionId);
-    }
-
-    bool IsLess(const TPartitionId& rhs) const
-    {
+    friend auto operator<=>(const TPartitionId& lhs, const TPartitionId& rhs) {
         auto makeTuple = [](const TPartitionId& v) {
-            return std::make_tuple(v.OriginalPartitionId, v.WriteId, v.InternalPartitionId);
+            return std::tie(v.OriginalPartitionId, v.WriteId, v.InternalPartitionId);
         };
-
-        return makeTuple(*this) < makeTuple(rhs);
+        return makeTuple(lhs) <=> makeTuple(rhs);
     }
 
-    void ToStream(IOutputStream& s) const
-    {
-        if (WriteId.Defined()) {
-            s << '{' << OriginalPartitionId << ", " << *WriteId << ", " << InternalPartitionId << '}';
-        } else {
-            s << OriginalPartitionId;
-        }
-    }
+    friend bool operator==(const TPartitionId& lhs, const TPartitionId& rhs) = default;
 
-    TString ToString() const
-    {
-        TStringBuilder s;
-        s << *this;
-        return s;
-    }
+    void ToStream(IOutputStream& s) const;
+
+    TString ToString() const;
 
     bool IsSupportivePartition() const
     {
@@ -85,28 +52,8 @@ public:
 
     ui32 OriginalPartitionId = 0;
     TMaybe<TWriteId> WriteId;
-    TMaybe<NKafka::TProducerInstanceId> KafkaProducerId;
     ui32 InternalPartitionId = 0;
 };
-
-inline
-bool operator==(const TPartitionId& lhs, const TPartitionId& rhs)
-{
-    return lhs.IsEqual(rhs);
-}
-
-inline
-bool operator<(const TPartitionId& lhs, const TPartitionId& rhs)
-{
-    return lhs.IsLess(rhs);
-}
-
-inline
-IOutputStream& operator<<(IOutputStream& s, const TPartitionId& v)
-{
-    v.ToStream(s);
-    return s;
-}
 
 }
 
@@ -119,20 +66,6 @@ struct THash<NKikimr::NPQ::TPartitionId> {
 };
 
 namespace std {
-
-template <>
-struct less<NKikimr::NPQ::TPartitionId> {
-    inline bool operator()(const NKikimr::NPQ::TPartitionId& lhs, const NKikimr::NPQ::TPartitionId& rhs) const
-    {
-        if (lhs.OriginalPartitionId < rhs.OriginalPartitionId) {
-            return true;
-        } else if (rhs.OriginalPartitionId < lhs.OriginalPartitionId) {
-            return false;
-        } else {
-            return lhs.WriteId < rhs.WriteId;
-        }
-    }
-};
 
 template <>
 struct hash<NKikimr::NPQ::TPartitionId> {

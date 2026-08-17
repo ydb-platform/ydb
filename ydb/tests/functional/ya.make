@@ -1,6 +1,7 @@
 RECURSE(
     api
     audit
+    topic
     autoconfig
     backup
     backup_collection
@@ -18,7 +19,8 @@ RECURSE(
     large_serializable
     limits
     minidumps
-    postgresql
+    mvp
+    nbs
     query_cache
     rename
     restarts
@@ -33,12 +35,14 @@ RECURSE(
     serverless
     split_merge
     sqs
+    sqs_topic
     statistics
     suite_tests
     tpc
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

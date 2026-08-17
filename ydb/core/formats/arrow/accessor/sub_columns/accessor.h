@@ -8,9 +8,9 @@
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -45,8 +45,8 @@ protected:
         return 0;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        return nullptr;
+    virtual TMinMax DoGetMinMaxScalars() const override { 
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;

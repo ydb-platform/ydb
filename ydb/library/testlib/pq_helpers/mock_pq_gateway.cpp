@@ -1,11 +1,15 @@
 #include "mock_pq_gateway.h"
 
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/common/test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
 #include <util/string/join.h>
+#include <util/system/mutex.h>
+
+#include <queue>
 
 namespace NTestUtils {
 
@@ -43,7 +47,7 @@ private:
 };
 
 class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSession, public NYdb::NTopic::IReadSession {
-    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSession {
+    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSessionControl {
         TMockPartitionSession(const TString& topicPath, ui64 partitionId) {
             PartitionSessionId = 0;
             TopicPath = topicPath;
@@ -53,6 +57,18 @@ class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSes
 
         void RequestStatus() final {
             Y_ENSURE(false, "Not implemented");
+        }
+
+        void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override final {
+        }
+
+        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override final {
+        }
+
+        void ConfirmDestroy() override final {
+        }
+
+        void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override final {
         }
     };
 
@@ -160,8 +176,8 @@ public:
         FillPromise();
     }
 
-    void AddStartSessionEvent() final {
-        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0));
+    void AddStartSessionEvent(ui64 endOffset) final {
+        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(PartitionSession, 0, endOffset));
     }
 
     void AddDataReceivedEvent(ui64 offset, const TString& data) final {
@@ -376,18 +392,6 @@ class TMockPqGateway final : public IMockPqGateway {
             : Self(self)
         {}
 
-        NYdb::TAsyncStatus CreateTopic(const TString& /*path*/, const NYdb::NTopic::TCreateTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        NYdb::TAsyncStatus AlterTopic(const TString& /*path*/, const NYdb::NTopic::TAlterTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        NYdb::TAsyncStatus DropTopic(const TString& /*path*/, const NYdb::NTopic::TDropTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
         NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& /*path*/, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
             Ydb::Topic::DescribeTopicResult describe;
             describe.add_partitions();
@@ -589,17 +593,17 @@ private:
     }
 
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic, ui64 partitionId) {
-        if (Settings.Runtime && Settings.Notifier) {
-            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
-        }
-
         const TString path(topic);
-        auto& info = GetTopicInfo(path);
         auto session = std::make_shared<TMockPqReadSession>(path, partitionId);
 
         with_lock (Mutex) {
+            auto& info = Topics[path];
             info.ReadSessionsByPartition[partitionId] = session;
             info.LastCreatedPartitionId = partitionId;
+        }
+
+        if (Settings.Runtime && Settings.Notifier) {
+            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
         }
 
         return session;

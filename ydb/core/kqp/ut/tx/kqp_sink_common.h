@@ -17,7 +17,6 @@ protected:
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
-    YDB_ACCESSOR(bool, DisableSinks, false);
     YDB_ACCESSOR(bool, UseRealThreads, true);
     YDB_ACCESSOR(bool, FillTables, true);
 
@@ -26,9 +25,8 @@ protected:
 public:
     void Execute() {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(UseRealThreads);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
         }
@@ -93,7 +91,18 @@ public:
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
                     UNIFORM_PARTITIONS = 100
                 );
-            )", type, type, type), TTxControl::NoTx()).GetValueSync();
+                CREATE TABLE `/Root/Test2` (
+                    Group Uint32 not null,
+                    Name String not null,
+                    Amount Uint64,
+                    Comment String,
+                    INDEX idx_comment GLOBAL UNIQUE ON (`Comment`),
+                    PRIMARY KEY (Group, Name)
+                ) WITH (
+                    STORE = %s,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                );
+            )", type, type, type, type), TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -103,6 +112,10 @@ public:
                     (1u, "Anna", 3500ul, "None"),
                     (1u, "Paul", 300ul, "None"),
                     (2u, "Tony", 7200ul, "None");
+                REPLACE INTO `Test2` (Group, Name, Amount, Comment) VALUES
+                    (1u, "Anna", 3500ul, "1"),
+                    (1u, "Paul", 300ul, "2"),
+                    (2u, "Tony", 7200ul, "3");
                 REPLACE INTO `KV` (Key, Value) VALUES
                     (1u, "One"),
                     (2u, "Two"),

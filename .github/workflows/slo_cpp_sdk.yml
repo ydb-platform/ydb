@@ -273,7 +273,7 @@ jobs:
           docker logs ydb-app-baseline > baseline.log 2>&1 || echo "No baseline container"
 
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{matrix.workload}}-slo-cpp-sdk-logs
           path: |

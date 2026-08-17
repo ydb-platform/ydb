@@ -24,7 +24,7 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters)
         : NActors::TStatsCollectingActor(intervalSec, setup, GetServiceCounters(counters, "utils"))
     {
-        MiniKQLPoolStats.Init(counters.Get());
+        MiniKQLPoolStats.Init(GetActorSystemCounters().Group.Get());
     }
 
 private:

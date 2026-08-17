@@ -5,7 +5,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -18,6 +17,12 @@
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr {
+
+// Only used below as a pointer in a factory-function declaration; a
+// forward declaration avoids pulling the heavy ydb/core/base/blobstorage.h
+// into this widely-included header.
+class TTabletStorageInfo;
+
 namespace NSchemeShard {
 
 static constexpr ui64 RootSchemeShardId = 0;

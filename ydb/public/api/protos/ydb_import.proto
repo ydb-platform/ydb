@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -76,8 +77,8 @@ message ImportFromS3Settings {
     string endpoint = 1 [(required) = true];
     Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6; // Empty collection means import of all export objects
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
@@ -145,21 +146,25 @@ message ImportFromS3Response {
 /// File system (FS)
 message ImportFromFsSettings {
     message Item {
-        /* YDB tables in FS are stored in a directory structure (see ydb_export.proto).
-           The directory contains:
-             * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
-             * '/scheme.pb' - object with information about scheme, indexes, etc;
-             * '/permissions.pb' - object with information about ACL and owner;
-             * '/metadata.json' - object with metadata about the backup.
-        The FS path can be either provided explicitly (relative to base_path)
-        Or, if the export contains the database objects list, you may specify the database object name,
-        and the FS prefix will be looked up in the database objects list by the import procedure
-        */
-        string source_path = 1;
+        oneof Source {
+            /* YDB tables in FS are stored in a directory structure (see ydb_export.proto).
+               The directory contains:
+                 * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+                 * '/scheme.pb' - object with information about scheme, indexes, etc;
+                 * '/permissions.pb' - object with information about ACL and owner;
+                 * '/metadata.json' - object with metadata about the backup.
+            */
+
+            // The FS path can be provided explicitly (relative to base_path)
+            string source_path = 1;
+
+            // Or, if the export contains the database objects list, you may specify the database object name, and the FS path will be looked up in the database objects list by the import procedure
+            string source_path_db = 3;
+        }
 
         // Database path to a database object to import the item to
         // Resolved relative to the default destination_path
-        // May be omitted if the item's source_path is specified, in this case will be taken equal to it
+        // May be omitted if the item's source_path_db is specified, in this case will be taken equal to it
         string destination_path = 2;
     }
 
@@ -234,8 +239,8 @@ message ListObjectsInS3ExportSettings {
     string endpoint = 1 [(required) = true];
     ImportFromS3Settings.Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6;
     uint32 number_of_retries = 7;
 

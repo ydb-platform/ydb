@@ -92,6 +92,35 @@ namespace NKikimr::NTestShard {
         ui32 StallCounter = 0;
         ui64 LastCookie = 0;
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Operation counters for success rate tracking
+
+        struct TOperationCounters {
+            ui64 OkCount = 0;
+            ui64 FailCount = 0;
+
+            void RecordOk(ui64 count = 1) { OkCount += count; }
+            void RecordFail(ui64 count = 1) { FailCount += count; }
+
+            ui64 GetTotalCount() const { return OkCount + FailCount; }
+
+            double GetSuccessRate() const {
+                const ui64 total = GetTotalCount();
+                return total > 0 ? static_cast<double>(OkCount) / total : 1.0;
+            }
+
+            TOperationCounters& operator+=(const TOperationCounters& other) {
+                OkCount += other.OkCount;
+                FailCount += other.FailCount;
+                return *this;
+            }
+        };
+
+        TOperationCounters WriteCounters;
+        TOperationCounters PatchCounters;
+        TOperationCounters DeleteCounters;
+        TOperationCounters ReadCounters;
+
         std::unique_ptr<TEvKeyValue::TEvRequest> CreateRequest();
         void Handle(TEvKeyValue::TEvResponse::TPtr ev);
 

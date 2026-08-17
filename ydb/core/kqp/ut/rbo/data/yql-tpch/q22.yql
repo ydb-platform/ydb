@@ -22,7 +22,7 @@ FROM (
             FROM
                 `/Root/customer` as customer
             WHERE
-                c_acctbal > 0.00
+                c_acctbal > $to_decimal("0.00")
                 AND Substring(CAST(c_phone AS String), 0u, 2u) IN (
                     '13', '31', '23', '29', '30', '18', '17'
                 )

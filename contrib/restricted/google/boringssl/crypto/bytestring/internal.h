@@ -1,26 +1,30 @@
-/* Copyright (c) 2014, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2014 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#ifndef OPENSSL_HEADER_BYTESTRING_INTERNAL_H
-#define OPENSSL_HEADER_BYTESTRING_INTERNAL_H
+#ifndef OPENSSL_HEADER_CRYPTO_BYTESTRING_INTERNAL_H
+#define OPENSSL_HEADER_CRYPTO_BYTESTRING_INTERNAL_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/asn1.h>
+#include <contrib/restricted/google/boringssl/include/openssl/bytestring.h>
+#include <contrib/restricted/google/boringssl/include/openssl/err.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#include <type_traits>
 
+#include "../mem_internal.h"
+
+
+BSSL_NAMESPACE_BEGIN
 
 // CBS_asn1_ber_to_der reads a BER element from |in|. If it finds
 // indefinite-length elements or constructed strings then it converts the BER
@@ -64,11 +68,63 @@ OPENSSL_EXPORT int CBS_get_asn1_implicit_string(CBS *in, CBS *out,
 // error, it calls |CBB_cleanup| on |cbb|.
 //
 // This function may be used to help implement legacy i2d ASN.1 functions.
-int CBB_finish_i2d(CBB *cbb, uint8_t **outp);
+OPENSSL_EXPORT int CBB_finish_i2d(CBB *cbb, uint8_t **outp);
 
+// CBBAsSpan returns a span containing |cbb|'s contents. It does not flush
+// |cbb|. The span is valid until the next operation to |cbb|.
+//
+// To avoid unfinalized length prefixes, it is a fatal error to call this on a
+// CBB with any active children.
+inline Span<uint8_t> CBBAsSpan(const CBB *cbb) {
+  return Span(CBB_data(cbb), CBB_len(cbb));
+}
 
-#if defined(__cplusplus)
-}  // extern C
-#endif
+// CBBFinishArray behaves like |CBB_finish| but stores the result in an Array.
+OPENSSL_EXPORT bool CBBFinishArray(CBB *cbb, Array<uint8_t> *out);
 
-#endif  // OPENSSL_HEADER_BYTESTRING_INTERNAL_H
+// D2IFromCBS takes a functor of type |Unique<T>(CBS*)| and implements the d2i
+// calling convention. For compatibility with functions that don't tag their
+// return value (e.g. public APIs), |T*(CBS)| is also accepted. The callback can
+// assume that the |CBS|'s length fits in |long|. The callback should not access
+// |out|, |inp|, or |len| directly.
+template <typename T, typename CBSFunc>
+inline T *D2IFromCBS(T **out, const uint8_t **inp, long len, CBSFunc func) {
+  static_assert(std::is_invocable_v<CBSFunc, CBS *>);
+  static_assert(
+      std::is_same_v<std::invoke_result_t<CBSFunc, CBS *>, UniquePtr<T>> ||
+      std::is_same_v<std::invoke_result_t<CBSFunc, CBS *>, T *>);
+  if (len < 0) {
+    OPENSSL_PUT_ERROR(ASN1, ASN1_R_BUFFER_TOO_SMALL);
+    return nullptr;
+  }
+  CBS cbs;
+  CBS_init(&cbs, *inp, len);
+  UniquePtr<T> ret(func(&cbs));
+  if (ret == nullptr) {
+    return nullptr;
+  }
+  if (out != nullptr) {
+    UniquePtr<T> free_out(*out);
+    *out = ret.get();
+  }
+  *inp = CBS_data(&cbs);
+  return ret.release();
+}
+
+// I2DFromCBB takes a functor of type |bool(CBB*)| and implements the i2d
+// calling convention. It internally makes a |CBB| with the specified initial
+// capacity. The callback should not access |outp| directly.
+template <typename CBBFunc>
+inline int I2DFromCBB(size_t initial_capacity, uint8_t **outp, CBBFunc func) {
+  static_assert(std::is_invocable_v<CBBFunc, CBB *>);
+  static_assert(std::is_same_v<std::invoke_result_t<CBBFunc, CBB *>, bool>);
+  ScopedCBB cbb;
+  if (!CBB_init(cbb.get(), initial_capacity) || !func(cbb.get())) {
+    return -1;
+  }
+  return CBB_finish_i2d(cbb.get(), outp);
+}
+
+BSSL_NAMESPACE_END
+
+#endif  // OPENSSL_HEADER_CRYPTO_BYTESTRING_INTERNAL_H

@@ -27,15 +27,20 @@ public:
     // N.B. we want to compute hash of this struct, so we use sorted map.
     TMap<TString, TString> ProxyUrlAliasingRules;
 
+    bool IsHeavy = false;
+    bool EnableControlMultiplexingBand = false;
+
 public:
     TConnectionCacheKey() = default;
 
-    TConnectionCacheKey(const TClientContext& context)
+    TConnectionCacheKey(const TClientContext& context, bool isHeavy = false)
         : JobProxySocketPath(context.JobProxySocketPath)
         , ClusterUrl(context.ServerName)
         , RpcProxyRole(context.RpcProxyRole)
         , ProxyAddress(context.ProxyAddress)
         , ProxyUrlAliasingRules(context.Config->ProxyUrlAliasingRules.begin(), context.Config->ProxyUrlAliasingRules.end())
+        , IsHeavy(isHeavy)
+        , EnableControlMultiplexingBand(context.Config->EnableControlMultiplexingBand)
     { }
 
     bool operator==(const TConnectionCacheKey& other) const = default;
@@ -61,6 +66,8 @@ struct THash<NYT::NDetail::TConnectionCacheKey>
             HashCombine(result, k);
             HashCombine(result, v);
         }
+        HashCombine(result, key.IsHeavy);
+        HashCombine(result, key.EnableControlMultiplexingBand);
         return result;
     }
 };
@@ -77,7 +84,7 @@ NApi::IConnectionPtr GetOrCreateConnection(const TConnectionCacheKey& key)
 {
     static TMutex lock;
     static THashMap<TConnectionCacheKey, TWeakPtr<NApi::IConnection>> cache;
-    static size_t maxCacheSize = 32;
+    static size_t maxCacheSize = 64;
 
     auto g = Guard(lock);
 
@@ -108,6 +115,8 @@ NApi::IConnectionPtr GetOrCreateConnection(const TConnectionCacheKey& key)
         connectionConfig->ProxyUrlAliasingRules.emplace(clusterName, url);
     }
 
+    connectionConfig->EnableControlMultiplexingBand = key.EnableControlMultiplexingBand;
+
     auto connection = NApi::NRpcProxy::CreateConnection(connectionConfig);
 
     if (it != cache.end()) {
@@ -124,9 +133,9 @@ NApi::IConnectionPtr GetOrCreateConnection(const TConnectionCacheKey& key)
     return connection;
 }
 
-NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context)
+static NApi::IClientPtr CreateApiClientImpl(const TClientContext& context, bool isHeavy)
 {
-    auto key = TConnectionCacheKey(context);
+    auto key = TConnectionCacheKey(context, isHeavy);
     auto connection = GetOrCreateConnection(key);
 
     NApi::TClientOptions clientOptions;
@@ -142,6 +151,22 @@ NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context)
     }
 
     return connection->CreateClient(clientOptions);
+}
+
+TApiClients CreateApiClients(const TClientContext& context)
+{
+    if (context.Config->EnableControlMultiplexingBand) {
+        // Multiplexing is done on native client side.
+        auto client = CreateApiClientImpl(context, /*isHeavy*/ false);
+        return {
+            .Light = client,
+            .Heavy = client,
+        };
+    }
+    return {
+        .Light = CreateApiClientImpl(context, /*isHeavy*/ false),
+        .Heavy = CreateApiClientImpl(context, /*isHeavy*/ true),
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -166,7 +191,7 @@ IClientPtr CreateRpcClient(
     NDetail::EnsureInitialized();
 
     auto rawClient = MakeIntrusive<NDetail::TRpcRawClient>(
-        NDetail::CreateApiClient(context),
+        NDetail::CreateApiClients(context),
         context.Config);
 
     return new NDetail::TClient(

@@ -8,7 +8,7 @@ namespace NKikimr::NMiniKQL {
 // TODO: move this class to beter place
 class TStatus {
 public:
-    inline static const TStatus Ok() {
+    inline static TStatus Ok() {
         return TStatus();
     }
 

@@ -5,12 +5,14 @@
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_config.h"
 
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 #include <util/system/file.h>
@@ -26,10 +28,8 @@ struct TPDiskMon;
 namespace NPDisk {
 
 struct TDiskFormat;
-struct TPersistentBufferFormat;
 
 using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
-using TPersistentBufferFormatPtr = std::unique_ptr<TPersistentBufferFormat, void(*)(TPersistentBufferFormat*)>;
 
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
@@ -198,7 +198,6 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TString ErrorReason;
     TFileHandle DiskFd; // A duplicated fd for direct disk access
     TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
-    TPersistentBufferFormatPtr PersistentBufferFormat{nullptr, nullptr};
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
@@ -330,10 +329,12 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
 struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
-    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize = 0)
         : ExpectedSlotCount(expectedSlotCount)
         , SlotSizeInUnits(slotSizeInUnits)
+        , ExpectedSlotSize(expectedSlotSize)
     {}
 
     TString ToString() const {
@@ -346,6 +347,7 @@ struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvB
         str << "EvChangeExpectedSlotCount ";
         str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
         str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << " ExpectedSlotSize# " << record.ExpectedSlotSize;
         str << "}";
         return str.Str();
     }
@@ -388,7 +390,8 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     using TCallback = std::unique_ptr<ICallback>;
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
+                    TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature)
@@ -396,6 +399,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
+        , WriteSource(writeSource)
         , LogCallback(std::move(cb))
     {
         Y_VERIFY(Owner);
@@ -409,7 +413,8 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TCommitRecord &commitRecord,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
+                    TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature, /*commitRecord*/ true)
@@ -417,6 +422,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
+        , WriteSource(writeSource)
         , LogCallback(std::move(cb))
         , CommitRecord(commitRecord)
     {
@@ -460,6 +466,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
                             // usually LsnSegmentStart=Lsn and this diapason is a single point
     ui64 Lsn;
     void *Cookie;
+    const TWriteSource WriteSource;
     TCallback LogCallback;
     TCommitRecord CommitRecord;
 
@@ -976,6 +983,7 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     void *Cookie;
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1091,7 +1099,9 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     bool DoFlush;
+    const TWriteSource WriteSource;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     mutable NLWTrace::TOrbit Orbit;
 
@@ -1200,7 +1210,8 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
 
 
     TEvChunkWrite(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, TPartsPtr partsPtr,
-            void *cookie, bool doFlush, ui8 priorityClass, bool isSeqWrite = true)
+            void *cookie, bool doFlush, ui8 priorityClass, TWriteSource writeSource = UnknownWriteSource(),
+            bool isSeqWrite = true)
         : ChunkIdx(chunkIdx)
         , Offset(offset)
         , PartsPtr(partsPtr)
@@ -1209,6 +1220,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
         , OwnerRound(ownerRound)
         , PriorityClass(priorityClass)
         , DoFlush(doFlush)
+        , WriteSource(writeSource)
         , IsSeqWrite(isSeqWrite)
     {
         Validate();
@@ -1523,6 +1535,28 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
     }
 };
 
+////////////////////////////////////////////////////////////////////////////
+// Device overestimation sample transport: sent by a DDisk / PersistentBuffer
+// actor (an IO_URING source) to the PDisk actor that owns the same physical
+// device, so PDisk can merge these raw samples with its own block-device
+// samples into one completion-ordered stream. See
+// blobstorage_pdisk_device_overestimation.h for the aggregation model.
+////////////////////////////////////////////////////////////////////////////
+struct TEvDeviceOverestimationSamples
+    : TEventLocal<TEvDeviceOverestimationSamples, TEvBlobStorage::EvDeviceOverestimationSamples> {
+    TVector<NPDisk::TDeviceIoSample> Samples;
+
+    explicit TEvDeviceOverestimationSamples(TVector<NPDisk::TDeviceIoSample> samples)
+        : Samples(std::move(samples))
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{TEvDeviceOverestimationSamples SamplesCount# " << Samples.size() << "}";
+        return str.Str();
+    }
+};
+
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
@@ -1535,6 +1569,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
     double VDiskRawUsage = 0;  // 100.0 * Owner.Used / Owner.HardLimit
     double PDiskUsage = 0;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    ui32 ExpectedSlotCount = 0; // maximum number of VDisks over PDisk
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
 
@@ -1546,6 +1581,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 usedChunks,
             ui32 numSlots,
             ui32 numActiveSlots,
+            ui32 expectedSlotCount,
             TString errorReason,
             TStatusFlags logStatusFlags = {})
         : Status(status)
@@ -1555,6 +1591,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , NumActiveSlots(numActiveSlots)
+        , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
         , LogStatusFlags(logStatusFlags)
     {}
@@ -1568,6 +1605,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " NumActiveSlots# " << NumActiveSlots;
+        str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";
@@ -1757,7 +1795,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)
-        : Outcome(EPDiskMetadataOutcome::OK)
+        : Outcome(metadata.size() ? EPDiskMetadataOutcome::OK : EPDiskMetadataOutcome::NO_METADATA)
         , Metadata(std::move(metadata))
         , PDiskGuid(pdiskGuid)
     {}
@@ -1766,6 +1804,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
 struct TEvWriteMetadata : TEventLocal<TEvWriteMetadata, TEvBlobStorage::EvWriteMetadata> {
     TRcBuf Metadata;
 
+    // An empty payload clears metadata; subsequent reads return NO_METADATA.
     TEvWriteMetadata(TRcBuf&& metadata)
         : Metadata(std::move(metadata))
     {}
@@ -1947,17 +1986,10 @@ struct TPDiskCtx {
     {}
 };
 
-#define P_LOG(LEVEL, MARKER, ...) \
+#define YDB_LOG_P_LOG(LEVEL, MARKER, ...) \
     do { \
         if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
-        } \
-    } while (false)
-
-#define S_LOG(LEVEL, MARKER, ...) \
-    do { \
-        if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK_SHRED, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+            YDB_LOG_CTX_COMP(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, {"PDiskId", PCtx->PDiskId}); \
         } \
     } while (false)
 

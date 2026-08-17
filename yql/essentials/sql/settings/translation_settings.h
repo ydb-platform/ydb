@@ -1,7 +1,9 @@
 #pragma once
 
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -19,7 +21,9 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
+constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
 
 enum class ESqlMode {
     QUERY = 0,
@@ -38,6 +42,12 @@ enum class EBindingsMode {
     DROP_WITH_WARNING,
     // bindings.my_binding -> current_cluster.my_binding
     DROP
+};
+
+enum class EYqlSelect {
+    Disable,
+    Auto,
+    Force,
 };
 
 inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
@@ -85,6 +95,7 @@ struct TTranslationSettings {
     THashMap<TString, TString> ModuleMapping;
     THashSet<TString> Libraries;
     THashSet<TString> Flags;
+    EYqlSelect YqlSelect = EYqlSelect::Disable;
 
     EBindingsMode BindingsMode;
     THashMap<TString, TTableBindingSettings> Bindings;
@@ -112,14 +123,14 @@ struct TTranslationSettings {
     bool PGDisable;
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
+    TMaybe<size_t> MaxParseTreeDepth;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
-    // lower case mapping Module -> Functions
-    const THashMap<TString, THashSet<TString>>* UdfFilter = nullptr;
+    const NYql::IUdfMeta* UdfMeta = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;
@@ -131,9 +142,14 @@ struct TTranslationSettings {
     TMaybe<TString> ApplicationName;
     bool PgSortNulls = false;
     NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
-    bool EmitReadsForExists = false;
+    bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
     bool IsReplay = false;
+    bool AllowTablesFunction = false;
+
+    bool ValidateViewStatement = true;
+
+    TVector<TString> ExtraSystemColumnPrefixes;
 };
 
 struct TParsedSettings {
@@ -148,5 +164,7 @@ struct TParsedSettings {
 bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings& parsed, NYql::TIssues& issues);
 
 bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues);
+
+void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettings& settings);
 
 } // namespace NSQLTranslation

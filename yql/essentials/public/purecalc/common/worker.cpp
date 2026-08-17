@@ -17,6 +17,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
@@ -46,7 +47,8 @@ TWorkerGraph::TWorkerGraph(
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
     TLangVersion langver,
-    bool insideEvaluation)
+    bool insideEvaluation,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env(ScopedAlloc)
     , FuncRegistry(funcRegistry)
@@ -54,6 +56,7 @@ TWorkerGraph::TWorkerGraph(
     , TimeProvider(deterministicTimeProviderSeed ? CreateDeterministicTimeProvider(*deterministicTimeProviderSeed) : CreateDefaultTimeProvider())
     , LLVMSettings(LLVMSettings)
     , NativeYtTypeFlags(nativeYtTypeFlags)
+    , RuntimeSettings(std::move(runtimeSettings))
 {
     // Build the root MKQL node
     NCommon::TMemoizedTypesMap typeMemoization;
@@ -76,7 +79,7 @@ TWorkerGraph::TWorkerGraph(
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, false, langver);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, /*voidWithEffects=*/false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -155,11 +158,12 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NUdf::EValidatePolicy::Exception,
         LLVMSettings,
         NKikimr::NMiniKQL::EGraphPerProcess::Multi,
-        nullptr,
+        /*stats=*/nullptr,
         countersProvider,
-        nullptr,
-        nullptr,
-        langver);
+        /*secureParamsProvider=*/nullptr,
+        /*logProvider=*/nullptr,
+        langver,
+        RuntimeSettings);
 
     ComputationPattern = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
@@ -169,8 +173,26 @@ TWorkerGraph::TWorkerGraph(
 
     ComputationGraph = ComputationPattern->Clone(
         computationPatternOpts.ToComputationOptions(*RandomProvider, *TimeProvider));
-
     ComputationGraph->Prepare();
+    TVector<NKikimr::NMiniKQL::IComputationExternalNode*> externalNodes;
+    // Here is a problem, because invalidation of SelfNodes and Caches is not enough.
+    // We must invalidate all nodes that "depend" on SelfNodes.
+    // By "depend" we mean that these nodes somehow by some code flow can store values from SelfNodes.
+    // But now there is no way to do this.
+    //
+    // So here we invalidate all external nodes to prevent only small subset of problems that we found by tests.
+    for (const auto& node : ComputationGraph->GetNodes()) {
+        if (dynamic_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get())) {
+            externalNodes.push_back(static_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get()));
+        }
+    }
+    for (auto* selfNode : SelfNodes) {
+        if (selfNode) {
+            externalNodes.push_back(selfNode);
+        }
+    }
+
+    ExternalNodeInvalidator = NKikimr::NMiniKQL::TComputationExternalNodeInvalidator(externalNodes);
 
     // Scoped alloc acquires itself on construction. We need to release it before returning control to user.
     // Note that scoped alloc releases itself on destruction so it is no problem if the above code throws.
@@ -199,11 +221,13 @@ TWorker<TBase>::TWorker(
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
-    TLangVersion langver)
+    TLangVersion langver,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
              inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
+             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, /*insideEvaluation=*/false,
+             std::move(runtimeSettings))
 {
 }
 
@@ -345,11 +369,7 @@ void TWorker<TBase>::Release() {
 template <typename TBase>
 void TWorker<TBase>::Invalidate() {
     auto& ctx = Graph_.ComputationGraph->GetContext();
-    for (const auto* selfNode : Graph_.SelfNodes) {
-        if (selfNode) {
-            selfNode->InvalidateValue(ctx);
-        }
-    }
+    Graph_.ExternalNodeInvalidator.InvalidateMutables(ctx);
     Graph_.ComputationGraph->InvalidateCaches();
 }
 

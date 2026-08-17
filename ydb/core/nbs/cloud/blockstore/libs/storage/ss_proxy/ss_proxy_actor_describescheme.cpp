@@ -1,9 +1,6 @@
 #include "ss_proxy_actor.h"
 
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/probes.h>
-// #include
-// <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/kikimr/helpers.h>
@@ -36,8 +33,11 @@ private:
     TActorId PathDescriptionBackup;
 
 public:
-    TDescribeSchemeActor(TRequestInfoPtr requestInfo, TString schemeShardDir,
-                         TString path, TActorId pathDescriptionBackup);
+    TDescribeSchemeActor(
+        TRequestInfoPtr requestInfo,
+        TString schemeShardDir,
+        TString path,
+        TActorId pathDescriptionBackup);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -60,9 +60,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDescribeSchemeActor::TDescribeSchemeActor(TRequestInfoPtr requestInfo,
-                                           TString schemeShardDir, TString path,
-                                           TActorId pathDescriptionBackup)
+TDescribeSchemeActor::TDescribeSchemeActor(
+    TRequestInfoPtr requestInfo,
+    TString schemeShardDir,
+    TString path,
+    TActorId pathDescriptionBackup)
     : RequestInfo(std::move(requestInfo))
     , SchemeShardDir(std::move(schemeShardDir))
     , Path(std::move(path))
@@ -90,8 +92,9 @@ void TDescribeSchemeActor::DescribeScheme(const TActorContext& ctx)
     NYdb::NBS::Send(ctx, MakeTxProxyID(), std::move(request));
 }
 
-bool TDescribeSchemeActor::HandleError(const TActorContext& ctx,
-                                       const NProto::TError& error)
+bool TDescribeSchemeActor::HandleError(
+    const TActorContext& ctx,
+    const NProto::TError& error)
 {
     if (FAILED(error.GetCode())) {
         ReplyAndDie(
@@ -156,7 +159,8 @@ void TDescribeSchemeActor::HandleDescribeSchemeResult(
     // }
 
     auto response = std::make_unique<TEvSSProxy::TEvDescribeSchemeResponse>(
-        record.GetPath(), record.GetPathDescription());
+        record.GetPath(),
+        record.GetPathDescription());
 
     ReplyAndDie(ctx, std::move(response));
 }
@@ -164,12 +168,15 @@ void TDescribeSchemeActor::HandleDescribeSchemeResult(
 STFUNC(TDescribeSchemeActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvSchemeShard::TEvDescribeSchemeResult,
-              HandleDescribeSchemeResult);
+        HFunc(
+            TEvSchemeShard::TEvDescribeSchemeResult,
+            HandleDescribeSchemeResult);
 
         default:
-            HandleUnexpectedEvent(ev, NKikimrServices::NBS_SS_PROXY,
-                                  __PRETTY_FUNCTION__);
+            HandleUnexpectedEvent(
+                ev,
+                NKikimrServices::NBS_SS_PROXY,
+                __PRETTY_FUNCTION__);
             break;
     }
 }
@@ -187,9 +194,19 @@ void TSSProxyActor::HandleDescribeScheme(
     auto requestInfo =
         CreateRequestInfo(ev->Sender, ev->Cookie, msg->CallContext);
 
+    auto schemeShardDir = NbsStorageConfig.GetSchemeShardDir();
+    auto diskId = msg->Path;
+    TString volumeDir, volumeName;
+    std::tie(volumeDir, volumeName) =
+        DiskIdToVolumeDirAndName(schemeShardDir, diskId);
+    const auto volumePath = volumeDir + "/" + volumeName;
+
     NYdb::NBS::Register<TDescribeSchemeActor>(
-        ctx, std::move(requestInfo), NbsStorageConfig.GetSchemeShardDir(),
-        msg->Path, PathDescriptionBackup);
+        ctx,
+        std::move(requestInfo),
+        schemeShardDir,
+        volumePath,
+        PathDescriptionBackup);
 }
 
 }   // namespace NYdb::NBS::NStorage

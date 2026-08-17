@@ -9,17 +9,17 @@ SELECT
     Sum(
         CASE
             WHEN (CAST(d_date AS Date) < CAST('1998-04-08' AS Date)) THEN (
-                cs_sales_price - Coalesce(cr_refunded_cash, 0)
+                cs_sales_price - Coalesce(cr_refunded_cash, cast(0 as decimal(7,2)))
             )
-            ELSE 0
+            ELSE cast(0 as decimal(7,2))
         END
     ) AS sales_before,
     Sum(
         CASE
             WHEN (CAST(d_date AS Date) >= CAST('1998-04-08' AS Date)) THEN (
-                cs_sales_price - Coalesce(cr_refunded_cash, 0)
+                cs_sales_price - Coalesce(cr_refunded_cash, cast (0 as decimal(7,2)))
             )
-            ELSE 0
+            ELSE cast(0 as decimal(7,2))
         END
     ) AS sales_after
 FROM
@@ -32,13 +32,13 @@ ON
         AND cs_item_sk == cr_item_sk
     )
 ,
-    `/Root/test/ds/warehouse`
+    `/Root/test/ds/warehouse` as warehouse
 ,
-    `/Root/test/ds/item`
+    `/Root/test/ds/item` as item
 ,
-    `/Root/test/ds/date_dim`
+    `/Root/test/ds/date_dim` as date_dim
 WHERE
-    i_current_price BETWEEN 0.99 AND 1.49
+    i_current_price BETWEEN cast ("0.99" as decimal(7,2)) AND cast("1.49" as decimal(7,2))
     AND i_item_sk == cs_item_sk
     AND cs_warehouse_sk == w_warehouse_sk
     AND cs_sold_date_sk == d_date_sk

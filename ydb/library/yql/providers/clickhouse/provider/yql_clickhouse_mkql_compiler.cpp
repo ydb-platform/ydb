@@ -21,7 +21,7 @@ namespace {
 TRuntimeNode BuildNativeParseCall(TRuntimeNode input, TType* inputItemType, TType* outputItemType, const std::string_view& timezone, NCommon::TMkqlBuildContext& ctx)
 {
     const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputItemType}), ctx.ProgramBuilder.NewStructType({}), outputItemType});
-    const auto flow = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, "Native"), {input, ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Utf8>(timezone)) }));
+    const auto flow = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, "Native"), {input, ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Utf8>(timezone)) }), {});
     const auto structType = static_cast<const TStructType*>(outputItemType);
     return ctx.ProgramBuilder.ExpandMap(flow,
         [&](TRuntimeNode item) {

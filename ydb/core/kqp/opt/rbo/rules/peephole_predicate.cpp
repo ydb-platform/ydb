@@ -29,6 +29,10 @@ bool IsSuitableToApplyPeephole(const TIntrusivePtr<IOperator>& input) {
 namespace NKikimr {
 namespace NKqp {
 
+bool TPeepholePredicate::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!IsSuitableToApplyPeephole(input)) {
@@ -55,8 +59,7 @@ TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusiv
 
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    // Using a special PeepholeTypeAnnTransformer.
-    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, &(ctx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;

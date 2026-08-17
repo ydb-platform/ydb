@@ -13,6 +13,7 @@
 namespace NKikimr::NColumnShard {
 class TTablesManager;
 }
+
 namespace NKikimr::NOlap {
 
 template <class TConveyorTask>
@@ -29,7 +30,8 @@ public:
         : TBase(actions, "CS::NORMALIZER")
         , Data(std::move(data))
         , Schemas(std::move(schemas))
-        , NormContext(nCtx) {
+        , NormContext(nCtx)
+    {
     }
 
 protected:
@@ -56,13 +58,15 @@ class TPortionsNormalizerTask: public INormalizerTask {
 
 public:
     TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package)
-        : Package(std::move(package)) {
+        : Package(std::move(package))
+    {
     }
 
     TPortionsNormalizerTask(
         typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Package(std::move(package))
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
@@ -88,7 +92,8 @@ private:
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     TConclusionStatus InitPortions(

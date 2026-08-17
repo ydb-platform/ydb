@@ -2,7 +2,9 @@
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/sql_types/window_frames_collector_params.h>
+#include <yql/essentials/core/yql_window_frame_settings_pg.h>
 #include <yql/essentials/utils/parse_double.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/overloaded.h>
 
@@ -15,8 +17,6 @@ namespace NYql {
 namespace {
 
 using NWindow::EDirection;
-using NWindow::TCoreWinFrameCollectorBounds;
-using NWindow::TCoreWinFramesCollectorParams;
 using NWindow::TInputRow;
 using NWindow::TInputRowWindowFrame;
 using NWindow::TNumberAndDirection;
@@ -24,7 +24,7 @@ using NWindow::TNumberAndDirection;
 using namespace NNodes;
 
 struct TUnsortedTag {};
-struct TManyColumnsInSort {};
+
 struct TSorted {
     enum class ESortDir {
         Asc,
@@ -34,7 +34,7 @@ struct TSorted {
     ESortDir SortDir;
 };
 
-using TSortTraitsInfo = std::variant<TUnsortedTag, TManyColumnsInSort, TSorted>;
+using TSortTraitsInfo = std::variant<TUnsortedTag, TSorted>;
 
 TExprNode::TPtr GetSettingByName(const TExprNode::TChildrenType& settings, TStringBuf name) {
     for (const auto& setting : settings) {
@@ -49,9 +49,6 @@ TExprNode::TPtr GetSettingByName(const TExprNode::TChildrenType& settings, TStri
 ESortOrder GetSortOrder(const TSortTraitsInfo& info) {
     return std::visit(TOverloaded{
                           [&](const TUnsortedTag&) {
-                              return ESortOrder::Unimportant;
-                          },
-                          [&](const TManyColumnsInSort&) {
                               return ESortOrder::Unimportant;
                           },
                           [&](const TSorted& sorted) {
@@ -74,11 +71,49 @@ bool CheckRowFrameNeverEmpty(const TWindowFrameSettings::TRowFrame& frame) {
     }
 }
 
+class TParseFrameBoundResult {
+public:
+    TParseFrameBoundResult(TExprNodeNumberAndDirection boundNode, TMaybe<TNodeTransform> columnCast, TMaybe<TNodeTransform> boundCast, bool isZero, bool isCurrentRow, TMaybe<ui32> procId)
+        : BoundNode_(std::move(boundNode))
+        , ColumnCast_(std::move(columnCast))
+        , BoundCast_(std::move(boundCast))
+        , IsZero_(isZero)
+        , IsCurrentRow_(isCurrentRow)
+        , ProcId_(procId)
+    {
+    }
 
-struct TParseFrameBoundResult {
-    TExprNodeNumberAndDirection BoundNode;
-    bool IsZero;
-    bool IsCurrentRow;
+    const TExprNodeNumberAndDirection& GetBoundNode() const {
+        return BoundNode_;
+    }
+
+    const TMaybe<TNodeTransform>& GetColumnCast() const {
+        return ColumnCast_;
+    }
+
+    const TMaybe<TNodeTransform>& GetBoundCast() const {
+        return BoundCast_;
+    }
+
+    bool IsZero() const {
+        return IsZero_;
+    }
+
+    bool IsCurrentRow() const {
+        return IsCurrentRow_;
+    }
+
+    const TMaybe<ui32>& GetProcId() const {
+        return ProcId_;
+    }
+
+private:
+    TExprNodeNumberAndDirection BoundNode_;
+    TMaybe<TNodeTransform> ColumnCast_;
+    TMaybe<TNodeTransform> BoundCast_;
+    bool IsZero_;
+    bool IsCurrentRow_;
+    TMaybe<ui32> ProcId_;
 };
 
 template <typename T>
@@ -96,8 +131,8 @@ auto FromStringAtom(TStringBuf buf) {
 // left <= 0: left is Preceding or zero
 // right >= 0: right is Following or zero
 bool CheckRangeFrameNeverEmpty(const TParseFrameBoundResult& left, const TParseFrameBoundResult& right) {
-    bool leftLeZero = left.BoundNode.GetDirection() == EDirection::Preceding || left.IsZero;
-    bool rightGeZero = right.BoundNode.GetDirection() == EDirection::Following || right.IsZero;
+    bool leftLeZero = left.GetBoundNode().GetDirection() == EDirection::Preceding || left.IsZero();
+    bool rightGeZero = right.GetBoundNode().GetDirection() == EDirection::Following || right.IsZero();
     return leftLeZero && rightGeZero;
 }
 
@@ -106,6 +141,18 @@ bool CmpGreaterNonInf(TExprNodeNumberAndDirection left, TExprNodeNumberAndDirect
     auto l = TNumberAndDirection<T>(FromStringAtom<T>(left.GetUnderlyingValue()->Head().Content()), left.GetDirection());
     auto r = TNumberAndDirection<U>(FromStringAtom<U>(right.GetUnderlyingValue()->Head().Content()), right.GetDirection());
 
+    return l > r;
+}
+
+bool CmpGreaterNonInfDecimal(TExprNodeNumberAndDirection left, TExprNodeNumberAndDirection right) {
+    auto parseDecimalFromNode = [](const TExprNode::TPtr& node) -> NDecimal::TInt128 {
+        YQL_ENSURE(node->ChildrenSize() == 3, "Expected 3 children for Decimal callable");
+        ui8 precision = FromString<ui8>(node->Child(1)->Content());
+        ui8 scale = FromString<ui8>(node->Child(2)->Content());
+        return NDecimal::FromString(node->Head().Content(), precision, scale);
+    };
+    auto l = TNumberAndDirection<NDecimal::TInt128>(parseDecimalFromNode(left.GetUnderlyingValue()), left.GetDirection());
+    auto r = TNumberAndDirection<NDecimal::TInt128>(parseDecimalFromNode(right.GetUnderlyingValue()), right.GetDirection());
     return l > r;
 }
 
@@ -173,22 +220,54 @@ bool CompareCallablesNonInf(TExprNodeNumberAndDirection leftCallable, TExprNodeN
         return CompareWithRightCallable<NUdf::TDataType<NUdf::TInterval>::TLayout>(leftCallable, rightCallable);
     } else if (leftCallableName == "Interval64") {
         return CompareWithRightCallable<NUdf::TDataType<NUdf::TInterval64>::TLayout>(leftCallable, rightCallable);
+    } else if (leftCallableName == "Decimal") {
+        return CmpGreaterNonInfDecimal(leftCallable, rightCallable);
     }
     YQL_ENSURE(false, "Unexpected callable in comparasion.");
 }
 
-// Frame is always empty if left > right.
 bool CheckRangeFrameIsAlwaysEmpty(const TParseFrameBoundResult& left, const TParseFrameBoundResult& right) {
-    // If either bound is infinity, frame cannot be empty.
-    if (left.BoundNode.IsInf() || right.BoundNode.IsInf()) {
+    if (left.GetBoundNode().IsInf() || right.GetBoundNode().IsInf() || left.IsZero() || right.IsZero()) {
         return false;
     }
 
-    return CompareCallablesNonInf(left.BoundNode, right.BoundNode);
+    return CompareCallablesNonInf(left.GetBoundNode(), right.GetBoundNode());
 }
 
-TExprNode::TPtr Zero(TPositionHandle pos, TStringBuf callable, TExprContext& ctx) {
-    return ctx.NewCallable(pos, callable, { ctx.NewAtom(pos, "0") });
+std::expected<bool, TString> CheckRangeFrameIsAlwaysEmptyPg(const TParseFrameBoundResult& left, const TParseFrameBoundResult& right) {
+    // If either bound is infinity or zero, frame cannot be always empty.
+    if (left.IsZero() || right.IsZero() || left.GetBoundNode().IsInf() || right.GetBoundNode().IsInf()) {
+        return false;
+    }
+
+    bool isAlwaysNonEmptyByDirection = left.GetBoundNode().GetDirection() == EDirection::Preceding && right.GetBoundNode().GetDirection() == EDirection::Following;
+    if (isAlwaysNonEmptyByDirection) {
+        return false;
+    }
+    bool isAlwaysEmptyByDirection = left.GetBoundNode().GetDirection() == EDirection::Following && right.GetBoundNode().GetDirection() == EDirection::Preceding;
+
+    if (isAlwaysEmptyByDirection) {
+        return true;
+    }
+
+    YQL_ENSURE(left.GetBoundNode().GetDirection() == right.GetBoundNode().GetDirection(), "Expected same direction for left and right bounds");
+    if (left.GetBoundNode().GetDirection() == EDirection::Preceding) {
+        auto result = PgCompareWithCasts(left.GetBoundNode().GetUnderlyingValue(),
+                                         right.GetBoundNode().GetUnderlyingValue(),
+                                         NKikimr::NMiniKQL::EPgCompareType::Less);
+        if (!result.has_value()) {
+            return std::unexpected(result.error());
+        }
+        return result.value();
+    } else {
+        auto result = PgCompareWithCasts(left.GetBoundNode().GetUnderlyingValue(),
+                                         right.GetBoundNode().GetUnderlyingValue(),
+                                         NKikimr::NMiniKQL::EPgCompareType::Greater);
+        if (!result.has_value()) {
+            return std::unexpected(result.error());
+        }
+        return result.value();
+    }
 }
 
 TString SerializeActualNodeForError(const TExprNode& node) {
@@ -251,10 +330,10 @@ std::expected<std::strong_ordering, TString> ParseCallable(const TExprNode::TPtr
         if (std::isinf(value)) {
             return std::unexpected(TString("Inf is not allowed for RANGE frame bounds"));
         }
-        if (value < 0.0f) {
+        if (value < 0.0F) {
             return std::strong_ordering::less;
         }
-        if (value > 0.0f) {
+        if (value > 0.0F) {
             return std::strong_ordering::greater;
         }
         return std::strong_ordering::equal;
@@ -279,75 +358,23 @@ std::expected<std::strong_ordering, TString> ParseCallable(const TExprNode::TPtr
     } else if (callableName == "Interval64") {
         NUdf::TDataType<NUdf::TInterval64>::TLayout value = FromString<NUdf::TDataType<NUdf::TInterval64>::TLayout>(valNode.Content());
         return value <=> static_cast<NUdf::TDataType<NUdf::TInterval64>::TLayout>(0);
+    } else if (callableName == "Decimal") {
+        if (callable->ChildrenSize() != 3) {
+            return std::unexpected(TString("Expected 3 children for Decimal callable"));
+        }
+        ui8 precision = FromString<ui8>(callable->Child(1)->Content());
+        ui8 scale = FromString<ui8>(callable->Child(2)->Content());
+        NDecimal::TInt128 value = NDecimal::FromString(valNode.Content(), precision, scale);
+        if (NDecimal::IsNan(value)) {
+            return std::unexpected(TString("NaN is not allowed for RANGE frame bounds"));
+        }
+        if (NDecimal::IsInf(value)) {
+            return std::unexpected(TString("Inf is not allowed for RANGE frame bounds"));
+        }
+        return value <=> NDecimal::TInt128(0);
     }
 
     return std::unexpected(TStringBuilder() << "Unsupported callable type for RANGE bound: " << callableName);
-}
-
-template <typename TLiteral>
-std::expected<TParseFrameBoundResult, TIssue> ParseFrameRangeBound(const TTypeAnnotationNode* sortColumnType, TExprNode::TPtr frameBound, TExprContext& ctx) {
-    YQL_ENSURE(frameBound->IsList(), "List expected");
-
-    if (!EnsureTupleMinSize(*frameBound, 1, ctx)) {
-        return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least one size."));
-    }
-    if (!EnsureAtom(frameBound->Head(), ctx)) {
-        return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Head must be an atom."));
-    }
-
-    auto type = frameBound->Head().Content();
-    if (type == "currentRow") {
-        if (frameBound->ChildrenSize() == 1) {
-            if constexpr (std::is_void_v<TLiteral>) {
-                return TParseFrameBoundResult{.BoundNode = TExprNodeNumberAndDirection::Zero(), .IsZero = true, .IsCurrentRow=true};
-            } else {
-                auto zeroNode = Zero(frameBound->Pos(), TLiteral::CallableName(), ctx);
-                return TParseFrameBoundResult{.BoundNode = TExprNodeNumberAndDirection(zeroNode, EDirection::Following), .IsZero = true, .IsCurrentRow = true};
-            }
-        }
-        return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), TStringBuilder() << "Expecting no value for '" << type << "'"));
-    }
-
-    if (!(type == "preceding" || type == "following")) {
-        return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), TStringBuilder() << "Expecting preceding or following, but got '" << type << "'"));
-    }
-
-    EDirection direction = (type == "preceding") ? EDirection::Preceding : EDirection::Following;
-
-    if (!EnsureTupleSize(*frameBound, 2, ctx)) {
-        return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least 2 size for frame bounds."));
-    }
-
-    auto boundValue = frameBound->ChildPtr(1);
-    if (boundValue->IsAtom()) {
-        if (boundValue->Content() == "unbounded") {
-            return TParseFrameBoundResult{.BoundNode = TExprNodeNumberAndDirection::Inf(direction), .IsZero = false, .IsCurrentRow=false};
-        }
-        return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expecting unbounded, but got '" << boundValue->Content() << "'"));
-    }
-
-    if constexpr (!std::is_void_v<TLiteral>) {
-        YQL_ENSURE(sortColumnType, "Sorted column expected");
-        auto addAllowed = IsAddAllowedYqlTypes(sortColumnType, boundValue->GetTypeAnn(), ctx);
-        if (!addAllowed.has_value()) {
-            auto message = TStringBuilder() << "Error while processing RANGE bound: " << addAllowed.error();
-            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), message));
-        }
-
-        auto parseCallable = ParseCallable(boundValue);
-        if (!parseCallable.has_value()) {
-            auto message = TStringBuilder() << "Error while processing RANGE bound: " << parseCallable.error();
-            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), message));
-        }
-
-        auto parseCallableResult = parseCallable.value();
-        if (parseCallableResult == std::strong_ordering::less) {
-            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expected positive literal value"));
-        }
-        return TParseFrameBoundResult{.BoundNode = TExprNodeNumberAndDirection(boundValue, direction), .IsZero = (parseCallableResult == std::strong_ordering::equal), .IsCurrentRow=false};
-    } else {
-        return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Offset specifing is not allowed here since that column type does not support for RANGE mode."));
-    }
 }
 
 TSorted::ESortDir ExtractSortDirectionFromBool(TExprNode::TPtr sortDirection) {
@@ -383,12 +410,8 @@ TSortTraitsInfo ExtractSortTraitsInfo(const TExprNode::TPtr& sortTraits) {
 
     const TTypeAnnotationNode* lambdaType = sortKeyLambda->GetTypeAnn();
     YQL_ENSURE(lambdaType, "Expected to have non null lambda type.");
-    const TTypeAnnotationNode* firstColumnType = lambdaType;
-    if (lambdaType->GetKind() == ETypeAnnotationKind::Tuple) {
-        return TManyColumnsInSort{};
-    }
 
-    return TSorted{.SortedColumnType = firstColumnType,
+    return TSorted{.SortedColumnType = lambdaType,
                    .SortDir = ExtractSortDirection(sortDirections)};
 }
 
@@ -432,50 +455,187 @@ std::expected<TMaybe<i32>, TIssue> ParseFrameRowsBounds(TExprNode::TPtr setting,
                                                    << SerializeActualNodeForError(*setting->TailPtr())));
 }
 
-template <typename TLiteral>
-TMaybe<TWindowFrameSettings> ParseFrameRangeBounds(const TTypeAnnotationNode* sortColumnType, TExprNode::TPtr frameSpec, TExprContext& ctx) {
-    auto begin = GetSettingByName(frameSpec->Children(), "begin");
-    auto end = GetSettingByName(frameSpec->Children(), "end");
-    if (!begin || !end) {
-        ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
-                            TStringBuilder() << "Expected begin and end for row frames."));
-        return {};
-    }
-    auto beginParse = ParseFrameRangeBound<TLiteral>(sortColumnType, begin, ctx);
-    if (!beginParse.has_value()) {
-        ctx.AddError(beginParse.error());
-        return {};
-    }
-    auto endParse = ParseFrameRangeBound<TLiteral>(sortColumnType, end, ctx);
-    if (!endParse.has_value()) {
-        ctx.AddError(endParse.error());
-        return {};
-    }
-    bool isAlwaysEmpty = false;
-    bool isNeverEmpty = true;
-    if constexpr (!std::is_void_v<TLiteral>) {
-        isAlwaysEmpty = CheckRangeFrameIsAlwaysEmpty(beginParse.value(), endParse.value());
-        isNeverEmpty = CheckRangeFrameNeverEmpty(beginParse.value(), endParse.value());
-    } else {
-        isAlwaysEmpty = false;
-        isNeverEmpty = true;
-    }
-    auto sortTraits = ExtractSortTraitsInfo(GetSettingByName(frameSpec->Children(), "sortSpec"));
-    auto range = TWindowFrameSettings::TRangeFrame(
-        {beginParse->BoundNode, endParse->BoundNode},
-        /*isNumeric=*/!std::is_void_v<TLiteral>,
-        /*sortOrder=*/GetSortOrder(sortTraits),
-        /*isRightCurrentRow=*/endParse->IsCurrentRow);
+enum class EType {
+    YQL,
+    PG,
+    NonNumeric,
+};
 
-    return TWindowFrameSettings{range,
-                                /*neverEmpty=*/isNeverEmpty,
-                                /*compact=*/GetSettingByName(frameSpec->Children(), "compact") != nullptr,
-                                /*isAlwaysEmpty=*/isAlwaysEmpty};
+TString GetErrorMessageForNonNumericBoundMisuse(const TTypeAnnotationNode* columnType) {
+    if (columnType) {
+        return TStringBuilder() << "RANGE frames over an ORDER BY expression of type \""
+                                << *columnType
+                                << "\" support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode";
+    } else {
+        return "RANGE frames over an ORDER BY expression of that type support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode";
+    }
 }
 
-constexpr TStringBuf ErrorNonNumeric = "Range frame for not sorted frames is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
-constexpr TStringBuf ErrorMultipleColumns = "Range frame for multiple expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
-constexpr TStringBuf ErrorNonNumericSingleColumn = "Range frame for non numeric expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
+template <EType DispatchType>
+class TParseFrameRangeBound {
+public:
+    consteval static EType Type() {
+        return DispatchType;
+    }
+
+    static std::expected<TParseFrameBoundResult, TIssue> SingleBound(const TTypeAnnotationNode* sortColumnType, TExprNode::TPtr frameBound, TExprContext& ctx) {
+        YQL_ENSURE(frameBound->IsList(), "List expected");
+
+        if (!EnsureTupleMinSize(*frameBound, 1, ctx)) {
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least one size"));
+        }
+        if (!EnsureAtom(frameBound->Head(), ctx)) {
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Head must be an atom"));
+        }
+
+        auto type = frameBound->Head().Content();
+        if (type == "currentRow") {
+            if (frameBound->ChildrenSize() == 1) {
+                return TParseFrameBoundResult(TExprNodeNumberAndDirection::Zero(), Nothing(), Nothing(), /*isZero=*/true, /*isCurrentRow=*/true, Nothing());
+            }
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), TStringBuilder() << "Expecting no value for '" << type << "'"));
+        }
+
+        if (!(type == "preceding" || type == "following")) {
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), TStringBuilder() << "Expecting preceding or following, but got '" << type << "'"));
+        }
+
+        EDirection direction = (type == "preceding") ? EDirection::Preceding : EDirection::Following;
+
+        if (!EnsureTupleSize(*frameBound, 2, ctx)) {
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least 2 size for frame bounds"));
+        }
+
+        auto boundValue = frameBound->ChildPtr(1);
+        if (boundValue->IsAtom()) {
+            if (boundValue->Content() == "unbounded") {
+                auto node = TExprNodeNumberAndDirection::Inf(direction);
+                return TParseFrameBoundResult(node, Nothing(), Nothing(), /*isZero=*/false, /*isCurrentRow=*/false, Nothing());
+            }
+            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expecting unbounded, but got '" << boundValue->Content() << "'"));
+        }
+
+        if constexpr (Type() == EType::NonNumeric) {
+            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), GetErrorMessageForNonNumericBoundMisuse(sortColumnType)));
+        }
+        YQL_ENSURE(sortColumnType, "Sorted column expected");
+        auto message = TStringBuilder() << "Error while processing RANGE bound for column type: " << *sortColumnType << " and offset type: " << *boundValue->GetTypeAnn();
+        auto issue = TIssue(ctx.GetPosition(boundValue->Pos()), message);
+        if constexpr (Type() == EType::YQL) {
+            auto addAllowed = IsAddAllowedYqlTypes(sortColumnType, boundValue->GetTypeAnn(), ctx);
+            if (!addAllowed.has_value()) {
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), addAllowed.error())));
+            }
+
+            auto parseCallable = ParseCallable(boundValue);
+            if (!parseCallable.has_value()) {
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), parseCallable.error())));
+            }
+
+            auto parseCallableResult = parseCallable.value();
+            if (parseCallableResult == std::strong_ordering::less) {
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expected positive literal value")));
+            }
+            auto node = TExprNodeNumberAndDirection(boundValue, direction);
+            return TParseFrameBoundResult(
+                node,
+                Nothing(),
+                Nothing(),
+                /*isZero=*/parseCallableResult == std::strong_ordering::equal,
+                /*isCurrentRow=*/false,
+                /*procId=*/Nothing());
+        } else if constexpr (Type() == EType::PG) {
+            auto sign = PgSign(boundValue);
+            if (!sign.has_value()) {
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), sign.error())));
+            }
+            if (sign.value() == std::strong_ordering::less) {
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), "Expected positive literal value")));
+            }
+            auto inRangeCasts = LookupInRangeCasts(sortColumnType, boundValue->GetTypeAnn(), boundValue->Pos(), ctx);
+            if (!inRangeCasts.has_value()) {
+                auto message = TStringBuilder() << "Range column and offset types are not compatible";
+                auto subIssue = MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), inRangeCasts.error());
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), message)).AddSubIssue(subIssue));
+            }
+            return TParseFrameBoundResult(
+                TExprNodeNumberAndDirection(boundValue, direction),
+                inRangeCasts->ColumnCast,
+                inRangeCasts->OffsetCast,
+                /*isZero=*/sign.value() == std::strong_ordering::equal,
+                /*isCurrentRow=*/false,
+                /*procId=*/inRangeCasts->ProcId);
+        }
+    }
+
+    static TMaybe<TWindowFrameSettings> Bounds(const TTypeAnnotationNode* sortColumnType, TExprNode::TPtr frameSpec, TExprContext& ctx) {
+        auto begin = GetSettingByName(frameSpec->Children(), "begin");
+        auto end = GetSettingByName(frameSpec->Children(), "end");
+        if (!begin || !end) {
+            ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
+                                TStringBuilder() << "Expected begin and end for row frames"));
+            return {};
+        }
+        auto beginParse = SingleBound(sortColumnType, begin, ctx);
+        if (!beginParse.has_value()) {
+            ctx.AddError(beginParse.error());
+            return {};
+        }
+        auto endParse = SingleBound(sortColumnType, end, ctx);
+        if (!endParse.has_value()) {
+            ctx.AddError(endParse.error());
+            return {};
+        }
+        bool isAlwaysEmpty = false;
+        bool isNeverEmpty = true;
+        if constexpr (Type() == EType::YQL) {
+            isAlwaysEmpty = CheckRangeFrameIsAlwaysEmpty(beginParse.value(), endParse.value());
+            isNeverEmpty = CheckRangeFrameNeverEmpty(beginParse.value(), endParse.value());
+        } else if constexpr (Type() == EType::NonNumeric) {
+            isAlwaysEmpty = false;
+            isNeverEmpty = true;
+        } else {
+            static_assert(Type() == EType::PG, "Invalid type");
+            auto checkEmpty = CheckRangeFrameIsAlwaysEmptyPg(beginParse.value(), endParse.value());
+            if (!checkEmpty.has_value()) {
+                ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()), checkEmpty.error()));
+                return {};
+            }
+            isAlwaysEmpty = checkEmpty.value();
+            isNeverEmpty = CheckRangeFrameNeverEmpty(beginParse.value(), endParse.value());
+        }
+        auto sortTraits = ExtractSortTraitsInfo(GetSettingByName(frameSpec->Children(), "sortSpec"));
+        auto convertToFrameBound = [](const TParseFrameBoundResult& result) -> TWindowFrameSettingBound {
+            return std::visit(TOverloaded{
+                                  [&](const TExprNodeNumberAndDirection::TUnbounded) {
+                                      return TWindowFrameSettingBound::Inf(result.GetBoundNode().GetDirection());
+                                  },
+                                  [&](const TExprNodeNumberAndDirection::TZero) {
+                                      return TWindowFrameSettingBound::Zero();
+                                  },
+                                  [&](const TExprNode::TPtr& boundNode) {
+                                      return TWindowFrameSettingBound(
+                                          TWindowFrameSettingWithOffset(boundNode,
+                                                                        result.GetColumnCast(),
+                                                                        result.GetBoundCast(),
+                                                                        result.GetProcId()), result.GetBoundNode().GetDirection());
+                                  },
+                              }, result.GetBoundNode().GetValue());
+        };
+
+        auto range = TWindowFrameSettings::TRangeFrame(
+            {convertToFrameBound(beginParse.value()),
+             convertToFrameBound(endParse.value())},
+            /*isNumeric=*/Type() != EType::NonNumeric,
+            /*sortOrder=*/GetSortOrder(sortTraits),
+            /*isRightCurrentRow=*/endParse->IsCurrentRow());
+
+        return TWindowFrameSettings{range,
+                                    /*neverEmpty=*/isNeverEmpty,
+                                    /*compact=*/GetSettingByName(frameSpec->Children(), "compact") != nullptr,
+                                    /*isAlwaysEmpty=*/isAlwaysEmpty};
+    }
+};
 
 bool VerifySettings(const TExprNode::TChildrenType& settings, TExprContext& ctx) {
     for (const auto& setting : settings) {
@@ -490,8 +650,8 @@ bool VerifySettings(const TExprNode::TChildrenType& settings, TExprContext& ctx)
     return true;
 }
 
-TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::TPtr frameSpec, TStringBuf error, TExprContext& ctx) {
-    auto result = ParseFrameRangeBounds<void>(nullptr, frameSpec, ctx);
+TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::TPtr frameSpec, const TTypeAnnotationNode* sortColumnType, TExprContext& ctx) {
+    auto result = TParseFrameRangeBound<EType::NonNumeric>::Bounds(sortColumnType, frameSpec, ctx);
     if (!result) {
         return result;
     }
@@ -502,45 +662,43 @@ TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::
         return result;
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()), error));
+    ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()), GetErrorMessageForNonNumericBoundMisuse(sortColumnType)));
     return {};
 }
 
 TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr frameSpec, TExprContext& ctx) {
     auto sortTraits = ExtractSortTraitsInfo(GetSettingByName(frameSpec->Children(), "sortSpec"));
     if (std::holds_alternative<TUnsortedTag>(sortTraits)) {
-        return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumeric, ctx);
-    } else if (std::holds_alternative<TManyColumnsInSort>(sortTraits)) {
-        return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorMultipleColumns, ctx);
+        return TryParseRangeForNotNumericFrameSettings(frameSpec, /*sortColumnType=*/nullptr, ctx);
     }
     YQL_ENSURE(std::holds_alternative<TSorted>(sortTraits));
     auto sortedTraits = std::get<TSorted>(sortTraits);
     auto* type = sortedTraits.SortedColumnType;
+    if (type->GetKind() == ETypeAnnotationKind::Error) {
+        auto issue = TIssue(ctx.GetPosition(frameSpec->Pos()),
+                            "RANGE frame got error in ORDER BY expression");
+        issue.AddSubIssue(MakeIntrusive<TIssue>(type->Cast<TErrorExprType>()->GetError()));
+        ctx.AddError(issue);
+        return {};
+    }
+    if (type->GetKind() == ETypeAnnotationKind::Pg) {
+        return TParseFrameRangeBound<EType::PG>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
+    }
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         type = type->Cast<TOptionalExprType>()->GetItemType();
     }
     if (type->GetKind() == ETypeAnnotationKind::Data) {
         switch (type->Cast<TDataExprType>()->GetSlot()) {
             case NUdf::EDataSlot::Int8:
-                return ParseFrameRangeBounds<TCoInt8>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint8:
-                return ParseFrameRangeBounds<TCoUint8>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int16:
-                return ParseFrameRangeBounds<TCoInt16>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint16:
-                return ParseFrameRangeBounds<TCoUint16>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int32:
-                return ParseFrameRangeBounds<TCoInt32>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint32:
-                return ParseFrameRangeBounds<TCoUint32>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int64:
-                return ParseFrameRangeBounds<TCoInt64>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint64:
-                return ParseFrameRangeBounds<TCoUint64>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Double:
-                return ParseFrameRangeBounds<TCoDouble>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Float:
-                return ParseFrameRangeBounds<TCoFloat>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Date:
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::Timestamp:
@@ -548,7 +706,6 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
             case NUdf::EDataSlot::TzDate:
             case NUdf::EDataSlot::TzDatetime:
             case NUdf::EDataSlot::TzTimestamp:
-                return ParseFrameRangeBounds<TCoInterval>(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Date32:
             case NUdf::EDataSlot::Datetime64:
             case NUdf::EDataSlot::Timestamp64:
@@ -556,22 +713,23 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
             case NUdf::EDataSlot::TzDate32:
             case NUdf::EDataSlot::TzDatetime64:
             case NUdf::EDataSlot::TzTimestamp64:
-                return ParseFrameRangeBounds<TCoInterval64>(sortedTraits.SortedColumnType, frameSpec, ctx);
+            case NUdf::EDataSlot::Decimal:
+                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             default:
-                return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumericSingleColumn, ctx);
+                return TryParseRangeForNotNumericFrameSettings(frameSpec, sortedTraits.SortedColumnType, ctx);
         }
     }
-    return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumericSingleColumn, ctx);
+    return TryParseRangeForNotNumericFrameSettings(frameSpec, sortedTraits.SortedColumnType, ctx);
 }
 
 TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode& node, TExprContext& ctx) {
     auto frameSpec = node.Child(0);
     bool isCompact = GetSettingByName(frameSpec->Children(), "compact") != nullptr;
 
-    if (node.IsCallable("WinOnRows")) {
+    if (node.IsCallable({"WinOnRows", "WinFilter"})) {
         if (!GetSettingByName(frameSpec->Children(), "begin") || !GetSettingByName(frameSpec->Children(), "end")) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
-                                TStringBuilder() << "Expected begin and end for row frames."));
+                                TStringBuilder() << "Expected begin and end for row frames"));
             return {};
         }
         auto leftParse = ParseFrameRowsBounds(GetSettingByName(frameSpec->Children(), "begin"), ctx);
@@ -599,8 +757,8 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
 
 } // namespace
 
-TWindowFrameSettings::TWindowFrameSettings(const TFrame& frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty)
-    : FrameBounds_(frameBounds)
+TWindowFrameSettings::TWindowFrameSettings(TFrame frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty)
+    : FrameBounds_(std::move(frameBounds))
     , NeverEmpty_(neverEmpty)
     , Compact_(compact)
     , IsAlwaysEmpty_(isAlwaysEmpty)
@@ -626,6 +784,16 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             return {};
         }
         return TryParseWindowFrameSettingsFromList(node, ctx);
+    } else if (frameSpec->IsCallable("Void")) {
+        // Void means default frame: ROWS UNBOUNDED PRECEDING to CURRENT ROW (used in deprecated SQL)
+        if (node.IsCallable("WinOnRows")) {
+            auto rowFrame = TWindowFrameSettings::TRowFrame{TMaybe<i32>(), TMaybe<i32>(0)};
+            return TWindowFrameSettings(rowFrame, /*neverEmpty=*/CheckRowFrameNeverEmpty(rowFrame), /*compact=*/false, /*isAlwaysEmpty=*/false);
+        }
+        const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
+        ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
+                            TStringBuilder() << "Invalid window frame - expecting Tuple, but got: " << (type ? FormatType(type) : "lambda")));
+        return {};
     } else {
         const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
         ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
@@ -692,7 +860,6 @@ bool TWindowFrameSettings::IsRightInf() const {
                           },
                       }, FrameBounds_);
 }
-
 
 bool TWindowFrameSettings::IsRightCurrent() const {
     return std::visit(TOverloaded{

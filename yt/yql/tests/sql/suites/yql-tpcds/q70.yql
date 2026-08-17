@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Window and aggregation functions are not allowed in this context */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -14,6 +13,7 @@ SELECT
             Grouping(s_state) + Grouping(s_county),
             CASE
                 WHEN Grouping(s_county) == 0 THEN s_state
+                ELSE NULL
             END
         ORDER BY
             Sum(ss_net_profit) DESC
@@ -62,6 +62,7 @@ ORDER BY
     lochierarchy DESC,
     CASE
         WHEN lochierarchy == 0 THEN s_state
+        ELSE NULL
     END,
     rank_within_parent
 LIMIT 100;

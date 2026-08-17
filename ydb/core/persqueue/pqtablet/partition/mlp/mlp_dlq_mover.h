@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/core/ymq/actor/events.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -24,6 +25,7 @@ public:
 
 private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
+    void Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr&);
     STFUNC(StateDescribe);
 
     void CreateWriter();
@@ -33,13 +35,10 @@ private:
 
     void ProcessQueue();
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
-    STFUNC(StateRead);
-
-    void WaitWrite();
     void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
-    STFUNC(StateWrite);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    STFUNC(StateWork);
 
     void ReplySuccess();
     void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
@@ -48,9 +47,16 @@ private:
 
 private:
     TDLQMoverSettings Settings;
+    TString TopicName;
+
+    TString SQSUserName;
+    TString SQSFolderId;
+    TString SQSQueueName;
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;
+    std::deque<std::pair<TDLQMessage, ui64>> Pending;
+    ui64 PendingMessagesSize = 0;
 
     Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString Error;

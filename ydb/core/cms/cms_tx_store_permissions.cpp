@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
@@ -25,7 +27,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_PERMISSIONS ; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
@@ -39,6 +41,8 @@ public:
         if (MaintenanceTaskId) {
             Y_ABORT_UNLESS(Scheduled);
 
+            const ui32 maxInflightActions = Scheduled->Request.GetMaxPermissionCount();
+
             Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
             Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{
                 .TaskId = *MaintenanceTaskId,
@@ -46,7 +50,8 @@ public:
                 .Owner = Scheduled->Owner,
                 .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed(),
                 .CreateTime = now,
-                .LastRefreshTime = now
+                .LastRefreshTime = now,
+                .MaxInflightActions = maxInflightActions
             });
 
             db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
@@ -54,7 +59,8 @@ public:
                 NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed()),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::CreateTime>(now.MicroSeconds()),
-                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds())
+                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::MaxInflightActions>(maxInflightActions)
             );
         } else if (Scheduled != nullptr && Self->State->MaintenanceRequests.contains(Scheduled->RequestId)) {
             const auto& taskId = Self->State->MaintenanceRequests[Scheduled->RequestId];
@@ -138,7 +144,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions complete");
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);

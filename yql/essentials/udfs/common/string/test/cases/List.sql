@@ -1,4 +1,12 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"a@b@c"|>,
+    <|value:"@a@b@c"|>,
+    <|value:"@@@a@a"|>,
+    <|value:"d#e#f"|>,
+    <|value:"d"|>,
+    <|value:""|>
+);
+
 SELECT
     value,
     Ensure(value, String::JoinFromList(String::SplitToList(value, "@"), "@") == value) AS equals_to_original,
@@ -9,4 +17,4 @@ SELECT
     String::SplitToList(value, "b@", false AS DelimeterString) AS multichar_delim_set,
     String::SplitToList(value, "b@", true AS DelimeterString) AS multichar_delim_string,
     String::SplitToList(value, "@", 1 AS Limit) AS limited
-FROM Input;
+FROM AS_TABLE($input);

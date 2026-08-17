@@ -5,6 +5,7 @@ import logging
 import pytest
 import requests
 import yatest.common
+import library.python.port_manager
 
 from dataclasses import dataclass
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
@@ -31,7 +32,7 @@ class S3:
 
 @pytest.fixture(scope="module")
 def s3(request) -> S3:
-    port_manager = yatest.common.network.PortManager()
+    port_manager = library.python.port_manager.PortManager()
     s3_port = port_manager.get_port()
     s3_url = "http://localhost:{port}".format(port=s3_port)
 

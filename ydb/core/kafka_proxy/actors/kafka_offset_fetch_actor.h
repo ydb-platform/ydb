@@ -1,4 +1,5 @@
 #include "actors.h"
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include "../kqp_helper.h"
 
@@ -48,7 +49,8 @@ struct TTopicGroupRequest {
 };
 
 
-class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
+class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor>
+                            , public TKafkaExceptionHandler<TKafkaOffsetFetchActor> {
 
     using TBase = NActors::TActor<TKafkaOffsetFetchActor>;
     using TOffsetFetchResponsePartitions = NKafka::TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions;
@@ -62,6 +64,10 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -97,9 +103,14 @@ public:
     void FillMapWithGroupRequests();
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
+    TString GetMetadataDatabasePath() const;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "TKafkaOffsetFetchActor{GroupId=" << Message->GroupId.value() << ",DatabasePath=" << DatabasePath << "}: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TKafkaOffsetFetchActor"},
+            {"selfId", SelfId()},
+            {"groupId", Message->GroupId.value()},
+            {"databasePath", DatabasePath});
     }
 
 private:

@@ -16,12 +16,33 @@ message TCompression {
     optional int64 Level = 2;
 }
 
+message TEncoding {
+    message TPlain {
+    }
+
+    message TDictionary {
+    }
+
+    oneof Implementation {
+        TPlain Plain = 1;
+        TDictionary Dictionary = 2;
+    }
+}
+
+message TDefaultExpression {
+    optional string ExprText = 1;
+    optional string Context = 2;
+    repeated string Dependencies = 3;
+    optional bool Stored = 4 [default = false];
+}
+
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
         DEFAULT_KIND_NULL = 1;
         DEFAULT_KIND_SEQUENCE = 2;
         DEFAULT_KIND_LITERAL = 3;
+        DEFAULT_KIND_EXPRESSION = 4;
     };
 
     optional string Name = 1;
@@ -39,4 +60,12 @@ message TKqpColumnMetadataProto {
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
     optional TCompression Compression = 13;
+    repeated TEncoding Encoding = 14;
+    // When set, the value returned by the sequence allocator must be bit-reversed
+    // before being placed into the row. Used for `__ydb_row_id` columns of tables with
+    // fulltext indexes in `UseRowIdAsDocId` mode so that monotonic sequence values
+    // spread across partitions instead of concentrating on the last shard.
+    optional bool BitReverseSequenceValue = 15 [default = false];
+    optional bool SetNotNullInProgress = 16 [default = false];
+    optional TDefaultExpression DefaultExpression = 17;
 };

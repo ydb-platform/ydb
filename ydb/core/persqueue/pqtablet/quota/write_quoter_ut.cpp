@@ -21,7 +21,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     return setup;
 }
 
-TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytesPerSecond, size_t deduplicationIdQuota) {
+TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytesPerSecond, size_t writeSpeedInMessagesPerSecond, size_t burstSizeInMessages) {
     NKikimrPQ::TPQConfig pqConfig;
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     pqConfig.SetTopicsAreFirstClassCitizen(true);
@@ -29,8 +29,10 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     NPersQueue::TTopicConverterPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
-    config.MutablePartitionConfig()->SetWriteMessageDeduplicationIdPerSecond(deduplicationIdQuota);
-
+    config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
+    config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
+    config.MutablePartitionConfig()->SetBurstSizeInMessages(burstSizeInMessages);
+ 
     TPartitionId partitionId;
     TActorId tabletActor = edgeActor;
     ui64 tabletId = 28739;
@@ -48,34 +50,40 @@ void RequestQuota(auto& runtime, auto& quoterId, auto& edgeActorId) {
         new TEvPQ::TEvRequestQuota(1, new IEventHandle(quoterId, edgeActorId, writeRequest)));
 }
 
-bool WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
+THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
     auto event = runtime.GrabEdgeEvent<TEvPQ::TEvApproveWriteQuota>(timeout);
-    return !!event;
+    UNIT_ASSERT(event);
+    return std::move(event);
 }
 
-void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t deduplicationIds) {
+void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t messages) {
     runtime.Send(quoterId, edgeActorId,
-        new TEvPQ::TEvConsumed(bytes, deduplicationIds, 1, "client"));
+        new TEvPQ::TEvConsumed(bytes, messages, 1, "client"));
 }
 
-Y_UNIT_TEST(WaitDeduplicationIdQuota) {
+Y_UNIT_TEST(WaitMessagesQuota) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     auto edgeActorId = runtime.AllocateEdgeActor();
 
-    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1);
+    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1, 1);
     RequestQuota(runtime, quoterId, edgeActorId);
     UNIT_ASSERT(WaitForQuotaApproved(runtime));
 
-    TInstant start = TInstant::Now();
+    for (size_t i = 0; i < 3; ++i) {
+        Cerr << ">>>>> Start iteration " << i << Endl;
+        TInstant start = TInstant::Now();
 
-    ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
+        ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
 
-    RequestQuota(runtime, quoterId, edgeActorId);
-    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+        RequestQuota(runtime, quoterId, edgeActorId);
+        const auto ev = WaitForQuotaApproved(runtime);
+        const auto waitTime = ev->PartitionQuotaWaitTime;
+        UNIT_ASSERT_GT_C(waitTime, TDuration::MilliSeconds(950), "duration: " << waitTime);
 
-    auto duration = TInstant::Now() - start;
-    UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
+        auto duration = TInstant::Now() - start;
+        UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
+    }
 }
 
 }

@@ -457,6 +457,23 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
         AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
     }
 
+    Y_UNIT_TEST(SetKafkaBatchBaseOffset) {
+        const TKafkaRecordBatch expected = MakeRecordBatch(ECompressionType::ZSTD);
+        TString batchBytes = WriteKafkaRecordBatch(expected);
+
+        UNIT_ASSERT(SetKafkaBatchBaseOffset(batchBytes, 123));
+
+        const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(batchBytes);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, 123);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[0].OffsetDelta, 0);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[1].OffsetDelta, 1);
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[0].Key, expected.Records[0].Key));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[0].Value, expected.Records[0].Value));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Key, expected.Records[1].Key));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Value, expected.Records[1].Value));
+    }
+
     Y_UNIT_TEST(ReadKafkaBatchHeader) {
         UNIT_ASSERT(!ReadKafkaBatchHeader(TStringBuf()));
 

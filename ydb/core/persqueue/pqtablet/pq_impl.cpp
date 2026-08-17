@@ -3835,17 +3835,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Immediate transaction",
             {"logPrefix", LogPrefix()});
         TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
-        if (!Partitions.contains(originalPartitionId)) {
-            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown original partition",
-                {"logPrefix", LogPrefix()},
-                {"partitionId", originalPartitionId});
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        NKikimrPQ::TError::INTERNAL,
-                                        "unknown partition",
-                                        ctx);
-            return;
-        }
         const TPartitionInfo& partition = Partitions.at(originalPartitionId);
 
         if (txBody.HasWriteId()) {

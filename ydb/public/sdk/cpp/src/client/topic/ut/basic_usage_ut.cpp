@@ -2079,7 +2079,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.ProducerIdPrefix("write_then_multiple_flushes_producer");
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Zero());
-        writeSettings.ProducerThreads(1);
+        writeSettings.AsyncExecutionMode(true);
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_KB, 'a');
@@ -2158,7 +2158,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxMemoryUsage(10_MB);
         writeSettings.MaxBlockTimeout(TDuration::Zero());
-        writeSettings.ProducerThreads(1);
+        writeSettings.AsyncExecutionMode(true);
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_KB, 'a');

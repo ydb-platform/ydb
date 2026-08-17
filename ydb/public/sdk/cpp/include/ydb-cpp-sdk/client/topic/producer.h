@@ -44,9 +44,9 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! If not set, Write will block until the message is written to the buffer.
     FLUENT_SETTING_DEFAULT(TDuration, MaxBlockTimeout, TDuration::Max());
 
-    //! Number of internal producer threads.
-    //! 0 preserves the current inline execution mode. 1 runs client wakeups on an internal SDK thread.
-    FLUENT_SETTING_DEFAULT(std::uint32_t, ProducerThreads, 0);
+    //! Run client wakeups on an internal SDK thread.
+    //! If disabled, wakeups are executed inline by the calling thread.
+    FLUENT_SETTING_DEFAULT(bool, AsyncExecutionMode, false);
 
 private:
     using TWriteSessionSettings::ProducerId;

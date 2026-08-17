@@ -44,7 +44,6 @@ public:
     void EnsureWarmupSecIsValid() const;
     void EnsureRatesIsValid() const;
     void EnsureCodecOptionsAreValid() const;
-    void EnsureSdkProducerThreadsIsValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
@@ -99,7 +98,7 @@ public:
     TDuration BatchFlushInterval = TDuration::Seconds(1);
     std::optional<ui64> BatchFlushSizeBytes;
     ui32 BatchFlushMessageCount = 1;
-    ui32 SdkProducerThreads = 0;
+    bool SdkProducerAsyncExecutionMode = false;
     TString BatchInnerCodecStr;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;

@@ -1633,10 +1633,6 @@ TProducer::TProducer(
         ythrow TContractViolation("MessageGroupId should be empty for Producer");
     }
 
-    if (Settings.ProducerThreads_ > 1) {
-        ythrow TContractViolation("ProducerThreads can be either 0 or 1");
-    }
-
     if (IsFederation(DbDriverState->DiscoveryEndpoint)) {
         ythrow TContractViolation("Producer is not supported for federation");
     }
@@ -1734,7 +1730,7 @@ TProducer::TProducer(
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
 
-    if (Settings.ProducerThreads_ == 1) {
+    if (Settings.AsyncExecutionMode_) {
         MainWorkerThread = SystemThreadFactory()->Run([this] {
             RunMainWorkerLoop();
         });
@@ -2080,8 +2076,8 @@ std::optional<TWriteResult> TProducer::ReserveMemoryForWrite(std::uint64_t size,
     return std::nullopt;
 }
 
-void TProducer::ValidateSeqNoStrategy(const std::optional<uint64_t>& seqNo) {
-    const auto expectedStrategy = seqNo.has_value()
+void TProducer::ValidateSeqNoStrategy(bool hasSeqNo) {
+    const auto expectedStrategy = hasSeqNo
         ? ESeqNoStrategy::WithSeqNo
         : ESeqNoStrategy::WithoutSeqNo;
 
@@ -2347,7 +2343,7 @@ TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory)
         return makeClosedResult();
     }
 
-    ValidateSeqNoStrategy(message.SeqNo_);
+    ValidateSeqNoStrategy(message.SeqNo_.has_value());
 
     const auto memoryUsage = message.Data.size();
     const auto partition = message.GetPartition();

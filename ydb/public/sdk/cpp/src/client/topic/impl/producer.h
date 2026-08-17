@@ -420,7 +420,7 @@ private:
     void ReserveMemory(std::uint64_t size);
     void ReleaseReservedMemory(std::uint64_t size);
     std::optional<TWriteResult> ReserveMemoryForWrite(std::uint64_t size, bool checkMemory);
-    void ValidateSeqNoStrategy(const std::optional<uint64_t>& seqNo);
+    void ValidateSeqNoStrategy(bool hasSeqNo);
     void DrainClientRequests();
     void HandleClientMessage(TMessageInfo&& message);
     void HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise);

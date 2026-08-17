@@ -69,13 +69,6 @@ void TTopicOperationsScenario::EnsureCodecOptionsAreValid() const
     TCommandWorkloadTopicParams::StrToBatchInnerCodec(BatchInnerCodecStr);
 }
 
-void TTopicOperationsScenario::EnsureSdkProducerThreadsIsValid() const
-{
-    if (SdkProducerThreads > 1) {
-        throw TMisuseException() << "--sdk-producer-threads can be either 0 or 1";
-    }
-}
-
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";
@@ -347,7 +340,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .BatchFlushInterval = BatchFlushInterval,
             .BatchFlushSizeBytes = BatchFlushSizeBytes,
             .BatchFlushMessageCount = BatchFlushMessageCount,
-            .SdkProducerThreads = SdkProducerThreads,
+            .SdkProducerAsyncExecutionMode = SdkProducerAsyncExecutionMode,
         };
 
         if (KeyedWrites) {

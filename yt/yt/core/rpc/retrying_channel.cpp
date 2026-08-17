@@ -287,10 +287,10 @@ private:
                 << UnderlyingChannel_->GetEndpointAttributes()
                 << TErrorAttribute("omitted_inner_error_count", OmittedInnerErrorCount_);
             if (FirstError_) {
-                detailedError = detailedError << *FirstError_;
+                detailedError = detailedError.With(*FirstError_);
             }
             if (LastError_) {
-                detailedError = detailedError << *LastError_;
+                detailedError = detailedError.With(*LastError_);
             }
             ResponseHandler_->HandleError(std::move(detailedError), LastAddress_);
         }

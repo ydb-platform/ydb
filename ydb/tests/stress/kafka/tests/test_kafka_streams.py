@@ -17,8 +17,11 @@ class TestYdbTopicWorkload(StressFixture):
             "enable_kafka_transactions",
             "enable_topic_compactification_by_key",
         ]
-        if request.node.name == "test_batched_source":
-            extra_feature_flags.append("enable_topic_messages_batching")
+        if request.node.name in ("test_batched_source", "test_direct_batched_produce"):
+            extra_feature_flags.extend([
+                "enable_topic_write_offset_delta_in_keys",
+                "enable_topic_messages_batching",
+            ])
         yield from self.setup_cluster(
             kafka_api_port=self.kafka_api_port,
             extra_feature_flags=extra_feature_flags,
@@ -67,6 +70,16 @@ class TestYdbTopicWorkload(StressFixture):
             self.database,
             suffix="-batch",
             extra_args=[
+                "--num-workers", "1",
                 "--source-writer", "kafka",
+            ],
+        )
+
+    def test_direct_batched_produce(self):
+        self.run_workload(
+            self.database,
+            suffix="-direct-batch",
+            extra_args=[
+                "--source-writer", "kafka-direct",
             ],
         )

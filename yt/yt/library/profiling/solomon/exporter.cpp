@@ -524,15 +524,15 @@ void TSolomonExporter::DoHandleShard(
             int gridSeconds;
             if (!TryFromString<int>(*gridHeader, gridSeconds)) {
                 THROW_ERROR_EXCEPTION("Invalid value of \"X-Solomon-GridSec\" header")
-                    << TErrorAttribute("value", *gridHeader);
+                    .With("value", *gridHeader);
             }
             readGridStep = TDuration::Seconds(gridSeconds);
         }
 
         if ((now && !period) || (period && !now)) {
             THROW_ERROR_EXCEPTION("Both \"period\" and \"now\" must be present in request")
-                << TErrorAttribute("now", now)
-                << TErrorAttribute("period", period);
+                .With("now", now)
+                .With("period", period);
         }
 
         auto gridStep = Config_->GridStep;
@@ -631,9 +631,9 @@ void TSolomonExporter::DoHandleShard(
 
             if (readWindow.empty()) {
                 THROW_ERROR_EXCEPTION("Can't find latest timestamp")
-                    << TErrorAttribute("first_iteration", Window_[0].first)
-                    << TErrorAttribute("grid_factor", gridFactor)
-                    << TErrorAttribute("window_size", Window_.size());
+                    .With("first_iteration", Window_[0].first)
+                    .With("grid_factor", gridFactor)
+                    .With("window_size", Window_.size());
             }
         }
 
@@ -742,39 +742,39 @@ void TSolomonExporter::ValidatePeriodAndGrid(std::optional<TDuration> period, st
 
     if (*period < gridStep) {
         THROW_ERROR_EXCEPTION("Period cannot be lower than grid step")
-            << TErrorAttribute("period", *period)
-            << TErrorAttribute("grid_step", gridStep);
+            .With("period", *period)
+            .With("grid_step", gridStep);
     }
 
     if (period->GetValue() % gridStep.GetValue() != 0) {
         THROW_ERROR_EXCEPTION("Period must be multiple of grid step")
-            << TErrorAttribute("period", *period)
-            << TErrorAttribute("grid_step", gridStep);
+            .With("period", *period)
+            .With("grid_step", gridStep);
     }
 
     if (readGridStep) {
         if (*readGridStep < gridStep) {
             THROW_ERROR_EXCEPTION("Server grid step cannot be lower than client grid step")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("grid_step", gridStep);
+                .With("server_grid_step", *readGridStep)
+                .With("grid_step", gridStep);
         }
 
         if (readGridStep->GetValue() % gridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("Server grid step must be multiple of client grid step")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("grid_step", gridStep);
+                .With("server_grid_step", *readGridStep)
+                .With("grid_step", gridStep);
         }
 
         if (*readGridStep > *period) {
             THROW_ERROR_EXCEPTION("Server grid step cannot be greater than fetch period")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("period", *period);
+                .With("server_grid_step", *readGridStep)
+                .With("period", *period);
         }
 
         if (period->GetValue() % readGridStep->GetValue() != 0) {
             THROW_ERROR_EXCEPTION("Server grid step must be multiple of fetch period")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("period", *period);
+                .With("server_grid_step", *readGridStep)
+                .With("period", *period);
         }
     }
 }
@@ -832,11 +832,11 @@ TErrorOr<TReadWindow> TSolomonExporter::SelectReadWindow(
         readWindow.back().first.size() != static_cast<size_t>(gridSubsample))
     {
         return TError("Read query is outside of window")
-            << TErrorAttribute("now", now)
-            << TErrorAttribute("period", period)
-            << TErrorAttribute("grid", readGridStep)
-            << TErrorAttribute("window_first", Window_.front().second)
-            << TErrorAttribute("window_last", Window_.back().second);
+            .With("now", now)
+            .With("period", period)
+            .With("grid", readGridStep)
+            .With("window_first", Window_.front().second)
+            .With("window_last", Window_.back().second);
     }
 
     return readWindow;
@@ -865,13 +865,13 @@ void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
     auto summaryPolicyConflicts = GetSummaryPolicyConflicts(policy);
     if (summaryPolicyConflicts.AllPolicyWithSpecifiedAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All)
-            << TErrorAttribute("policy", policy);
+            .With(TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All))
+            .With("policy", policy);
     }
     if (summaryPolicyConflicts.OmitNameLabelSuffixWithSeveralAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
-            << TErrorAttribute("policy", policy);
+            .With(TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix))
+            .With("policy", policy);
     }
 }
 

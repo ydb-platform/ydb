@@ -88,6 +88,66 @@ private:
     ui64 NodeId;
 };
 
+class TCommandConfigMerge : public TYdbReadOnlyCommand {
+public:
+    TCommandConfigMerge();
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString StaticConfigPath;
+    TString DynamicConfigPath;
+    TString OutputPath;
+};
+
+class TCommandConfigTransform : public TYdbReadOnlyCommand {
+public:
+    void Config(TConfig& config) override;
+
+protected:
+    TCommandConfigTransform(const TString& name, const TString& description);
+
+    TString InputPath;
+    TString OutputPath;
+};
+
+class TCommandConfigToggle : public TCommandConfigTransform {
+public:
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+
+protected:
+    TCommandConfigToggle(const TString& name, const TString& description);
+    bool Enabled() const;
+
+private:
+    bool Enable = false;
+    bool Disable = false;
+};
+
+class TCommandConfigToggleV2FeatureFlag : public TCommandConfigToggle {
+public:
+    TCommandConfigToggleV2FeatureFlag();
+    int Run(TConfig& config) override;
+};
+
+class TCommandConfigToggleSelfManagement : public TCommandConfigToggle {
+public:
+    TCommandConfigToggleSelfManagement();
+    int Run(TConfig& config) override;
+};
+
+class TCommandConfigCleanupV2 : public TCommandConfigTransform {
+public:
+    TCommandConfigCleanupV2();
+    int Run(TConfig& config) override;
+};
+
+class TCommandConfigMigration : public TClientCommandTree {
+public:
+    TCommandConfigMigration();
+};
+
 class TCommandVolatileConfig : public TClientCommandTree {
 public:
     TCommandVolatileConfig();

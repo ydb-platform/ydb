@@ -4,6 +4,7 @@ SRCS(
     ss_proxy.cpp
     ss_proxy_actor.cpp
     ss_proxy_actor_createvolume.cpp
+    ss_proxy_actor_destroyvolume.cpp
     ss_proxy_actor_describescheme.cpp
     ss_proxy_actor_modifyscheme.cpp
     ss_proxy_actor_waitschemetx.cpp

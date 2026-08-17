@@ -60,7 +60,7 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
         TabletIndexId_ = NameTable_->GetIdOrRegisterName(TabletIndexColumnName);
     } catch (const std::exception& ex) {
         SetError(TError("Failed to add system columns to name table for a format writer")
-            << ex);
+            .With(ex));
     }
 }
 

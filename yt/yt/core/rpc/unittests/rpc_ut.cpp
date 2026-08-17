@@ -59,11 +59,14 @@ template <class TImpl>
 using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TGrpcTest = TRpcTestBase<TImpl>;
+template <class TImpl>
+using TGrpcAuthenticatedTest = TRpcAuthenticatedTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
+TYPED_TEST_SUITE(TGrpcAuthenticatedTest, TGrpcOnly);
 TYPED_TEST_SUITE(TRpcAuthenticatedTest, TAllTransports);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -154,6 +157,26 @@ TYPED_TEST(TRpcTest, DefaultUserIsRoot)
     const auto& rsp = rspOrError.Value();
     // Root is expressed by leaving the field unset.
     EXPECT_FALSE(rsp->has_user());
+}
+
+TYPED_TEST(TGrpcAuthenticatedTest, EmptyUserIsRootForCompatibility)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+    req->SetUser("");
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    EXPECT_EQ("authenticated-user", rsp->user());
+}
+
+TYPED_TEST(TGrpcAuthenticatedTest, ManuallySpecifiedUserMismatch)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+    req->SetUser("different-user");
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_EQ(NRpc::EErrorCode::AuthenticationError, rspOrError.GetCode());
 }
 
 TYPED_TEST(TRpcTest, UserTag)

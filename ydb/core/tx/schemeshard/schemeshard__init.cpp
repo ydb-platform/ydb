@@ -2196,6 +2196,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
+                
+                const auto pathIt = Self->PathsById.find(pathId);
+                if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
+                    Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
+                    if (const auto& props = streamingQuery->Properties.GetProperties();
+                        props.contains("run") && props.at("run") == "true") {
+                        Self->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(1);
+                    }
+                }
 
                 if (!rowset.Next()) {
                     return false;

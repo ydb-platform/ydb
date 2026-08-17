@@ -220,7 +220,7 @@ private:
 
         if (std::ssize(errors) == endpointSetCount) {
             Pool_->SetPeerDiscoveryError(
-                TError("Endpoints could not be resolved in any cluster") << errors);
+                TError("Endpoints could not be resolved in any cluster").With(errors));
             return;
         }
 

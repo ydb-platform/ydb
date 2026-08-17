@@ -8,9 +8,13 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+IF (NOT OS_WINDOWS)
 SRCS(
     yql_generic_lookup_actor_ut.cpp
 )
+ELSE()
+# TTestActorRuntimeBase(..., true) seems broken on windows
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

@@ -111,8 +111,8 @@ TSharedRef THttpParser::Feed(const TSharedRef& input)
         std::string errorContext(input.Begin() + contextStart, contextEnd - contextStart);
 
         THROW_ERROR_EXCEPTION("HTTP parse error: %v", http_errno_description(http_errno))
-            << TErrorAttribute("parser_error_name", http_errno_name(http_errno))
-            << TErrorAttribute("error_context", EscapeC(TStringBuf(errorContext)));
+            .With("parser_error_name", http_errno_name(http_errno))
+            .With("error_context", EscapeC(TStringBuf(errorContext)));
     }
 
     if (http_errno == HPE_PAUSED) {
@@ -381,8 +381,8 @@ void THttpInput::Reset()
 TError THttpInput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 void THttpInput::FinishHeaders()
@@ -825,8 +825,8 @@ TFuture<void> THttpOutput::Close()
 TError THttpOutput::AnnotateError(const TError& error)
 {
     return error
-        << TErrorAttribute("connection_id", Connection_->GetId())
-        << TErrorAttribute("request_id", RequestId_);
+        .With("connection_id", Connection_->GetId())
+        .With("request_id", RequestId_);
 }
 
 TFuture<void> THttpOutput::FinishChunked()

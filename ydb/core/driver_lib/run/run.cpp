@@ -5,6 +5,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
@@ -2276,6 +2277,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCsFlowControlManager) {
+        sil->AddServiceInitializer(new TFlowControlManagerInitializer(runConfig));
+    }
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
@@ -2283,6 +2288,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableUdfStore) {
+        Y_ABORT_UNLESS(NKqp::AsDynamicFunctionRegistry(FunctionRegistry.Get()),
+            "FunctionRegistry must implement NKqp::IDynamicFunctionRegistry for UDF store");
         sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
     }
 
@@ -2495,7 +2502,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry());
     TypeRegistry->CalculateMetadataEtag();
 
-    FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
+    FunctionRegistry = NKqp::CreateDynamicFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     FormatFactory.Reset(new TFormatFactory);
 
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();

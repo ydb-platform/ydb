@@ -19,6 +19,7 @@ enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvSchemaOperationResponse,
     EvSchemaResponse,
+    EvDescribeOperationResponse,
     EvEnd
 };
 

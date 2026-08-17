@@ -59,7 +59,7 @@ void BrotliDecompress(TSource* source, TBlob* output)
 
     if (remainingSize != 0) {
         THROW_ERROR_EXCEPTION("Brotli decompression failed: input stream is not fully consumed")
-            << TErrorAttribute("remaining_size", remainingSize);
+            .With("remaining_size", remainingSize);
     }
 }
 

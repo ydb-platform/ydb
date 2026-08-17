@@ -1188,6 +1188,9 @@ FROM `{table_name}`"""
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
+
         data = [
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }'
@@ -1214,6 +1217,13 @@ FROM `{table_name}`"""
 
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 0)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 0)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:

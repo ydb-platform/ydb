@@ -1008,6 +1008,86 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         runTest(true);
     }
 
+    Y_UNIT_TEST(KafkaCompressedBatchReadRewritesBaseOffsets) {
+        auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
+        serverSettings.FeatureFlags.SetEnableTopicMessagesBatching(true);
+        serverSettings.FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, serverSettings, false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        constexpr ui32 partitionId = 0;
+        const ui64 tabletId = GetPQTabletId(setup, setup.GetFullTopicPath(), partitionId);
+        const auto edge = setup.GetRuntime().AllocateEdgeActor();
+        const TString ownerCookie = NPQ::CmdSetOwner(&setup.GetRuntime(), tabletId, edge, partitionId).first;
+
+        WriteKafkaBatch(
+            setup,
+            tabletId,
+            edge,
+            partitionId,
+            ownerCookie,
+            0,
+            "sourceid_kafka_batch_read_offsets",
+            1,
+            {"value-0", "value-1", "value-2"},
+            0);
+
+        WriteKafkaBatch(
+            setup,
+            tabletId,
+            edge,
+            partitionId,
+            ownerCookie,
+            1,
+            "sourceid_kafka_batch_read_offsets",
+            4,
+            {"value-3", "value-4"},
+            3);
+
+        TTopicClient client(setup.MakeDriver());
+        TReadSessionSettings settings;
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+        settings.Decompress(false);
+
+        auto session = client.CreateReadSession(settings);
+
+        TVector<std::pair<ui64, ui64>> offsets;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (offsets.size() < 2 && TInstant::Now() < deadline) {
+            UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(5)),
+                "Read session event timeout");
+            auto event = session->GetEvent(false);
+            UNIT_ASSERT(event.has_value());
+
+            if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                start->Confirm();
+                continue;
+            }
+            if (auto* stop = std::get_if<TStopPartitionEvent>(&*event)) {
+                stop->Confirm();
+                continue;
+            }
+            if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                UNIT_ASSERT(data->HasCompressedMessages());
+                for (auto& message : data->GetCompressedMessages()) {
+                    const auto batch = NKafka::ReadKafkaRecordBatch(message.GetData());
+                    UNIT_ASSERT_VALUES_EQUAL(batch.BaseOffset, message.GetOffset());
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(batch.Records.size()), message.GetLogicalMessageCount());
+                    offsets.emplace_back(message.GetOffset(), batch.BaseOffset);
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(offsets[0].first, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(offsets[0].second, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(offsets[1].first, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(offsets[1].second, 3u);
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
     Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_ManyPartitions) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3, 3);

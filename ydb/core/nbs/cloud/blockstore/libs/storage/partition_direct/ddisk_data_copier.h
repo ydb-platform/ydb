@@ -59,7 +59,7 @@ private:
     std::optional<TBlockRange64> GetFreshRange() const;
     NWilson::TSpan CreateSpan(TBlockRange64 range) const;
     void StartCopyRange();
-    void CopyRange(TBlockRange64 range);
+    void CopyRange(ui64 syncId, TBlockRange64 range);
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
         const IReadRequestExecutor::TResponse& response);

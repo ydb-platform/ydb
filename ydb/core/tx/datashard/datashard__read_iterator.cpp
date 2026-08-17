@@ -532,6 +532,7 @@ public:
         , StartTs(ts)
         , Self(self)
         , TableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion)
+        , ColumnTypes(tableInfo.GetColumnTypes(state.Columns))
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
@@ -582,6 +583,9 @@ public:
         iterRange.MaxKey = keyTo;
         iterRange.MinInclusive = fromInclusive;
         iterRange.MaxInclusive = toInclusive;
+        const TTableRange tableRange(
+            keyFromCells.GetCells(), fromInclusive,
+            keyToCells.GetCells(), toInclusive);
         const bool reverse = State.Reverse;
 
         if (TArrayRef<const TCell> cells = (reverse ? keyToCells.GetCells() : keyFromCells.GetCells())) {
@@ -600,10 +604,10 @@ public:
 
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         }
 
         txc.Env.DisableReadMissingReferences();
@@ -624,14 +628,6 @@ public:
             range.ToInclusive = true;
             range.FromInclusive = true;
             return ReadRange(txc, range);
-        }
-
-        if (ColumnTypes.empty()) {
-            for (auto tag: State.Columns) {
-                auto it = TableInfo.Columns.find(tag);
-                Y_ASSERT(it != TableInfo.Columns.end());
-                ColumnTypes.emplace_back(it->second.Type);
-            }
         }
 
         const auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
@@ -1207,7 +1203,7 @@ private:
     // table keys. Those keys are part of the posting-table primary key, so we
     // can deduplicate candidates before touching the table and progressively
     // over-fetch until Limit unique neighbors have been found.
-    THnswSearchResult SearchHnswDistinct() const {
+    THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
         const auto& topK = *State.VectorTopK;
         if (topK.HnswIndex->HasChanges()) {
             // The overlay may contain changes from an uncommitted or aborted
@@ -1222,8 +1218,23 @@ private:
 
         while (true) {
             auto candidates = topK.HnswIndex->Search(topK.Target, requested);
+
+            THnswSearchResult inRange;
+            for (auto& candidate : candidates.Results) {
+                TSerializedCellVec key(candidate.first);
+                if (ComparePointAndRange(
+                        key.GetCells(), range,
+                        TableInfo.KeyColumnTypes, TableInfo.KeyColumnTypes) == 0) {
+                    inRange.Results.push_back(std::move(candidate));
+                }
+            }
+
             if (topK.DistinctColumns.empty()) {
-                return candidates;
+                if (inRange.Results.size() >= topK.Limit || requested == topK.HnswIndex->Size()) {
+                    return inRange;
+                }
+                requested = Min(topK.HnswIndex->Size(), requested * 2);
+                continue;
             }
 
             TVector<size_t> distinctKeyPositions;
@@ -1245,7 +1256,7 @@ private:
 
             THnswSearchResult unique;
             THashSet<TString> seen;
-            for (auto& candidate : candidates.Results) {
+            for (auto& candidate : inRange.Results) {
                 TSerializedCellVec key(candidate.first);
                 TVector<TCell> cells;
                 for (size_t position : distinctKeyPositions) {
@@ -1265,13 +1276,22 @@ private:
         }
     }
 
-    EReadStatus MaterializeHnswResults(const THnswSearchResult& results, TTransactionContext& txc) {
+    EReadStatus MaterializeHnswResults(
+        const THnswSearchResult& results,
+        const TTableRange& range,
+        TTransactionContext& txc)
+    {
         auto& topK = *State.VectorTopK;
 
         TVector<TSerializedCellVec> keys;
         keys.reserve(results.Results.size());
         for (const auto& [serializedKey, _] : results.Results) {
-            keys.emplace_back(serializedKey);
+            TSerializedCellVec key(serializedKey);
+            if (ComparePointAndRange(
+                    key.GetCells(), range,
+                    TableInfo.KeyColumnTypes, TableInfo.KeyColumnTypes) == 0) {
+                keys.emplace_back(std::move(key));
+            }
         }
 
         bool ready = true;
@@ -1321,10 +1341,15 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+    EReadStatus IterateRange(
+        TIterator* iter,
+        NTable::TKeyRange& iterRange,
+        const TTableRange& tableRange,
+        TTransactionContext& txc)
+    {
         if (State.VectorTopK && State.VectorTopK->HnswIndex) {
-            auto results = SearchHnswDistinct();
-            return MaterializeHnswResults(results, txc);
+            auto results = SearchHnswDistinct(tableRange);
+            return MaterializeHnswResults(results, tableRange, txc);
         }
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();

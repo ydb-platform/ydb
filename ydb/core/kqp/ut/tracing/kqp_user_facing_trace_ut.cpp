@@ -190,6 +190,79 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         uploader.Traces.clear();
     }
 
+    Y_UNIT_TEST(LateCompileDiagnosticsAreBoundedAndKeepIdentity) {
+        NKqp::TCompileDiagnosticsCollector collector;
+        auto metadata = collector.Begin(NKqp::ECompileDependency::SchemeCache, "/Root/pending");
+        auto statistics = collector.Begin(NKqp::ECompileDependency::StatisticsService, "/Root/statistics");
+
+        collector.Enable();
+        collector.Finish(std::move(metadata), NKqp::ECompileDependencyStatus::Error);
+        const auto snapshot = collector.Snapshot(TInstant::Now());
+
+        UNIT_ASSERT_VALUES_EQUAL(snapshot->Dependencies.size(), 2u);
+        const auto exact = std::ranges::find_if(snapshot->Dependencies, [](const auto& dependency) {
+            return dependency.Dependency == NKqp::ECompileDependency::SchemeCache;
+        });
+        UNIT_ASSERT(exact != snapshot->Dependencies.end());
+        UNIT_ASSERT_VALUES_EQUAL(exact->Target, "/Root/pending");
+        UNIT_ASSERT(exact->Status == NKqp::ECompileDependencyStatus::Error);
+
+        const auto pending = std::ranges::find_if(snapshot->Dependencies, [](const auto& dependency) {
+            return dependency.Dependency == NKqp::ECompileDependency::StatisticsService;
+        });
+        UNIT_ASSERT(pending != snapshot->Dependencies.end());
+        UNIT_ASSERT(pending->Status == NKqp::ECompileDependencyStatus::Unknown);
+        collector.Finish(std::move(statistics), NKqp::ECompileDependencyStatus::Ok);
+
+        NKqp::TCompileDiagnosticsCollector bounded(/*enabled*/ true);
+        std::vector<NKqp::ICompileDependencyDiagnostics::THandle> handles;
+        for (size_t i = 0; i < 65; ++i) {
+            handles.push_back(bounded.Begin(NKqp::ECompileDependency::SchemeCache,
+                TStringBuilder() << "/Root/table-" << i));
+        }
+        const auto overflow = bounded.Snapshot(TInstant::Now());
+        UNIT_ASSERT_VALUES_EQUAL(overflow->Dependencies.size(), 64u);
+        UNIT_ASSERT_VALUES_EQUAL(overflow->Dropped, 1u);
+        for (const auto& dependency : overflow->Dependencies) {
+            UNIT_ASSERT(dependency.Dependency == NKqp::ECompileDependency::SchemeCache);
+            UNIT_ASSERT_C(dependency.Target, "retained dependency lost its target");
+        }
+    }
+
+    Y_UNIT_TEST(ExecutionRetentionKeepsSuccessfulAnomaly) {
+        std::vector<NKqp::TExecutionTraceSnapshot> source;
+        const TInstant start = TInstant::Now();
+        for (size_t i = 0; i < NKqp::MaxExecutionTraceSnapshots; ++i) {
+            NKqp::TExecutionTraceSnapshot normal;
+            normal.ExecuterActorType = TStringBuilder() << "normal-" << i;
+            normal.Status = Ydb::StatusIds::SUCCESS;
+            normal.Timeline.Execute = {start, start + TDuration::Seconds(10)};
+            source.push_back(std::move(normal));
+        }
+
+        NKqp::TExecutionTraceSnapshot anomalous;
+        anomalous.ExecuterActorType = "anomalous";
+        anomalous.Status = Ydb::StatusIds::SUCCESS;
+        anomalous.Timeline.Execute = {start, start + TDuration::MilliSeconds(1)};
+        NKqp::TStageTraceSnapshot stage;
+        NKqp::TTaskTraceSnapshot task;
+        task.Window = anomalous.Timeline.Execute;
+        task.ReadRetries = 1;
+        stage.InterestingTasks.push_back(std::move(task));
+        anomalous.Stages.push_back(std::move(stage));
+        source.push_back(std::move(anomalous));
+
+        std::vector<NKqp::TExecutionTraceSnapshot> retained;
+        size_t dropped = 0;
+        NKqp::AppendExecutionTraceSnapshots(retained, dropped, source);
+
+        UNIT_ASSERT_VALUES_EQUAL(retained.size(), NKqp::MaxExecutionTraceSnapshots);
+        UNIT_ASSERT_VALUES_EQUAL(dropped, 1u);
+        UNIT_ASSERT_C(std::ranges::any_of(retained, [](const auto& trace) {
+            return trace.ExecuterActorType == "anomalous";
+        }), "successful execution with retry anomaly was evicted by normal executions");
+    }
+
     Y_UNIT_TEST(ForwardedRequestKeepsProxySnapshot) {
         auto [runtime, server, sender] = CreateServer();
         Y_UNUSED(server);
@@ -270,6 +343,87 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         runtime.Send(blockedCompile.Release());
         auto activeResponse = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(activeResponse->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ProxyRejectFinishesProxyOwnedTrace) {
+        auto [runtime, server, sender] = CreateServer();
+        Y_UNUSED(server);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        auto request = MakeSQLRequest("SELECT 1;", true);
+        request->Record.MutableRequest()->SetSessionId("ydb://session/3?node_id=1&id=missing");
+        NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
+            request->Record.MutableUserFacingTraceId());
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
+            request.Release()));
+
+        auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_UNEQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        const auto* root = FindSpan(*userUploader, "EXECUTE");
+        AssertSpanStatus(root, NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "proxy reject did not finish its root span");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*root, "ydb.trace.coverage")->value().string_value(), "proxy_only");
+        AssertSpanStatus(FindSpan(*userUploader, "KQP proxy"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "proxy reject did not mark the proxy span as failed");
+    }
+
+    Y_UNIT_TEST(ProxyTimeoutDoesNotDuplicateSessionOwnedTrace) {
+        auto [runtime, server, sender] = CreateServer();
+        Y_UNUSED(server);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        TAutoPtr<IEventHandle> blockedCompile;
+        TAutoPtr<IEventHandle> blockedAbort;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
+            if (!blockedCompile
+                    && ev->GetTypeRewrite() == NKqp::TEvKqp::TEvCompileRequest::EventType) {
+                blockedCompile = ev.Release();
+                return true;
+            }
+            if (!blockedAbort
+                    && ev->GetTypeRewrite() == NKqp::TEvKqp::TEvAbortExecution::EventType) {
+                blockedAbort = ev.Release();
+                return true;
+            }
+            return previousFilter ? previousFilter(runtimeBase, ev) : false;
+        };
+        previousFilter = runtime.SetEventFilter(filter);
+
+        auto request = MakeSQLRequest("SELECT 1;", true);
+        request->Record.MutableRequest()->SetTimeoutMs(1);
+        NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
+            request->Record.MutableUserFacingTraceId());
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
+            request.Release()));
+
+        TDispatchOptions requestStarted;
+        requestStarted.FinalEvents.emplace_back([&](IEventHandle&) {
+            return blockedCompile && blockedAbort;
+        });
+        runtime.DispatchEvents(requestStarted);
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+
+        runtime.SetEventFilter(std::move(previousFilter));
+        runtime.Send(blockedAbort.Release());
+        runtime.Send(blockedCompile.Release());
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        const size_t roots = std::ranges::count_if(userUploader->Spans, [](const auto& span) {
+            return span.name() == "EXECUTE";
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(roots, 1u,
+            "proxy timeout and session abort both rendered the user-facing root");
     }
 
     Y_UNIT_TEST(ChannelMatrixTreeShapeAndImmediateCommit) {
@@ -610,15 +764,33 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         std::vector<TAutoPtr<IEventHandle>> captured;
         size_t compileRequests = 0;
+        size_t tracedCompileRequests = 0;
+        size_t enableDiagnostics = 0;
+        size_t metadataRequests = 0;
         TTestActorRuntimeBase::TEventFilter previousFilter;
         auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvCompileRequest::EventType) {
                 ++compileRequests;
+                const auto* request = static_cast<const NKqp::TEvKqp::TEvCompileRequest*>(ev->GetBase());
+                tracedCompileRequests += request->CollectTraceDiagnostics;
             }
-            if (captured.empty()
-                    && ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
-                captured.push_back(ev.Release());
-                return true;
+            if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvEnableCompileDiagnostics::EventType) {
+                ++enableDiagnostics;
+            }
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
+                const auto* response = static_cast<const TEvTxProxySchemeCache::TEvNavigateKeySetResult*>(
+                    ev->GetBase());
+                const bool isQueryTable = std::ranges::any_of(response->Request->ResultSet,
+                    [](const auto& entry) {
+                        return CanonizePath(entry.Path) == "/Root/table-1";
+                    });
+                if (isQueryTable) {
+                    ++metadataRequests;
+                    if (captured.empty()) {
+                        captured.push_back(ev.Release());
+                        return true;
+                    }
+                }
             }
             return previousFilter ? previousFilter(runtimeBase, ev) : false;
         };
@@ -639,10 +811,18 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         firstBlocked.FinalEvents.emplace_back([&](IEventHandle&) { return !captured.empty(); });
         runtime.DispatchEvents(firstBlocked);
 
+        const size_t compileRequestsBeforeSecond = compileRequests;
         send(tracedSender, /*userTracing*/ true);
-        TDispatchOptions secondQueued;
-        secondQueued.FinalEvents.emplace_back([&](IEventHandle&) { return compileRequests >= 2; });
-        runtime.DispatchEvents(secondQueued);
+        TDispatchOptions secondReachedCompileService;
+        secondReachedCompileService.FinalEvents.emplace_back([&](IEventHandle&) {
+            return compileRequests > compileRequestsBeforeSecond;
+        });
+        runtime.DispatchEvents(secondReachedCompileService);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(tracedCompileRequests, 1u,
+            "sampled session did not request compile diagnostics");
+        UNIT_ASSERT_VALUES_EQUAL_C(enableDiagnostics, 1u,
+            "sampled waiter did not enable diagnostics on the active compile actor");
 
         runtime.SetEventFilter(std::move(previousFilter));
         for (auto& event : captured) {
@@ -653,6 +833,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto second = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(tracedSender);
         UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(second->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(metadataRequests, 1u,
+            "sampling split one cold query into two metadata-loading compilations");
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT(devUploader->Spans.empty());
@@ -790,6 +972,27 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
                 return shard.GetShardId() == lateSlowShard;
             }));
 
+        NKqp::TShardReadDiagnosticsCollector boundedConcurrentCollector;
+        for (ui64 shardId = 1; shardId <= NKqp::MaxActiveShardReadDiagnostics; ++shardId) {
+            UNIT_ASSERT(boundedConcurrentCollector.OnStart(
+                shardId, TInstant::MilliSeconds(100)) != 0);
+        }
+        const ui64 untrackedFailedShard = NKqp::MaxActiveShardReadDiagnostics + 1;
+        UNIT_ASSERT_VALUES_EQUAL(boundedConcurrentCollector.OnStart(
+            untrackedFailedShard, TInstant::MilliSeconds(200)), 0u);
+        boundedConcurrentCollector.OnFinish(untrackedFailedShard, 0, 0, 7,
+            Ydb::StatusIds::ABORTED, true, TInstant::MilliSeconds(201));
+        NKqpProto::TKqpTaskExtraStats boundedConcurrentStats;
+        boundedConcurrentCollector.Export(boundedConcurrentStats, 0);
+        const auto failed = std::find_if(boundedConcurrentStats.GetShardReads().begin(),
+            boundedConcurrentStats.GetShardReads().end(), [&](const auto& shard) {
+                return shard.GetShardId() == untrackedFailedShard;
+            });
+        UNIT_ASSERT_C(failed != boundedConcurrentStats.GetShardReads().end(),
+            "failed shard was lost after the in-flight timing cap");
+        UNIT_ASSERT_VALUES_EQUAL(failed->GetStartTimeMs(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(failed->GetStatus(), Ydb::StatusIds::ABORTED);
+
         std::vector<NKqp::TExecutionTraceSnapshot> executionCandidates;
         for (size_t i = 1; i <= NKqp::MaxExecutionTraceSnapshots; ++i) {
             NKqp::TExecutionTraceSnapshot trace;
@@ -824,15 +1027,24 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(std::any_of(wideExecution.Stages.begin(), wideExecution.Stages.end(),
             [](const auto& stage) { return stage.StageId == NKqp::MaxStageTraceSnapshotsPerQuery; }));
 
-        NKqp::TCompileDiagnosticsCollector compileCollector;
-        compileCollector.Begin(NKqp::ECompileDependency::SchemeCache, "/Root/pending",
-            TInstant::MilliSeconds(100));
-        const auto compileSnapshot = compileCollector.Snapshot(TInstant::MilliSeconds(200));
+        NKqp::TCompileDiagnosticsCollector compileCollector(/*enabled*/ true);
+        compileCollector.Begin(NKqp::ECompileDependency::SchemeCache, "/Root/pending");
+        const auto compileSnapshot = compileCollector.Snapshot(TInstant::Now());
         UNIT_ASSERT_VALUES_EQUAL(compileSnapshot->Dependencies.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(compileSnapshot->Dependencies.front().End,
-            TInstant::MilliSeconds(200));
-        UNIT_ASSERT_VALUES_EQUAL(compileSnapshot->Dependencies.front().Status,
-            NKqp::ECompileDependencyStatus::Unknown);
+        UNIT_ASSERT(compileSnapshot->Dependencies.front().End
+            >= compileSnapshot->Dependencies.front().Start);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compileSnapshot->Dependencies.front().Status),
+            static_cast<int>(NKqp::ECompileDependencyStatus::Unknown));
+
+        NKqp::TCompileDiagnosticsCollector lateCompileCollector;
+        lateCompileCollector.Begin(NKqp::ECompileDependency::SchemeCache,
+            "/Root/pending-before-sampling");
+        lateCompileCollector.Enable();
+        const auto lateCompileSnapshot = lateCompileCollector.Snapshot(TInstant::Now());
+        UNIT_ASSERT_VALUES_EQUAL(lateCompileSnapshot->Dependencies.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(lateCompileSnapshot->Dependencies.front().Target, "");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(lateCompileSnapshot->Dependencies.front().Status),
+            static_cast<int>(NKqp::ECompileDependencyStatus::Unknown));
 
         NKqp::TShardAckDiagnosticsCollector commitCollector;
         for (ui64 shardId = 1; shardId <= NKqp::MaxCommitShardDiagnostics + 2; ++shardId) {
@@ -1150,7 +1362,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindReadShardSpan(*userUploader, "first_to_last_message"),
-            "scan did not export its first-to-last-message boundary");
+            "scan did not export its first-to-last-message boundary: "
+                << userUploader->PrintTraces());
         const auto* executeSpan = FindSpan(*userUploader, "Execute");
         UNIT_ASSERT(executeSpan);
         UNIT_ASSERT(FindAttribute(*executeSpan, "ydb.actor.type"));

@@ -164,11 +164,11 @@ public:
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         ResponseStatsMode = Request.StatsMode;
         CollectionStatsMode = ResponseStatsMode;
-        if (Request.DiagnosticsPolicy.CollectStageAggregates
-                || Request.DiagnosticsPolicy.CollectTaskSamples) {
+        if (Request.DiagnosticsPolicy.CollectShardSamples) {
             CollectionStatsMode = Max(CollectionStatsMode,
-                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
-        } else if (Request.DiagnosticsPolicy.CollectTimeline) {
+                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        } else if (Request.DiagnosticsPolicy.CollectStageAggregates
+                || Request.DiagnosticsPolicy.CollectTaskSamples) {
             CollectionStatsMode = Max(CollectionStatsMode,
                 Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
         }
@@ -236,7 +236,19 @@ protected:
 
         KqpTableResolverId = {};
 
+        if (ExecutionTrace) {
+            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolveMetadata) = reply.NavigateWindow;
+            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolvePartitioning) = reply.ResolveKeysWindow;
+        }
+
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
+            if (ExecutionTrace) {
+                if (reply.ResolveKeysWindow) {
+                    ExecutionTrace->FailedPhase = EExecutionPhase::ResolvePartitioning;
+                } else if (reply.NavigateWindow) {
+                    ExecutionTrace->FailedPhase = EExecutionPhase::ResolveMetadata;
+                }
+            }
             if (ExecuterStateSpan) {
                 ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
             }
@@ -246,11 +258,6 @@ protected:
 
         if (ExecuterStateSpan) {
             ExecuterStateSpan.EndOk();
-        }
-
-        if (ExecutionTrace) {
-            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolveMetadata) = reply.NavigateWindow;
-            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolvePartitioning) = reply.ResolveKeysWindow;
         }
 
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
@@ -1924,9 +1931,15 @@ protected:
             return;
         }
 
-        EndExecutionPhase();
-        ExecutionTrace->Timeline.Execute.End = TInstant::Now();
+        const TInstant finishAt = TInstant::Now();
         ExecutionTrace->Status = ResponseEv->Record.GetResponse().GetStatus();
+        if (ExecutionTrace->Status != Ydb::StatusIds::SUCCESS
+                && !ExecutionTrace->FailedPhase
+                && CurrentExecutionPhase != EExecutionPhase::Count) {
+            ExecutionTrace->FailedPhase = CurrentExecutionPhase;
+        }
+        EndExecutionPhase(finishAt);
+        ExecutionTrace->Timeline.Execute.End = finishAt;
         Stats->ExportTraceSnapshot(*ExecutionTrace);
         TrimExecutionTraceSnapshot(*ExecutionTrace);
         ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
@@ -1941,16 +1954,18 @@ protected:
 
     // Starting a phase closes the previous window; the last one closes at response fill.
     void BeginExecutionPhase(EExecutionPhase phase) {
-        EndExecutionPhase();
-        if (ExecutionTrace) {
-            CurrentExecutionPhase = phase;
-            ExecutionTrace->Timeline.Phase(phase).Start = TInstant::Now();
+        if (!ExecutionTrace) {
+            return;
         }
+        const TInstant transitionAt = TInstant::Now();
+        EndExecutionPhase(transitionAt);
+        CurrentExecutionPhase = phase;
+        ExecutionTrace->Timeline.Phase(phase).Start = transitionAt;
     }
 
-    void EndExecutionPhase() {
+    void EndExecutionPhase(TInstant finishAt) {
         if (ExecutionTrace && CurrentExecutionPhase != EExecutionPhase::Count) {
-            ExecutionTrace->Timeline.Phase(CurrentExecutionPhase).End = TInstant::Now();
+            ExecutionTrace->Timeline.Phase(CurrentExecutionPhase).End = finishAt;
         }
         CurrentExecutionPhase = EExecutionPhase::Count;
     }

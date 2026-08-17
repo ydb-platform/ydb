@@ -12,7 +12,8 @@ bool Failed(Ydb::StatusIds::StatusCode status) {
 }
 
 auto ShardRank(const NKqpProto::TKqpShardReadStats& shard) {
-    const ui64 durationMs = shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+    const ui64 durationMs = shard.GetStartTimeMs()
+            && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
         ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
     return std::tuple(Failed(shard.GetStatus()), shard.GetRetries() > 0, durationMs);
 }
@@ -31,7 +32,7 @@ auto StageRank(const TStageTraceSnapshot& stage) {
 
 auto ExecutionRank(const TExecutionTraceSnapshot& trace) {
     const bool anomalous = std::any_of(trace.Stages.begin(), trace.Stages.end(),
-        [](const auto& stage) { return std::get<0>(StageRank(stage)); });
+        [](const auto& stage) { return std::get<1>(StageRank(stage)); });
     const ui64 durationUs = trace.Timeline.Execute
         ? (trace.Timeline.Execute.End - trace.Timeline.Execute.Start).MicroSeconds() : 0;
     return std::tuple(Failed(trace.Status), anomalous, durationUs);
@@ -82,6 +83,7 @@ struct TOwnedBufferShard {
 struct TOwnedCommitShard {
     size_t Execution;
     bool Prepared;
+    ui64 DurationUs;
     TShardAckDiagnostic Value;
 };
 
@@ -226,16 +228,22 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         auto& commit = snapshots[execution].Commit;
         originalCommitShards[execution] = {commit.PreparedShards.size(), commit.CommittedShards.size()};
         for (auto& shard : commit.PreparedShards) {
-            commitShards.push_back({execution, true, std::move(shard)});
+            const ui64 durationUs = commit.PrepareShards.Start != TInstant::Zero()
+                    && shard.AcknowledgedAt >= commit.PrepareShards.Start
+                ? (shard.AcknowledgedAt - commit.PrepareShards.Start).MicroSeconds() : 0;
+            commitShards.push_back({execution, true, durationUs, std::move(shard)});
         }
         for (auto& shard : commit.CommittedShards) {
-            commitShards.push_back({execution, false, std::move(shard)});
+            const ui64 durationUs = commit.ApplyShards.Start != TInstant::Zero()
+                    && shard.AcknowledgedAt >= commit.ApplyShards.Start
+                ? (shard.AcknowledgedAt - commit.ApplyShards.Start).MicroSeconds() : 0;
+            commitShards.push_back({execution, false, durationUs, std::move(shard)});
         }
         commit.PreparedShards.clear();
         commit.CommittedShards.clear();
     }
     RetainBest(commitShards, MaxCommitShardDiagnosticsPerQuery, [](const auto& lhs, const auto& rhs) {
-        return lhs.Value.AcknowledgedAt > rhs.Value.AcknowledgedAt;
+        return lhs.DurationUs > rhs.DurationUs;
     });
     for (auto& shard : commitShards) {
         auto& commit = snapshots[shard.Execution].Commit;

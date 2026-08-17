@@ -76,7 +76,8 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
     auto shardRank = [](const NKqpProto::TKqpShardReadStats& shard) {
         const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
             && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
-        const ui64 durationMs = shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+        const ui64 durationMs = shard.GetStartTimeMs()
+                && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
             ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
         return std::tuple(failed, shard.GetRetries() > 0, durationMs);
     };

@@ -232,6 +232,9 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (CollectTimeline) {
+            NavigateWindow.End = TInstant::Now();
+        }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
@@ -535,6 +538,17 @@ private:
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
         replyEv->CpuTime = CpuTime;
+        if (CollectTimeline) {
+            const TInstant failedAt = TInstant::Now();
+            if (NavigateWindow.Start != TInstant::Zero() && NavigateWindow.End == TInstant::Zero()) {
+                NavigateWindow.End = failedAt;
+            }
+            if (ResolveKeysWindow.Start != TInstant::Zero() && ResolveKeysWindow.End == TInstant::Zero()) {
+                ResolveKeysWindow.End = failedAt;
+            }
+            replyEv->NavigateWindow = NavigateWindow;
+            replyEv->ResolveKeysWindow = ResolveKeysWindow;
+        }
         Send(Owner, replyEv.release());
         PassAway();
     }

@@ -14,8 +14,6 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
-#include <cstring>
-
 #include "actors.h"
 #include "kafka_fetch_actor.h"
 
@@ -38,11 +36,13 @@ TString RewriteKafkaBatchBaseOffset(TStringBuf data, ui64 baseOffset) {
         return TString(data);
     }
 
-    auto kafkaBaseOffset = static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
-    NormalizeNumber(kafkaBaseOffset);
+    const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+    TKafkaWriteBuffer buffer(baseOffsetSize);
+    TKafkaWritable writable(buffer);
+    writable << static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
 
     TString result(data);
-    std::memcpy(result.Detach(), &kafkaBaseOffset, sizeof(kafkaBaseOffset));
+    result.replace(0, baseOffsetSize, buffer.AsString());
     return result;
 }
 

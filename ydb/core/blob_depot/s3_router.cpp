@@ -10,7 +10,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -177,8 +176,7 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepotS3Router : public TActorBootstrapped<TBlobDepotS3Router> {
         struct TEvPrivate {
             enum {
-                EvBalancerTick = EventSpaceBegin(TEvents::ES_PRIVATE),
-                EvRefreshNow,
+                EvRefreshNow = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvPushMetrics,
             };
         };
@@ -197,24 +195,6 @@ namespace NKikimr::NBlobDepot {
         TRouterStats Stats;
 
         TMonotonic BalancerRequestStartedAt;
-
-        ui32 RefreshSecMin() const {
-            return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
-        }
-
-        ui32 RefreshSecMax() const {
-            const ui32 lo = RefreshSecMin();
-            const ui32 hi = Settings.HasBalancerRefreshSecMax() ? Settings.GetBalancerRefreshSecMax() : 15;
-            return hi >= lo ? hi : lo;
-        }
-
-        TDuration NextRefreshDelay() const {
-            const ui32 lo = RefreshSecMin();
-            const ui32 hi = RefreshSecMax();
-            const ui32 sec = lo == hi ? lo
-                : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
-            return TDuration::Seconds(sec);
-        }
 
         TDuration MetricsPushInterval() const {
             const ui32 ms = Settings.GetMetricsPushIntervalMs();
@@ -376,16 +356,6 @@ namespace NKikimr::NBlobDepot {
             ++Stats.BalancerResolveRequests;
         }
 
-        void ScheduleNextRefresh() {
-            TActivationContext::Schedule(NextRefreshDelay(),
-                new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
-        }
-
-        void HandleBalancerTick() {
-            IssueBalancerRequest();
-            ScheduleNextRefresh();
-        }
-
         void HandleRefreshNow() {
             YDB_LOG_WARN("S3Router 5xx detected, triggering endpoint refresh",
                 {"marker", "BDTS30"},
@@ -437,16 +407,15 @@ namespace NKikimr::NBlobDepot {
 
                 ++Stats.BalancerResolveFailures;
             }
-            ScheduleNextRefresh();
         }
 
         void Forward(STATEFN_SIG) {
+            IssueBalancerRequest();
             if (!InnerWrapperId) {
                 return;
             }
 
             TActivationContext::Send(ev->Forward(InnerWrapperId));
-            IssueBalancerRequest();
         }
 
     public:
@@ -474,7 +443,6 @@ namespace NKikimr::NBlobDepot {
 
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
-                ScheduleNextRefresh();
             } else {
                 BuildInnerWrapper(OriginalEndpoint);
             }
@@ -513,7 +481,6 @@ namespace NKikimr::NBlobDepot {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-                cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
                 cFunc(TEvents::TSystem::Poison, PassAway);

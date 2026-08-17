@@ -432,8 +432,9 @@ _JS = (
     'me],value)),matched=result.filter(item=>queries.some(query=>matches(item,query))),facetNames=[...new Set(matched.flatMa'
     'p(item=>Object.keys(item.facets)))],varyingFacets=facetNames.filter(name=>new Set(matched.map(item=>item.facets[name]))'
     '.size>1);\n'
-    "  for(const item of result){const labels=varyingFacets.map(name=>name+'='+item.facets[name]),prefix=scope.profile?'':ite"
-    "m.run+' / '+item.profile;item.label=scope.profile?(labels.join('; ')||'value'):prefix+(labels.length?'['+labels.join(';"
+    "  for(const item of result){const labels=varyingFacets.map(name=>name+'='+item.facets[name]),prefix=scope.singleProfile?"
+    "'':item.run+' / '+item.profile;item.label=scope.singleProfile?(labels.join('; ')||'value'):prefix+(labels.length?'['+l"
+    "abels.join(';"
     " ')+']':'')}return result\n"
     '}\n'
     'function mountSingleChart(container,data,scope={}){\n'
@@ -541,7 +542,8 @@ _JS = (
     "n.length+' common '+esc(state.x)+' values ('+esc(common.join(', '))+').<div class=coverage>'+coverage+'</div></div>'}els"
     'e warning.innerHTML=\'<div class="notice good">All selected lines share \'+common.length+\' \'+esc(state.x)+\' values.</div>\''
     ';\n'
-    "    const colors=indexed.map((_,index)=>chartColors[index%chartColors.length]);const legend='<div class=chart-legend>'+i"
+    "    if(indexed.length===1)indexed[0].label=indexed[0].metric;const colors=indexed.map((_,index)=>chartColors[index%char"
+    "tColors.length]);const legend=indexed.length===1?'':'<div class=chart-legend>'+i"
     'ndexed.map((item,index)=>\'<span><i class="legend-swatch chart-bg-\'+index%chartColors.length+\'"></i>\'+esc(item.label)+\'</'
     "span>').join('')+'</div>';\n"
     "    const metricTitle=selectedMetrics.join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
@@ -577,10 +579,16 @@ _JS = (
     "name]).join(', '),queries:[{metric,...fixed,worker_aggregation:workerAggregation,repeat_aggregation:'median',repeat:'*'"
     '}]})))\n'
     '}\n'
+    'function defaultChartScope(data,scope){\n'
+    '  const benchmarks=[...new Set(data.series.map(item=>item.benchmark))].sort(),benchmark=scope.benchmark||benchmarks[0]'
+    ",profiles=[...new Set(data.series.filter(item=>item.benchmark===benchmark).map(item=>item.profile))].sort();return {ben"
+    "chmark,profile:scope.profile||profiles[0]||''}\n"
+    '}\n'
     'function mountChartBuilder(container,data,scope={}){\n'
-    '  if(!container)return;let nextId=1,charts=[...defaultActorCharts(data,scope),...defaultMemoryCharts(data,scope)];if(!c'
+    '  if(!container)return;let nextId=1,presetScope=defaultChartScope(data,scope),charts=[...defaultActorCharts(data,presetS'
+    'cope),...defaultMemoryCharts(data,presetScope)].map(chart=>({...chart,...presetScope}));if(!c'
     'harts.length)charts=[{open:false}];chart'
-    's=charts.map(chart=>({id:nextId++,...chart}));\n'
+    's=charts.map(chart=>({...chart,id:nextId++}));\n'
     "  function renderBoard(){container.innerHTML='<div class=toolbar><button class=primary id=add-chart>Add chart</button></"
     'div><div class=chart-board>\'+charts.map(chart=>\'<section class=card data-chart="\'+chart.id+\'"></section>\').join(\'\')+\'</d'
     "iv>';container.querySelector('#add-chart').onclick=()=>{charts.push({id:nextId++,open:true});renderBoard()};for(const ch"
@@ -647,7 +655,8 @@ _JS = (
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,select"
     'edProfile)}catch(error){alert(error.message)}};\n'
     "    if(selectedProfile){const pieces=selectedProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mo"
-    "untChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile})}catch(error){documen"
+    "untChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,singleProfile:true})}"
+    'catch(error){documen'
     "t.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
     'splayError(error))}\n'

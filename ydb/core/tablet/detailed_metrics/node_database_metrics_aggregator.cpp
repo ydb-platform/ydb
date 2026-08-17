@@ -240,6 +240,8 @@ public:
             mapIt = TabletToTableMap.end();
         }
 
+        ReconcileTable(relativePath, table);
+
         if (IsFollowerRole && IsTableLevel(table)) {
             return;
         }
@@ -379,6 +381,24 @@ private:
         return entry.PerPartitionGroup;
     }
 
+    void ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
+        auto it = Tables.find(relativePath);
+        if (it == Tables.end()) {
+            return;
+        }
+
+        const TDetailedMetricsTableInfo& stored = it->second.Info;
+
+        if (table.MetricsLevel != stored.MetricsLevel) {
+            DropTableEntry(it);
+            return;
+        }
+
+        if (table.SchemaVersion > stored.SchemaVersion) {
+            it->second.Info = table;
+        }
+    }
+
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
@@ -399,12 +419,6 @@ private:
 
             return &it->second;
         }
-
-        // NOTE: Reconciling an existing entry on a schema version or a metrics level
-        //       change is implemented in a separate step (the level and rename step of
-        //       the detailed metrics plan). Until then the level of a table is frozen at
-        //       the very first report, which MetricsLevelChangeIsIgnoredUntilReconciliation
-        //       pins, so that the step has to flip an explicit assertion
 
         // A new entry: this is the one place the key is actually materialized into a
         // TString, once, shared between the map key and the GetSubgroup() call
@@ -432,11 +446,35 @@ private:
         }
 
         if (entry.IsEmpty()) {
-            Tables.erase(it);
+            EraseTableEntry(it);
+        }
+    }
 
-            if (Tables.empty()) {
-                DatabaseGroup.Reset();
-            }
+    void DropTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        auto& entry = it->second;
+
+        TVector<TTabletKey> tablets;
+        tablets.reserve(entry.Leaves.size());
+        for (const auto& [tablet, _] : entry.Leaves) {
+            tablets.push_back(tablet);
+        }
+
+        for (const auto& tablet : tablets) {
+            ForgetLeaf(it->first, entry, tablet);
+        }
+
+        DropTableBucket(it->first, entry);
+
+        Y_DEBUG_ABORT_UNLESS(entry.IsEmpty());
+
+        EraseTableEntry(it);
+    }
+
+    void EraseTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        Tables.erase(it);
+
+        if (Tables.empty()) {
+            DatabaseGroup.Reset();
         }
     }
 
@@ -450,12 +488,18 @@ private:
 
         bucket->Forget(tablet);
 
-        if (!bucket->IsEmpty()) {
+        if (bucket->IsEmpty()) {
+            DropTableBucket(relativePath, entry);
+        }
+    }
+
+    void DropTableBucket(const TString& relativePath, TTableEntry& entry) {
+        if (!entry.TableBucket) {
             return;
         }
 
         const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
-        bucket.Reset();
+        entry.TableBucket.Reset();
 
         TargetCounterGroup->RemoveSubgroupChain({
             {DATABASE_LABEL, DatabasePath},

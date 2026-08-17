@@ -89,8 +89,7 @@ public:
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
-        , CompileDiagnosticsCollector(collectTraceDiagnostics
-            ? std::make_shared<TCompileDiagnosticsCollector>() : nullptr)
+        , CompileDiagnosticsCollector(std::make_shared<TCompileDiagnosticsCollector>(collectTraceDiagnostics))
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
@@ -183,6 +182,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvContinueProcess, HandleCompile);
+                HFunc(TEvKqp::TEvEnableCompileDiagnostics, HandleEnableCompileDiagnostics);
                 cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             default:
                 UnexpectedEvent("CompileState", ev->GetTypeRewrite());
@@ -196,6 +196,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvContinueProcess, HandleSplit);
+                HFunc(TEvKqp::TEvEnableCompileDiagnostics, HandleEnableCompileDiagnostics);
                 cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             default:
                 UnexpectedEvent("SplitState", ev->GetTypeRewrite());
@@ -375,6 +376,11 @@ private:
         AsyncCompileResult->Continue().Apply(callback);
     }
 
+    void HandleEnableCompileDiagnostics(TEvKqp::TEvEnableCompileDiagnostics::TPtr&,
+            const TActorContext&) {
+        CompileDiagnosticsCollector->Enable();
+    }
+
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
         // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
@@ -490,7 +496,7 @@ private:
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
         const TInstant finishTime = TInstant::Now();
-        if (CompileDiagnosticsCollector) {
+        if (CompileDiagnosticsCollector->IsEnabled()) {
             responseEv->CompileDiagnostics = CompileDiagnosticsCollector->Snapshot(finishTime);
             responseEv->CompileActorDiagnostic = TCompileActorDiagnostic{
                 .Start = StartTime,

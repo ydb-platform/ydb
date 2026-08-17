@@ -17,6 +17,7 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <atomic>
 #include <functional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
@@ -109,19 +110,26 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
     std::function<ECompileDependencyStatus(const TResponse&)> extractStatus = {})
 {
     auto promise = NewPromise<TResult>();
-    const ui64 diagnosticId = diagnostics
-        ? diagnostics->Begin(dependency, std::move(target), TInstant::Now()) : 0;
-    auto tracedCallback = [callback = std::move(callback), diagnostics = std::move(diagnostics),
-            extractStatus = std::move(extractStatus), diagnosticId]
-            (TPromise<TResult> promise, TResponse&& response) mutable {
-        if (diagnostics) {
-            diagnostics->Finish(diagnosticId, TInstant::Now(),
-                extractStatus ? extractStatus(response) : ECompileDependencyStatus::Unknown);
+    auto diagnostic = diagnostics
+        ? diagnostics->Begin(dependency, std::move(target))
+        : ICompileDependencyDiagnostics::THandle{};
+    auto diagnosticFinished = std::make_shared<std::atomic<bool>>(false);
+    auto finishDiagnostic = [diagnostics, diagnostic, diagnosticFinished](ECompileDependencyStatus status) mutable {
+        if (diagnostics && !diagnosticFinished->exchange(true, std::memory_order_relaxed)) {
+            diagnostics->Finish(std::move(diagnostic), status);
         }
+    };
+    auto tracedCallback = [callback = std::move(callback), finishDiagnostic,
+            extractStatus = std::move(extractStatus)]
+            (TPromise<TResult> promise, TResponse&& response) mutable {
+        finishDiagnostic(extractStatus ? extractStatus(response) : ECompileDependencyStatus::Unknown);
         callback(std::move(promise), std::move(response));
     };
+    auto failedCallback = [finishDiagnostic = std::move(finishDiagnostic)]() mutable {
+        finishDiagnostic(ECompileDependencyStatus::Error);
+    };
     IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
-        actorId, request, promise, std::move(tracedCallback));
+        actorId, request, promise, std::move(tracedCallback), std::move(failedCallback));
     actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
     return promise.GetFuture();
 }

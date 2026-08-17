@@ -159,6 +159,10 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
     NLWTrace::TOrbit Orbit;
 };
 
+struct TEvEnableCompileDiagnostics : public TEventLocal<TEvEnableCompileDiagnostics,
+    TKqpEvents::EvEnableCompileDiagnostics>
+{};
+
 struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvParseResponse> {
     TEvParseResponse(const TKqpQueryId& query, TVector<TQueryAst> astStatements, NLWTrace::TOrbit orbit = {})
         : AstStatements(std::move(astStatements))

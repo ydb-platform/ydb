@@ -242,7 +242,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 }
                 upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
                     upsertIndexRows.value(), true, insert.Pos(), ctx);
-                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                const auto& postingTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder()
+                    << insert.Table().Path().Value() << "/" << indexDesc->Name << "/"
+                    << NKikimr::NTableIndex::NKMeans::PostingTable);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, postingTable, indexDesc);
                 break;
             }
             case TIndexDescription::EType::GlobalFulltextPlain:

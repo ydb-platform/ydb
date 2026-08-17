@@ -313,6 +313,16 @@ struct TValidateStreamingConstraintsInfo {
         }
 
         const auto& name = node->Content();
+        if (!node->GetConstraint<TStreamingConstraintNode>()) {
+            // Sanity check, that all checkpointed callables are used in streaming context
+            if (CheckpointintCallables.contains(name)) {
+                HasErrors = true;
+                YQL_CLOG(WARN, ProviderKqp) << "Found checkpointed callable in non streaming context: " << KqpExprToPrettyString(*node, Ctx);
+                Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' can not be used outside streaming context"));
+            }
+            return;
+        }
+
         if (!UnsupportedCheckpointsCallables.contains(name)) {
             return;
         }
@@ -332,11 +342,16 @@ struct TValidateStreamingConstraintsInfo {
 private:
     // Callables which passes streaming constraints but incompatible with checkpoints
     inline static const std::unordered_set<std::string_view> UnsupportedCheckpointsCallables = {
-        "Skip"sv, "Take"sv, "Limit"sv,
+        TCoSkip::CallableName(), TCoTake::CallableName(), TCoLimit::CallableName(),
         "TakeWhile"sv, "SkipWhile"sv, "TakeWhileInclusive"sv, "SkipWhileInclusive"sv,
         "WideTakeWhile"sv, "WideSkipWhile"sv, "WideTakeWhileInclusive"sv, "WideSkipWhileInclusive"sv,
-        "PruneAdjacentKeys"sv, "PruneKeys"sv,
-        "MapNext"sv, "Chain1Map"sv, "WideChain1Map"sv
+        TCoPruneAdjacentKeys::CallableName(), TCoPruneKeys::CallableName(),
+        TCoMapNext::CallableName(), TCoChain1Map::CallableName(), "WideChain1Map"sv
+    };
+
+    // Callables for which will be unconditionally allocated checkpoint storage slot
+    inline static const std::unordered_set<std::string_view> CheckpointintCallables = {
+        TCoMultiHoppingCore::CallableName(), "TimeOrderRecover"sv, "MatchRecognizeCore"sv
     };
 };
 
@@ -360,8 +375,8 @@ bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TValidate
         }
     }
 
-    if (node->IsCallable() && isStreaming && !hasErrors) {
-        if (!node->GetConstraint<TStreamingConstraintNode>()) {
+    if (node->IsCallable() && !hasErrors) {
+        if (isStreaming && !node->GetConstraint<TStreamingConstraintNode>()) {
             auto& ctx = info.Ctx;
             hasErrors = true;
             YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);

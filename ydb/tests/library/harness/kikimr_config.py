@@ -257,7 +257,7 @@ class KikimrConfigGenerator(object):
                 self.__grpc_tls_key = key_pem
                 self.__grpc_tls_cert = cert_pem
             else:
-                if grpc_tls_data_path is None:
+                if not grpc_tls_data_path:
                     raise ValueError('existing_grpc_tls_data requires grpc_tls_data_path')
                 self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = existing_grpc_tls_data
 

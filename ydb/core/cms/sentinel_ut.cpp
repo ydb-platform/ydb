@@ -917,15 +917,20 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         env.SimulateSleep(TDuration::Minutes(1));
 
         bool targetSeenFaulty = false;
+        bool targetSeenMaintenanceNoRequest = false;
         auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
             const auto& request = event->Get()->Record;
             for (const auto& command : request.GetRequest().GetCommand()) {
                 if (command.HasUpdateDriveStatus()) {
                     const auto& update = command.GetUpdateDriveStatus();
                     if (update.GetHostKey().GetNodeId() == targetId.NodeId
-                            && update.GetPDiskId() == targetId.DiskId
-                            && update.GetStatus() == NKikimrBlobStorage::EDriveStatus::FAULTY) {
-                        targetSeenFaulty = true;
+                            && update.GetPDiskId() == targetId.DiskId) {
+                        if (update.GetStatus() == NKikimrBlobStorage::EDriveStatus::FAULTY) {
+                            targetSeenFaulty = true;
+                        }
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
+                            targetSeenMaintenanceNoRequest = true;
+                        }
                     }
                 }
             }
@@ -940,6 +945,8 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         observerHolder.Remove();
         UNIT_ASSERT_C(!targetSeenFaulty,
             "FAULTY must not bypass guardian when maintenance status changes at the same time");
+        UNIT_ASSERT_C(targetSeenMaintenanceNoRequest,
+            "Maintenance status must still be updated independently when drive status is blocked");
     }
 
     Y_UNIT_TEST(MaintenanceStatus) {

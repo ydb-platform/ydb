@@ -84,6 +84,8 @@ public:
     bool IsMaintenanceStatusChanged() const;
     void ApplyChanges(TString& reason);
     void ApplyChanges();
+    void ApplyDriveStatusChanges(TString& reason);
+    void ApplyMaintenanceStatusChanges();
     EPDiskStatus GetStatus() const;
     bool IsNewStatusGood() const;
     EMaintenanceStatus::E GetMaintenanceStatus() const;

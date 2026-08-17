@@ -286,13 +286,21 @@ bool TPDiskStatus::IsMaintenanceStatusChanged() const {
 }
 
 void TPDiskStatus::ApplyChanges(TString& reason) {
-    Current = Compute(Current, reason);
-    CurrentMaintenanceStatus = ComputeMaintenanceStatus(CurrentMaintenanceStatus);
+    ApplyDriveStatusChanges(reason);
+    ApplyMaintenanceStatusChanges();
 }
 
 void TPDiskStatus::ApplyChanges() {
     TString unused;
     ApplyChanges(unused);
+}
+
+void TPDiskStatus::ApplyDriveStatusChanges(TString& reason) {
+    Current = Compute(Current, reason);
+}
+
+void TPDiskStatus::ApplyMaintenanceStatusChanges() {
+    CurrentMaintenanceStatus = ComputeMaintenanceStatus(CurrentMaintenanceStatus);
 }
 
 EPDiskStatus TPDiskStatus::GetStatus() const {
@@ -1214,13 +1222,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
 
             all.AddPDisk(id, hasGoodState);
-            if (info.IsChanged()) {
-                if (info.IsNewStatusGood() || info.HasForcedStatus()
-                        || (info.IsMaintenanceStatusChanged() && !info.IsDriveStatusChanged())) {
+
+            const bool driveChanged = info.IsDriveStatusChanged();
+            const bool maintenanceChanged = info.IsMaintenanceStatusChanged();
+
+            if (driveChanged) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id, hasGoodState);
                 }
+            } else if (maintenanceChanged) {
+                alwaysAllowed.insert(id);
             } else {
                 info.AllowChanging();
             }
@@ -1237,24 +1250,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             SentinelState->ChangeRequests.clear();
         }
 
-        for (const auto& id : allowed) {
-            Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
-            TPDiskInfo::TPtr info = SentinelState->PDisks.at(id);
-
-            info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
-
-            if (!info->IsChangingAllowed()) {
-                info->AllowChanging();
-                continue;
-            }
-
-            const EPDiskStatus status = info->GetStatus();
-            const EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
-            TString reason;
-            info->ApplyChanges(reason);
-            const EPDiskStatus requiredStatus = info->GetStatus();
-            const EMaintenanceStatus::E requiredMaintenanceStatus = info->GetMaintenanceStatus();
-
+        auto queueStatusChange = [&](const TPDiskID& id, TPDiskInfo::TPtr info,
+                EPDiskStatus status, EPDiskStatus requiredStatus,
+                EMaintenanceStatus::E maintenanceStatus, EMaintenanceStatus::E requiredMaintenanceStatus,
+                const TString& reason)
+        {
             YDB_LOG_NOTICE("PDisk status changed",
                 {"name", Name()},
                 {"PDiskId", id},
@@ -1272,6 +1272,40 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     (*Counters->PDisksPendingChange)++;
                 }
             }
+        };
+
+        for (const auto& id : allowed) {
+            Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
+            TPDiskInfo::TPtr info = SentinelState->PDisks.at(id);
+
+            info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
+
+            const bool driveChanged = info->IsDriveStatusChanged();
+            const bool maintenanceChanged = info->IsMaintenanceStatusChanged();
+
+            if (driveChanged && !info->IsChangingAllowed()) {
+                info->AllowChanging();
+                if (maintenanceChanged) {
+                    const EPDiskStatus status = info->GetStatus();
+                    const EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
+                    info->ApplyMaintenanceStatusChanges();
+                    queueStatusChange(id, info, status, status,
+                        maintenanceStatus, info->GetMaintenanceStatus(), "maintenance only");
+                }
+                continue;
+            }
+
+            const EPDiskStatus status = info->GetStatus();
+            const EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
+            TString reason;
+            if (driveChanged) {
+                info->ApplyDriveStatusChanges(reason);
+            }
+            if (maintenanceChanged) {
+                info->ApplyMaintenanceStatusChanges();
+            }
+            queueStatusChange(id, info, status, info->GetStatus(),
+                maintenanceStatus, info->GetMaintenanceStatus(), reason);
         }
 
         for (const auto& [id, reason] : disallowed) {
@@ -1279,6 +1313,14 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             auto& pdisk = SentinelState->PDisks.at(id);
             pdisk->DisallowChanging();
             pdisk->IgnoreReason = reason;
+
+            if (pdisk->IsMaintenanceStatusChanged()) {
+                const EPDiskStatus status = pdisk->GetStatus();
+                const EMaintenanceStatus::E maintenanceStatus = pdisk->GetMaintenanceStatus();
+                pdisk->ApplyMaintenanceStatusChanges();
+                queueStatusChange(id, pdisk, status, status,
+                    maintenanceStatus, pdisk->GetMaintenanceStatus(), "maintenance only");
+            }
         }
 
         if (issues) {
@@ -1347,8 +1389,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             auto& command = *request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
-            command.SetStatus(info->GetStatus());
-            command.SetMaintenanceStatus(info->GetMaintenanceStatus());
+            // Leave Status as UNKNOWN when only maintenance changed — BSC ignores UNKNOWN.
+            if (info->GetStatus() != info->ActualStatus) {
+                command.SetStatus(info->GetStatus());
+            }
+            if (info->GetMaintenanceStatus() != info->ActualMaintenanceStatus) {
+                command.SetMaintenanceStatus(info->GetMaintenanceStatus());
+            }
         }
         request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 

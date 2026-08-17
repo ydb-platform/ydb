@@ -92,6 +92,8 @@ struct TEvPrivate {
         EvBackupImportRecordBatch,
         EvBackupImportRecordBatchResult,
 
+        EvRetryConfigSubscription,
+
         EvEnd
     };
 
@@ -511,6 +513,8 @@ struct TEvPrivate {
     struct TEvBackupImportRecordBatchResult: public TEventLocal<TEvBackupImportRecordBatchResult, EvBackupImportRecordBatchResult> {
         explicit TEvBackupImportRecordBatchResult() = default;
     };
+
+    struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 };
 
 }   // namespace NKikimr::NColumnShard

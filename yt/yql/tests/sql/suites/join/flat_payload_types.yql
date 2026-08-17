@@ -1,0 +1,37 @@
+USE plato;
+
+-- Type preservation through the flat payload intermediate: required Int32,
+-- Int32? (null and not null), Int32?? (Nothing, Just(Nothing), Just(Just(v)))
+-- and a pg column (null and not null).
+pragma yt.JoinCommonUseFlatPayload="true";
+
+$a = SELECT
+    key,
+    subkey,
+    value,
+    Unwrap(CAST(subkey AS Int32)) AS i32,      -- Int32, required
+    CAST(subkey AS Int32) AS i32o,             -- Int32?, always present
+    CAST(value AS Int32) AS i32n,              -- Int32?, always NULL (non-numeric)
+    CASE key
+        WHEN "020" THEN Just(Just(20))         -- Int32??: Just(Just(v))
+        WHEN "075" THEN Just(Nothing(Int32?))  -- Int32??: Just(Nothing)
+        ELSE Nothing(OptionalType(Int32?))     -- Int32??: Nothing
+    END AS i32nn,
+    CASE key
+         WHEN "020" THEN Nothing(pgint4?)       -- pg?: NULL
+         WHEN "075" THEN Just(pgint4("75"))     -- pg?: present
+         ELSE Just(pgint4("1"))                 -- pg?: present
+    END AS p
+FROM Input1;
+
+$b = SELECT key, value FROM Input2 WHERE key != "075";
+
+SELECT a.key AS k, a.subkey AS ask, b.subkey AS bsk,
+    a.i32 AS i, a.i32o AS io, a.i32n AS in, a.i32nn AS inn, a.p AS ap, b.value AS bv
+FROM $a AS a INNER JOIN Input2 AS b ON a.key == b.key
+ORDER BY k, ask, bsk;
+
+SELECT a.key AS ak, b.key AS bk, a.subkey AS ask,
+    a.i32 AS i, a.i32o AS io, a.i32n AS in, a.i32nn AS inn, a.p AS ap, b.value AS bv
+FROM $a AS a LEFT JOIN $b AS b ON a.key == b.key
+ORDER BY ak, ask, bk, bv;

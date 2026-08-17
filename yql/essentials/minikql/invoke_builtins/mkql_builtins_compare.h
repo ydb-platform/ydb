@@ -2,8 +2,9 @@
 
 #include "mkql_builtins_impl.h" // Y_IGNORE // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 template <typename TLeft, typename TRight, class TImpl>
 struct TCompareArithmeticBinary: public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
@@ -125,15 +126,14 @@ int CompareCustomsWithCleanup(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePo
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
 struct TCompareArgsOpt {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
-const TFunctionParamMetadata TCompareArgsOpt<TInput1, TInput2, IsLeftOptional, IsRightOptional, IsResultOptional>::Value[4] = {
-    {NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {0, 0}};
+const std::array<TFunctionParamMetadata, 4> TCompareArgsOpt<TInput1, TInput2, IsLeftOptional, IsRightOptional, IsResultOptional>::Value = {{{NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                                                            {0, 0}}};
 
 template <
     typename TInput1, typename TInput2,
@@ -669,5 +669,4 @@ void RegisterGreater(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry);
 void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

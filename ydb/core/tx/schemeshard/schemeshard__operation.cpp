@@ -1509,8 +1509,15 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
-    case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        return {CreateInitializeBuildIndexImplTable(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable: {
+        THashSet<TString> localSequences;
+        for (const auto& col : tx.GetCreateTable().GetColumns()) {
+            if (col.HasDefaultFromSequence()) {
+                localSequences.insert(col.GetDefaultFromSequence());
+            }
+        }
+        return {CreateInitializeBuildIndexImplTable(op.NextPartId(), tx, localSequences)};
+    }
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1688,7 +1695,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     // Secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
-        return {CreateNewSecret(op.NextPartId(), tx)};
+        return {CreateNewSecret(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
         return {CreateAlterSecret(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:

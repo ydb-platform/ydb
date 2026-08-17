@@ -66,6 +66,7 @@ message TAuthConfig {
     optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
     optional TExternalIdpConfig ExternalIdpConfig = 91;
     optional TLocalMetadataService LocalMetadataService = 92;
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
 }
 
 message TLocalMetadataService {
@@ -92,6 +93,18 @@ message TStaffApiTvmSettings {
     optional uint32 SelfTvmId = 3;
     optional string DiskCacheDir = 4;
     optional uint32 StaffAppId = 5;
+    oneof Secret {
+        string SecretEnvironmentVariable = 6;
+        string PlainTextSecret = 7 [(Ydb.sensitive) = true];
+    }
+}
+
+message TBlackBoxTvmSettings {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional uint32 SelfTvmId = 3;
+    optional string DiskCacheDir = 4;
+    optional uint32 BlackBoxAppId = 5;
     oneof Secret {
         string SecretEnvironmentVariable = 6;
         string PlainTextSecret = 7 [(Ydb.sensitive) = true];

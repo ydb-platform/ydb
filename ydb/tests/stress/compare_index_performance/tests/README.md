@@ -82,9 +82,18 @@ sanity check) or two different refs — **without a local build**.
 | `compare_s3_query_destination` | `` | Database destination path for the queries table (optional, defaults to `{database}/vector_query_table`)
 
 `table_service_config` values like `enable_vector_index_read=true` are parsed
-into booleans; everything else is kept as a string. Feature flags are appended
-to the cluster config; the fulltext test additionally enables
+into booleans, numeric values into ints/floats; everything else is kept as a
+string. Keys may be dotted paths into nested submessages, e.g.
+`resource_manager.kqp_level_cache_max_size_bytes=314572800`; they are merged
+recursively, so the untouched defaults of that submessage (such as
+`resource_manager.channel_buffer_size`) are preserved. Feature flags follow the
+same `key=value` convention: a bare `enable_foo` (or `enable_foo=true`) enables
+the flag, `enable_foo=false` disables it. The fulltext test additionally enables
 `enable_fulltext_index` on both sides automatically.
+
+> **A/B a flag that only exists on one side.** A feature flag or config field
+> that a binary doesn't know is rejected as an unknown YAML field, so pass a
+> new/PR-only flag through the *current* input only, not the *main* input.
 
 ## Flamegraphs (optional)
 
@@ -138,6 +147,12 @@ the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
   --test-param compare_current_table_service_config=enable_vector_index_read=true \
   --test-param compare_flamegraph=1 \
   --test-param compare_perf_sudo=1
+
+# A/B the vector level cache (nested table_service_config option, 300 MiB).
+./ya make --build relwithdebinfo -tA \
+  ydb/tests/stress/compare_index_performance/tests \
+  --test-param compare_workload=vector \
+  --test-param compare_current_table_service_config=resource_manager.kqp_level_cache_max_size_bytes=314572800
 
 # Import data from S3 instead of auto-generating (uses a fixed dataset).
 ./ya make --build relwithdebinfo -tA \

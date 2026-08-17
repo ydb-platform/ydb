@@ -172,10 +172,16 @@ namespace NKikimr::NBsController {
                         for (bool value : settings.GetUseSelfHealLocalPolicy()) {
                             Self->UseSelfHealLocalPolicy = value;
                             db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->UseSelfHealLocalPolicy = Self->UseSelfHealLocalPolicy;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         return;
                     }
@@ -297,8 +303,13 @@ namespace NKikimr::NBsController {
                 }
 
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
-                Success = Success && Self->ValidateConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), &Error, Response);
+                const TValidateConfigUpdatesParameters validationParameters{
+                    .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
+                    .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
+                    .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
+                    .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                };
+                Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
                 if (Success && Cmd.GetRollback()) {
                     Rollback();

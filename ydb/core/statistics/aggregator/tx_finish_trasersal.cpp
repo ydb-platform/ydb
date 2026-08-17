@@ -52,7 +52,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 forceTerminalState = Ydb::Table::AnalyzeState::STATE_FAILED;
                 break;
         }
-        Self->FinishTraversal(db, forceTerminalState, Issues);
+        Self->FinishTraversal(db, Status, forceTerminalState, Issues);
 
         return true;
     }

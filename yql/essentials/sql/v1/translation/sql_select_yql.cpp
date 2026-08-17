@@ -571,7 +571,7 @@ private:
         setItem.Position = Ctx_.Pos();
 
         if (Mode_ != NSQLTranslation::ESqlMode::QUERY) {
-            return Unsupported("ESqlMode != QUERY");
+            return Unsupported(TString::Join("ESqlMode ", ToString(Mode_)));
         }
 
         if (!Ctx_.SimpleColumns) {
@@ -963,8 +963,16 @@ private:
 
     TSQLResult<TYqlSource> Build(const TRule_flatten_source& rule) {
         if (rule.HasBlock2()) {
-            Token(rule.GetBlock2().GetToken1());
-            return Unsupported("FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS)");
+            const auto& block = rule.GetBlock2();
+            Token(block.GetToken1());
+            switch (block.GetBlock2().GetAltCase()) {
+                case TRule_flatten_source_TBlock2_TBlock2::kAlt1:
+                    return Unsupported("FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg");
+                case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
+                    return Unsupported("FLATTEN COLUMNS");
+                case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
+                    YQL_ENSURE(false, "Unreachable");
+            }
         }
 
         return Build(rule.GetRule_named_single_source1());
@@ -1204,6 +1212,10 @@ private:
             }
 
             return TNonNull(node);
+        }
+
+        if (node->GetSource()) {
+            return Unsupported("bind parameter referencing a legacy source");
         }
 
         TYqlTableRefArgs args = {

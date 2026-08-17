@@ -2,6 +2,13 @@
 
 Core implementation of YDB topics (persistent queues).
 
+Shared rules: [`RULES.md`](RULES.md).
+
+## Guidelines
+
+* In `pqrb` / `pqtablet`: batch when persisting; minimize persists and
+  inter-actor messages.
+
 ## Layout
 
 One root directory per tablet or service, plus `common/`, `public/`, `events/`.
@@ -16,28 +23,16 @@ In `public/` and `common/`, nested dirs by **purpose**; in `pqrb/` and
 * **`writer/`**, **`dread_cache_service/`**, **`deferred_publish/`** — writer,
   direct-read cache, deferred publish.
 
-Protocol layers (each has its own `AGENTS.md`):
+Protocol layers and related Topics trees (each has its own `AGENTS.md`):
 
 * [`persqueue_v1`](../../services/persqueue_v1/AGENTS.md) ·
+  [`persqueue_v0`](../../services/deprecated/persqueue_v0/AGENTS.md) ·
   [`kafka_proxy`](../kafka_proxy/AGENTS.md) ·
+  [`http_proxy`](../http_proxy/AGENTS.md) ·
   [`datastreams`](../../services/datastreams/AGENTS.md) ·
-  [`sqs_topic`](../../services/sqs_topic/AGENTS.md)
-
-## Guidelines
-
-* External code uses `public/` (and `events/` where needed), not `pqtablet/` /
-  `pqrb/` internals. Layering: `public` → tablets.
-* In `pqrb` / `pqtablet`: batch when persisting; minimize persists and
-  inter-actor messages; extract large logic into separate actors or classes.
-* `*_fwd.h` for forward declarations; `.pb.h` only when needed.
-  Config helpers: [`public/config.h`](public/config.h).
-* Put method implementations in `.cpp` files, not in headers — except
-  template functions and template classes.
+  [`sqs_topic`](../../services/sqs_topic/AGENTS.md) ·
+  [`library/persqueue`](../../library/persqueue/AGENTS.md)
 
 ## Tests
 
 `./ya make --build relwithdebinfo -tA ydb/core/persqueue` (or a narrower `ut/`).
-Monorepo rules: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
-[`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md) ·
-[`agents/NO_ABORT.md`](../../agents/NO_ABORT.md).

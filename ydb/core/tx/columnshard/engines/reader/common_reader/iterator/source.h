@@ -21,7 +21,8 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
-#include <util/system/thread.h>
+
+#include <atomic>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -41,10 +42,67 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
-    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
+
+private:
+    struct TPrevNodeState {
+        ui32 NodeId = 0;
+        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Failed = false;
+        bool Defined = false;
+    };
+
+    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
+
+    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
+    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
+    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
+    // the immutable compiled graph.
+    TString StartCategoryName;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    std::atomic<TPrevNodeState> PrevNode = {};
+
+    TString RenderCategoryName(const TPrevNodeState& state) const {
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
 
 public:
+    void SetStartCategoryName(TString&& name) {
+        StartCategoryName = std::move(name);
+    }
+
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
+                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
+                           .Failed = conclusion.IsFail(),
+                           .Defined = true }, std::memory_order_release);
+    }
+
+    TString GetPrevCategoryName() const {
+        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
+    }
+
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
+    // load keeps the pair consistent.
+    TPrevNodeTracing GetPrevNodeTracing() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
+        TString executionResult;
+        if (state.Defined) {
+            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
+        }
+        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -64,6 +122,14 @@ public:
 
     bool HasProgramIterator() const {
         return !!ProgramIterator;
+    }
+
+    bool HasExecutionVisitor() const {
+        return !!ExecutionVisitor;
+    }
+
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
+        return ExecutionVisitor;
     }
 
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
@@ -90,9 +156,6 @@ public:
 
 private:
     TAtomic SyncSectionFlag = 1;
-    TAtomic StepExecutionDepth = 0;
-    TAtomic StepExecutionThreadId = 0;
-    TString ExecutingStepName;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(ui64, DeprecatedPortionId);
@@ -281,9 +344,6 @@ public:
     virtual void InitRecordsCount(const ui32 recordsCount);
 
     ui32 GetRecordsCount() const;
-
-    void StartStepExecution(const TString& stepName);
-    void FinishStepExecution();
 
     void StartAsyncSection();
 

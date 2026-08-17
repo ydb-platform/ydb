@@ -34,9 +34,11 @@ SRCS(
     functions_executor_wrapper.cpp
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
+    persqueue_v1_gaps_ut.cpp
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp
+    fill_batched_data_offset_ut.cpp
 
     pqtablet_mock.cpp
     kqp_mock.cpp

@@ -43,9 +43,11 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     NArrow::NSSA::TProcessorContext context(
         source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
+    AFL_VERIFY(!Program);
+    Program = program;
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
-    SetPrevCategoryName(step.GetPrevName());
+    SetStartCategoryName(step.GetPrevName());
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
@@ -173,36 +175,6 @@ void IDataSource::OnStartProcessing() {
     LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(), GetTxId(),
         GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(), portionBlobBytes, portionRawBytes, minPk, maxPk, minSnapshot,
         maxSnapshot);
-}
-
-void IDataSource::StartStepExecution(const TString& stepName) {
-    const TAtomicBase threadId = static_cast<TAtomicBase>(TThread::CurrentThreadId());
-    const TAtomicBase depth = AtomicIncrement(StepExecutionDepth);
-    if (depth == 1) {
-        AtomicSet(StepExecutionThreadId, threadId);
-    } else {
-        TAtomicBase ownerThreadId = AtomicGet(StepExecutionThreadId);
-        while (!ownerThreadId) {
-            // Outermost StartStepExecution has incremented depth but not published thread id yet.
-            ownerThreadId = AtomicGet(StepExecutionThreadId);
-        }
-        AFL_VERIFY(ownerThreadId == threadId)("executing_step", ExecutingStepName)("new_step", stepName)("source_idx", SourceIdx)("depth", depth);
-    }
-    ExecutingStepName = stepName;
-}
-
-void IDataSource::FinishStepExecution() {
-    const TAtomicBase threadId = static_cast<TAtomicBase>(TThread::CurrentThreadId());
-    AFL_VERIFY(AtomicGet(StepExecutionThreadId) == threadId)("executing_step", ExecutingStepName)("source_idx", SourceIdx)(
-        "depth", AtomicGet(StepExecutionDepth));
-    const TAtomicBase depth = AtomicDecrement(StepExecutionDepth);
-    AFL_VERIFY(depth >= 0)("source_idx", SourceIdx)("executing_step", ExecutingStepName);
-    if (depth == 0) {
-        // Another outermost execution may already have started; clear ownership only if we still own it.
-        if (AtomicCas(&StepExecutionThreadId, 0, threadId)) {
-            ExecutingStepName.clear();
-        }
-    }
 }
 
 void IDataSource::StartAsyncSection() {

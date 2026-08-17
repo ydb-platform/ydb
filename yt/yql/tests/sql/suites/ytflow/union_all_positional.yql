@@ -1,0 +1,20 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+pragma PositionalUnionAll;
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+insert into Output
+select
+    string_field || "_first" as string_field,
+    CAST(1 AS Int64) as int64_field
+from Input
+union all
+select
+    string_field || "_second" as renamed_string_field,
+    int64_field as renamed_int64_field
+from Input;

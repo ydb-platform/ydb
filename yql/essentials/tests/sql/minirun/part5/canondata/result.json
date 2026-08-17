@@ -684,6 +684,20 @@
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_lambda-lambda_brief-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-fold_mut_dict_insert-default.txt-Debug]": [
+        {
+            "checksum": "dd584f3098cde7dea11fcae6c5574316",
+            "size": 694,
+            "uri": "https://{canondata_backend}/1871002/8a40cd200a505bba5aa61beb5af3fe0a738e1e71/resource.tar.gz#test.test_linear-fold_mut_dict_insert-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-fold_mut_dict_insert-default.txt-Results]": [
+        {
+            "checksum": "3833198995ea8a9812574fb22bc1c26c",
+            "size": 982,
+            "uri": "https://{canondata_backend}/1871002/8a40cd200a505bba5aa61beb5af3fe0a738e1e71/resource.tar.gz#test.test_linear-fold_mut_dict_insert-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[linear-if_linear_twice_in_both_branches-default.txt-Debug]": [
         {
             "checksum": "41993fe20b4f15ef2964581cd0f57e44",

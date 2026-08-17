@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 
 #include <type_traits>
 
@@ -262,6 +263,18 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
+            {
+                const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
+                const ui32 totalChunks = oos.GetLocalTotalChunks();
+                const ui32 usedChunks = oos.GetLocalUsedChunks();
+                const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);
+                if (totalChunks > 0) {
+                    const ui32 freeChunks = totalChunks > usedChunks ? totalChunks - usedChunks : 0;
+                    params.FreeChunksBudget = freeChunks > reserve ? freeChunks - reserve : 0;
+                }
+                params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
+                    ui64(Config->HullCompEmergencyEnableAtColor));
+            }
             auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
                 std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
             auto aid = RunInBatchPool(ctx, selector.release());
@@ -355,6 +368,9 @@ namespace NKikimr {
                         break;
                     case NHullComp::ESelectStrategy::FreeSpace:
                         ++group.BlobsFreeSpace();
+                        break;
+                    case NHullComp::ESelectStrategy::Emergency:
+                        ++group.BlobsEmergency();
                         break;
                     case NHullComp::ESelectStrategy::Squeeze:
                         ++group.BlobsSqueeze();

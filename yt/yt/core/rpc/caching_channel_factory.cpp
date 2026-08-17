@@ -107,8 +107,8 @@ public:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        YT_LOG_DEBUG("Cached channel evicted (Endpoint: %v)",
-            evictableChannel->GetEndpointDescription());
+        YT_TLOG_DEBUG("Cached channel evicted")
+            .With("Endpoint", evictableChannel->GetEndpointDescription());
 
         if (auto it = WeakChannelMap_.find(address); it != WeakChannelMap_.end()) {
             if (auto existingChannel = it->second.Lock(); existingChannel.Get() == evictableChannel) {
@@ -188,8 +188,8 @@ private:
             StrongChannelMap_.emplace(address, wrappedChannel);
             RegisterChannelForTtlChecks(address, wrappedChannel);
 
-            YT_LOG_DEBUG("Cached channel registered (Endpoint: %v)",
-                wrappedChannel->GetEndpointDescription());
+            YT_TLOG_DEBUG("Cached channel registered")
+                .With("Endpoint", wrappedChannel->GetEndpointDescription());
 
             return wrappedChannel;
         }
@@ -214,11 +214,11 @@ private:
             auto channel = it->second.Lock();
             auto lastActivityTime = channel ? std::make_optional(channel->GetLastActivityTime()) : std::nullopt;
             if (!lastActivityTime || *lastActivityTime < deadline) {
-                YT_LOG_DEBUG("Cached channel expired (Address: %v, Endpoint: %v, LastActivityTime: %v, Ttl: %v)",
-                    it->first,
-                    channel ? std::make_optional(channel->GetEndpointDescription()) : std::nullopt,
-                    lastActivityTime,
-                    IdleChannelTtl_);
+                YT_TLOG_DEBUG("Cached channel expired")
+                    .With("Address", it->first)
+                    .With("Endpoint", channel ? std::make_optional(channel->GetEndpointDescription()) : std::nullopt)
+                    .With("LastActivityTime", lastActivityTime)
+                    .With("Ttl", IdleChannelTtl_);
                 expiredItems.emplace_back(std::move(it->first), std::move(channel));
                 std::swap(*it, TtlCheckQueue_.back());
                 TtlCheckQueue_.pop_back();

@@ -330,7 +330,7 @@ public:
 
 class IResourceProcessor {
 public:
-    enum class EExecutionResult {
+    enum class EExecutionResult: ui8 {
         Success,
         Skipped,
         InBackground

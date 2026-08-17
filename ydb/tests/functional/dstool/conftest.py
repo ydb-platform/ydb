@@ -26,7 +26,7 @@ class BaseConfigBuilder:
         return self
 
     def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0,
-                  box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsconfig.EDriveStatus.ACTIVE):
+                  box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsbase3.EDriveStatus.ACTIVE):
         pdisk = self._base_config.PDisk.add()
         pdisk.NodeId = node_id
         pdisk.PDiskId = pdisk_id

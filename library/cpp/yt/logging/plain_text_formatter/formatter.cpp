@@ -1,6 +1,7 @@
 #include "formatter.h"
 
 #include <library/cpp/yt/logging/structured_payload.h>
+#include <library/cpp/yt/logging/tag.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -8,7 +9,7 @@
 
 #include <variant>
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     #include <emmintrin.h>
     #include <pmmintrin.h>
 #endif
@@ -97,7 +98,7 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
 {
     auto current = message.begin();
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     auto vectorLow = _mm_set1_epi8(PrintableASCIILow);
     auto vectorHigh = _mm_set1_epi8(PrintableASCIIHigh);
 #endif
@@ -124,7 +125,7 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
             out->AppendString(TStringBuf("...<message truncated>"));
             break;
         }
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
         // Use SSE for optimization.
         if (current + 16 > message.end()) {
             appendChar();

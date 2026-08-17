@@ -5,24 +5,23 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsDict, bool IsOptional>
 class TLengthWrapper: public TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> {
-    typedef TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>>;
 
 public:
     TLengthWrapper(TComputationMutables& mutables, IComputationNode* collection)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Collection(collection)
+        , Collection_(collection)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& collection = Collection->GetValue(compCtx);
+        const auto& collection = Collection_->GetValue(compCtx);
         if (IsOptional && !collection) {
             return NUdf::TUnboxedValuePod();
         }
@@ -31,9 +30,9 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const auto collection = GetNodeValue(Collection, ctx, block);
+        const auto collection = GetNodeValue(Collection_, ctx, block);
 
         if constexpr (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -45,7 +44,7 @@ public:
             block = good;
 
             const auto length = CallBoxedValueVirtualMethod < IsDict ? NUdf::TBoxedValueAccessor::EMethod::GetDictLength : NUdf::TBoxedValueAccessor::EMethod::GetListLength > (Type::getInt64Ty(context), collection, ctx.Codegen, block);
-            if (Collection->IsTemporaryValue()) {
+            if (Collection_->IsTemporaryValue()) {
                 CleanupBoxed(collection, ctx, block);
             }
             result->addIncoming(SetterFor<ui64>(length, context, block), block);
@@ -55,7 +54,7 @@ public:
             return result;
         } else {
             const auto length = CallBoxedValueVirtualMethod < IsDict ? NUdf::TBoxedValueAccessor::EMethod::GetDictLength : NUdf::TBoxedValueAccessor::EMethod::GetListLength > (Type::getInt64Ty(context), collection, ctx.Codegen, block);
-            if (Collection->IsTemporaryValue()) {
+            if (Collection_->IsTemporaryValue()) {
                 CleanupBoxed(collection, ctx, block);
             }
             return SetterFor<ui64>(length, context, block);
@@ -64,10 +63,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Collection);
+        this->DependsOn(Collection_);
     }
 
-    IComputationNode* const Collection;
+    IComputationNode* const Collection_;
 };
 
 } // namespace
@@ -82,5 +81,4 @@ IComputationNode* WrapLength(TCallable& callable, const TComputationNodeFactoryC
     return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TLengthWrapper, 2, isDict, isOptional, ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

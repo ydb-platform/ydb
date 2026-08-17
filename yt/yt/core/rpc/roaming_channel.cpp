@@ -46,10 +46,10 @@ public:
         }
 
         ResponseHandler_->HandleError(TError(NYT::EErrorCode::Canceled, "RPC request canceled")
-            << TErrorAttribute("request_id", Request_->GetRequestId())
-            << TErrorAttribute("realm_id", Request_->GetRealmId())
-            << TErrorAttribute("service", Request_->GetService())
-            << TErrorAttribute("method", Request_->GetMethod()));
+            .With("request_id", Request_->GetRequestId())
+            .With("realm_id", Request_->GetRealmId())
+            .With("service", Request_->GetService())
+            .With("method", Request_->GetMethod()));
 
         Request_.Reset();
         ResponseHandler_.Reset();

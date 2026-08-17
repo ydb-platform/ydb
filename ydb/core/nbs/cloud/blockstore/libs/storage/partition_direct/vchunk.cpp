@@ -3,13 +3,14 @@
 #include "flush_request.h"
 #include "partition_direct_service.h"
 #include "read_request_executor.h"
-#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -24,6 +25,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NThreading;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+NProto::TError MakeVChunkDestroyedError()
+{
+    return MakeError(E_REJECTED, "VChunk destroyed");
+}
+
+NProto::TError MakeVChunkStoppedError()
+{
+    return MakeError(E_REJECTED, "VChunk stopped");
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,7 +71,7 @@ TVChunk::TVChunk(
         .VChunkIndex = vChunkConfig.GetVChunkIndex()
      }}
     , VChunkConfig(vChunkConfig)
-    , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
+    , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(VChunkConfig, BlockSize, BlocksCount))
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
@@ -159,8 +176,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
                     std::move(request),
                     std::move(span));
             } else {
-                promise.SetValue(
-                    TReadBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                promise.SetValue(TReadBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -216,8 +233,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(std::move(bundle));
             } else {
-                bundle->SendFinalReply(
-                    TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+                bundle->SendFinalReply(TWriteBlocksLocalResponse{
+                    .Error = MakeVChunkDestroyedError()});
             }
         });
 
@@ -280,7 +297,7 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap.GetPBufferUsedSize(hostIndex);
+    return BlocksDirtyMap->GetPBufferUsedSize(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
@@ -295,7 +312,7 @@ std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
         return 0;
     }
 
-    return BlocksDirtyMap.GetSafeBarrierForErase();
+    return BlocksDirtyMap->GetSafeBarrierForErase();
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -304,15 +321,18 @@ TString TVChunk::DebugPrintDirtyMap()
 
     TStringBuilder sb;
     sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
-    sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
-    sb << "PBuffers:\n" << BlocksDirtyMap.DebugPrintPBuffers();
+    sb << "DDiskStates: " << BlocksDirtyMap->DebugPrintDDiskState() << "\n";
+    sb << "PBuffers:\n" << BlocksDirtyMap->DebugPrintPBuffers();
     sb << "Inflight(" << Inflight.size() << "):\n" << PrintInflight();
-    sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
-    sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
+    sb << "PBuffersUsage:\n" << BlocksDirtyMap->DebugPrintPBuffersUsage();
+    sb << "DDiskLocks: " << BlocksDirtyMap->DebugPrintLockedDDiskRanges()
        << "\n";
-    sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";
-    sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
-    sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
+    sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
+    sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
+    sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
+    sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
+    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
 }
 
@@ -339,7 +359,7 @@ void TVChunk::OnWriteBlocksResponse(
         "%s OnWriteBlocksResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str(),
-        FormatError(response.Error).c_str());
+        FormatError(response.Error).Quote().c_str());
 
     --InflightWritesCount;
 
@@ -349,7 +369,7 @@ void TVChunk::OnWriteBlocksResponse(
             "TVChunk.UpdateDirtyMap",
             NWilson::EFlags::AUTO_END);
 
-        BlocksDirtyMap.WriteFinished(
+        BlocksDirtyMap->WriteFinished(
             response.Lsn,
             bundle->GetVChunkRange(),
             response.RequestedWrites,
@@ -379,7 +399,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
+    BlocksDirtyMap->UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
     ScheduleCleaningUp();
@@ -392,7 +412,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (const auto& meta: response.Meta) {
-        BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
+        BlocksDirtyMap->RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
     if (!DirtyMapReady.HasValue()) {
         DirtyMapReady.SetValue();
@@ -436,17 +456,17 @@ void TVChunk::DoStop()
 
     Stopped = true;
 
+    if (Copiers.empty()) {
+        OnStopped();
+        return;
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s DoStop copiers: %zu",
         LogTitle.GetWithTime().c_str(),
         Copiers.size());
-
-    if (Copiers.empty()) {
-        OnStopped();
-        return;
-    }
 
     TVector<TFuture<TDDiskDataCopier::EResult>> copierStops;
     for (const auto& [_, copier]: Copiers) {
@@ -479,8 +499,8 @@ void TVChunk::DoReadBlocksLocal(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        promise.SetValue(TReadBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        promise.SetValue(
+            TReadBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 
@@ -493,7 +513,7 @@ void TVChunk::DoReadBlocksLocal(
             "TVChunk.DirtyMap.ReadHint",
             NWilson::EFlags::AUTO_END);
 
-        readHint = BlocksDirtyMap.MakeReadHint(vchunkRange);
+        readHint = BlocksDirtyMap->MakeReadHint(vchunkRange);
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -528,7 +548,7 @@ void TVChunk::DoReadBlocksLocal(
                         std::move(span));
                 } else {
                     promise.SetValue(TReadBlocksLocalResponse{
-                        .Error = MakeError(E_CANCELLED)});
+                        .Error = MakeVChunkDestroyedError()});
                 }
             });
         return;
@@ -584,8 +604,8 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (Stopped) {
-        bundle->SendFinalReply(TWriteBlocksLocalResponse{
-            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        bundle->SendFinalReply(
+            TWriteBlocksLocalResponse{.Error = MakeVChunkStoppedError()});
         return;
     }
 
@@ -595,7 +615,7 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     // thread, so the cleanup watermark covers it from the moment of generation.
     const ui64 lsn = PartitionDirectService->GenerateLsn();
     bundle->SetLsn(lsn);
-    BlocksDirtyMap.RegisterInflightWrite(lsn, bundle->GetVChunkRange());
+    BlocksDirtyMap->RegisterInflightWrite(lsn, bundle->GetVChunkRange());
 
     LOG_DEBUG(
         *ActorSystem,
@@ -620,12 +640,12 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 void TVChunk::DoFlush(bool force)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    if (!BlocksDirtyMap.NeedFlush()) {
+    if (!BlocksDirtyMap->NeedFlush()) {
         return;
     }
 
     auto flushBatch =
-        BlocksDirtyMap.MakeFlushHint(force ? 1 : SyncRequestsBatchSize);
+        BlocksDirtyMap->MakeFlushHint(force ? 1 : SyncRequestsBatchSize);
 
     LOG_DEBUG(
         *ActorSystem,
@@ -643,7 +663,7 @@ void TVChunk::DoFlush(bool force)
             DirectBlockGroup,
             route,
             std::move(hint),
-            TraceService->CreteRootSpan("Flush"));
+            TraceService->CreateRootSpan("Flush"));
         Inflight.push_back(flushExecutor);
 
         auto future = flushExecutor->GetFuture();
@@ -674,7 +694,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 
     --InflightFlushesCount;
 
-    BlocksDirtyMap.FlushFinished(
+    BlocksDirtyMap->FlushFinished(
         response.Route,
         response.FlushOk,
         response.FlushFailed);
@@ -696,18 +716,18 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!BlocksDirtyMap.NeedErase()) {
+    if (!BlocksDirtyMap->NeedErase()) {
         return;
     }
 
     TEraseHints hints;
     switch (eraseType) {
         case TBlocksDirtyMap::EEraseType::Standard:
-            hints =
-                BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
+            hints = BlocksDirtyMap->MakeEraseHint(
+                force ? 1 : SyncRequestsBatchSize);
             break;
         case TBlocksDirtyMap::EEraseType::Belated:
-            hints = BlocksDirtyMap.MakeEraseBelatedHint();
+            hints = BlocksDirtyMap->MakeEraseBelatedHint();
             break;
     };
 
@@ -727,7 +747,7 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
             DirectBlockGroup,
             host,
             std::move(hint),
-            TraceService->CreteRootSpan("Erase"));
+            TraceService->CreateRootSpan("Erase"));
         Inflight.push_back(eraseExecutor);
 
         auto future = eraseExecutor->GetFuture();
@@ -762,7 +782,7 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
         "%s OnEraseResponse",
         LogTitle.GetWithTime().c_str());
 
-    BlocksDirtyMap.EraseFinished(
+    BlocksDirtyMap->EraseFinished(
         response.Host,
         response.EraseOk,
         response.EraseFailed);
@@ -807,8 +827,8 @@ void TVChunk::ScheduleCleaningUp()
         NKikimrServices::NBS_PARTITION,
         "%s ScheduleCleaningUp: %s %s",
         LogTitle.GetWithTime().c_str(),
-        BlocksDirtyMap.NeedFlush() ? "NeedFlush" : "",
-        BlocksDirtyMap.NeedErase() ? "NeedErase" : "");
+        BlocksDirtyMap->NeedFlush() ? "NeedFlush" : "",
+        BlocksDirtyMap->NeedErase() ? "NeedErase" : "");
 
     CleaningUpScheduled = true;
 
@@ -843,8 +863,8 @@ void TVChunk::CleaningUp()
         NKikimrServices::NBS_PARTITION,
         "%s CleaningUp: %s %s",
         LogTitle.GetWithTime().c_str(),
-        BlocksDirtyMap.NeedFlush() ? "NeedFlush" : "",
-        BlocksDirtyMap.NeedErase() ? "NeedErase" : "");
+        BlocksDirtyMap->NeedFlush() ? "NeedFlush" : "",
+        BlocksDirtyMap->NeedErase() ? "NeedErase" : "");
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
@@ -856,19 +876,19 @@ void TVChunk::UpdatePendingCounters()
 
     Counters.UpdatePending(
         EVChunkOperation::Flush,
-        BlocksDirtyMap.GetFlushPendingCount());
+        BlocksDirtyMap->GetFlushPendingCount());
     Counters.UpdatePending(
         EVChunkOperation::Erase,
-        BlocksDirtyMap.GetErasePendingCount());
+        BlocksDirtyMap->GetErasePendingCount());
     Counters.UpdatePending(
         EVChunkOperation::EraseBelated,
-        BlocksDirtyMap.GetEraseBelatedCount());
+        BlocksDirtyMap->GetEraseBelatedCount());
     Counters.UpdateMinLsn(
         EVChunkOperation::Flush,
-        BlocksDirtyMap.GetMinFlushPendingLsn());
+        BlocksDirtyMap->GetMinFlushPendingLsn());
     Counters.UpdateMinLsn(
         EVChunkOperation::Erase,
-        BlocksDirtyMap.GetMinErasePendingLsn());
+        BlocksDirtyMap->GetMinErasePendingLsn());
 }
 
 void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
@@ -955,76 +975,69 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
         newConfig.DebugPrint().c_str());
 
     VChunkConfig = std::move(newConfig);
-    BlocksDirtyMap.UpdateConfig(VChunkConfig);
+    BlocksDirtyMap->UpdateConfig(VChunkConfig);
 
-    // Remove unnecessary copiers
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
     {
-        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
-        const bool needCopier = watermark != std::nullopt;
-        const auto* copier = Copiers.FindPtr(hostIndex);
-        if (needCopier || !copier) {
-            continue;
-        }
-
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Copier %s stopping",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str());
-
-        (*copier)->Stop().Subscribe(
-            [weakSelf = weak_from_this(), hostIndex]   //
-            (const TFuture<TDDiskDataCopier::EResult>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->OnCopierStopped(hostIndex, f.GetValue());
-                }
-            });
-        Copiers.erase(hostIndex);
-    }
-
-    // Add new copiers
-    for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
-         ++hostIndex)
-    {
-        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
-        const bool needCopier = watermark != std::nullopt;
+        const bool needCopier =
+            BlocksDirtyMap->GetFreshRange(hostIndex) != std::nullopt &&
+            VChunkConfig.GetDisabledHosts().Get(hostIndex) == false;
         const auto* copier = Copiers.FindPtr(hostIndex);
 
-        if (!needCopier || copier) {
-            continue;
+        if (needCopier && !copier) {
+            // Add new copier
+
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s started",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
+
+            auto newCopier = Copiers[hostIndex] =
+                std::make_shared<TDDiskDataCopier>(
+                    ActorSystem,
+                    TraceService,
+                    PartitionDirectService,
+                    DiskDescription,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    BlocksDirtyMap,
+                    hostIndex);
+
+            newCopier->Start().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopyComplete(hostIndex, f.GetValue());
+                    }
+                });
         }
+        if (!needCopier && copier) {
+            // Remove unnecessary copier
 
-        BlocksDirtyMap.SetReadWatermark(hostIndex, *watermark);
-        auto newCopier = Copiers[hostIndex] =
-            std::make_shared<TDDiskDataCopier>(
-                ActorSystem,
-                TraceService,
-                PartitionDirectService,
-                DiskDescription,
-                VChunkConfig,
-                DirectBlockGroup,
-                &BlocksDirtyMap,
-                hostIndex);
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s stopping",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
 
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Copier %s started",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str());
+            (*copier)->Stop().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopierStopped(hostIndex, f.GetValue());
+                    }
+                });
+            Copiers.erase(hostIndex);
 
-        newCopier->Start().Subscribe(
-            [weakSelf = weak_from_this(), hostIndex]   //
-            (const TFuture<TDDiskDataCopier::EResult>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->OnCopyComplete(hostIndex, f.GetValue());
-                }
-            });
+            // Just in case, clear the locks of the deleted copier.
+            BlocksDirtyMap->ClearRangeSyncs(hostIndex);
+        }
     }
 }
 
@@ -1044,7 +1057,8 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             break;
         }
         case EHostState::Offline: {
-            const TString message = newConfig.EvacuateHost(hostIndex);
+            newConfig.DisableHost(hostIndex);
+            const TString message = newConfig.PromoteHostIfNeeded();
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

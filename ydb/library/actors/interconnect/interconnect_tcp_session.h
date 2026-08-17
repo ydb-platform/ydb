@@ -7,7 +7,6 @@
 #include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/retro_tracing/spans.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -31,7 +30,6 @@
 #include "events_local.h"
 #include "interconnect_impl.h"
 #include "interconnect_zc_processor.h"
-#include "uring_context.h"
 #include "interconnect_channel.h"
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
@@ -102,7 +100,7 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
-    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+    // DEFAULT_DEADPEER_TIMEOUT lives in interconnect_common.h -- it is shared with the v2 data plane.
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;
     static constexpr ui32 DEFAULT_TOTAL_INFLIGHT_DATA = 4 * 10240 * 1024;
@@ -282,8 +280,6 @@ namespace NActors {
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
             cFunc(TEvConfirmUpdate::EventType, HandleConfirmUpdate)
             hFunc(NMon::TEvHttpInfoRes, GenerateHttpInfo)
-            hFunc(TEvUringRecvComplete, Handle)
-            hFunc(TEvUringRegisterResult, Handle)
         )
 
     private:
@@ -298,20 +294,6 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         ui32 NodeId = 0;
         TSessionParams Params;
-
-        TUringContext::TPtr UringContext;
-        ui16 MainRecvBufGroupId = 0;
-        ui16 XdcRecvBufGroupId = 0;
-        bool MainRecvMultishotActive = false;
-        [[maybe_unused]] bool XdcRecvMultishotActive = false;
-        // Diagnostic recv-path counters (instrumentation for the idle-keepalive DeadPeer hunt).
-        ui64 UringMainRecvCompletions = 0;
-        ui64 UringMainRecvBytes = 0;
-        // XDC receive over io_uring: a single async readv directly into the XdcInputQ
-        // destination spans (or the catch-stream buffer) is kept in flight at a time.
-        ui64 UringXdcReadSeqNo = 0;
-        bool UringXdcReadInFlight = false;
-        bool UringXdcReadIsCatch = false;
 
     protected:
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
@@ -374,18 +356,10 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void Handle(TEvUringRecvComplete::TPtr& ev);
-        void Handle(TEvUringRegisterResult::TPtr& ev);
         void HandleConfirmUpdate();
         void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
         void Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
         void ReceiveData();
-        void StartRecvUring();
-        // XDC-over-io_uring receive helpers (Caveat 3).
-        void DriveXdcUring();
-        bool SubmitXdcRecvUring();
-        void ProcessXdcCatchBytesUring(ssize_t recvres);
-        void ProcessXdcBytesUring(ssize_t recvres);
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
@@ -597,10 +571,6 @@ namespace NActors {
                 hFunc(TEvSocketDisconnect, OnDisconnect)
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
-                hFunc(TEvUringRegisterResult, Handle)
-                hFunc(TEvUringRegisterFailed, Handle)
-                hFunc(TEvUringWriteComplete, Handle)
-                hFunc(TEvUringSendZcNotif, Handle)
                 cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
@@ -634,12 +604,7 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void Handle(TEvUringRegisterResult::TPtr& ev);
-        void Handle(TEvUringRegisterFailed::TPtr& ev);
-        void Handle(TEvUringWriteComplete::TPtr& ev);
-        void Handle(TEvUringSendZcNotif::TPtr& ev);
         void WriteData();
-        void WriteDataUring();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
@@ -684,12 +649,14 @@ namespace NActors {
         TWatchdogTimer<TEvCheckLostConnection> LostConnectionWatchdog;
 
         void OnCloseOnIdleTimerHit() {
-            LOG_INFO_IC("ICS27", "CloseOnIdle timer hit, session terminated");
+            YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "CloseOnIdle timer hit, session terminated",
+                {"marker", "ICS27"});
             Terminate(TDisconnectReason::CloseOnIdle());
         }
 
         void OnLostConnectionTimerHit() {
-            LOG_ERROR_IC("ICS28", "LostConnection timer hit, session terminated");
+            YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "LostConnection timer hit, session terminated",
+                {"marker", "ICS28"});
             Terminate(TDisconnectReason::LostConnection());
         }
 
@@ -752,38 +719,6 @@ namespace NActors {
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
-
-        TUringContext::TPtr UringContext;
-        ui64 UringWriteSeqNo = 0;
-        bool UringMainWriteInFlight = false;
-        bool UringXdcWriteInFlight = false;
-        struct TUringWriteInFlight {
-            size_t Bytes;
-            bool IsXdc;
-            bool IsOutOfBand = false;
-            std::vector<struct iovec> Iovecs;
-        };
-        THashMap<ui64, TUringWriteInFlight> UringWritesInFlight;
-
-        // Diagnostic send-path counters (instrumentation for the idle-keepalive DeadPeer hunt).
-        ui64 UringMainWritevSubmitted = 0;  // main-socket writevs handed to io_uring
-        ui64 UringMainWriteCompleted = 0;   // main-socket writev completions processed
-        // Monotonic timestamp at which UringMainWriteInFlight last went true; TMonotonic::Zero()
-        // when the latch is clear. Used to detect a wedged single-in-flight write latch.
-        TMonotonic UringMainWriteInFlightSince;
-        TMonotonic UringMainWriteStuckReported; // throttles the "latch stuck" NOTICE
-
-        // IORING_OP_SEND_ZC buffer lifetime (Caveat 5). When the XDC stream is sent with
-        // io_uring zero-copy, an XdcStream buffer must not be freed (DropFront) until the
-        // kernel posts the corresponding IORING_CQE_F_NOTIF. We advance the read cursor on
-        // the data CQE (safe) but gate DropFront on the cumulative notif-confirmed offset.
-        bool UringZcEnabled = false;
-        ui64 XdcZcNotifCum = 0;     // cumulative XDC bytes whose send_zc NOTIF has arrived
-        ui64 XdcDropWantedCum = 0;  // cumulative XDC bytes the peer has confirmed for dropping
-        ui64 XdcDroppedCum = 0;     // cumulative XDC bytes physically dropped from XdcStream
-        std::deque<ui64> XdcZcNotifQueue; // FIFO of in-flight zc send sizes awaiting NOTIF
-        void DropFrontXdc(size_t bytes);
-        void FlushXdcZcDrop();
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 

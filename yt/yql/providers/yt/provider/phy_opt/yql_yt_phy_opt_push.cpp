@@ -36,8 +36,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(T
 
     for (auto path: section.Paths()) {
         TYtPathInfo pathInfo(path);
-        // Dynamic tables don't support range selectors
-        if (pathInfo.Table->Meta->IsDynamic) {
+        // Dynamic and RLS tables don't support range selectors
+        if (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS) {
             return node;
         }
     }

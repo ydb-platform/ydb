@@ -10,7 +10,7 @@ PEERDIR(
 )
 
 NO_CHECK_IMPORTS(
-    ydb.tests.oss.canonical.*
+    *ydb.tests.oss.canonical.*
 )
 
 DEPENDS(

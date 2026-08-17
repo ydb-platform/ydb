@@ -1,9 +1,11 @@
+import os.path
 import sys
 import hashlib
 
 import pytest
 
 import numpy as np
+from numpy.exceptions import AxisError
 from numpy.linalg import LinAlgError
 from numpy.testing import (
     assert_, assert_raises, assert_equal, assert_allclose,
@@ -525,8 +527,8 @@ class TestIntegers:
 
     def test_repeatability_broadcasting(self, endpoint):
         for dt in self.itype:
-            lbnd = 0 if dt in (bool, np.bool_) else np.iinfo(dt).min
-            ubnd = 2 if dt in (bool, np.bool_) else np.iinfo(dt).max + 1
+            lbnd = 0 if dt in (bool, np.bool) else np.iinfo(dt).min
+            ubnd = 2 if dt in (bool, np.bool) else np.iinfo(dt).max + 1
             ubnd = ubnd - 1 if endpoint else ubnd
 
             # view as little endian for hash
@@ -641,7 +643,7 @@ class TestIntegers:
             lbnd = 0 if dt is bool else np.iinfo(dt).min
             ubnd = 2 if dt is bool else np.iinfo(dt).max + 1
             ubnd = ubnd - 1 if endpoint else ubnd
-            dt = np.bool_ if dt is bool else dt
+            dt = np.bool if dt is bool else dt
 
             sample = self.rfunc(lbnd, ubnd, endpoint=endpoint, dtype=dt)
             assert_equal(sample.dtype, dt)
@@ -662,7 +664,7 @@ class TestIntegers:
             lbnd = 0 if dt is bool else np.iinfo(dt).min
             ubnd = 2 if dt is bool else np.iinfo(dt).max + 1
             ubnd = ubnd - 1 if endpoint else ubnd
-            dt = np.bool_ if dt is bool else dt
+            dt = np.bool if dt is bool else dt
 
             sample = self.rfunc([lbnd], [ubnd], endpoint=endpoint, dtype=dt)
             assert_equal(sample.dtype, dt)
@@ -931,6 +933,15 @@ class TestRandomDist:
         res = hashlib.sha256(actual.view(np.int8)).hexdigest()
         assert_(choice_hash == res)
 
+    def test_choice_array_size_empty_tuple(self):
+        random = Generator(MT19937(self.seed))
+        assert_array_equal(random.choice([1, 2, 3], size=()), np.array(1),
+                           strict=True)
+        assert_array_equal(random.choice([[1, 2, 3]], size=()), [1, 2, 3])
+        assert_array_equal(random.choice([[1]], size=()), [1], strict=True)
+        assert_array_equal(random.choice([[1]], size=(), axis=1), [1],
+                           strict=True)
+
     def test_bytes(self):
         random = Generator(MT19937(self.seed))
         actual = random.bytes(10)
@@ -1012,9 +1023,9 @@ class TestRandomDist:
     def test_shuffle_exceptions(self):
         random = Generator(MT19937(self.seed))
         arr = np.arange(10)
-        assert_raises(np.AxisError, random.shuffle, arr, 1)
+        assert_raises(AxisError, random.shuffle, arr, 1)
         arr = np.arange(9).reshape((3, 3))
-        assert_raises(np.AxisError, random.shuffle, arr, 3)
+        assert_raises(AxisError, random.shuffle, arr, 3)
         assert_raises(TypeError, random.shuffle, arr, slice(1, 2, None))
         arr = [[1, 2, 3], [4, 5, 6]]
         assert_raises(NotImplementedError, random.shuffle, arr, 1)
@@ -1022,7 +1033,7 @@ class TestRandomDist:
         arr = np.array(3)
         assert_raises(TypeError, random.shuffle, arr)
         arr = np.ones((3, 2))
-        assert_raises(np.AxisError, random.shuffle, arr, 2)
+        assert_raises(AxisError, random.shuffle, arr, 2)
 
     def test_shuffle_not_writeable(self):
         random = Generator(MT19937(self.seed))
@@ -1044,10 +1055,10 @@ class TestRandomDist:
         assert_array_equal(actual, np.atleast_2d(desired).T)
 
         bad_x_str = "abcd"
-        assert_raises(np.AxisError, random.permutation, bad_x_str)
+        assert_raises(AxisError, random.permutation, bad_x_str)
 
         bad_x_float = 1.2
-        assert_raises(np.AxisError, random.permutation, bad_x_float)
+        assert_raises(AxisError, random.permutation, bad_x_float)
 
         random = Generator(MT19937(self.seed))
         integer_val = 10
@@ -1072,9 +1083,9 @@ class TestRandomDist:
     def test_permutation_exceptions(self):
         random = Generator(MT19937(self.seed))
         arr = np.arange(10)
-        assert_raises(np.AxisError, random.permutation, arr, 1)
+        assert_raises(AxisError, random.permutation, arr, 1)
         arr = np.arange(9).reshape((3, 3))
-        assert_raises(np.AxisError, random.permutation, arr, 3)
+        assert_raises(AxisError, random.permutation, arr, 3)
         assert_raises(TypeError, random.permutation, arr, slice(1, 2, None))
 
     @pytest.mark.parametrize("dtype", [int, object])
@@ -1233,7 +1244,7 @@ class TestRandomDist:
     @pytest.mark.slow
     def test_dirichlet_moderately_small_alpha(self):
         # Use alpha.max() < 0.1 to trigger stick breaking code path
-        alpha = np.array([0.02, 0.04, 0.03])
+        alpha = np.array([0.02, 0.04])
         exact_mean = alpha / alpha.sum()
         random = Generator(MT19937(self.seed))
         sample = random.dirichlet(alpha, size=20000000)
@@ -2577,7 +2588,7 @@ class TestSingleEltArrayInput:
             assert_equal(out.shape, self.tgtShape)
 
     def test_integers(self, endpoint):
-        itype = [np.bool_, np.int8, np.uint8, np.int16, np.uint16,
+        itype = [np.bool, np.int8, np.uint8, np.int16, np.uint16,
                  np.int32, np.uint32, np.int64, np.uint64]
         func = random.integers
         high = np.array([1])
@@ -2737,10 +2748,51 @@ def test_generator_ctor_old_style_pickle():
     rg = np.random.Generator(np.random.PCG64DXSM(0))
     rg.standard_normal(1)
     # Directly call reduce which is used in pickling
-    ctor, args, state_a = rg.__reduce__()
+    ctor, (bit_gen, ), _ = rg.__reduce__()
     # Simulate unpickling an old pickle that only has the name
-    assert args[:1] == ("PCG64DXSM",)
-    b = ctor(*args[:1])
-    b.bit_generator.state = state_a
+    assert bit_gen.__class__.__name__ == "PCG64DXSM"
+    print(ctor)
+    b = ctor(*("PCG64DXSM",))
+    print(b)
+    b.bit_generator.state = bit_gen.state
     state_b = b.bit_generator.state
-    assert state_a == state_b
+    assert bit_gen.state == state_b
+
+
+def test_pickle_preserves_seed_sequence():
+    # GH 26234
+    # Add explicit test that bit generators preserve seed sequences
+    import pickle
+
+    rg = np.random.Generator(np.random.PCG64DXSM(20240411))
+    ss = rg.bit_generator.seed_seq
+    rg_plk = pickle.loads(pickle.dumps(rg))
+    ss_plk = rg_plk.bit_generator.seed_seq
+    assert_equal(ss.state, ss_plk.state)
+    assert_equal(ss.pool, ss_plk.pool)
+
+    rg.bit_generator.seed_seq.spawn(10)
+    rg_plk = pickle.loads(pickle.dumps(rg))
+    ss_plk = rg_plk.bit_generator.seed_seq
+    assert_equal(ss.state, ss_plk.state)
+
+
+@pytest.mark.parametrize("version", [121, 126])
+def test_legacy_pickle(version):
+    # Pickling format was changes in 1.22.x and in 2.0.x
+    import pickle
+    import gzip
+
+    import yatest.common as yc
+    pwd = yc.source_path(os.path.dirname(__file__))
+    pkl_file = os.path.join(
+        pwd, "data", f"generator_pcg64_np{version}.pkl.gz"
+    )
+    with gzip.open(pkl_file) as gz:
+        rg = pickle.load(gz)
+    state = rg.bit_generator.state['state']
+
+    assert isinstance(rg, Generator)
+    assert isinstance(rg.bit_generator, np.random.PCG64)
+    assert state['state'] == 35399562948360463058890781895381311971
+    assert state['inc'] == 87136372517582989555478159403783844777

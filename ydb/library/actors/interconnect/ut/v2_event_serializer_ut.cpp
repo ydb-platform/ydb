@@ -4,6 +4,9 @@
 #include <ydb/library/actors/interconnect/v2_event_serializer.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 
+#include <contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord.h>
+#include <contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord_test_helpers.h>
+
 #include <util/string/cast.h>
 
 using namespace NActors;
@@ -66,8 +69,8 @@ void CheckIndexedEvent(IEventHandle& outEv, ui16 channel, size_t dataLen, bool w
     }
 }
 
-std::deque<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
-    std::deque<TContiguousSpan> spans;
+std::vector<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
+    std::vector<TContiguousSpan> spans;
 
     for (;;) {
         if (bufs.empty() || bufs.back().size() < 1024) {
@@ -102,7 +105,7 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
     ser.Push(std::move(h));
 
     std::vector<TRcBuf> bufs;
-    std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+    std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
     TEventDeserializer deser(TScopeId{});
     TEventProcessor processor;
@@ -178,7 +181,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
 
         std::vector<TRcBuf> bufs;
-        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
         TString stream;
         for (const TContiguousSpan& s : spans) {
@@ -232,13 +235,13 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
         struct TBatch {
             TRcBuf Scratch;
-            std::deque<TContiguousSpan> Spans;
+            std::vector<TContiguousSpan> Spans;
             size_t Bytes;
         };
         std::vector<TBatch> batches;
         for (;;) {
             TRcBuf scratch = TRcBuf::Uninitialized(4096); // small scratch -> many pipelined batches
-            std::deque<TContiguousSpan> spans;
+            std::vector<TContiguousSpan> spans;
             size_t total = 0;
             for (;;) {
                 const size_t produced = ser.ProduceOutputStream(scratch, &spans);
@@ -312,7 +315,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
 
         std::vector<TRcBuf> bufs;
-        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
         // feed the produced stream to the deserializer chunk by chunk and record the exact delivery order
         TEventDeserializer deser(TScopeId{});
@@ -362,6 +365,176 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         Cerr << "lastOtherPos# " << lastOtherPos << " floodBeforeLastOther# " << floodBeforeLastOther << Endl;
         UNIT_ASSERT_C(floodBeforeLastOther < numFlood / 4,
             "the flooded channel blocks the other one: floodBeforeLastOther# " << floodBeforeLastOther);
+    }
+
+    // Mock event whose body is emitted solely via WriteCord. The Cord is temporary — built inside
+    // SerializeToArcadiaStream from MakeCordFromExternal and destroyed when that returns — so only
+    // WriteCord's GetCords() (drained into RefcountItems::Cords) keeps the aliased backing alive.
+    // Keeping a Cord member on the event would hide a missing RefcountItems::Cords push, because the
+    // Event itself is retained until CommitProducedBytes.
+    //
+    // The external releaser poisons the backing with 0xAB before freeing it, so a premature Cord
+    // release is visible in still-aliased output spans without relying on ASAN or allocator churn.
+    struct TCordEvent: public IEventBase {
+        static constexpr char Poison = char(0xAB);
+
+        char Fill = 'X';
+        size_t Size = 0;
+        bool Fragmented = false;
+
+        TCordEvent(char fill, size_t size, bool fragmented = false)
+            : Fill(fill)
+            , Size(size)
+            , Fragmented(fragmented)
+        {}
+
+        static y_absl::Cord MakePoisoningCord(char fill, size_t size) {
+            auto* heap = new TString(size, fill);
+            return y_absl::MakeCordFromExternal(
+                y_absl::string_view(heap->data(), heap->size()),
+                [heap](y_absl::string_view) {
+                    if (!heap->empty()) {
+                        memset(heap->Detach(), static_cast<unsigned char>(Poison), heap->size());
+                    }
+                    delete heap;
+                });
+        }
+
+        y_absl::Cord MakeTemporaryCord() const {
+            if (Fragmented) {
+                const size_t part = Size / 3;
+                y_absl::Cord cord = MakePoisoningCord(Fill, part);
+                cord.Append(MakePoisoningCord(static_cast<char>(Fill + 1), part));
+                cord.Append(MakePoisoningCord(static_cast<char>(Fill + 2), Size - 2 * part));
+                return cord;
+            }
+            return MakePoisoningCord(Fill, Size);
+        }
+
+        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
+            y_absl::Cord tmp = MakeTemporaryCord();
+            return chunker->WriteCord(tmp);
+        }
+        bool IsSerializable() const override {
+            return true;
+        }
+        TString ToStringHeader() const override {
+            return TString();
+        }
+        ui32 Type() const override {
+            return TEvPrivate::EvTest + 100;
+        }
+        ui32 CalculateSerializedSize() const override {
+            return Size;
+        }
+    };
+
+    std::unique_ptr<IEventHandle> MakeCordEventHandle(ui16 channel, ui64 cookie, char fill, size_t size,
+            bool fragmented = false)
+    {
+        auto* ev = new TCordEvent(fill, size, fragmented);
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        return std::make_unique<IEventHandle>(recipient, sender, ev,
+            IEventHandle::MakeFlags(channel, 0), cookie);
+    }
+
+    Y_UNIT_TEST(WriteCordBytesAppearInOutputStream) {
+        constexpr size_t cordSize = 4096 + 27;
+        TEventSerializer ser(true);
+        ser.Push(MakeCordEventHandle(/*channel=*/1, /*cookie=*/7, /*fill=*/'Z', /*size=*/cordSize));
+
+        std::vector<TRcBuf> bufs;
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+        TString stream;
+        for (const TContiguousSpan& s : spans) {
+            stream.append(s.data(), s.size());
+        }
+
+        // Event body is raw Cord bytes interleaved with chunk headers, so long runs may be split —
+        // check a short run and that enough Z bytes made it into the stream.
+        UNIT_ASSERT(stream.Contains(TString(64, 'Z')));
+        size_t zCount = 0;
+        for (char c : stream) {
+            if (c == 'Z') {
+                ++zCount;
+            }
+        }
+        UNIT_ASSERT_GE(zCount, cordSize);
+        UNIT_ASSERT_GE(stream.size(), cordSize);
+    }
+
+    // Same UAF pattern as CommitDoesNotReleaseEventsWithBytesStillInFlight, but the aliased memory comes
+    // from a temporary WriteCord Cord / RefcountItems::Cords — not from an Event-owned Cord member.
+    Y_UNIT_TEST(CommitDoesNotReleaseCordBytesStillInFlight) {
+        TEventSerializer ser(true);
+
+        // One large fragmented Cord-backed event plus many smaller ones so serialization pipelines
+        // across batches. External releasers poison with 0xAB when the Cord is dropped.
+        constexpr size_t largeSize = 60000;
+        ser.Push(MakeCordEventHandle(/*channel=*/1, /*cookie=*/0, /*fill=*/'A', largeSize, /*fragmented=*/true));
+
+        constexpr ui64 numSmall = 40;
+        for (ui64 i = 1; i <= numSmall; ++i) {
+            ser.Push(MakeCordEventHandle(/*channel=*/2, i, static_cast<char>('a' + (i % 26)), 1000));
+        }
+
+        struct TBatch {
+            TRcBuf Scratch;
+            std::vector<TContiguousSpan> Spans;
+            size_t Bytes;
+        };
+        // One ProduceOutputStream call per batch: Cord aliasing barely consumes scratch, so draining
+        // a large scratch in an inner loop would collapse everything into a single batch.
+        std::vector<TBatch> batches;
+        for (;;) {
+            TRcBuf scratch = TRcBuf::Uninitialized(512);
+            std::vector<TContiguousSpan> spans;
+            const size_t produced = ser.ProduceOutputStream(scratch, &spans);
+            if (!produced) {
+                break;
+            }
+            batches.push_back({std::move(scratch), std::move(spans), produced});
+        }
+
+        TString stream;
+        for (const TBatch& b : batches) {
+            for (const TContiguousSpan& s : b.Spans) {
+                stream.append(s.data(), s.size());
+            }
+        }
+        // Fragmented large event is Fill/'A', Fill+1/'B', Fill+2/'C' thirds. If RefcountItems::Cords
+        // was skipped, the external releaser already poisoned those aliases with 0xAB.
+        UNIT_ASSERT(stream.Contains(TString(64, 'A')));
+        UNIT_ASSERT(stream.Contains(TString(64, 'B')));
+        UNIT_ASSERT(stream.Contains(TString(64, 'C')));
+        UNIT_ASSERT(!stream.Contains(TString(64, TCordEvent::Poison)));
+
+        volatile ui64 acc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            ser.CommitProducedBytes(batches[i].Bytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+            // After committing earlier batches, in-flight Cord aliases must still be unpoisoned.
+            TString rest;
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    rest.append(s.data(), s.size());
+                }
+            }
+            if (!rest.empty()) {
+                UNIT_ASSERT_C(!rest.Contains(TString(64, TCordEvent::Poison)),
+                    "Cord backing was released while bytes still in flight (missing RefcountItems::Cords?)");
+            }
+        }
+        Y_UNUSED(acc);
+        UNIT_ASSERT_GT(batches.size(), 1);
     }
 
 }

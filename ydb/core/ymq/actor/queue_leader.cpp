@@ -1631,7 +1631,8 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
                 TablesFormat_ = ui32(data["TablesFormat"]);
             }
             IsFifoQueue_ = bool(data["FifoQueue"]);
-            TopicCreated_ = bool(data["TopicCreated"]);
+            // TopicCreated may be missing for queues created by older versions.
+            TopicCreated_ = data["TopicCreated"].HaveValue() ? bool(data["TopicCreated"]) : false;
             Shards_.resize(ShardsCount_);
             const auto& cfg = Cfg();
             if (IsFifoQueue_) {

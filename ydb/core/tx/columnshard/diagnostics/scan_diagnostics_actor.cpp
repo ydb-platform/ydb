@@ -37,7 +37,8 @@ void TScanDiagnosticsActor::Bootstrap() {
 
 void TScanDiagnosticsActor::Handle(const NMon::TEvRemoteHttpInfo::TPtr& ev) {
     TStringBuilder htmlResult;
-    htmlResult << R"(<script language="javascript" type="text/javascript" src="../columnshard/viz-global.js"></script>)";
+    htmlResult << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << SelfId().NodeId()
+               << "/columnshard/viz-global.js\"></script>";
     htmlResult << RenderScanDiagnostics(LastPublicScans, "public");
     htmlResult << RenderScanDiagnostics(LastInternalScans, "internal");
     Send(ev->Sender, std::make_unique<NMon::TEvRemoteHttpInfoRes>(htmlResult));

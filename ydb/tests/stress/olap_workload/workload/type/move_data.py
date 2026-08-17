@@ -49,7 +49,8 @@ class WorkloadMoveData(WorkloadBase):
         response = self.kikimr_client.console_request(text_format.MessageToString(request.protobuf))
         result = cms_tenants_pb.GetDatabaseStatusResult()
         response.GetTenantStatusResponse.Response.operation.result.Unpack(result)
-        return result.required_resources.storage_units[0]
+        units = result.required_resources.storage_units
+        return units[0] if units else None
 
     def _alter_units(self, delta):
         request = AlterTenantRequest(self.database)
@@ -71,7 +72,16 @@ class WorkloadMoveData(WorkloadBase):
         return False
 
     def _pre_start(self):
-        units = self._storage_units()
+        # A domain path such as /Root reports no storage units, and CMS alters do not
+        # apply to it; disable the workload instead of failing the whole runner.
+        try:
+            units = self._storage_units()
+        except Exception as e:
+            logger.warning("move_data: cannot read tenant storage units (%s), workload disabled", e)
+            return False
+        if units is None:
+            logger.warning("move_data: database reports no storage units, workload disabled")
+            return False
         self.unit_kind = units.unit_kind
         self.unit_count = units.count
         # Removing a unit must leave at least one behind, so a single-unit pool is
@@ -88,6 +98,8 @@ class WorkloadMoveData(WorkloadBase):
         target = self.unit_count - 1
         self._alter_units(-1)
         if not self._wait_units(target):
+            if self.is_stop_requested():
+                return
             raise RuntimeError(f"pool did not shrink to {target} units within {self.converge_timeout}s")
         self.shrinks += 1
         logger.info("move_data: shrunk pool to %s units, letting the move run", target)
@@ -101,6 +113,10 @@ class WorkloadMoveData(WorkloadBase):
         target = self.unit_count + 1
         self._alter_units(1)
         if not self._wait_units(target):
+            # _wait_units also returns False when the workload is asked to stop, and a
+            # decommission outlives a short run: that is a shutdown, not a failure.
+            if self.is_stop_requested():
+                return
             raise RuntimeError(f"pool did not grow back to {target} units within {self.converge_timeout}s")
         self.grows += 1
 

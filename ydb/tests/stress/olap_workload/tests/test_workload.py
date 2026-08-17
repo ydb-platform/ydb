@@ -22,8 +22,8 @@ class TestYdbWorkload(StressFixture):
             },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
-                "generate_internal_path_id": True
-
+                "generate_internal_path_id": True,
+                "move_data_enabled": True,
             }
         )
 

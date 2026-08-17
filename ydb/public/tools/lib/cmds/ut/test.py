@@ -120,5 +120,5 @@ def test_load_existing_grpc_tls_data_rejects_incomplete_data():
         with open(os.path.join(tmpdir, 'key.pem'), 'w'):
             pass
 
-        with pytest.raises(RuntimeError, match='key.pem'):
+        with pytest.raises(ValueError, match='key.pem'):
             load_existing_grpc_tls_data(tmpdir)

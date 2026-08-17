@@ -34,10 +34,12 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             extra_feature_flags=["enable_cut_history"],
             column_shard_config={
                 "cut_history_enabled": True,
-                # ColumnShard is on the deny list by default, which disables the
-                # cutter for exactly the tablets under test.
-                "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
                 "alter_object_enabled": True,
+            },
+            # The deny list is Hive's, not ColumnShard's, and ColumnShard is on it by
+            # default — which would disable the cutter for the tablets under test.
+            hive_config={
+                "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
             },
         )
 

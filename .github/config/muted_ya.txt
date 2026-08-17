@@ -1,6 +1,4 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
@@ -14,7 +12,6 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
-ydb/library/actors/interconnect/ut_rdma XdcRdmaTest/XdcRdmaTestCqMode.SendMixBig/EVENT
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
@@ -32,7 +29,6 @@ ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDi
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupBasic.test_warmup_basic
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
-ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

@@ -554,6 +554,7 @@ namespace NKikimr::NDDisk {
 
         struct TChunkRef {
             TChunkIdx ChunkIdx = 0;
+            ui32 InFlightDataIo = 0;
             std::queue<TPendingEvent> PendingEventsForChunk;
         };
 

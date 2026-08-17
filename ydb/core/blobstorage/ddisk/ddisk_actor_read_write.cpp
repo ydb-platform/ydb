@@ -180,6 +180,7 @@ namespace NKikimr::NDDisk {
         op->SetSpan(std::move(span));
         op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
+        ++chunkRef.InFlightDataIo;
         DirectUringOp(op);
     }
 
@@ -301,6 +302,7 @@ namespace NKikimr::NDDisk {
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
+        static_cast<TDDiskIoOp*>(op.get())->SetChunkKey(creds.TabletId, selector.VChunkIndex);
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
         if (plan.Kind == TIntegrityManager::TReadPlan::Mixed) {
@@ -309,11 +311,20 @@ namespace NKikimr::NDDisk {
             op->SetReadUsedBlocksMask(std::move(plan.UsedBlocks));
         }
 
+        ++chunkRef.InFlightDataIo;
         DirectUringOp(op);
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvDDiskIoResult::TPtr ev) {
         auto& msg = *ev->Get();
+        Y_ABORT_UNLESS(msg.HasChunkKey);
+        const auto tabletIt = ChunkRefs.find(msg.TabletId);
+        Y_ABORT_UNLESS(tabletIt != ChunkRefs.end());
+        const auto chunkIt = tabletIt->second.find(msg.VChunkIndex);
+        Y_ABORT_UNLESS(chunkIt != tabletIt->second.end());
+        Y_ABORT_UNLESS(chunkIt->second.InFlightDataIo > 0);
+        --chunkIt->second.InFlightDataIo;
+
         auto status = msg.Status;
         TString errorMessage = std::move(msg.ErrorMessage);
         if (Y_UNLIKELY(IsBroken())) {

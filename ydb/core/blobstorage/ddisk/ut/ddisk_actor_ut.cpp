@@ -3144,9 +3144,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
     Y_UNIT_TEST(DeleteTabletChunks_CommittedChunkFreed) {
-        // Verify that a committed-but-not-yet-written chunk (ChunkIdx set, TEvChunkWriteRaw
-        // still pending) is correctly placed in TCommitRecord::DeleteChunks when
-        // DeleteTabletChunks is called.
+        // A committed chunk must not be deleted while its client data I/O is still in flight.
+        // Once the I/O drains, verify the existing two-phase data/integrity deletion.
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(23, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 202, 1);
@@ -3173,7 +3172,96 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.ReplyLog(disk, *traffic.Increment);
         // Leave the data write unreplied — the chunk has no user data yet.
 
-        // ChunkIdx is set, no in-flight increments, no pending events — delete must succeed.
+        auto assertDeletionBusy = [&] {
+            // Capture either the expected immediate BUSY result or the buggy deletion log. A
+            // bounded simulation fails promptly instead of waiting for an unacknowledged log.
+            std::unique_ptr<IEventHandle> rawDeleteResult;
+            std::unique_ptr<IEventHandle> unexpectedDeleteLog;
+            ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+                if (!rawDeleteResult
+                        && ev->GetTypeRewrite() == NDDisk::TEvDeleteTabletChunksResult::EventType) {
+                    rawDeleteResult = std::move(ev);
+                    return false;
+                }
+                if (!unexpectedDeleteLog
+                        && ev->GetTypeRewrite() == NPDisk::TEvLog::EventType
+                        && ev->GetRecipientRewrite() == disk.PDiskEdge) {
+                    unexpectedDeleteLog = std::move(ev);
+                    return false;
+                }
+                return true;
+            };
+            SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvDeleteTabletChunks(creds));
+            ui32 eventsProcessed = 0;
+            ctx.Runtime.Sim([&] {
+                return !rawDeleteResult && !unexpectedDeleteLog && ++eventsProcessed <= 200;
+            });
+            ctx.Runtime.FilterFunction = {};
+            UNIT_ASSERT_C(!unexpectedDeleteLog,
+                "deletion emitted a chunk-map log while client data I/O was in flight");
+            UNIT_ASSERT_C(rawDeleteResult, "DeleteTabletChunks did not return BUSY");
+            auto busyResult = std::unique_ptr<TEventHandle<NDDisk::TEvDeleteTabletChunksResult>>(
+                reinterpret_cast<TEventHandle<NDDisk::TEvDeleteTabletChunksResult>*>(
+                    rawDeleteResult.release()));
+            AssertStatus(busyResult, TReplyStatus::BUSY);
+
+            // The BUSY path must not have queued a deletion log after sending its client result.
+            const TActorId sentinelEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+            ctx.Runtime.Send(new IEventHandle(sentinelEdge, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
+            for (;;) {
+                auto ev = ctx.Runtime.WaitForEdgeActorEvent({disk.PDiskEdge, sentinelEdge});
+                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+                    ctx.ConsumeUnsolicitedPDiskEvent(ev);
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Recipient, sentinelEdge,
+                    "deletion queued PDisk traffic after returning BUSY");
+                break;
+            }
+        };
+
+        // The raw fallback write is still outstanding.
+        assertDeletionBusy();
+
+        // Completing the raw write is not enough: deletion must remain blocked until the DDisk
+        // actor processes the completion message in its own mailbox.
+        std::unique_ptr<IEventHandle> heldCompletion;
+        ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (!heldCompletion && ev->GetTypeRewrite()
+                    == NDDisk::TDDiskActor::TEvPrivate::TEvDDiskIoResult::EventType) {
+                heldCompletion = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        ctx.SendPDiskResponse(disk, *traffic.DataWrites[0],
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ui32 eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return !heldCompletion && ++eventsProcessed <= 200;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_C(heldCompletion, "DDisk I/O completion callback was not captured");
+        assertDeletionBusy();
+
+        ctx.Runtime.Send(std::move(heldCompletion), NodeId);
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
+
+        // Reads hold the same physical chunk alive until their completion reaches the actor.
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, chunkA);
+        assertDeletionBusy();
+
+        const TString payload = MakeData('Z', BlockSize);
+        ctx.SendPDiskResponse(disk, *readRaw,
+            new NPDisk::TEvChunkReadRawResult(TRope(payload)));
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+
         SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvDeleteTabletChunks(creds));
 
         // Phase 1 durably removes the tablet mapping and deallocates only the data chunk. The

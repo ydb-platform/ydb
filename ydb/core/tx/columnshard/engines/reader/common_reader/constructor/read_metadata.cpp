@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
@@ -43,29 +44,14 @@ TConclusionStatus TReadMetadata::Init(
         return TConclusionStatus::Success();
     }
 
-    ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.Orbit);
+    ITableMetadataAccessor::TSelectMetadataContext context(
+        owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.Orbit, owner->GetDataLocksManager());
     SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, readerClass);
 
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }
-    if (readDescription.readConflictingPortions) {
-        auto& opManager = owner->GetOperationsManager();
-        for (const TPortionInfo::TConstPtr& p : SourcesConstructor->GetConflictingPortions()) {
-            // add maybe conflicting writes
-            if (!p->IsCommitted()) {
-                AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
-                auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
-                auto writeId = written->GetInsertWriteId();
-                auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
-                // we do not need to check our own uncommitted writes
-                if (op->GetLockId() != *LockId) {
-                    AddMaybeConflictingWrite(writeId, op->GetLockId());
-                }
-            }
-            // add the portion to the scan lock
-        }
-    }
+
     SourcesConstructor->InitCursor(readDescription.GetScanCursorVerified());
 
     {
@@ -78,6 +64,31 @@ TConclusionStatus TReadMetadata::Init(
     StatsMode = readDescription.StatsMode;
     DeduplicationPolicy = readDescription.DeduplicationPolicy;
     GroupedMemoryLimiterOperator = readDescription.GroupedMemoryLimiterOperator;
+
+    if (readDescription.readConflictingPortions) {
+        auto& opManager = owner->GetOperationsManager();
+        std::vector<TPortionInfo::TConstPtr> conflictingPortions = SourcesConstructor->GetConflictingPortions();
+        if (!conflictingPortions.empty()) {
+            for (const TPortionInfo::TConstPtr& p : conflictingPortions) {
+                // add maybe conflicting writes
+                if (!p->IsCommitted()) {
+                    AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
+                    auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
+                    auto writeId = written->GetInsertWriteId();
+                    auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
+                    // we do not need to check our own uncommitted writes
+                    if (op->GetLockId() != *LockId) {
+                        AddMaybeConflictingWrite(writeId, op->GetLockId());
+                    }
+                }
+            }
+
+            // register the lock in the end, when Init() is successful for sure
+            const TString lockName = TStringBuilder() << "scan:" << readDescription.TxId << ":" << readDescription.ScanId;
+            DataLockGuard = owner->GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(
+                lockName, conflictingPortions, NDataLocks::ELockCategory::Scan, true);
+        }
+    }
     return TConclusionStatus::Success();
 }
 
@@ -114,6 +125,10 @@ NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
+    if (DataLockGuard) {
+        DataLockGuard->Release(*owner.GetDataLocksManager());
+    }
+
     auto alreadyAborted = LockId.has_value() && owner.GetOperationsManager().GetLockOptional(*GetLockId()) == nullptr;
     if (!NeedToDetectConflicts() || alreadyAborted) {
         return;

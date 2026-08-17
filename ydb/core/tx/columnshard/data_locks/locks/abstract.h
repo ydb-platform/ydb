@@ -20,6 +20,7 @@ enum class ELockCategory: ui32 {
     Compaction = 0,
     Actualization,
     Tables,
+    Scan,
     Cleanup,
     Sharing,   // used only for TReshardColumnTable which is not supported yet
     Any,
@@ -34,13 +35,15 @@ static const inline std::array<std::set<ELockCategory>, (ui32)ELockCategory::MAX
     //Tables
     std::set<ELockCategory>(
         { ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Sharing, ELockCategory::Any }),
+    //Scan
+    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Any }),
     //Cleanup
-    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
+    std::set<ELockCategory>({ ELockCategory::Scan, ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
     //Sharing
     std::set<ELockCategory>({ ELockCategory::Tables, ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
     //Any
-    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Cleanup,
-        ELockCategory::Sharing, ELockCategory::Any }),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Scan,
+        ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
 };
 
 class ILock {

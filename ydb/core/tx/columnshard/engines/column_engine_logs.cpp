@@ -41,6 +41,7 @@ using namespace NKikimr::NOlap::NReader::LWTRACE_GET_NAMESPACE(YDB_CS_SCAN);
 
 class TPortionsSelector {
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
+    const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
     const TInternalPathId PathId;
     const TSnapshot Snapshot;
     const TPKRangesFilter& PkRangesFilter;
@@ -58,11 +59,12 @@ class TPortionsSelector {
     ui64 TotalFilteredPortionsCount = 0;
 
 public:
-    TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, TInternalPathId pathId, TSnapshot snapshot,
-        const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-        const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 tabletId, ui64 txId,
-        ui64 scanId)
+    TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
+        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting,
+        const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit,
+        ui64 tabletId, ui64 txId, ui64 scanId)
         : GranuleMeta(std::move(granuleMeta))
+        , DataLocksManager(dataLocksManager)
         , PathId(pathId)
         , Snapshot(snapshot)
         , PkRangesFilter(pkRangesFilter)
@@ -120,6 +122,9 @@ private:
             }
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
+            if (takePortion) {
+                takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
+            }
 
             YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"event", takePortion ? "portion_selected" : "portion_skipped"},
@@ -153,6 +158,9 @@ private:
             }
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
+            if (takePortion) {
+                takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
+            }
 
             YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"event", takePortion ? "portion_selected" : "portion_skipped"},
@@ -187,6 +195,10 @@ private:
             }
 
             if (nonconflicting && !WithNonconflicting || conflicting && !WithConflicting) {
+                return true;
+            }
+
+            if (DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan)) {
                 return true;
             }
 
@@ -768,8 +780,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 }
 
 std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
-    const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-    const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId, ui64 scanId) const {
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting,
+    const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit,
+    ui64 txId, ui64 scanId) const {
+    AFL_VERIFY(dataLocksManager);
     std::vector<TSelectedPortionInfo> out;
 
     auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
@@ -777,8 +791,8 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         return {};
     }
 
-    return TPortionsSelector(
-        granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions, orbit, TabletId, txId, scanId)
+    return TPortionsSelector(granuleMeta, dataLocksManager, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions,
+        orbit, TabletId, txId, scanId)
         .Select();
 }
 

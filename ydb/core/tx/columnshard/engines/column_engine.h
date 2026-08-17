@@ -177,9 +177,10 @@ public:
     }
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter,
-        const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions,
-        const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId = 0, ui64 scanId = 0) const = 0;
+    virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, TSnapshot snapshot,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting,
+        const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit,
+        ui64 txId = 0, ui64 scanId = 0) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(

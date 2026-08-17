@@ -83,11 +83,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext&);
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
 
-    //client requests
-    // remove TEvPersQueue::TEvUpdateConfig at 26-3 release
-    void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
-    void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
@@ -125,7 +120,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
     void HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
-    void ApplyNewConfigAndReply(const TActorContext& ctx);
     void ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                         const TActorContext& ctx);
     void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
@@ -156,7 +150,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
         TEvPQ::TEvWrite::TMsg& msg) const;
 
-    void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TConverterFactoryPtr& converterFactory,
                                      NPersQueue::TTopicConverterPtr& topicConverter,
@@ -256,11 +249,6 @@ private:
     TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
-    TSet<TChangeNotification> ChangeConfigNotification;
-    NKikimrPQ::TPQTabletConfig NewConfig;
-    bool NewConfigShouldBeApplied;
-    size_t ChangePartitionConfigInflight = 0;
-
     TString TopicName;
     TString TopicPath;
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
@@ -282,7 +270,6 @@ private:
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
-    TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
     using TMLPRequest = std::variant<
         TEvPQ::TEvMLPReadRequest::TPtr,
@@ -466,18 +453,11 @@ private:
                                  const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
-    void BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
-                          const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                          const TActorContext& ctx);
-    void EndWriteConfig(const NKikimrClient::TResponse& resp,
-                        const TActorContext& ctx);
     void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                            const NKikimrPQ::TPQTabletConfig& cfg,
                            const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                            const NKikimrPQ::TPartitions& partitionsData,
                            const TActorContext& ctx);
-
-    void ClearNewConfig();
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,

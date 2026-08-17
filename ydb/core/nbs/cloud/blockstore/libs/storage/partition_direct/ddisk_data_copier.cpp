@@ -215,6 +215,7 @@ void TDDiskDataCopier::CopyRange(ui64 syncId, TBlockRange64 range)
 
     auto readHint = DirtyMap->MakeReadHint(range);
     if (readHint.RangeHints.empty()) {
+        DirtyMap->EndRangeSync(copyRangeState->SyncId, false);
         auto waitReadyFuture = readHint.WaitReady;
         Y_ABORT_UNLESS(!waitReadyFuture.HasValue());
         waitReadyFuture.Subscribe(
@@ -289,6 +290,7 @@ void TDDiskDataCopier::OnRangeRead(
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).Quote().c_str());
 
+        DirtyMap->EndRangeSync(copyRangeState->SyncId, false);
         if (IsNeverRetriableError(response.Error)) {
             Complete.SetValue(EResult::Error);
         } else {
@@ -339,8 +341,8 @@ void TDDiskDataCopier::OnRangeWritten(
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).Quote().c_str());
 
+        DirtyMap->EndRangeSync(copyRangeState->SyncId, false);
         if (IsNeverRetriableError(response.Error)) {
-            DirtyMap->EndRangeSync(copyRangeState->SyncId, false);
             Complete.SetValue(EResult::Error);
         } else {
             ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());

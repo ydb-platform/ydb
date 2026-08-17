@@ -54,8 +54,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     )  # TODO YQ-5431
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
-        "enable_dq_source_stream_lookup_join_shuffle_mode", False
-    )  # TODO YQ-5453
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -108,6 +108,9 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+            "query_limits": {
+                "result_rows_limit": 20,
+            },
         },
         replication_config={
             "iam_service_control": {

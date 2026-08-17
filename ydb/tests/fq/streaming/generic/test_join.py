@@ -378,8 +378,8 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
-        # "ShuffleMode", # TODO YQ-5453
-        # "Hash",
+        "ShuffleMode",
+        "Hash",
         "FullscanLimit",
         "0",
     ),
@@ -629,8 +629,8 @@ TESTCASES = [
                 ),
             ]
         ),
-        # 'ShuffleMode',
-        # 'Map',
+        'ShuffleMode',
+        'Map',
     ),
     # 10
     (
@@ -666,8 +666,8 @@ TESTCASES = [
         * 10,
         'MultiGet',
         'true',
-        # 'ShuffleMode',
-        # 'Map',
+        'ShuffleMode',
+        'Map',
     ),
     # 11
     (
@@ -1191,8 +1191,8 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
-        # "ShuffleMode",
-        # "Hash",
+        "ShuffleMode",
+        "Hash",
         "FullscanLimit",
         "0",
     ),

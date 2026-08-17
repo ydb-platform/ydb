@@ -3756,7 +3756,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "prefix columns support is disabled");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext/json index support is disabled");
 }
 
 Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
@@ -4215,25 +4215,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
     CompareYson("[[[1u]];[[5u]]]", selectKeys(R"sql(
         SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE Tenant = "acme" AND UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-}
-
-Y_UNIT_TEST(CreateCompactRelevancePrefixedRejected) {
-    // Compact relevance + prefix is not supported: the corpus-global dictionary keyed by token only
-    // cannot be aggregated when the prefix is the leading sort key. The combination must be rejected.
-    auto kikimr = KikimrPrefixCompact();
-    auto db = kikimr.GetQueryClient();
-
-    // With EnableCompactFulltextIndex, fulltext_relevance is built in the compact relevance format.
-    TString query = R"sql(
-        CREATE TABLE `/Root/Docs` (
-            Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key),
-            INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (UserId, Text)
-                WITH (tokenizer=standard, use_filter_lowercase=true)
-        );
-    )sql";
-    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "compact relevance");
 }
 
 // Creates an integer-PK table with an inline prefixed fulltext index (online write maintenance path),

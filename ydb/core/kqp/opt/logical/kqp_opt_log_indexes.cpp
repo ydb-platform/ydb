@@ -2331,7 +2331,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         }
     }
 
-    if (!expectedSettings.has_value()) {
+    if (selectedIndex.empty()) {
         return node;
     }
 

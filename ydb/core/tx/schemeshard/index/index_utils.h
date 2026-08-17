@@ -297,21 +297,30 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         // Fulltext index key columns are [prefix..., text]; more than one key column means the
         // index has prefix columns. Enforce the feature flag server-side so direct scheme
         // operations or older clients cannot bypass the KQP-side check.
-        if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
-            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-            error = "Prefixed fulltext/json index support is disabled";
-            return false;
-        }
-
         if (indexKeys.KeyColumns.size() > 1) {
-            // Prefix columns must be disjoint from the primary key (doc-id) columns:
-            // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
+            if (!AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "Prefixed fulltext/json index support is disabled";
+                return false;
+            }
+
             const THashSet<TString> pkColumns{baseTableColumns.Keys.begin(), baseTableColumns.Keys.end()};
             for (size_t i = 0; i < indexKeys.KeyColumns.size()-1; ++i) {
-                if (pkColumns.contains(indexKeys.KeyColumns[i])) {
+                const auto& col = indexKeys.KeyColumns[i];
+                // Prefix columns must be disjoint from the primary key (doc-id) columns
+                if (pkColumns.contains(col)) {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder() << typeName << " index prefix column '" << indexKeys.KeyColumns[i]
-                        << "' must not be a primary key column";
+                    error = TStringBuilder() << typeName << " index prefix column '"
+                        << col << "' must not be a primary key column";
+                    return false;
+                }
+                // Prefix columns must have types allowed for the primary key
+                Y_ABORT_UNLESS(baseColumnTypes.contains(col));
+                auto typeInfo = baseColumnTypes.at(col);
+                if (!NKikimr::IsAllowedKeyType(typeInfo)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder() << "Column " << col
+                        << " has wrong key type " << NScheme::TypeName(typeInfo);
                     return false;
                 }
             }

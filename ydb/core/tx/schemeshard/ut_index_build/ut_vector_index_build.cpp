@@ -1152,7 +1152,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             ui32 rowCount = tableRows; // alias
             ui64 formulaRequestUnitsApproximation = levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5);
 
-            ui64 actualRequestUnits = smallRows ? 3415 : 18552; // TODO: cut from html
+            ui64 actualRequestUnits = smallRows ? 3415 : 22215; // TODO: cut from html
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: " << actualRequestUnits << " ");
@@ -1176,7 +1176,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             } else {
                 // here `formulaRequestUnitsApproximation` much less than `actualRequestUnits`
                 // because we do less than 5 kmeans iterations or buffer some rows
-                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 18552);
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 22215);
                 UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 27648);
             }
         }
@@ -1322,7 +1322,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const ui64 tableBytes = tableRows * tableRowBytes;
         const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 buildBytes = tableRows * buildRowBytes;
-        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 postingBytes = tableRows * postingRowBytes;
         const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
@@ -1539,7 +1539,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 buildBytes = tableRows * buildRowBytes;
         const ui64 buildShardBytes = shardRows * buildRowBytes;
-        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 postingBytes = tableRows * postingRowBytes;
         const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);

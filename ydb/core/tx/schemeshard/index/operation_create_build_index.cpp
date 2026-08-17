@@ -267,7 +267,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             // Vector search ranks posting rows by the embedding even when the
             // index is otherwise non-covering. Keep the permanent posting
             // table schema consistent with the transient build table schema.
-            indexDataColumns.insert(indexDesc.GetKeyColumnNames(indexDesc.KeyColumnNamesSize() - 1));
+            const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+            Y_ENSURE(!indexColumns.KeyColumns.empty());
+            indexDataColumns.insert(indexColumns.KeyColumns.back());
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
             result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
             if (prefixVectorIndex) {

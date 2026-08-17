@@ -967,6 +967,21 @@ TKafkaRecordBatch ReadRecordBatch(TStringBuf data) {
     return batch;
 }
 
+bool SetKafkaBatchBaseOffset(TString& data, ui64 baseOffset) {
+    const auto header = ReadKafkaBatchHeader(data);
+    if (!header || header->Magic < TKafkaRecordBatch::MagicMeta::Default) {
+        return false;
+    }
+
+    const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+    TKafkaWriteBuffer buffer(baseOffsetSize);
+    TKafkaWritable writable(buffer);
+    writable << static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
+
+    data.replace(0, baseOffsetSize, buffer.AsString());
+    return true;
+}
+
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
     TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);

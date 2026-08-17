@@ -1076,9 +1076,7 @@ private:
                 Allocated.emplace(pendingHandle, std::move(pending));
             }
         }
-        if (auto bIt = AwaitPerPool.find(poolId); bIt != AwaitPerPool.end() && !bIt->second.empty()) {
-            Wakeup(0ULL);
-        }
+        Wakeup(0ULL);
     }
 
     CURLM* GetHandle() const {

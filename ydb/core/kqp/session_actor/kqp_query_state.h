@@ -190,6 +190,7 @@ public:
     TInstant StartTime;
     TInstant ProxyRequestStartTime;
     std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
+    TInstant AdmissionStartedAt;
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
@@ -208,7 +209,7 @@ public:
     NWilson::TTraceId UserFacingTraceId;
     bool UserFacingExecutionDelegated = false;
     TString UserFacingRootName;
-    TString ObfuscatedQueryText;
+    TString UserFacingOperation;
     std::vector<TCompileAttemptDiagnostic> CompileAttempts;
     std::optional<size_t> ActiveCompileAttempt;
     std::optional<TCompileAttemptDiagnostic> OverflowCompileAttempt;

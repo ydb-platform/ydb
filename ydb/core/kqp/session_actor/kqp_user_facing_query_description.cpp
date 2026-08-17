@@ -30,8 +30,9 @@ const char* GetTableSinkModeVerb(NKikimrKqp::TKqpTableSinkSettings::EType mode) 
     }
 }
 
-TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
-    TString writeVerb;
+TUserFacingQueryDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query,
+        const TMaybe<TString>& commandTag) {
+    TString inferredWriteVerb;
     TString writeTable;
     TString readTable;
     bool hasReads = false;
@@ -39,9 +40,9 @@ TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
     bool multiRead = false;
     bool mixedWriteVerbs = false;
     auto noteWriteVerb = [&](TStringBuf verb) {
-        mixedWriteVerbs = mixedWriteVerbs || (writeVerb && writeVerb != verb);
-        if (!writeVerb) {
-            writeVerb = verb;
+        mixedWriteVerbs = mixedWriteVerbs || (inferredWriteVerb && inferredWriteVerb != verb);
+        if (!inferredWriteVerb) {
+            inferredWriteVerb = verb;
         }
     };
     auto noteTable = [](TString& table, bool& multi, const TString& path) {
@@ -52,7 +53,7 @@ TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
     };
     for (const auto& tx : query.GetTransactions()) {
         if (tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-            return "DDL";
+            return {"DDL", "DDL"};
         }
         for (const auto& stage : tx.GetStages()) {
             for (const auto& sink : stage.GetSinks()) {
@@ -62,6 +63,19 @@ TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
                 }
                 NKikimrKqp::TKqpTableSinkSettings settings;
                 if (sink.GetInternalSink().GetSettings().UnpackTo(&settings)) {
+                    if (const char* verb = GetTableSinkModeVerb(settings.GetType())) {
+                        noteWriteVerb(verb);
+                        noteTable(writeTable, multiWrite, settings.GetTable().GetPath());
+                    }
+                }
+            }
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() != NKqpProto::TKqpOutputTransform::kInternalSink
+                        || !transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    continue;
+                }
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                if (transform.GetInternalSink().GetSettings().UnpackTo(&settings)) {
                     if (const char* verb = GetTableSinkModeVerb(settings.GetType())) {
                         noteWriteVerb(verb);
                         noteTable(writeTable, multiWrite, settings.GetTable().GetPath());
@@ -78,53 +92,94 @@ TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
                         noteWriteVerb("DELETE");
                         noteTable(writeTable, multiWrite, op.GetTable().GetPath());
                         break;
-                    default:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         hasReads = true;
                         noteTable(readTable, multiRead, op.GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpPhyTableOperation::TYPE_NOT_SET:
                         break;
                 }
             }
             for (const auto& source : stage.GetSources()) {
                 hasReads = true;
-                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                    noteTable(readTable, multiRead, source.GetReadRangesSource().GetTable().GetPath());
+                switch (source.GetTypeCase()) {
+                    case NKqpProto::TKqpSource::kReadRangesSource:
+                        noteTable(readTable, multiRead, source.GetReadRangesSource().GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpSource::kFullTextSource:
+                        noteTable(readTable, multiRead, source.GetFullTextSource().GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpSource::kSysViewSource:
+                        noteTable(readTable, multiRead, source.GetSysViewSource().GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpSource::kExternalSource:
+                    case NKqpProto::TKqpSource::TYPE_NOT_SET:
+                        break;
+                }
+            }
+            for (const auto& input : stage.GetInputs()) {
+                switch (input.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                        hasReads = true;
+                        noteTable(readTable, multiRead, input.GetStreamLookup().GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpPhyConnection::kVectorResolve:
+                        hasReads = true;
+                        noteTable(readTable, multiRead, input.GetVectorResolve().GetTable().GetPath());
+                        break;
+                    case NKqpProto::TKqpPhyConnection::kVectorSearch:
+                        hasReads = true;
+                        noteTable(readTable, multiRead, input.GetVectorSearch().GetTable().GetPath());
+                        break;
+                    default:
+                        break;
                 }
             }
         }
     }
-    if (writeVerb) {
-        if (mixedWriteVerbs || multiWrite) {
-            return "EXECUTE SCRIPT";
+
+    TString operation = commandTag.GetOrElse(TString{});
+    if (!operation) {
+        if (inferredWriteVerb) {
+            if (mixedWriteVerbs) {
+                return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
+            }
+            operation = inferredWriteVerb;
+        } else if (hasReads || query.ResultBindingsSize() > 0) {
+            operation = "SELECT";
         }
-        return !writeTable
-            ? writeVerb : TStringBuilder() << writeVerb << " " << writeTable;
     }
-    if (hasReads || query.ResultBindingsSize() > 0) {
-        return multiRead || !readTable
-            ? TString("SELECT") : TStringBuilder() << "SELECT " << readTable;
+    if (!operation) {
+        return {};
     }
-    return {};
+
+    const bool isRead = operation == "SELECT";
+    const TString& table = isRead ? readTable : writeTable;
+    const bool ambiguousTable = isRead ? multiRead : multiWrite;
+    return {
+        !table || ambiguousTable
+            ? operation : TStringBuilder() << operation << " " << table,
+        operation,
+    };
 }
 
 } // namespace
 
-TString DescribeUserFacingQuery(const TKqpQueryState& state) {
+TUserFacingQueryDescription DescribeUserFacingQuery(const TKqpQueryState& state) {
     switch (state.GetType()) {
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-            return "EXECUTE SCRIPT";
+            return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
         default:
             break;
     }
     if (state.Statements.size() > 1) {
-        return "EXECUTE SCRIPT";
+        return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
     }
-    TString result = DescribePhysicalQuery(state.PreparedQuery->GetPhysicalQuery());
-    if (!result && state.CommandTagName) {
-        result = *state.CommandTagName;
-    }
-    return result;
+    return DescribePhysicalQuery(state.PreparedQuery->GetPhysicalQuery(), state.CommandTagName);
 }
 
 TString SanitizeUserFacingQueryText(const TString& text) {

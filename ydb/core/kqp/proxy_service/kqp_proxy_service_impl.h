@@ -33,6 +33,10 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
+    NWilson::TTraceId UserFacingTraceId;
+    std::optional<NPrivateEvents::TEvQueryRequest::TProxyTraceSeed> ProxyTraceSeed;
+    NKikimrKqp::EQueryAction QueryAction = static_cast<NKikimrKqp::EQueryAction>(0);
+    bool UserFacingTraceTransferred = false;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -46,6 +50,22 @@ struct TKqpProxyRequest {
     void SetSessionId(const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         SessionId = sessionId;
         DbCounters = dbCounters;
+    }
+
+    void SetUserFacingTrace(const NPrivateEvents::TEvQueryRequest& request) {
+        if (request.Record.HasUserFacingTraceId()) {
+            UserFacingTraceId = request.GetUserFacingWilsonTraceId();
+            ProxyTraceSeed = request.GetProxyTraceSeed();
+            QueryAction = request.GetAction();
+        }
+    }
+
+    void TransferUserFacingTrace() {
+        UserFacingTraceTransferred = true;
+    }
+
+    void ReclaimUserFacingTrace() {
+        UserFacingTraceTransferred = false;
     }
 };
 
@@ -69,9 +89,31 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
+    TKqpProxyRequest* FindPtr(ui64 requestId) {
+        return PendingRequests.FindPtr(requestId);
+    }
+
+    void SetUserFacingTrace(ui64 requestId, const NPrivateEvents::TEvQueryRequest& request) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->SetUserFacingTrace(request);
+        }
+    }
+
     void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         TKqpProxyRequest* ptr = PendingRequests.FindPtr(requestId);
         ptr->SetSessionId(sessionId, dbCounters);
+    }
+
+    void TransferUserFacingTrace(ui64 requestId) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->TransferUserFacingTrace();
+        }
+    }
+
+    void ReclaimUserFacingTrace(ui64 requestId) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->ReclaimUserFacingTrace();
+        }
     }
 
     void Erase(ui64 requestId) {

@@ -63,6 +63,11 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
     optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
     optional TExternalIdpConfig ExternalIdpConfig = 91;
     optional TLocalMetadataService LocalMetadataService = 92;
@@ -72,6 +77,10 @@ message TAuthConfig {
 message TLocalMetadataService {
     optional string Host = 1 [default = "169.254.169.254"];
     optional uint64 Port = 2 [default = 80];
+<<<<<<< HEAD
+=======
+>>>>>>> 4d167daafdf ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
+>>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
 }
 
 message TUserRegistryConfig {

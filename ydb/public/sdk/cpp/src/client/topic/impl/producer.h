@@ -423,7 +423,7 @@ private:
     void ValidateSeqNoStrategy(bool hasSeqNo);
     void DrainClientRequests();
     void HandleClientMessage(TMessageInfo&& message);
-    void HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise);
+    void HandleClientFlush(NThreading::TPromise<TFlushResult> promise);
 
     TWriteResult WriteInternal(TWriteMessage& message, bool checkMemory);
     TWriteResult WriteToExplicitPartition(

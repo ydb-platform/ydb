@@ -209,6 +209,7 @@ def _run(arguments, resource_loader, tool_revision):
                 "benchmark": step.benchmark,
                 "profile": step.profile,
                 "affinity": step.affinity,
+                "background_load": step.background_load,
                 "threads": step.threads,
                 "case": step.case,
                 "parameters": step.parameters,
@@ -227,6 +228,11 @@ def _run(arguments, resource_loader, tool_revision):
     try:
         with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
             binaries = {}
+            background_binary = None
+            if any("none" != mode for config in loaded_config.runs for mode in config.background_load_modes):
+                background_binary = extract_executable(
+                    resource_loader("background_load"), temporary_directory, "background_load"
+                )
             manifest["binaries"] = {}
             store.write()
 
@@ -263,6 +269,7 @@ def _run(arguments, resource_loader, tool_revision):
                             configuration.benchmark.name,
                             configuration.profile,
                             event.get("affinity"),
+                            event.get("background_load", "none"),
                             event.get("threads"),
                             event.get("case"),
                             event.get("repeat"),
@@ -292,6 +299,7 @@ def _run(arguments, resource_loader, tool_revision):
                         tool_revision=tool_revision,
                         work_dir_hint=temporary_directory,
                         profiler_binary_path=profiler_binary_path,
+                        background_binary=background_binary,
                         event_sink=on_event,
                     )
                 except BenchmarkInterrupted as error:

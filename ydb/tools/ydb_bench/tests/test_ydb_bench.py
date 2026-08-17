@@ -1446,7 +1446,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(placement.supported)
         self.assertIn("spread-numa", placement.reason)
 
-    def test_run_fails_when_all_affinity_modes_are_unsupported(self):
+    def test_run_skips_when_all_affinity_modes_are_unsupported(self):
         script = self._script("exit 99")
         output = self.root / "unsupported-output"
         output.mkdir()
@@ -1469,8 +1469,8 @@ class YdbBenchTest(unittest.TestCase):
 
         with mock.patch.object(actors_core, "discover_topology", return_value=topology), mock.patch.object(
             os, "sched_setaffinity", create=True
-        ), self.assertRaisesRegex(BenchmarkError, "none of the selected affinity modes is supported"):
-            run_actors_core(
+        ):
+            result = run_actors_core(
                 self._binary(script),
                 configuration,
                 output,
@@ -1478,13 +1478,14 @@ class YdbBenchTest(unittest.TestCase):
             )
 
         manifest = json.loads((output / "run.json").read_text())
-        self.assertEqual(manifest["status"], "failed")
-        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(result["status"], "unsupported")
+        self.assertEqual(manifest["status"], "unsupported")
+        self.assertEqual(manifest["state"], "unsupported")
         self.assertIn("finished_at", manifest)
-        self.assertIn("spread-numa-pack-chiplet", manifest["error"])
+        self.assertIn("unsupported", manifest["error"])
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
-        self.assertFalse((output / "summary.csv").exists())
+        self.assertTrue((output / "summary.csv").exists())
 
 
 class WebTest(unittest.TestCase):

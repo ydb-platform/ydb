@@ -46,6 +46,19 @@ class AffinityPlacement:
         return self.reason is None
 
 
+@dataclass(frozen=True)
+class BackgroundPlacement:
+    mode: str
+    cpus: Optional[tuple]
+    groups: tuple = ()
+    workers: int = 0
+    reason: Optional[str] = None
+
+    @property
+    def supported(self):
+        return self.reason is None
+
+
 def parse_cpu_list(value):
     cpus = set()
     for item in value.strip().split(","):
@@ -338,6 +351,85 @@ def plan_affinity(mode, topology, required_cpus):
     if not cpus:
         return _unsupported(mode, "{} allowed CPUs are required by this placement".format(required_cpus))
     return AffinityPlacement(mode=mode, cpus=cpus)
+
+
+def _background_unsupported(mode, reason):
+    return BackgroundPlacement(mode=mode, cpus=None, reason=reason)
+
+
+def plan_background_load(mode, topology, foreground_cpus, foreground_threads):
+    """Place background workers on physical cores not used by the foreground."""
+    if mode == "none":
+        return BackgroundPlacement(mode=mode, cpus=(), workers=0)
+    cores = _core_groups(topology)
+    if foreground_cpus is None:
+        if mode not in ("memory-bandwidth", "coherence-all-numa"):
+            return _background_unsupported(
+                mode,
+                "{} requires an explicit foreground affinity".format(mode),
+            )
+        workers = max(0, len(cores) - foreground_threads)
+        if workers < 1:
+            return _background_unsupported(mode, "no estimated physical-core capacity remains")
+        if mode == "coherence-all-numa" and workers < 2:
+            return _background_unsupported(mode, "coherence-all-numa requires at least two workers")
+        if mode == "coherence-all-numa":
+            workers -= workers % 2
+        groups = (tuple(range(workers)),) if mode == "coherence-all-numa" else ()
+        return BackgroundPlacement(mode=mode, cpus=None, groups=groups, workers=workers)
+
+    occupied = set(foreground_cpus)
+    free_cores = [core for core in cores if not occupied.intersection(core)]
+    representatives = [core[0] for core in free_cores]
+    if not representatives:
+        return _background_unsupported(mode, "no unused physical cores remain")
+    if mode == "memory-bandwidth":
+        groups = tuple((cpu,) for cpu in representatives)
+        return BackgroundPlacement(mode=mode, cpus=tuple(representatives), groups=groups, workers=len(groups))
+
+    cpu_to_node = {
+        cpu: node_id for node_id, cpus in topology.numa_nodes for cpu in cpus
+    }
+    cpu_to_chiplet = {
+        cpu: (node_id, index)
+        for index, (node_id, cpus) in enumerate(topology.chiplets)
+        for cpu in cpus
+    }
+    groups = []
+    if mode == "coherence-chiplet":
+        by_chiplet = {}
+        for cpu in representatives:
+            if cpu in cpu_to_chiplet:
+                by_chiplet.setdefault(cpu_to_chiplet[cpu], []).append(cpu)
+        groups.extend(tuple(cpus) for _, cpus in sorted(by_chiplet.items()) if len(cpus) >= 2)
+    elif mode == "coherence-numa":
+        by_node = {}
+        for cpu in representatives:
+            chiplet = cpu_to_chiplet.get(cpu)
+            if chiplet is not None:
+                by_node.setdefault(chiplet[0], {}).setdefault(chiplet, []).append(cpu)
+        for chiplets in by_node.values():
+            pools = [list(cpus) for _, cpus in sorted(chiplets.items())]
+            if len(pools) >= 2:
+                groups.append(tuple(_round_robin(pools)))
+    elif mode == "coherence-all-numa":
+        by_node = {}
+        for cpu in representatives:
+            by_node.setdefault(cpu_to_node.get(cpu), []).append(cpu)
+        pools = [list(cpus) for node, cpus in sorted(by_node.items()) if node is not None]
+        if len(pools) >= 2:
+            groups.append(tuple(_round_robin(pools)))
+    else:
+        return _background_unsupported(mode, "unknown background load mode")
+    if not groups:
+        requirements = {
+            "coherence-chiplet": "two unused physical cores in one chiplet",
+            "coherence-numa": "unused physical cores in two chiplets of one NUMA node",
+            "coherence-all-numa": "unused physical cores in two NUMA nodes",
+        }
+        return _background_unsupported(mode, "requires {}".format(requirements[mode]))
+    cpus = tuple(cpu for group in groups for cpu in group)
+    return BackgroundPlacement(mode=mode, cpus=cpus, groups=tuple(groups), workers=len(cpus))
 
 
 def topology_record(topology):

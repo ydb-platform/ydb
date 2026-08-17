@@ -4237,8 +4237,6 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse* readResult = nullptr;
         THolder<TEvPersQueue::TEvRequest> readRequest;
-        TEvPersQueue::TEvUpdateConfigResponse* consumerDeleteResult = nullptr;
-        THolder<TEvPersQueue::TEvUpdateConfig> consumerDeleteRequest;
 
         // Read request
         {
@@ -4253,17 +4251,16 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetTimeoutMs(5000);
         }
 
-        // Consumer delete request
+        NKikimrPQ::TPQTabletConfig consumerDeleteConfig;
         {
-            consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
-            consumerDeleteRequest->MutableRecord()->SetTxId(42);
-            auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(pqConfigVersion++);
-            cfg.AddPartitionIds(0);
-            cfg.AddPartitions()->SetPartitionId(0);
-            cfg.SetLocalDC(true);
-            cfg.SetTopic("topic");
-            auto& cons = *cfg.AddConsumers();
+            consumerDeleteConfig.SetVersion(pqConfigVersion++);
+            consumerDeleteConfig.AddPartitionIds(0);
+            consumerDeleteConfig.AddPartitions()->SetPartitionId(0);
+            consumerDeleteConfig.SetLocalDC(true);
+            consumerDeleteConfig.SetTopic("topic");
+            consumerDeleteConfig.SetTopicName("rt3.dc1--asdfgs--topic");
+            consumerDeleteConfig.SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
+            auto& cons = *consumerDeleteConfig.AddConsumers();
             cons.SetName("user2");
             cons.SetImportant(true);
         }
@@ -4280,13 +4277,8 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         });
 
         // Delete consumer while read request is still in progress
-        tc.Runtime->SendToPipe(tc.TabletId, edge, consumerDeleteRequest.Release(), 0, GetPipeConfigWithRetries());
-        consumerDeleteResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
-        {
-            //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
-            UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
-            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
-        }
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, edge, consumerDeleteConfig,
+                           tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
 
         // Resend intercepted blob responses and wait for read result
         captureBlobResponsesObserver.Remove();

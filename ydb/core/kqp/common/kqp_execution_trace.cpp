@@ -89,6 +89,58 @@ struct TOwnedCommitShard {
 
 } // namespace
 
+TExecutionDiagnosticsCapture::TExecutionDiagnosticsCapture(TString executerActorType,
+        TString computeActorType) {
+    Snapshot.ExecuterActorType = std::move(executerActorType);
+    Snapshot.ComputeActorType = std::move(computeActorType);
+    Snapshot.Timeline.Execute.Start = TInstant::Now();
+}
+
+void TExecutionDiagnosticsCapture::OnPhaseStarted(EExecutionPhase phase) {
+    const TInstant transitionAt = TInstant::Now();
+    EndCurrentPhase(transitionAt);
+    CurrentPhase = phase;
+    Snapshot.Timeline.Phase(phase).Start = transitionAt;
+}
+
+void TExecutionDiagnosticsCapture::OnTableResolverFinished(
+        const TTimeWindow& navigateWindow, const TTimeWindow& resolveKeysWindow,
+        Ydb::StatusIds::StatusCode status) {
+    Snapshot.Timeline.Phase(EExecutionPhase::ResolveMetadata) = navigateWindow;
+    Snapshot.Timeline.Phase(EExecutionPhase::ResolvePartitioning) = resolveKeysWindow;
+    if (status != Ydb::StatusIds::SUCCESS) {
+        if (resolveKeysWindow) {
+            Snapshot.FailedPhase = EExecutionPhase::ResolvePartitioning;
+        } else if (navigateWindow) {
+            Snapshot.FailedPhase = EExecutionPhase::ResolveMetadata;
+        }
+    }
+}
+
+void TExecutionDiagnosticsCapture::SetCommitDiagnostics(TCommitDiagnostics diagnostics) {
+    Snapshot.Commit = std::move(diagnostics);
+}
+
+TExecutionTraceSnapshot TExecutionDiagnosticsCapture::Finish(
+        Ydb::StatusIds::StatusCode status) {
+    const TInstant finishAt = TInstant::Now();
+    Snapshot.Status = status;
+    if (status != Ydb::StatusIds::SUCCESS && !Snapshot.FailedPhase
+            && CurrentPhase != EExecutionPhase::Count) {
+        Snapshot.FailedPhase = CurrentPhase;
+    }
+    EndCurrentPhase(finishAt);
+    Snapshot.Timeline.Execute.End = finishAt;
+    return std::move(Snapshot);
+}
+
+void TExecutionDiagnosticsCapture::EndCurrentPhase(TInstant finishAt) {
+    if (CurrentPhase != EExecutionPhase::Count) {
+        Snapshot.Timeline.Phase(CurrentPhase).End = finishAt;
+        CurrentPhase = EExecutionPhase::Count;
+    }
+}
+
 void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots) {
     std::vector<TOwnedStage> stages;
     std::vector<size_t> originalStages(snapshots.size());

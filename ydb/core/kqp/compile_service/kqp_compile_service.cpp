@@ -247,20 +247,6 @@ public:
         ++ActiveRequestsSize;
     }
 
-    TKqpCompileRequest* FindActiveRequest(const TKqpQueryId& query) {
-        return ActiveRequests.FindPtr(query);
-    }
-
-    bool HasQueuedTraceWaiter(const TKqpQueryId& query) const {
-        const auto it = QueryIndex.find(query);
-        if (it == QueryIndex.end()) {
-            return false;
-        }
-        return std::any_of(it->second.begin(), it->second.end(), [](const auto& requestIt) {
-            return requestIt->CollectTraceDiagnostics;
-        });
-    }
-
 private:
     bool HasActiveRequest(const TKqpQueryId& query) const {
         return ActiveRequests.contains(query);
@@ -785,12 +771,6 @@ private:
     }
 
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
-        TActorId compileActorToEnable;
-        if (compileRequest.CollectTraceDiagnostics) {
-            if (const auto* active = RequestsQueue.FindActiveRequest(compileRequest.Query)) {
-                compileActorToEnable = active->CompileActor;
-            }
-        }
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
             Counters->ReportCompileRequestRejected(overflow->DbCounters);
@@ -802,9 +782,6 @@ private:
             ReplyError(overflow->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx,
                 overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
             return;
-        }
-        if (compileActorToEnable) {
-            ctx.Send(compileActorToEnable, new TEvKqp::TEvEnableCompileDiagnostics());
         }
         YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
             {"queueSize", RequestsQueue.Size()});
@@ -937,8 +914,6 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        request.CollectTraceDiagnostics = request.CollectTraceDiagnostics
-            || RequestsQueue.HasQueuedTraceWaiter(request.Query);
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action,

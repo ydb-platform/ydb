@@ -141,6 +141,27 @@ struct TExecutionTraceSnapshot {
     TCommitDiagnostics Commit;
 };
 
+class TExecutionDiagnosticsCapture {
+public:
+    TExecutionDiagnosticsCapture(TString executerActorType, TString computeActorType);
+
+    void OnPhaseStarted(EExecutionPhase phase);
+
+    void OnTableResolverFinished(const TTimeWindow& navigateWindow,
+        const TTimeWindow& resolveKeysWindow, Ydb::StatusIds::StatusCode status);
+
+    void SetCommitDiagnostics(TCommitDiagnostics diagnostics);
+
+    TExecutionTraceSnapshot Finish(Ydb::StatusIds::StatusCode status);
+
+private:
+    void EndCurrentPhase(TInstant finishAt);
+
+private:
+    TExecutionTraceSnapshot Snapshot;
+    EExecutionPhase CurrentPhase = EExecutionPhase::Count;
+};
+
 void TrimExecutionTraceSnapshot(TExecutionTraceSnapshot& snapshot);
 
 void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots);

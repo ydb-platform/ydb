@@ -190,12 +190,11 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         uploader.Traces.clear();
     }
 
-    Y_UNIT_TEST(LateCompileDiagnosticsAreBoundedAndKeepIdentity) {
+    Y_UNIT_TEST(CompileDiagnosticsAreBoundedAndKeepIdentity) {
         NKqp::TCompileDiagnosticsCollector collector;
         auto metadata = collector.Begin(NKqp::ECompileDependency::SchemeCache, "/Root/pending");
         auto statistics = collector.Begin(NKqp::ECompileDependency::StatisticsService, "/Root/statistics");
 
-        collector.Enable();
         collector.Finish(std::move(metadata), NKqp::ECompileDependencyStatus::Error);
         const auto snapshot = collector.Snapshot(TInstant::Now());
 
@@ -214,7 +213,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(pending->Status == NKqp::ECompileDependencyStatus::Unknown);
         collector.Finish(std::move(statistics), NKqp::ECompileDependencyStatus::Ok);
 
-        NKqp::TCompileDiagnosticsCollector bounded(/*enabled*/ true);
+        NKqp::TCompileDiagnosticsCollector bounded;
         std::vector<NKqp::ICompileDependencyDiagnostics::THandle> handles;
         for (size_t i = 0; i < 65; ++i) {
             handles.push_back(bounded.Begin(NKqp::ECompileDependency::SchemeCache,
@@ -765,7 +764,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         std::vector<TAutoPtr<IEventHandle>> captured;
         size_t compileRequests = 0;
         size_t tracedCompileRequests = 0;
-        size_t enableDiagnostics = 0;
         size_t metadataRequests = 0;
         TTestActorRuntimeBase::TEventFilter previousFilter;
         auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
@@ -773,9 +771,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
                 ++compileRequests;
                 const auto* request = static_cast<const NKqp::TEvKqp::TEvCompileRequest*>(ev->GetBase());
                 tracedCompileRequests += request->CollectTraceDiagnostics;
-            }
-            if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvEnableCompileDiagnostics::EventType) {
-                ++enableDiagnostics;
             }
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
                 const auto* response = static_cast<const TEvTxProxySchemeCache::TEvNavigateKeySetResult*>(
@@ -821,9 +816,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL_C(tracedCompileRequests, 1u,
             "sampled session did not request compile diagnostics");
-        UNIT_ASSERT_VALUES_EQUAL_C(enableDiagnostics, 1u,
-            "sampled waiter did not enable diagnostics on the active compile actor");
-
         runtime.SetEventFilter(std::move(previousFilter));
         for (auto& event : captured) {
             runtime.Send(event.Release());
@@ -839,11 +831,15 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
-        const auto* compileActor = FindSpan(*userUploader, "Compile query");
-        UNIT_ASSERT_C(compileActor,
-            "sampled coalesced waiter did not receive compile actor snapshot");
-        UNIT_ASSERT_C(FindSpan(*userUploader, "Load metadata /Root/table-1"),
-            "sampled coalesced waiter did not receive dependency snapshot");
+        const auto* compile = FindSpan(*userUploader, "Compile");
+        UNIT_ASSERT_C(compile, "sampled coalesced waiter lost the compile phase");
+        const auto* coverage = FindAttribute(*compile, "ydb.trace.coverage");
+        UNIT_ASSERT_C(coverage, "late sampled waiter is not marked as partial");
+        UNIT_ASSERT_VALUES_EQUAL(coverage->value().string_value(), "joined_in_progress");
+        UNIT_ASSERT_C(!FindSpan(*userUploader, "Compile query"),
+            "late sampled waiter reconstructed compile actor diagnostics");
+        UNIT_ASSERT_C(!FindSpan(*userUploader, "Load metadata /Root/table-1"),
+            "late sampled waiter reconstructed dependency diagnostics");
         AssertChildSpansAreWithinParents(*userUploader);
     }
 
@@ -1027,23 +1023,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(std::any_of(wideExecution.Stages.begin(), wideExecution.Stages.end(),
             [](const auto& stage) { return stage.StageId == NKqp::MaxStageTraceSnapshotsPerQuery; }));
 
-        NKqp::TCompileDiagnosticsCollector compileCollector(/*enabled*/ true);
+        NKqp::TCompileDiagnosticsCollector compileCollector;
         compileCollector.Begin(NKqp::ECompileDependency::SchemeCache, "/Root/pending");
         const auto compileSnapshot = compileCollector.Snapshot(TInstant::Now());
         UNIT_ASSERT_VALUES_EQUAL(compileSnapshot->Dependencies.size(), 1u);
         UNIT_ASSERT(compileSnapshot->Dependencies.front().End
             >= compileSnapshot->Dependencies.front().Start);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compileSnapshot->Dependencies.front().Status),
-            static_cast<int>(NKqp::ECompileDependencyStatus::Unknown));
-
-        NKqp::TCompileDiagnosticsCollector lateCompileCollector;
-        lateCompileCollector.Begin(NKqp::ECompileDependency::SchemeCache,
-            "/Root/pending-before-sampling");
-        lateCompileCollector.Enable();
-        const auto lateCompileSnapshot = lateCompileCollector.Snapshot(TInstant::Now());
-        UNIT_ASSERT_VALUES_EQUAL(lateCompileSnapshot->Dependencies.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(lateCompileSnapshot->Dependencies.front().Target, "");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(lateCompileSnapshot->Dependencies.front().Status),
             static_cast<int>(NKqp::ECompileDependencyStatus::Unknown));
 
         NKqp::TShardAckDiagnosticsCollector commitCollector;

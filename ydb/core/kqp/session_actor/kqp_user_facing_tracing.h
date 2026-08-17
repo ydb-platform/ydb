@@ -1,8 +1,14 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <util/generic/string.h>
+
+#include <optional>
+#include <vector>
 
 namespace NActors {
 class IActor;
@@ -16,6 +22,33 @@ struct TEvQueryRequest;
 }
 
 constexpr size_t MaxUserFacingSpansPerQuery = 1000;
+
+class TUserFacingTraceContext {
+public:
+    TUserFacingTraceContext(NWilson::TTraceId traceId, TInstant sessionStart,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops);
+
+    TUserFacingTraceContext(const TUserFacingTraceContext&) = delete;
+    TUserFacingTraceContext& operator=(const TUserFacingTraceContext&) = delete;
+    TUserFacingTraceContext(TUserFacingTraceContext&&) = default;
+    TUserFacingTraceContext& operator=(TUserFacingTraceContext&&) = default;
+
+    NWilson::TTraceId TraceId;
+    TExecutionDiagnosticsPolicy DiagnosticsPolicy;
+    TInstant SessionStart;
+    TInstant ProxyRequestStart;
+    std::vector<NKikimrKqp::TProxyRequestHop> ProxyHops;
+    TInstant AdmissionStartedAt;
+    bool ExecutionDelegated = false;
+    TString RootName;
+    TString Operation;
+    std::vector<TCompileAttemptDiagnostic> CompileAttempts;
+    std::optional<size_t> ActiveCompileAttempt;
+    std::optional<TCompileAttemptDiagnostic> OverflowCompileAttempt;
+    size_t CompileAttemptsDropped = 0;
+    std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+    size_t ExecutionTracesDropped = 0;
+};
 
 TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& parent);
 

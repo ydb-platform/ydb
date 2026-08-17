@@ -210,6 +210,33 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT(!error.empty());
     }
 
+    Y_UNIT_TEST(MemoryEstimateAccountsForConnectivity) {
+        const auto defaultEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 16);
+        const auto denseEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 100);
+        UNIT_ASSERT_GT(denseEstimate, defaultEstimate);
+        UNIT_ASSERT_VALUES_EQUAL(denseEstimate - defaultEstimate,
+            100 * 2 * (100 - 16) * sizeof(ui32));
+        UNIT_ASSERT_VALUES_EQUAL(
+            THnswIndex::EstimateMemoryBytes(100, 4, 16, 1234),
+            defaultEstimate + 1234);
+    }
+
+    Y_UNIT_TEST(RejectsUnsafeHnswSettingsBeforeNmslibBuild) {
+        auto settings = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        settings.set_hnsw_connectivity(NKMeans::MaxHnswConnectivity + 1);
+        std::vector<std::pair<TString, TString>> data = {
+            {"a", SerializeFloatVector({1.0f, 0.0f})},
+        };
+
+        TString error;
+        auto index = THnswIndex::Build(settings, data, 0, error);
+        UNIT_ASSERT(!index);
+        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_connectivity");
+    }
+
     Y_UNIT_TEST(RejectsEmptyInput) {
         auto settings = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,

@@ -1,9 +1,11 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ddisk_state.h)
 GENERATE_ENUM_SERIALIZATION(dirty_map.h)
 GENERATE_ENUM_SERIALIZATION(inflight_info.h)
 
 SRCS(
+    ddisk_state.cpp
     dirty_map.cpp
     inflight_info.cpp
     range_locker.cpp

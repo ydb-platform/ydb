@@ -25,7 +25,8 @@ class TTopicOffsetsActor: public TBaseActor<TTopicOffsetsActor>
     static constexpr size_t StatusMaxRetries = 15;
     static constexpr TDuration StatusRetryInitialDelay = TDuration::MilliSeconds(25);
     static constexpr TDuration StatusRetryMaxDelay = TDuration::MilliSeconds(250);
-    static constexpr ui64 TimeoutTag = Max<ui64>();
+    // Retry wakeups use the tablet id as the tag. Timeout is 0, which is never a tablet id.
+    static constexpr ui64 TimeoutTag = 0;
 
 public:
     TTopicOffsetsActor(TActorId requester, TTopicOffsetsSettings&& settings)
@@ -137,7 +138,11 @@ private:
             : Settings.Token;
         // Anonymous access (no token) skips SelectRow, matching the previous OffsetFetch actor.
         if (Settings.RequireSelectRow && !selectRowToken.empty()) {
-            AFL_ENSURE(topicInfo.SecurityObject);
+            if (!topicInfo.SecurityObject) {
+                return ReplyError(
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "Missing security object for " << Settings.Path);
+            }
             TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(selectRowToken);
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
                 return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");

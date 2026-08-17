@@ -285,7 +285,7 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
-struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
+struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvCommitedOffsetsResponse>
                                   , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
     TEvCommitedOffsetsResponse()

@@ -164,13 +164,14 @@ private:
     }
 
     void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev) {
+        // ScheduleRetry() clears LocationInflight before setting RetryPending, so a
+        // late cookie=0 reply from an old PQRB cannot land in the retry window.
+        // Cookie matching below cannot defend against those (old PQRB always
+        // replies with cookie 0); LocationInflight is the real safety net.
         if (!LocationInflight || RetryPending) {
             return;
         }
         if (ev->Cookie == 0) {
-            // Old PQRB does not put the request cookie on the response.
-            // Generation matching is impossible; drop stale replies only via
-            // LocationInflight / RetryPending.
             return ApplyLocationResponse(ev->Get()->Record);
         }
         if (ev->Cookie != LocationRequestGeneration) {

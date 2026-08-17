@@ -176,7 +176,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
     }
 
     if (!filled) {
-        SendPartitionsLocationError(sender, ctx);
+        SendPartitionsLocationError(sender, ctx, cookie);
         return true;
     }
 

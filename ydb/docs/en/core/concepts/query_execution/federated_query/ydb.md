@@ -38,7 +38,7 @@ SELECT * FROM ydb_datasource.`<table_name>`
 Where:
 
 - `ydb_datasource` - identifier of the external data source;
-- `<table_name>` - full name of the table within the [hierarchy](../../concepts/index.html#ydb-hierarchy) of directories in the {{ ydb-short-name }} database, e.g., `table`, `dir1/table1`, or `dir1/dir2/table3`.
+- `<table_name>` - full name of the table within the [hierarchy](../../architecture.md#ydb-hierarchy) of directories in the {{ ydb-short-name }} database, e.g., `table`, `dir1/table1`, or `dir1/dir2/table3`.
 
 If the table is at the top level of the hierarchy (not belonging to any directories), it is permissible not to enclose the table name in backticks "\`":
 

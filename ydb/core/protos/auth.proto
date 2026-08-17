@@ -71,6 +71,7 @@ message TAuthConfig {
     optional TExternalIdpConfig ExternalIdpConfig = 91;
     optional TLocalMetadataService LocalMetadataService = 92;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -92,6 +93,9 @@ message TAuthConfig {
 =======
     optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
 >>>>>>> d04f492c636 ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
+=======
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+>>>>>>> 28ae9d83b62 ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
 }
 
 message TLocalMetadataService {

@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = mm\2\n"
                                             "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = 11\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
                                               "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
                                               "__ydb_parent = 9223372036854775810, key = 1, data = one\n"
                                               "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = 11\2\n"
                                             "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = mm\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
                                               "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
                                               "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
                                               "__ydb_parent = 9223372036854775810, key = 4, data = four\n"
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             UNIT_ASSERT_VALUES_EQUAL(level, similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
                 ? "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = II\2\n"
                 : "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = \xFF\xFF\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
                                               "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
                                               "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
                                               "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = \x21\xFF\x02\n"
             "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = \xFF\x20\x02\n"
             "__ydb_parent = 0, __ydb_id = 9223372036854775811, __ydb_centroid = \xFF\xFF\x02\n");
-        UNIT_ASSERT_VALUES_EQUAL(posting,
+        AssertPostingTableEqual(posting,
             "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
             "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
             "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\2\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
                                               "__ydb_parent = 1, key = 5, embedding = \x75\x75\2, data = five\n"
                                               "__ydb_parent = 2, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 2, key = 2, embedding = \x31\x31\2, data = two\n"
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\2\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 1, key = 2, embedding = \x31\x31\2, data = two\n"
                                               "__ydb_parent = 1, key = 3, embedding = \x32\x32\2, data = three\n"
                                               "__ydb_parent = 2, key = 4, embedding = \x65\x65\2, data = four\n"
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             UNIT_ASSERT_VALUES_EQUAL(level, similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
                 ? "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\2\n"
                 : "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = \xFF\xFF\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 1, key = 2, embedding = \x31\x31\2, data = two\n"
                                               "__ydb_parent = 1, key = 3, embedding = \x32\x32\2, data = three\n"
                                               "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = \x21\xFF\x02\n"
             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = \xFF\x20\x02\n"
             "__ydb_parent = 0, __ydb_id = 3, __ydb_centroid = \xFF\xFF\x02\n");
-        UNIT_ASSERT_VALUES_EQUAL(posting,
+        AssertPostingTableEqual(posting,
             "key = 1, __ydb_parent = 1, __ydb_foreign = 0, __ydb_distance = 9.424325546e-06, embedding = \x10\x80\x02, data = one\n"
             "key = 2, __ydb_parent = 2, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
             "key = 3, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = mm\2\n"
                                             "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = 11\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
                                             "__ydb_parent = 9223372036854775849, key = 5, data = five\n"
                                             "__ydb_parent = 9223372036854775850, key = 1, data = one\n"
                                             "__ydb_parent = 9223372036854775850, key = 2, data = two\n"
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = 11\2\n"
                                             "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = mm\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
                                             "__ydb_parent = 9223372036854775849, key = 2, data = two\n"
                                             "__ydb_parent = 9223372036854775849, key = 3, data = three\n"
                                             "__ydb_parent = 9223372036854775850, key = 4, data = four\n"
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             UNIT_ASSERT_VALUES_EQUAL(level, similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
                 ? "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
                 : "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \xFF\xFF\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
                                             "__ydb_parent = 9223372036854775849, key = 2, data = two\n"
                                             "__ydb_parent = 9223372036854775849, key = 3, data = three\n"
                                             "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
@@ -762,7 +762,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\2\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, embedding = \x65\x65\2, data = four\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 41, key = 4, embedding = \x65\x65\2, data = four\n"
                                               "__ydb_parent = 41, key = 5, embedding = \x75\x75\2, data = five\n"
                                               "__ydb_parent = 42, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 42, key = 2, embedding = \x31\x31\2, data = two\n"
@@ -777,7 +777,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\2\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 41, key = 2, embedding = \x31\x31\2, data = two\n"
                                               "__ydb_parent = 41, key = 3, embedding = \x32\x32\2, data = three\n"
                                               "__ydb_parent = 42, key = 4, embedding = \x65\x65\2, data = four\n"
@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             UNIT_ASSERT_VALUES_EQUAL(level, similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
                 ? "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
                 : "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \xFF\xFF\2\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
+            AssertPostingTableEqual(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
                                               "__ydb_parent = 41, key = 2, embedding = \x31\x31\2, data = two\n"
                                               "__ydb_parent = 41, key = 3, embedding = \x32\x32\2, data = three\n"
                                               "__ydb_parent = 41, key = 4, embedding = \x65\x65\2, data = four\n"
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         UNIT_ASSERT_VALUES_EQUAL(level,
             "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x97\xFF\x02\n"
             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \xFF\x38\x02\n");
-        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOut);
+        AssertPostingTableEqual(posting, BuildToBuildWithOverlapOut);
     }
 
     Y_UNIT_TEST (BuildToBuild_Ranges) {
@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 39, __ydb_id = 40, __ydb_centroid = 00\2\n"
                     "__ydb_parent = 39, __ydb_id = 41, __ydb_centroid = 22\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 40, key = 1, embedding = 00\2, data = one\n"
                     "__ydb_parent = 41, key = 2, embedding = 22\2, data = two\n");
                 recreate();
@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\2\n"
                     "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
                     "__ydb_parent = 41, key = 2, embedding = \x31\x31\2, data = two\n"
                     "__ydb_parent = 41, key = 3, embedding = \x32\x32\2, data = three\n"
@@ -934,7 +934,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 41, __ydb_id = 42, __ydb_centroid = uu\2\n"
                     "__ydb_parent = 41, __ydb_id = 43, __ydb_centroid = vv\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 42, key = 5, embedding = uu\2, data = five2\n"
                     "__ydb_parent = 43, key = 6, embedding = vv\2, data = six\n");
                 recreate();
@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                     "__ydb_parent = 39, __ydb_id = 42, __ydb_centroid = 22\2\n"
                     "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = 11\2\n"
                     "__ydb_parent = 40, __ydb_id = 44, __ydb_centroid = mm\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 41, key = 1, embedding = 00\2, data = one\n"
                     "__ydb_parent = 42, key = 2, embedding = 22\2, data = two\n"
                     "__ydb_parent = 43, key = 1, embedding = \x30\x30\2, data = one\n"
@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                     "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = mm\2\n"
                     "__ydb_parent = 41, __ydb_id = 44, __ydb_centroid = uu\2\n"
                     "__ydb_parent = 41, __ydb_id = 45, __ydb_centroid = vv\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 42, key = 1, embedding = \x30\x30\2, data = one\n"
                     "__ydb_parent = 42, key = 2, embedding = \x31\x31\2, data = two\n"
                     "__ydb_parent = 42, key = 3, embedding = \x32\x32\2, data = three\n"
@@ -1000,7 +1000,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                         "__ydb_parent = 40, __ydb_id = 45, __ydb_centroid = mm\2\n"
                         "__ydb_parent = 41, __ydb_id = 46, __ydb_centroid = uu\2\n"
                         "__ydb_parent = 41, __ydb_id = 47, __ydb_centroid = vv\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 42, key = 1, embedding = 00\2, data = one\n"
                     "__ydb_parent = 43, key = 2, embedding = 22\2, data = two\n"
                     "__ydb_parent = 44, key = 1, embedding = \x30\x30\2, data = one\n"
@@ -1027,7 +1027,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                         "__ydb_parent = 40, __ydb_id = 72, __ydb_centroid = mm\2\n"
                         "__ydb_parent = 41, __ydb_id = 73, __ydb_centroid = uu\2\n"
                         "__ydb_parent = 41, __ydb_id = 74, __ydb_centroid = vv\2\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting,
+                AssertPostingTableEqual(posting,
                     "__ydb_parent = 69, key = 1, embedding = 00\2, data = one\n"
                     "__ydb_parent = 70, key = 2, embedding = 22\2, data = two\n"
                     "__ydb_parent = 71, key = 1, embedding = \x30\x30\2, data = one\n"
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows, 0, true);
                 UNIT_ASSERT_VALUES_EQUAL(level, "");
-                UNIT_ASSERT_VALUES_EQUAL(posting, "");
+                AssertPostingTableEqual(posting, "");
                 recreate();
             }
         }
@@ -1060,7 +1060,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows, 0, true);
                 UNIT_ASSERT_VALUES_EQUAL(level, "");
-                UNIT_ASSERT_VALUES_EQUAL(posting, "");
+                AssertPostingTableEqual(posting, "");
                 recreate();
             }
         }

@@ -86,6 +86,7 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
     NTable::TPos& dataPos, NTable::TPos* isForeignPos)
 {
+    Y_UNUSED(forBuild);
     auto tags = GetAllTags(table);
     TTags result;
     result.reserve(1 + data.size() + (isForeignPos ? 1 : 0));
@@ -100,7 +101,12 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
         dataPos = result.size();
     } else {
         embeddingPos = result.size();
-        dataPos = result.size() + (forBuild ? 0 : 1); // always include embedding in build tables
+        // The embedding is already emitted as part of sourcePk when it belongs
+        // to the main table key. Keep scanning it for distance calculations,
+        // but don't duplicate it among the output value cells.
+        const bool embeddingIsKey = std::find(table.KeyColumnIds.begin(), table.KeyColumnIds.end(), embeddingTag)
+            != table.KeyColumnIds.end();
+        dataPos = result.size() + embeddingIsKey;
         result.push_back(embeddingTag);
     }
     for (const auto& column : data) {
@@ -153,12 +159,11 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
     switch (uploadState) {
         case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:
         case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING: {
             if (auto it = std::find(data.begin(), data.end(), embedding); it == data.end()) {
                 addType(embedding);
             }
-            [[fallthrough]];
-        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING:
-        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING: {
             for (const auto& column : data) {
                 addType(column);
             }

@@ -290,6 +290,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     implTableColumns = CalcTableImplDescription(GetIndexType(indexDesc), baseTableColumns, indexKeys);
 
+    const auto indexType = GetIndexType(indexDesc);
+
     auto checkInvertedIndex = [&](const char* typeName) {
         // We have already checked this in IsCompatibleIndex
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
@@ -301,6 +303,13 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             if (!AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
                 status = NKikimrScheme::EStatus::StatusPreconditionFailed;
                 error = "Prefixed fulltext/json index support is disabled";
+                return false;
+            }
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+                indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = "Prefixed fulltext indexes with relevance are not supported";
                 return false;
             }
 
@@ -338,7 +347,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return true;
     };
 
-    switch (GetIndexType(indexDesc)) {
+    switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:

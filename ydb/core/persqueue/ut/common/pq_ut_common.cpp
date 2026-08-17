@@ -71,21 +71,12 @@ void SendPQTabletConfig(
     UNIT_ASSERT(complete->Record.HasOrigin() && complete->Record.GetOrigin() == tabletId);
 }
 
-void PQTabletPrepare(const TTabletPreparationParameters& parameters,
-                    const TConstArrayRef<TConsumerPreparationParameters> users,
-                     TTestActorRuntime& runtime,
-                     ui64 tabletId,
-                     TActorId edge,
-                     ui64 txId,
-                     ui64 planStep) {
-    TAutoPtr<IEventHandle> handle;
-    static int version = 0;
-    if (parameters.specVersion) {
-        version = parameters.specVersion;
-    } else {
-        ++version;
-    }
-
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version)
+{
     NKikimrPQ::TPQTabletConfig tabletConfig;
     for (ui32 i = 0; i < parameters.partitions; ++i) {
         tabletConfig.AddPartitionIds(i);
@@ -170,6 +161,26 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));
         }
     }
+
+    return tabletConfig;
+}
+
+void PQTabletPrepare(const TTabletPreparationParameters& parameters,
+                    const TConstArrayRef<TConsumerPreparationParameters> users,
+                     TTestActorRuntime& runtime,
+                     ui64 tabletId,
+                     TActorId edge,
+                     ui64 txId,
+                     ui64 planStep) {
+    TAutoPtr<IEventHandle> handle;
+    static int version = 0;
+    if (parameters.specVersion) {
+        version = parameters.specVersion;
+    } else {
+        ++version;
+    }
+
+    NKikimrPQ::TPQTabletConfig tabletConfig = MakePQTabletConfig(parameters, users, runtime, version);
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {

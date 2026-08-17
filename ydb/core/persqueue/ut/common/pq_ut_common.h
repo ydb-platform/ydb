@@ -283,6 +283,12 @@ struct TConsumerPreparationParameters {
     std::optional<ui64> ReadSpeedInMessagesPerSecond;
 };
 
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version);
+
 void SendPQTabletConfig(
     TTestActorRuntime& runtime,
     ui64 tabletId,

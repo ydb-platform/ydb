@@ -33,7 +33,7 @@ struct TTransaction;
 
 class TPersQueue : public NKeyValue::TKeyValueFlat {
     enum ECookie : ui64 {
-        WRITE_CONFIG_COOKIE = 2,
+        WRITE_CONFIG_COOKIE = 2, // reserved: former TEvUpdateConfig persist cookie
         READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,

@@ -4227,8 +4227,13 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
         static ui32 pqConfigVersion = 1'000;
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
-                        {{"user1", true}, {"user2", true}}, tc);
+        TTabletPreparationParameters prepareParams{
+            .maxCountInPartition=100,
+            .deleteTime=TDuration::Days(2).Seconds(),
+            .partitions=1,
+            .specVersion=pqConfigVersion++,
+        };
+        PQTabletPrepare(prepareParams, {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
         // Reset tablet cache
@@ -4251,19 +4256,12 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetTimeoutMs(5000);
         }
 
-        NKikimrPQ::TPQTabletConfig consumerDeleteConfig;
-        {
-            consumerDeleteConfig.SetVersion(pqConfigVersion++);
-            consumerDeleteConfig.AddPartitionIds(0);
-            consumerDeleteConfig.AddPartitions()->SetPartitionId(0);
-            consumerDeleteConfig.SetLocalDC(true);
-            consumerDeleteConfig.SetTopic("topic");
-            consumerDeleteConfig.SetTopicName("rt3.dc1--asdfgs--topic");
-            consumerDeleteConfig.SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
-            auto& cons = *consumerDeleteConfig.AddConsumers();
-            cons.SetName("user2");
-            cons.SetImportant(true);
-        }
+        TVector<TConsumerPreparationParameters> remainingConsumers{{
+            .Name = "user2",
+            .Important = true,
+        }};
+        auto consumerDeleteConfig = MakePQTabletConfig(
+            prepareParams, remainingConsumers, *tc.Runtime, pqConfigVersion++);
 
         TActorId edge = tc.Runtime->AllocateEdgeActor();
 

@@ -1566,6 +1566,7 @@ class TDataShard
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
+    void OnFollowerDataUpdated() override;
 
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
@@ -1869,7 +1870,27 @@ public:
     }
 
     void SetHnswIndexBuilding(ui32 localTid, bool building) {
-        HnswIndexCache[localTid].Building = building;
+        auto& entry = HnswIndexCache[localTid];
+        entry.Building = building;
+        if (!building) {
+            entry.InvalidatedWhileBuilding = false;
+        }
+    }
+
+    bool IsHnswIndexBuildObsolete(ui32 localTid) const {
+        auto it = HnswIndexCache.find(localTid);
+        return it != HnswIndexCache.end() && it->second.InvalidatedWhileBuilding;
+    }
+
+    void InvalidateHnswIndexes() {
+        for (auto& [_, entry] : HnswIndexCache) {
+            entry.Index.reset();
+            entry.RowCountAtBuild = 0;
+            entry.VectorColumnTag = 0;
+            entry.DeltaReservations.clear();
+            entry.NextScanAttemptAt = TInstant::Zero();
+            entry.InvalidatedWhileBuilding = entry.Building;
+        }
     }
 
     void RegisterHnswScanPageFault(ui32 localTid) {
@@ -1932,6 +1953,7 @@ public:
         entry.VectorColumnTag = vectorColumnTag;
         entry.DeltaReservations.clear();
         entry.Building = false;
+        entry.InvalidatedWhileBuilding = false;
         entry.NextScanAttemptAt = TInstant::Zero();
     }
 
@@ -3092,17 +3114,16 @@ private:
     // In-memory HNSW index cache for accelerated vector top-K search, keyed by
     // local table id (i.e. one entry per posting table hosted by this tablet).
     //
-    // The index is built once, when the vector index build finishes (see
-    // hnsw_index_build_unit.cpp), and is NOT maintained afterwards: the posting
-    // table stays writable (DML on the main table upserts into it), so rows
-    // inserted or updated later are invisible to HNSW-accelerated search and
-    // deleted rows can still be returned. Rebuild the index to pick them up.
+    // Leader writes maintain an installed index with per-key deltas. Follower
+    // redo does not expose row-level changes, so it invalidates the whole cache
+    // and the read path reconstructs it lazily from the updated follower data.
     struct THnswIndexCacheEntry {
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
         ui32 VectorColumnTag = 0;
         THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
+        bool InvalidatedWhileBuilding = false;
         TInstant NextScanAttemptAt;
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;

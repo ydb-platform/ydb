@@ -1566,6 +1566,102 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         CheckTableReads(session, mainTableName, true, false);
     }
 
+    Y_UNIT_TEST(FollowerHnswCacheInvalidatedOnRedo) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        auto serverSettings = TKikimrSettings(appConfig)
+            .SetFeatureFlags(featureFlags)
+            .SetEnableForceFollowers(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto execute = [&session](const TString& query, TTxSettings txSettings) {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        {
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/HnswFollower` (
+                    pk Int64 NOT NULL,
+                    emb String,
+                    PRIMARY KEY (pk)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswFollower` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([0.0f, -1.0f]), "FloatVector"));
+        )"), TTxSettings::SerializableRW());
+        {
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                ALTER TABLE `/Root/HnswFollower`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                          levels=1, clusters=2, hnsw_min_rows=1);
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        for (const TStringBuf table : {
+                "/Root/HnswFollower/index/indexImplLevelTable",
+                "/Root/HnswFollower/index/indexImplPostingTable"}) {
+            const TString alter = TStringBuilder()
+                << "ALTER TABLE `" << table
+                << "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");";
+            auto result = session.ExecuteSchemeQuery(alter).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswFollower` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+
+        // The first read starts the follower's lazy HNSW build. Give the build
+        // actor time to install it, then exercise the cached path once.
+        execute(search, TTxSettings::StaleRO());
+        Sleep(TDuration::Seconds(1));
+        execute(search, TTxSettings::StaleRO());
+
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswFollower` (pk, emb) VALUES
+                (100, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"), TTxSettings::SerializableRW());
+
+        // Observe the inserted posting row through the same follower before
+        // checking vector search, so replication lag cannot mask a stale cache.
+        bool followerCaughtUp = false;
+        for (ui32 attempt = 0; attempt < 50 && !followerCaughtUp; ++attempt) {
+            auto result = execute(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/HnswFollower/index/indexImplPostingTable`
+                WHERE pk = 100;
+            )"), TTxSettings::StaleRO());
+            followerCaughtUp = NYdb::FormatResultSetYson(result.GetResultSet(0)) == "[[1u]]";
+            if (!followerCaughtUp) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+        UNIT_ASSERT_C(followerCaughtUp, "posting-table follower did not catch up");
+
+        auto result = execute(search, TTxSettings::StaleRO());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[100]]");
+    }
+
     Y_UNIT_TEST_TWIN(OrderByReject, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();

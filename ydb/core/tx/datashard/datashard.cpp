@@ -427,6 +427,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     }
 }
 
+void TDataShard::OnFollowerDataUpdated() {
+    InvalidateHnswIndexes();
+}
+
 void TDataShard::SwitchToWork(const TActorContext &ctx) {
     if (NeedMediatorStateRestored()) {
         // We will need to wait until mediator state is fully restored before

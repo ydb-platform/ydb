@@ -16,15 +16,21 @@ class TestYdbWorkload(StressFixture):
                 "enable_move_column_table": True,
                 "enable_columnshard_bool": True,
                 "enable_cs_dictionary_encoding": True,
+                "enable_cut_history": True,
                 "enable_columnshard_interval": True,
                 "enable_columnshard_uuid": True,
                 "enable_columnshard_dy_number": True,
             },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
-                "generate_internal_path_id": True
-
-            }
+                "generate_internal_path_id": True,
+                "cut_history_enabled": True,
+            },
+            # The deny list is Hive's, not ColumnShard's, and ColumnShard is on it by
+            # default — which would disable the cutter for the tablets under test.
+            hive_config={
+                "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
+            },
         )
 
     def test(self):

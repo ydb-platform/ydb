@@ -178,6 +178,10 @@ private:
                     case NDescriber::EStatus::UNAUTHORIZED:
                     case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                         return Ydb::StatusIds::SCHEME_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    case NDescriber::EStatus::UNKNOWN_ERROR:
+                        return Ydb::StatusIds::INTERNAL_ERROR;
                     default:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                 }
@@ -190,6 +194,8 @@ private:
                         return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
                     case NDescriber::EStatus::NOT_TOPIC:
                         return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     default:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                 }

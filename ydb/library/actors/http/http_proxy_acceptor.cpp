@@ -7,6 +7,30 @@
 
 namespace NHttp {
 
+TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, TIpPort port) {
+    try {
+        TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor(THttpConfig::SocketType::GuessAddressFamily(address));
+        // for unit tests :(
+        SetSockOpt(socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
+#ifdef SO_REUSEPORT
+        SetSockOpt(socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
+#endif
+        THttpConfig::SocketAddressType bindAddress(socket->Socket.MakeAddress(address, port));
+        int err = socket->Socket.Bind(bindAddress.get());
+        if (err != 0) {
+            return nullptr;
+        }
+        err = socket->Socket.Listen(THttpConfig::LISTEN_QUEUE);
+        if (err != 0) {
+            return nullptr;
+        }
+        SetNonBlock(socket->Socket);
+        return socket;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {
 public:
     using TBase = NActors::TActor<TAcceptorActor>;
@@ -49,13 +73,11 @@ protected:
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
-        Socket = new TSocketDescriptor(SocketType::GuessAddressFamily(address));
-        // for unit tests :(
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
-#ifdef SO_REUSEPORT
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
-#endif
-        SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
+        if (event->Get()->PreboundSocket) {
+            Socket = event->Get()->PreboundSocket;
+        } else if (!Socket) {
+            Socket = TryBindListeningSocket(address, port);
+        }
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
@@ -66,6 +88,12 @@ protected:
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
         int err = 0;
+        if (!Socket) {
+            err = -1;
+            YDB_LOG_WARN("Failed to bind",
+                {"address", address},
+                {"port", port});
+        }
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
                 Endpoint->SecureContext = TSslHelpers::CreateServerContext(
@@ -88,32 +116,16 @@ protected:
                 TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
             }
         }
-        if (err == 0) {
-            err = Socket->Socket.Bind(bindAddress.get());
-            if (err != 0) {
-                YDB_LOG_WARN("Failed to bind",
-                    {"bindAddress", bindAddress->ToString()},
-                    {"code", err});
-            }
-        }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
-            err = Socket->Socket.Listen(LISTEN_QUEUE);
-            if (err == 0) {
-                YDB_LOG_INFO("Listening",
-                    {"schema", schema},
-                    {"bindAddress", bindAddress->ToString()});
-                SetNonBlock(Socket->Socket);
-                Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
-                TBase::Become(&TAcceptorActor::StateListening);
-                Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
-                return;
-            } else {
-                YDB_LOG_WARN("Failed to listen",
-                    {"schema", schema},
-                    {"bindAddress", bindAddress->ToString()},
-                    {"code", err});
-            }
+            SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
+            YDB_LOG_INFO("Listening",
+                {"schema", schema},
+                {"bindAddress", bindAddress->ToString()});
+            Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
+            TBase::Become(&TAcceptorActor::StateListening);
+            Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
+            return;
         }
         YDB_LOG_WARN("Failed to init - retrying...");
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());

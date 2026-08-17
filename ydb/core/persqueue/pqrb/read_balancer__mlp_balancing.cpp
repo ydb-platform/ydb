@@ -116,6 +116,7 @@ void TMLPConsumer::RestoreReceiveAttemptPartition(const TString& receiveAttemptI
 
 std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::CollectExpiredReceiveAttemptPartitions(TInstant now) {
     std::vector<TReceiveAttemptPartitionDelete> deletes;
+    deletes.reserve(ReceiveAttemptPartitions.size());
     absl::erase_if(ReceiveAttemptPartitions, [&](const auto& entry) {
         if (entry.second.Expiry <= now) {
             deletes.push_back(MakeDeleteKey(entry.first));
@@ -123,6 +124,16 @@ std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::CollectExpiredReceiveA
         }
         return false;
     });
+    return deletes;
+}
+
+std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::ExtractReceiveAttemptPartitions() {
+    std::vector<TReceiveAttemptPartitionDelete> deletes;
+    deletes.reserve(ReceiveAttemptPartitions.size());
+    for (const auto& [receiveAttemptId, _] : ReceiveAttemptPartitions) {
+        deletes.push_back(MakeDeleteKey(receiveAttemptId));
+    }
+    ReceiveAttemptPartitions.clear();
     return deletes;
 }
 
@@ -397,7 +408,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
                      record.GetCookie());
 }
 
-void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
+std::vector<TReceiveAttemptPartitionDelete> TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
     absl::flat_hash_set<TString> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -405,6 +416,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
         }
     }
 
+    std::vector<TReceiveAttemptPartitionDelete> deletes;
     for (auto it = Consumers.begin(); it != Consumers.end();) {
         auto& [consumerName, consumer] = *it;
         it++;
@@ -417,6 +429,8 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
                 consumer.Rebuild();
             }
         } else {
+            auto consumerDeletes = consumer.ExtractReceiveAttemptPartitions();
+            deletes.insert(deletes.end(), std::make_move_iterator(consumerDeletes.begin()), std::make_move_iterator(consumerDeletes.end()));
             Consumers.erase(consumerName);
         }
     }
@@ -427,6 +441,8 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
             it->second.Rebuild();
         }
     }
+
+    return deletes;
 }
 
 void TMLPBalancer::SetUseForReading(const TString& consumerName,

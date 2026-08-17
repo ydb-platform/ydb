@@ -3405,6 +3405,30 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                 "Prefixed JSON index requires an equality predicate");
         }
+
+        // More complex expression (OR) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId = 100 OR UserId = 200) AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+
+        // More complex expression (sqrt :D) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId * UserId) = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
     }
 
     Y_UNIT_TEST(PrefixedJsonAlterAdd) {

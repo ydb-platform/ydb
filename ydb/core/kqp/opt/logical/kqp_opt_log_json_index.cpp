@@ -849,10 +849,28 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
     if (!prefixColumns.empty()) {
         TVector<std::pair<TString, TExprNode::TPtr>> capturedPrefixColumns = seedPrefixColumns;
         const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
-        VisitExpr(body.Ptr(), [&](const TExprNode::TPtr& expr) {
+        static const THashSet<TString> AllowedJsonExprs = {
+            "And", "OptionalIf", "Just", "AssumeStrict"
+        };
+        TExprVisitPtrFunc extract = [&](const TExprNode::TPtr& expr) {
             TryExtractPrefixValues(expr, prefixColumnsSet, capturedPrefixColumns);
-            return true;
-        });
+            auto optionalIf = TExprBase(expr).Maybe<TCoOptionalIf>();
+            if (optionalIf) {
+                VisitExpr(optionalIf.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            auto coalesce = TExprBase(expr).Maybe<TCoCoalesce>();
+            if (coalesce) {
+                auto boolOr = coalesce.Cast().Value().Maybe<TCoBool>();
+                if (!boolOr || boolOr.Cast().Literal().Value() != "false") {
+                    return false;
+                }
+                VisitExpr(coalesce.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            return AllowedJsonExprs.contains(expr->Content());
+        };
+        VisitExpr(body.Ptr(), extract);
 
         if (capturedPrefixColumns.size() < prefixColumns.size()) {
             return std::unexpected(TIssue(ctx.GetPosition(node.Pos()),

@@ -1942,8 +1942,9 @@ void TryExtractPrefixValues(const TExprNode::TPtr& expr, const THashSet<TString>
         prefixValues.emplace_back(col, value.Ptr());
         return true;
     };
-    if (!trySide(eq.Cast().Left(), eq.Cast().Right()))
+    if (!trySide(eq.Cast().Left(), eq.Cast().Right())) {
         trySide(eq.Cast().Right(), eq.Cast().Left());
+    }
 }
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,

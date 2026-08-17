@@ -653,42 +653,29 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
 }
 
 NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
-    auto promise = NThreading::NewPromise<bool>();
-    auto future = promise.GetFuture();
-    auto complete = [connections = Connections, promise](bool value) mutable {
-        try {
-            connections->PostToResponseQueue([promise, value]() mutable {
-                promise.TrySetValue(value);
-            });
-        } catch (...) {
-        }
-    };
-    std::optional<bool> immediateResult;
-
-    {
-        std::lock_guard guard(Lock);
-        if (Aborting.load()) {
-            immediateResult = false;
-        } else {
-            if (!CurrentBatch.Empty()) {
-                WriteBatchImpl();
-            }
-
-            if (!OriginalMessagesToSend.empty()) {
-                OriginalMessagesToSend.back().FlushCallbacks.push_back(std::move(complete));
-            } else if (!SentOriginalMessages.empty()) {
-                SentOriginalMessages.back().FlushCallbacks.push_back(std::move(complete));
-            } else {
-                immediateResult = true;
-            }
-        }
+    std::lock_guard guard(Lock);
+    if (Aborting.load()) {
+        return NThreading::MakeFuture(false);
     }
 
-    if (immediateResult) {
-        complete(*immediateResult);
+    if (!CurrentBatch.Empty()) {
+        WriteBatchImpl();
     }
 
-    return future;
+    TOriginalMessage* message = nullptr;
+    if (!OriginalMessagesToSend.empty()) {
+        message = &OriginalMessagesToSend.back();
+    } else if (!SentOriginalMessages.empty()) {
+        message = &SentOriginalMessages.back();
+    } else {
+        return NThreading::MakeFuture(true);
+    }
+
+    if (!message->FlushPromise.Initialized()) {
+        message->FlushPromise = NThreading::NewPromise<bool>();
+    }
+
+    return message->FlushPromise.GetFuture();
 }
 
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
@@ -1486,12 +1473,8 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
 void TWriteSessionImpl::AbortFlushPromisesImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    auto abort = [](TOriginalMessage& message) {
-        message.CompleteFlushes(false);
-    };
-
     for (auto& message : OriginalMessagesToSend) {
-        abort(message);
+        message.CompleteFlush(false);
     }
 
     std::queue<TOriginalMessage> sentMessages;
@@ -1499,7 +1482,7 @@ void TWriteSessionImpl::AbortFlushPromisesImpl() {
     while (!sentMessages.empty()) {
         auto message = std::move(sentMessages.front());
         sentMessages.pop();
-        abort(message);
+        message.CompleteFlush(false);
         SentOriginalMessages.push(std::move(message));
     }
 }

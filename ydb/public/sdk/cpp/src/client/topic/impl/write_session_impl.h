@@ -275,7 +275,7 @@ private:
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         TWriteContext WriteContext;
-        std::vector<std::function<void(bool)>> FlushCallbacks;
+        NThreading::TPromise<bool> FlushPromise;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          TWriteContext&& writeContext = std::monostate{})
@@ -299,17 +299,13 @@ private:
         TOriginalMessage& operator=(TOriginalMessage&&) noexcept = default;
 
         ~TOriginalMessage() {
-            CompleteFlushes(true);
+            CompleteFlush(true);
         }
 
-        void CompleteFlushes(bool value) noexcept {
-            for (auto& callback : FlushCallbacks) {
-                try {
-                    callback(value);
-                } catch (...) {
-                }
+        void CompleteFlush(bool value) noexcept {
+            if (FlushPromise.Initialized()) {
+                FlushPromise.TrySetValue(value);
             }
-            FlushCallbacks.clear();
         }
     };
 

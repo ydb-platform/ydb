@@ -37,9 +37,12 @@ Y_UNIT_TEST_SUITE(WriteSessionFlush) {
 
         session->Write(WaitForWriteToken(*session), "message");
 
-        auto flush = session->Flush();
-        UNIT_ASSERT_C(flush.Wait(TDuration::Seconds(30)), "flush timed out");
-        UNIT_ASSERT(flush.GetValue());
+        auto firstFlush = session->Flush();
+        auto secondFlush = session->Flush();
+        UNIT_ASSERT_C(firstFlush.Wait(TDuration::Seconds(30)), "first flush timed out");
+        UNIT_ASSERT_C(secondFlush.Wait(TDuration::Seconds(30)), "second flush timed out");
+        UNIT_ASSERT(firstFlush.GetValue());
+        UNIT_ASSERT(secondFlush.GetValue());
         UNIT_ASSERT(session->Close(TDuration::Zero()));
     }
 }

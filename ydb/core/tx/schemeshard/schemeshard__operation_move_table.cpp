@@ -819,6 +819,7 @@ public:
         {
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
+                return result;
             }
             if (srcPath->IsColumnTable()) {
                 if (srcPath.Parent()->IsOlapStore()) {

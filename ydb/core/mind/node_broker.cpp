@@ -534,18 +534,15 @@ void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
 
 void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
-    if (Self->EnableLongLease) {
-        for (auto &pr : Nodes) {
-            if (pr.second.AliveUntil <= Epoch.End && pr.second.Liveness == ENodeLiveness::Alive) {
-                diff.NodesToMakeDead.push_back(pr.first);
-            }
-        }
-    }
-
     for (auto &pr : Nodes) {
         auto expire = Self->EnableLongLease ? pr.second.ExpireV2 : pr.second.Expire;
-        if (expire <= Epoch.End)
+        if (expire <= Epoch.End) {
             diff.NodesToExpire.push_back(pr.first);
+        } else if (Self->EnableLongLease
+                   && pr.second.AliveUntil <= Epoch.End
+                   && pr.second.Liveness == ENodeLiveness::Alive) {
+            diff.NodesToMakeDead.push_back(pr.first);
+        }
     }
 
     for (auto &pr : ExpiredNodes)
@@ -1893,13 +1890,15 @@ TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, c
                                  TNodeLocation(schema.GetLocation()))
     , Lease(schema.GetLease())
     , Expire(TInstant::MicroSeconds(schema.GetExpire()))
-    , ExpireV2(TInstant::MicroSeconds(schema.GetExpireV2()))
+    , ExpireV2(Max(TInstant::MicroSeconds(schema.GetExpire()),
+                   TInstant::MicroSeconds(schema.GetExpireV2())))
     , AuthorizedByCertificate(schema.GetAuthorizedByCertificate())
     , SlotIndex(schema.GetSlotIndex())
     , ServicedSubDomain(schema.GetServicedSubDomain())
     , State(state)
     , Version(version)
-    , AliveUntil(TInstant::MicroSeconds(schema.GetAliveUntil()))
+    , AliveUntil(Max(TInstant::MicroSeconds(schema.GetExpire()),
+                     TInstant::MicroSeconds(schema.GetAliveUntil())))
     , Liveness(static_cast<ENodeLiveness>(schema.GetLiveness()))
 {}
 

@@ -112,7 +112,7 @@ def test_load_existing_grpc_tls_data_rejects_incomplete_data():
         with open(cert_path, 'w') as writer:
             writer.write('certificate')
 
-        with pytest.raises(RuntimeError, match='ca.pem.*key.pem'):
+        with pytest.raises(ValueError, match='ca.pem.*key.pem'):
             load_existing_grpc_tls_data(tmpdir)
 
         with open(os.path.join(tmpdir, 'ca.pem'), 'w') as writer:

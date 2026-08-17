@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -87,7 +88,11 @@ public:
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const;
 
-    ui64 GetMoveDataPortionsCount() const;
+    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
+
+    ui64 GetMoveDataPortionsCount() const {
+        return GetMoveDataQueueSizes().GetTotal();
+    }
 
     void Refresh(const TAddExternalContext& externalContext);
 

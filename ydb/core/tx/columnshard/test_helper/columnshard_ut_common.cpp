@@ -667,6 +667,18 @@ NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, c
     return SetupSchema(runtime, sender, tableId, tableDescription);
 }
 
+NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody) {
+    using namespace NTxUT;
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    return SetupSchema(runtime, sender, schemaTxBody, 100);
+}
+
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
     std::vector<ui32> fields;

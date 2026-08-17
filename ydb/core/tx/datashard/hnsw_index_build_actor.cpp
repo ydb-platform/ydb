@@ -86,6 +86,13 @@ IActor* CreateHnswIndexBuildActor(const TActorId& replyTo, ui32 localTid, ui32 v
 void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
     auto* result = ev->Get();
+    if (IsHnswIndexBuildObsolete(result->LocalTid)) {
+        SetHnswIndexBuilding(result->LocalTid, false);
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+            TabletID() << " HNSW: discarding lazy build invalidated by follower update for localTid="
+            << result->LocalTid);
+        return;
+    }
     if (result->Index) {
         SetHnswIndex(result->LocalTid, result->Index, std::move(result->MemoryReservation),
             result->RowCountAtBuild, result->VectorColumnTag);

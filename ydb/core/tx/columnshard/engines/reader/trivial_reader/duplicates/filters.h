@@ -53,6 +53,7 @@ public:
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;
     bool IsBufferExhausted() const;
     void AddSource(const ui64 portionId, ui64 rowsCount);
+    ui32 GetProcessedRows(const ui64 portionId) const;
     TString DebugString() const;
     ui64 CountSources() const;
 
@@ -75,7 +76,8 @@ public:
     bool AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     bool AbortWaitingPortion(const ui64 portionId, const TString& error);
-    void Abort(const TString& error);
+    // Returns number of waiting constructors aborted.
+    ui64 Abort(const TString& error);
 
     ~TFiltersStore();
 };

@@ -20,6 +20,13 @@ std::unique_ptr<TFilterBuildingGuard>&& TEvFilterRequestResourcesAllocated::Extr
     return std::move(RequestGuard);
 }
 
+TEvFilterRequestAllocationFailed::TEvFilterRequestAllocationFailed(const std::shared_ptr<TFilterAccumulator>& request, const TString& error)
+    : Request(request)
+    , Error(error)
+{
+    AFL_VERIFY(Request);
+}
+
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
@@ -87,9 +94,10 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
 {
 }
 
-TEvMergeBordersResult::TEvMergeBordersResult(
-    TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
+TEvMergeBordersResult::TEvMergeBordersResult(TBuildFilterTaskContext&& context, TMergeRuntimeState&& mergeState,
+    THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
     : Context(std::move(context))
+    , MergeState(std::move(mergeState))
     , ReadyFilters(std::move(readyFilters))
     , Result(std::move(conclusion))
 {

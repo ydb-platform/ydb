@@ -3,9 +3,12 @@
 #include "context.h"
 #include "filters.h"
 
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/common.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate {
 
@@ -24,11 +27,33 @@ public:
     std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard();
 };
 
+// Filter-size memory allocation failed before the request was registered in FiltersStore.
+// Subscriber is already notified; the manager must unwind InflightFilterRequests.
+class TEvFilterRequestAllocationFailed
+    : public NActors::TEventLocal<TEvFilterRequestAllocationFailed, NColumnShard::TEvPrivate::EvFilterRequestAllocationFailed> {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Request);
+    YDB_READONLY_DEF(TString, Error);
+
+public:
+    TEvFilterRequestAllocationFailed(const std::shared_ptr<TFilterAccumulator>& request, const TString& error);
+};
+
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 class TBuildFilterTaskExecutor;
+
+// Progressive filter/batch state owned by either TBordersFlowController (idle) or TMergeBorders (inflight).
+// Never shared across concurrent merge tasks. Merger itself is created per TMergeBorders task.
+struct TMergeRuntimeState {
+    TFiltersBuilder FiltersBuilder;
+    // Portion batches that still have unprocessed rows after a drain window.
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> OpenBatches;
+    ui64 PrevRowsAdded = 0;
+    ui64 PrevRowsSkipped = 0;
+};
 
 class TBuildFilterTaskContext {
 private:
@@ -73,12 +98,14 @@ public:
 class TEvMergeBordersResult: public NActors::TEventLocal<TEvMergeBordersResult, NColumnShard::TEvPrivate::EvMergeBordersResult> {
 public:
     TBuildFilterTaskContext Context;
+    // Progressive FiltersBuilder/OpenBatches ownership returned to the controller after the task.
+    std::optional<TMergeRuntimeState> MergeState;
     THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
     TConclusionStatus Result;
 
 public:
-    TEvMergeBordersResult(
-        TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
+    TEvMergeBordersResult(TBuildFilterTaskContext&& context, TMergeRuntimeState&& mergeState,
+        THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

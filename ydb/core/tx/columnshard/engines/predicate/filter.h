@@ -218,8 +218,14 @@ protected:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(SourceIdx);
-        AFL_VERIFY(sourceIdx == *SourceIdx);
+        // When PortionId is set it is the stable identity across TTxScan continuations;
+        // SourceIdx may be stale and must not be compared (same as IDeprecatedSimpleScanCursor).
+        if (!PortionId) {
+            AFL_VERIFY(SourceIdx);
+            AFL_VERIFY(sourceIdx == *SourceIdx);
+        } else {
+            Y_UNUSED(sourceIdx);
+        }
         if (indexStart >= RecordIndex) {
             return true;
         }
@@ -228,9 +234,18 @@ protected:
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
-            return false;
+        // SourceIdx is assigned per scan as constructors are popped from the heap.
+        // Concurrent inserts (uncommitted written portions) shift that index across
+        // TTxScan continuations, so resume must key off PortionId when it is present.
+        if (PortionId) {
+            if (*PortionId != entity.GetDeprecatedPortionId()) {
+                return false;
+            }
+        } else {
+            AFL_VERIFY(SourceIdx);
+            if (*SourceIdx != entity.GetEntityId()) {
+                return false;
+            }
         }
         if (!entity.GetEntityRecordsCount()) {
             usage = false;

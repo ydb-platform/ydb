@@ -10,25 +10,35 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
+// Shared merge config. Progressive filter state lives in TMergeRuntimeState.
 struct TMergeContext {
-    std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
-    TFiltersBuilder FiltersBuilder;
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
-    ui64 PrevRowsAdded = 0;
-    ui64 PrevRowsSkipped = 0;
-    bool IsReversed;
+    const bool IsReversed;
     std::shared_ptr<TPortionStore> Portions;
     std::map<ui32, std::shared_ptr<arrow::Field>> FetchingColumns;
+    std::shared_ptr<const TAtomicCounter> AbortionFlag;
+    std::shared_ptr<arrow::Schema> PKSchema;
+    std::vector<std::string> VersionColumnNames;
+    NArrow::NMerger::TCursor MaxVersion;
+    NArrow::NMerger::TCursor MinUncommittedVersion;
 
-    TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
-        std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions,
-        const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns);
+    TMergeContext(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed,
+        const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns,
+        const std::shared_ptr<const TAtomicCounter>& abortionFlag, std::shared_ptr<arrow::Schema> pkSchema,
+        std::vector<std::string> versionColumnNames, NArrow::NMerger::TCursor maxVersion, NArrow::NMerger::TCursor minUncommittedVersion);
+
+    bool IsAborted() const {
+        return AbortionFlag && AbortionFlag->Val();
+    }
+
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> MakeMerger() const;
 };
 
 class TMergeBorders: public NConveyor::ITask {
 private:
     TActorId Owner;
     std::shared_ptr<TMergeContext> Context;
+    TMergeRuntimeState State;
     TEvBordersConstructionResult::TPtr Event;
     std::vector<NArrow::TSimpleRow> ReadyBorders;
 
@@ -38,9 +48,11 @@ private:
 
     virtual TString GetTaskClassIdentifier() const override;
 
+    void SendResult(THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion);
+
 public:
-    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event,
-        const std::vector<NArrow::TSimpleRow>& readyBorders);
+    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, TMergeRuntimeState&& state,
+        const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

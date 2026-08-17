@@ -38,9 +38,9 @@ private:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
+    std::shared_ptr<TAtomicCounter> AbortionFlag;
     TBordersFlowController BordersFlowController;
     TFiltersStore FiltersStore;
-    std::shared_ptr<TAtomicCounter> AbortionFlag;
 
     static constexpr ui32 MaxInflightExecutors = 1;
     ui32 InflightExecutors = 0;
@@ -48,10 +48,22 @@ private:
     static constexpr ui32 MaxInflightFilterRequests = 3;
     ui32 InflightFilterRequests = 0;
     std::deque<TEvRequestFilter::TPtr> PendingFilterRequests;
+    // Filter allocations waiting to call BordersFlowController::Next until merge is idle.
+    std::deque<NPrivate::TEvFilterRequestResourcesAllocated::TPtr> PendingNextAfterMerge;
 
     void TryStartPendingFilterRequest();
+    void TryStartPendingNextAfterMerge();
     void HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev);
+    void StartFilterAfterAllocation(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev);
     void OnFilterRequestCompleted();
+    void AbortAndPassAway(const TString& error);
+    void TryFinishAbort();
+
+    bool IsAborting() const {
+        return AbortionFlag && AbortionFlag->Val();
+    }
+
+    bool FinishedAbort = false;
 
     struct TPendingExecutor {
         std::shared_ptr<TBuildFilterTaskExecutor> Executor;
@@ -84,6 +96,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
+            hFunc(NPrivate::TEvFilterRequestAllocationFailed, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvBordersConstructionResult, Handle);
             hFunc(TEvMergeBordersResult, Handle);
@@ -95,10 +108,10 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
+    void Handle(const NPrivate::TEvFilterRequestAllocationFailed::TPtr&);
     void Handle(const TEvBordersConstructionResult::TPtr&);
     void Handle(const TEvMergeBordersResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
-    void AbortAndPassAway(const TString& error);
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const;
 
 public:

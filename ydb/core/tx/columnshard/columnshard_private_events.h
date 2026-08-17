@@ -77,6 +77,7 @@ struct TEvPrivate {
 
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
+        EvFilterRequestAllocationFailed,
         EvFilterConstructionResult,
         EvBordersConstructionResult,
         EvMergeBordersResult,

@@ -25,7 +25,12 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        Request->Abort(TStringBuilder() << "cannot allocate memory (filter size allocation): " << errorMessage);
+        const TString error = TStringBuilder() << "cannot allocate memory (filter size allocation): " << errorMessage;
+        if (!Request->IsDone()) {
+            Request->Abort(error);
+        }
+        // Notify the manager so InflightFilterRequests can unwind (needed for TryFinishAbort).
+        TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterRequestAllocationFailed(Request, error));
     }
 
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
@@ -66,19 +71,44 @@ void TDuplicateManager::Handle(const NActors::TEvents::TEvPoison::TPtr&) {
 }
 
 void TDuplicateManager::AbortAndPassAway(const TString& error) {
-    AbortionFlag->Inc();
-    BordersFlowController.ClearInflightOnAbort();
-    if (InflightExecutors) {
-        Counters->OnFetchInflight(-static_cast<i64>(InflightExecutors));
-        InflightExecutors = 0;
+    if (IsAborting()) {
+        TryFinishAbort();
+        return;
     }
+    AbortionFlag->Inc();
+    // Do not clear IsInflight: an in-flight TMergeBorders still owns the progressive filter state.
+    BordersFlowController.AbortPendingMerges();
     PendingExecutors.clear();
+    // InflightFilterRequests is incremented only for requests that entered HandleFilterRequestImpl.
+    // Decrement it for: (1) PendingNextAfterMerge (allocated, deferred until merge idle), and
+    // (2) FiltersStore waiting portions (allocated and registered). PendingFilterRequests never
+    // incremented the counter — only notify their subscribers.
     for (auto& ev : PendingFilterRequests) {
         ev->Get()->GetSubscriber()->OnFailure(error);
     }
     PendingFilterRequests.clear();
-    InflightFilterRequests = 0;
-    FiltersStore.Abort(error);
+    for (auto& ev : PendingNextAfterMerge) {
+        ev->Get()->GetRequest()->Abort(error);
+        AFL_VERIFY(InflightFilterRequests > 0);
+        --InflightFilterRequests;
+    }
+    PendingNextAfterMerge.clear();
+    const ui64 abortedWaiting = FiltersStore.Abort(error);
+    AFL_VERIFY(InflightFilterRequests >= abortedWaiting);
+    InflightFilterRequests -= abortedWaiting;
+    TryFinishAbort();
+}
+
+void TDuplicateManager::TryFinishAbort() {
+    AFL_VERIFY(IsAborting());
+    if (FinishedAbort) {
+        return;
+    }
+    // Wait for conveyor merge and fetch/filter allocations that may still call back.
+    if (HasInflightFetchOrMerge() || InflightFilterRequests > 0) {
+        return;
+    }
+    FinishedAbort = true;
     PassAway();
 }
 
@@ -103,15 +133,13 @@ TDuplicateManager::TDuplicateManager(
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , BordersFlowController(
-          std::make_shared<TMergeContext>(
-              std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
-                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
-                  GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
-                  GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
-              GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
-    , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
+    , BordersFlowController(
+          std::make_shared<TMergeContext>(Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
+              GetFetchingColumns(), AbortionFlag, PKSchema, IIndexInfo::GetSnapshotColumnNames(),
+              GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
+              GetVersionBatch(TSnapshot::Max(), 0)), TMergeRuntimeState(), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+    , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , HangTracker(inflightTimeout)
 {
 }
@@ -134,6 +162,7 @@ void TDuplicateManager::HandleWakeup() {
                              << "; fetch_inflight=" << InflightExecutors << "; merge_inflight=" << BordersFlowController.IsMergeInflight()
                              << "; filter_requests_inflight=" << InflightFilterRequests << "; pending_executors=" << PendingExecutors.size()
                              << "; pending_filter_requests=" << PendingFilterRequests.size()
+                             << "; pending_next_after_merge=" << PendingNextAfterMerge.size()
                              << "; borders_flow_controller=" << BordersFlowController.DebugString();
         YDB_LOG_ERROR("",
             {"component", "duplicates_manager"},
@@ -144,6 +173,7 @@ void TDuplicateManager::HandleWakeup() {
             {"filter_requests_inflight", InflightFilterRequests},
             {"pending_executors", PendingExecutors.size()},
             {"pending_filter_requests", PendingFilterRequests.size()},
+            {"pending_next_after_merge", PendingNextAfterMerge.size()},
             {"borders_flow_controller", BordersFlowController.DebugString()});
         AbortAndPassAway(error);
         return;
@@ -154,6 +184,10 @@ void TDuplicateManager::HandleWakeup() {
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
+    if (IsAborting()) {
+        ev->Get()->GetSubscriber()->OnFailure("duplicate filtering aborted");
+        return;
+    }
     if (InflightFilterRequests < MaxInflightFilterRequests) {
         ++InflightFilterRequests;
         auto evCopy = ev;
@@ -194,10 +228,52 @@ void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
+    if (IsAborting()) {
+        constructor->Abort("duplicate filtering aborted");
+        // OnFilterRequestCompleted already calls TryFinishAbort when aborting.
+        OnFilterRequestCompleted();
+        return;
+    }
     if (FiltersStore.NotifyReadyFilter(constructor)) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
             "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "cached")(
             "info", constructor->DebugString());
+        OnFilterRequestCompleted();
+        return;
+    }
+
+    // Do not mutate BordersFlowController (Next) while a merge task owns progressive filter state.
+    if (BordersFlowController.IsMergeInflight()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")(
+            "type", "deferred_until_merge")("info", constructor->DebugString())("pending_count", PendingNextAfterMerge.size());
+        PendingNextAfterMerge.emplace_back(ev);
+        return;
+    }
+
+    StartFilterAfterAllocation(ev);
+}
+
+void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestAllocationFailed::TPtr& ev) {
+    // Subscriber already aborted in DoOnAllocationImpossible; only unwind the inflight counter.
+    AFL_VERIFY(ev->Get()->GetRequest());
+    AFL_VERIFY(ev->Get()->GetRequest()->IsDone());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestAllocationFailed")(
+        "error", ev->Get()->GetError())("info", ev->Get()->GetRequest()->DebugString())("aborting", IsAborting());
+    OnFilterRequestCompleted();
+}
+
+void TDuplicateManager::StartFilterAfterAllocation(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
+    std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
+    AFL_VERIFY(!IsAborting());
+    AFL_VERIFY(!BordersFlowController.IsMergeInflight());
+
+    // Filter may have become ready while this request waited for merge.
+    if (FiltersStore.NotifyReadyFilter(constructor)) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")(
+            "type", "cached_after_merge")("info", constructor->DebugString());
         OnFilterRequestCompleted();
         return;
     }
@@ -254,11 +330,29 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     }
 }
 
+void TDuplicateManager::TryStartPendingNextAfterMerge() {
+    while (!PendingNextAfterMerge.empty() && !BordersFlowController.IsMergeInflight() && !IsAborting()) {
+        auto ev = std::move(PendingNextAfterMerge.front());
+        PendingNextAfterMerge.pop_front();
+        StartFilterAfterAllocation(ev);
+    }
+}
+
 void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
+    if (IsAborting()) {
+        AFL_VERIFY(InflightExecutors > 0);
+        Counters->OnFetchInflight(-1);
+        --InflightExecutors;
+        TryFinishAbort();
+        return;
+    }
     if (ev->Get()->Result.IsFail()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
             "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvBordersConstructionResult")(
             "error", ev->Get()->Result.GetErrorMessage());
+        AFL_VERIFY(InflightExecutors > 0);
+        Counters->OnFetchInflight(-1);
+        --InflightExecutors;
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
@@ -272,10 +366,25 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
 
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     auto& event = *ev->Get();
+    AFL_VERIFY(event.MergeState.has_value());
+    BordersFlowController.ReturnMergeState(std::move(*event.MergeState));
+    event.MergeState.reset();
+    if (IsAborting()) {
+        BordersFlowController.OnReadyMergeBorders(false);
+        AFL_VERIFY(InflightExecutors > 0);
+        Counters->OnFetchInflight(-1);
+        --InflightExecutors;
+        TryFinishAbort();
+        return;
+    }
     if (event.Result.IsFail()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
             "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvMergeBordersResult")(
             "error", event.Result.GetErrorMessage());
+        BordersFlowController.OnReadyMergeBorders(false);
+        AFL_VERIFY(InflightExecutors > 0);
+        Counters->OnFetchInflight(-1);
+        --InflightExecutors;
         AbortAndPassAway(event.Result.GetErrorMessage());
         return;
     }
@@ -291,7 +400,9 @@ void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
             OnFilterRequestCompleted();
         }
     }
-    BordersFlowController.OnReadyMergeBorders();
+    BordersFlowController.OnReadyMergeBorders(true);
+    // After merge, either the next queued merge is inflight or the controller is idle — only then Next().
+    TryStartPendingNextAfterMerge();
 }
 
 void TDuplicateManager::TryStartPendingExecutor() {
@@ -310,6 +421,10 @@ void TDuplicateManager::TryStartPendingExecutor() {
 void TDuplicateManager::OnFilterRequestCompleted() {
     AFL_VERIFY(InflightFilterRequests > 0);
     --InflightFilterRequests;
+    if (IsAborting()) {
+        TryFinishAbort();
+        return;
+    }
     TryStartPendingFilterRequest();
 }
 

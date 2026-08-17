@@ -100,6 +100,13 @@ using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
 using ECutState = NOlap::NBlobOperations::NBlobStorage::ECutState;
 
+// The suite only needs a live sensor instance to write into; values are asserted
+// through the cutter's own state, not through monitoring.
+static const NColumnShard::THistoryCutterCounters& TestSignals() {
+    static const NColumnShard::TBlobsManagerCounters counters("UT_BlobsManager");
+    return counters.HistoryCutterCounters;
+}
+
 // Exposes the protected sweep test hooks to this suite only.
 class TTestableHistoryCutter: public THistoryCutterWrapper {
 public:
@@ -299,7 +306,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // Standalone wrapper: expired manager weak_ptr makes IsDrained() false, so the
         // final re-check can never reach the barrier-send branch in this test.
         TTestableHistoryCutter cutter(info, /*currentGen=*/20, std::weak_ptr<NOlap::TBlobManager>(),
-            std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>(), TActorId());
+            std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>(), TActorId(), TestSignals());
 
         const TEntryKey keyA{ /*channel=*/2, /*fromGeneration=*/0 };
         const TEntryKey keyB{ /*channel=*/2, /*fromGeneration=*/5 };
@@ -333,7 +340,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
             NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
 
-        TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId());
+        TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ /*channel=*/2, /*fromGeneration=*/0 };
 
         // Empty queues and empty shared registry: the old entry is drained.

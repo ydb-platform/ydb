@@ -15,7 +15,20 @@ TBlobsManagerCounters::TBlobsManagerCounters(const TString& module)
     , CurrentGen(TBase::GetValue("CurrentGen"))
     , CurrentStep(TBase::GetValue("CurrentStep"))
     , GCCounters(*this, "GC")
+    , HistoryCutterCounters(*this, "CutHistory")
 
+{
+}
+
+THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName)
+    : TBase(sameAs, componentName)
+    , Nominations(TBase::GetDeriviative("Nominations/Count"))
+    , SweepsCompleted(TBase::GetDeriviative("Sweeps/Completed/Count"))
+    , EntriesCut(TBase::GetDeriviative("Entries/Cut/Count"))
+    , BarriersFailed(TBase::GetDeriviative("Barriers/Failed/Count"))
+    , SweepCandidates(TBase::GetValue("Sweep/Candidates"))
+    , ChannelsPoisoned(TBase::GetValue("Channels/Poisoned"))
+    , EntriesDisproved(TBase::GetValue("Entries/Disproved"))
 {
 }
 

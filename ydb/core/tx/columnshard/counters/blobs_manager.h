@@ -43,6 +43,50 @@ public:
     }
 };
 
+// A stalled cut has several externally indistinguishable causes: GC queues not
+// drained, blobs still shared out, an entry in disproval backoff, a poisoned
+// channel. These separate them. Aggregate rather than per-channel labels — the
+// channel is already in the poison warning.
+class THistoryCutterCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr Nominations;
+    NMonitoring::TDynamicCounters::TCounterPtr SweepsCompleted;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesCut;
+    NMonitoring::TDynamicCounters::TCounterPtr BarriersFailed;
+    NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
+    NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
+
+public:
+    THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
+
+    void OnNomination() const {
+        Nominations->Add(1);
+    }
+
+    void OnSweepCompleted() const {
+        SweepsCompleted->Add(1);
+    }
+
+    void OnBarrierResult(const bool ok) const {
+        if (ok) {
+            EntriesCut->Add(1);
+        } else {
+            BarriersFailed->Add(1);
+        }
+    }
+
+    // Deltas, not absolute values: every tablet owns a TBlobsManagerCounters but
+    // they share one module_id=BlobsManager subgroup, so Set() would be
+    // last-tablet-wins. The caller owns the per-tablet last-published state.
+    void OnLevelsDelta(const i64 sweepCandidates, const i64 channelsPoisoned, const i64 entriesDisproved) const {
+        SweepCandidates->Add(sweepCandidates);
+        ChannelsPoisoned->Add(channelsPoisoned);
+        EntriesDisproved->Add(entriesDisproved);
+    }
+};
+
 class TBlobsManagerCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -54,6 +98,7 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentGen;
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentStep;
     const TBlobsManagerGCCounters GCCounters;
+    const THistoryCutterCounters HistoryCutterCounters;
     TBlobsManagerCounters(const TString& module);
 
     void OnBlobsToDelete(const NOlap::TTabletsByBlob& blobs) const {

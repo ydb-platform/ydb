@@ -655,6 +655,11 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
+        if (Request.QueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+            auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+                Request.QueryPhysicalGraph);
+            PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
+        }
         const bool graphRestored = RestoreTasksGraph();
 
         NDq::TTxId dqTxId = TxId;

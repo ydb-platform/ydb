@@ -362,4 +362,5 @@ message TFeatureFlags {
     optional bool EnableGeneratedVirtual = 309 [default = false];
     optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 311 [default = false];
+    optional bool EnablePqSourceRescaling = 312 [default = false];
 }

@@ -34,6 +34,13 @@ const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
 
 const TPathId OTHER_TABLE_ID(72057594046644480ull, 43);
 
+// The very same table after an ESchemeOpMoveTable rename: another path, a fresh
+// PathId and a bumped schema version, reported by the very same tablets
+const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
+const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
+
+const TPathId RENAMED_TABLE_ID(72057594046644480ull, 45);
+
 constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -147,12 +154,13 @@ struct TFakeTablet {
         TInstant now,
         const TPathId& tableId = TABLE_ID,
         const TString& tablePath = TABLE_PATH,
-        TTabletTypes::EType tabletType = TABLET_TYPE
+        TTabletTypes::EType tabletType = TABLET_TYPE,
+        ui64 schemaVersion = 1
     ) {
         TDetailedMetricsTableInfo table;
         table.TableId = tableId;
         table.TablePath = tablePath;
-        table.SchemaVersion = 1;
+        table.SchemaVersion = schemaVersion;
         table.MetricsLevel = level;
 
         // An empty baseline (the very first report) makes the diff a plain copy
@@ -1513,21 +1521,133 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Pin the CURRENT behaviour of a metrics level change: the level of a table is frozen
-     * at its very first report, so a changed level does not re-route the counters.
+     * Verify that a metrics level change with NO schema version bump — an
+     * ALTER DATABASE ... TABLES_METRICS_LEVEL, which reaches the node through the
+     * subdomain publish rather than through the schema — re-routes the counters of the
+     * table from the per-partition leaves into the collapse bucket.
      *
-     * @note This is a deliberate deferral, not the target behaviour: reconciling a table
-     *       entry on a schema version or a metrics level change is the scope of the level
-     *       and rename step, which is expected to REPLACE the assertions below with
-     *       the transition ones (drop the leaves on PARTITION -> TABLE, drop the bucket on
-     *       TABLE -> PARTITION, drop the table on -> DISABLED). The test exists so that
-     *       the step has to flip an explicit assertion instead of silently changing
-     *       behaviour, which nothing pins.
+     * @note This is the transition, which watching the schema version alone would miss
+     *       entirely, leaving the table emitting per-partition leaves forever.
      */
-    Y_UNIT_TEST(MetricsLevelChangeIsIgnoredUntilReconciliation) {
+    Y_UNIT_TEST(LevelChangeWithoutSchemaBumpReconciles) {
+        TRoleTrees trees;
+
         const TInstant now = TInstant::Seconds(100);
 
-        // TEST 1: A table, which was first seen at the table level, keeps collapsing
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        TFakeTablet follower(1000, 1);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 8);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        }
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        trees.RecalculateAllCounters();
+
+        UNIT_ASSERT(FindLeafCounters(trees.Root, leader1.TabletId, leader1.FollowerId));
+        UNIT_ASSERT(FindLeafCounters(trees.Root, leader2.TabletId, leader2.FollowerId));
+        UNIT_ASSERT(FindLeafCounters(trees.Root, follower.TabletId, follower.FollowerId));
+
+        // The database default drops to the table level: the very same schema version 1,
+        // the very same tablets, only the level of the report changes
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        trees.RecalculateAllCounters();
+
+        DumpCounters("Counters after ALTER DATABASE dropped the level to the table one", trees.Root);
+
+        // Not a single leaf is left, of either role
+        auto tableGroup = FindTableGroup(trees.Root);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+
+        // ... and the collapse bucket holds the leaders alone
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
+            1 + 2
+        );
+    }
+
+    /**
+     * Verify the opposite transition: a table, which collapsed into one bucket, starts
+     * emitting a leaf per partition and drops the bucket it no longer fills.
+     *
+     * @note The table level series of a partition level table is produced on the
+     *       processor by summing the leaves across the nodes, so keeping the bucket here
+     *       as well would publish the very same table twice.
+     */
+    Y_UNIT_TEST(LevelChangeToPartitionDropsTheTableBucket) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
+            1 + 2
+        );
+
+        // The level is raised to the partition one
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        }
+
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after the level was raised to the partition one", rootGroup);
+
+        // The bucket took its type= subtree with it, and every partition has a leaf now
+        UNIT_ASSERT(!FindTableBucketCounters(rootGroup));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId),
+                "SUM(DbUniqueRowsTotal)"
+            ),
+            1
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId),
+                "SUM(DbUniqueRowsTotal)"
+            ),
+            2
+        );
+    }
+
+    /**
+     * Verify that a table, which stops collecting detailed metrics, is dropped whole:
+     * its groups go, and its reports create nothing afterwards.
+     */
+    Y_UNIT_TEST(LevelChangeToDisabledDropsTheTable) {
+        const TInstant now = TInstant::Seconds(100);
+
+        // TEST 1: From the table level, where the collapse bucket has to go
         {
             NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
 
@@ -1538,25 +1658,377 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             );
 
             TFakeTablet leader(1000, 0);
-
             leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+
             leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
-
-            leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
-            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
-
             aggregator->RecalculateAllCounters();
 
-            DumpCounters("Counters after the level changed to the partition one", rootGroup);
+            UNIT_ASSERT(FindTableBucketCounters(rootGroup));
+
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelDisabled, now);
+
+            DumpCounters("Counters after the table level table was disabled", rootGroup);
+
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+
+            // The reports of a disabled table keep creating nothing at all
+            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelDisabled, now);
+            aggregator->RecalculateAllCounters();
+
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        }
+
+        // TEST 2: From the partition level, where the leaves have to go. The level is
+        //         cleared rather than disabled: a table with no override of its own
+        //         follows a database default, which collects nothing
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader1(1000, 0);
+            TFakeTablet leader2(2000, 0);
+
+            for (auto* tablet : {&leader1, &leader2}) {
+                tablet->SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+                tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+            }
+            aggregator->RecalculateAllCounters();
+
+            UNIT_ASSERT(FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
+
+            // The first partition to notice takes ONLY its own table's leaves with it,
+            // including the leaf of the partition, which has not reported yet
+            leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
+
+            DumpCounters("Counters after the partition level table stopped collecting", rootGroup);
+
+            UNIT_ASSERT(!FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
+            UNIT_ASSERT(!FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId));
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        }
+    }
+
+    /**
+     * Verify that a per-table ALTER, which enables the detailed metrics of a table that
+     * collected none, starts emitting the leaves.
+     *
+     * @note Unlike the database default change above, this one DOES bump the schema
+     *       version, and it is the level, which decides what is built either way.
+     */
+    Y_UNIT_TEST(SchemaBumpEnablesPartitionLevel) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+
+        // The table follows a database default, which collects nothing
+        leader.Report(
+            aggregator,
+            TDetailedMetricsSettings::MetricsLevelUnspecified,
+            now,
+            TABLE_ID,
+            TABLE_PATH,
+            TABLET_TYPE,
+            1 /* schemaVersion */
+        );
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+
+        // ALTER TABLE ... SET (DETAILED_METRICS_LEVEL = PARTITION)
+        leader.Report(
+            aggregator,
+            TDetailedMetricsSettings::MetricsLevelPartition,
+            now,
+            TABLE_ID,
+            TABLE_PATH,
+            TABLET_TYPE,
+            2 /* schemaVersion */
+        );
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after the ALTER enabled the partition level", rootGroup);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader.TabletId, leader.FollowerId),
+                "SUM(DbUniqueRowsTotal)"
+            ),
+            5
+        );
+    }
+
+    /**
+     * Verify that a schema version bump, which does NOT change the effective level,
+     * keeps the counters of the table exactly where they are.
+     *
+     * @note The level is the only thing, which decides the shape of the entry, so a
+     *       plain ALTER has nothing to reconcile. Rebuilding the table on every schema
+     *       bump instead would restart the accumulated cumulative counters from zero —
+     *       a consumer reads that as a counter reset — and would blank the leaves of
+     *       the partitions, which have not reported since the ALTER.
+     */
+    Y_UNIT_TEST(SchemaBumpAtTheSameLevelKeepsTheCounters) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1).AddCumulative(CONSUMED_CPU, 100);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2).AddCumulative(CONSUMED_CPU, 200);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        }
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId),
+                "ConsumedCPU"
+            ),
+            100
+        );
+
+        // The ALTER bumps the schema version, and only the first partition has noticed
+        // it so far
+        leader1.AddCumulative(CONSUMED_CPU, 50);
+        leader1.Report(
+            aggregator,
+            TDetailedMetricsSettings::MetricsLevelPartition,
+            now,
+            TABLE_ID,
+            TABLE_PATH,
+            TABLET_TYPE,
+            2 /* schemaVersion */
+        );
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after a schema bump at the very same level", rootGroup);
+
+        // The accumulated counter keeps growing rather than restarting from the delta
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId),
+                "ConsumedCPU"
+            ),
+            100 + 50
+        );
+
+        // ... and the partition, which has not reported since, keeps its own leaf
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId),
+                "ConsumedCPU"
+            ),
+            200
+        );
+    }
+
+    /**
+     * Verify that the two instances of a node converge on a new level INDEPENDENTLY,
+     * one report each, and that neither of them detaches a shared node the other still
+     * writes under while they disagree.
+     *
+     * @note A level change reaches the instances through their own tablets' reports, so
+     *       there is always a window where the leader instance has already switched and
+     *       the follower one has not. The removals are routed through
+     *       RemoveSubgroupChain, which tests every node it empties within that node's
+     *       own lock, so the walk stops at the shared tablet_id= node for as long as
+     *       either instance still has a leaf there.
+     */
+    Y_UNIT_TEST(LevelChangeConvergesBothInstances) {
+        TRoleTrees trees;
+
+        const TInstant now = TInstant::Seconds(100);
+
+        // The leader of a partition and its follower, on one node, under ONE tablet_id=
+        TFakeTablet leader(1000, 0);
+        TFakeTablet follower(1000, 1);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 42);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 99);
+
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        trees.RecalculateAllCounters();
+
+        UNIT_ASSERT(FindLeafCounters(trees.Root, leader.TabletId, leader.FollowerId));
+        UNIT_ASSERT(FindLeafCounters(trees.Root, follower.TabletId, follower.FollowerId));
+
+        // TEST 1: The leader instance notices the new level first
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+        trees.RecalculateAllCounters();
+
+        DumpCounters("Counters while only the leader instance has switched", trees.Root);
+
+        UNIT_ASSERT(!FindLeafCounters(trees.Root, leader.TabletId, leader.FollowerId));
+
+        // The follower's leaf is untouched and still reachable from the SHARED root:
+        // the leader instance removed its own leaf, and the walk stopped at the
+        // tablet_id= node, which the follower instance still occupies
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(
+                FindLeafCounters(trees.Root, follower.TabletId, follower.FollowerId),
+                "SUM(DbUniqueRowsTotal)"
+            ),
+            99
+        );
+        UNIT_ASSERT(
+            trees.Root
+                ->FindSubgroup("database", DATABASE_PATH)
+                ->FindSubgroup("table", RELATIVE_TABLE_PATH)
+                ->FindSubgroup("detailed_metrics", "per_partition")
+                ->FindSubgroup("tablet_id", ToString(leader.TabletId))
+                ->FindSubgroup("follower_id", ToString(follower.FollowerId))
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
+            42
+        );
+
+        // TEST 2: The follower instance converges one report later, and the last leaf
+        //         takes the whole per-partition subtree with it — but not the table=
+        //         node, which the collapse bucket of the other instance still holds
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
+        trees.RecalculateAllCounters();
+
+        DumpCounters("Counters after both instances converged on the table level", trees.Root);
+
+        auto tableGroup = FindTableGroup(trees.Root);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
+            42
+        );
+    }
+
+    /**
+     * Verify that a renamed table manifests as drop-old/create-new, with no stale
+     * table= group left behind once the last of its tablets has reported the new path.
+     *
+     * @note A rename bumps the schema version and hands out a fresh PathId, but the key
+     *       of the whole per-table state is the RELATIVE PATH, so the new path simply
+     *       creates a new entry, and the tablets drain the old one as they move over —
+     *       the very same path a tablet re-reported under another table takes.
+     */
+    Y_UNIT_TEST(TableRenameCreatesTheNewGroupAndDropsTheOld) {
+        const TInstant now = TInstant::Seconds(100);
+
+        // TEST 1: The table level, where the tablets share one collapse bucket
+        {
+            NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            auto aggregator = CreateNodeDatabaseMetricsAggregator(
+                rootGroup,
+                DATABASE_PATH,
+                false /* isFollowerRole */
+            );
+
+            TFakeTablet leader1(1000, 0);
+            TFakeTablet leader2(2000, 0);
+
+            leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+            leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+            for (auto* tablet : {&leader1, &leader2}) {
+                tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+            }
+            aggregator->RecalculateAllCounters();
 
             UNIT_ASSERT_VALUES_EQUAL(
                 GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
-                7
+                1 + 2
             );
-            UNIT_ASSERT(!FindTableGroup(rootGroup)->FindSubgroup("detailed_metrics", "per_partition"));
+
+            // The first partition reports the new path: the old table keeps the second
+            // one for as long as it has not moved over
+            leader1.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelTable,
+                now,
+                RENAMED_TABLE_ID,
+                RENAMED_TABLE_PATH,
+                TABLET_TYPE,
+                2 /* schemaVersion */
+            );
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Counters while only one partition has reported the new path", rootGroup);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
+                2
+            );
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(
+                    FindTableBucketCounters(rootGroup, RENAMED_RELATIVE_TABLE_PATH),
+                    "SUM(DbUniqueRowsTotal)"
+                ),
+                1
+            );
+
+            // The second one follows, and nothing of the old path is left
+            leader2.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelTable,
+                now,
+                RENAMED_TABLE_ID,
+                RENAMED_TABLE_PATH,
+                TABLET_TYPE,
+                2 /* schemaVersion */
+            );
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Counters after the rename was fully reported", rootGroup);
+
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(
+                    FindTableBucketCounters(rootGroup, RENAMED_RELATIVE_TABLE_PATH),
+                    "SUM(DbUniqueRowsTotal)"
+                ),
+                1 + 2
+            );
+
+            // The reverse map points at the new path, so forgetting the tablets drops
+            // the group of the renamed table and the database= node above it
+            for (auto* tablet : {&leader1, &leader2}) {
+                aggregator->ForgetTablet(tablet->TabletId, tablet->FollowerId);
+            }
+
+            UNIT_ASSERT(!FindTableGroup(rootGroup, RENAMED_RELATIVE_TABLE_PATH));
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
         }
 
-        // TEST 2: A table, which was first seen at the partition level, keeps its leaves
+        // TEST 2: The partition level, where every tablet owns a leaf of its own
         {
             NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
 
@@ -1567,25 +2039,41 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             );
 
             TFakeTablet leader(1000, 0);
-
             leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+
             leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
-
-            leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
-            leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
-
             aggregator->RecalculateAllCounters();
 
-            DumpCounters("Counters after the level changed to the table one", rootGroup);
+            UNIT_ASSERT(FindLeafCounters(rootGroup, leader.TabletId, leader.FollowerId));
 
-            UNIT_ASSERT_VALUES_EQUAL(
-                GetCounterValue(
-                    FindLeafCounters(rootGroup, leader.TabletId, leader.FollowerId),
-                    "SUM(DbUniqueRowsTotal)"
-                ),
-                7
+            leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+            leader.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelPartition,
+                now,
+                RENAMED_TABLE_ID,
+                RENAMED_TABLE_PATH,
+                TABLET_TYPE,
+                2 /* schemaVersion */
             );
-            UNIT_ASSERT(!FindExecutorCountersGroup(FindTableGroup(rootGroup)));
+            aggregator->RecalculateAllCounters();
+
+            DumpCounters("Leaves after the rename", rootGroup);
+
+            UNIT_ASSERT(!FindTableGroup(rootGroup));
+
+            auto renamedLeaf = FindLeafCounters(
+                rootGroup,
+                leader.TabletId,
+                leader.FollowerId,
+                RENAMED_RELATIVE_TABLE_PATH
+            );
+            UNIT_ASSERT(renamedLeaf);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(renamedLeaf, "SUM(DbUniqueRowsTotal)"), 7);
+
+            aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
+
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
         }
     }
 

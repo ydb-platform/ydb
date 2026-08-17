@@ -799,10 +799,16 @@ private:
                     case TEasyCurlStream::EAction::Stop:
                         curl_easy_pause(streamHandle, CURLPAUSE_RECV);
                         break;
-                    case TEasyCurlStream::EAction::Drop:
+                    case TEasyCurlStream::EAction::Drop: {
                         curl_multi_remove_handle(Handle.get(), streamHandle);
-                        Allocated.erase(streamHandle);
+                        TString poolId;
+                        if (const auto ait = Allocated.find(streamHandle); ait != Allocated.end()) {
+                            poolId = ait->second->GetPoolId();
+                            Allocated.erase(ait);
+                        }
+                        ReleasePoolSlot(poolId);
                         break;
+                    }
                     case TEasyCurlStream::EAction::None:
                         break;
                 }
@@ -827,7 +833,7 @@ private:
                 if (Allocated.size() >= MaxHandlers) {
                     break;
                 }
-                const auto cap = PoolCaps.Value(poolId, MaxHandlers);
+                const auto cap = GetPoolCap(poolId);
                 if (AllocatedPerPool[poolId] >= cap) {
                     continue;
                 }
@@ -892,9 +898,6 @@ private:
                 }
 
                 const auto poolId = easy->GetPoolId();
-                if (auto& n = AllocatedPerPool[poolId]; n > 0) {
-                    --n;
-                }
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     AllocatedSize -= buffer->GetSizeLimit();
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(result, httpResponseCode)) {
@@ -904,19 +907,7 @@ private:
                     }
                 }
                 Allocated.erase(it);
-
-                // Promote pending streams for the pool that just freed a slot.
-                if (auto sIt = StreamAwaitPerPool.find(poolId); sIt != StreamAwaitPerPool.end()) {
-                    const auto cap = PoolCaps.Value(poolId, MaxHandlers);
-                    while (!sIt->second.empty() && AllocatedPerPool[poolId] < cap && Allocated.size() < MaxHandlers) {
-                        auto pending = std::move(sIt->second.front());
-                        sIt->second.pop();
-                        ++AllocatedPerPool[poolId];
-                        const auto pendingHandle = pending->GetHandle();
-                        Streams.emplace_back(TEasyCurlStream::TWeakPtr(pending));
-                        Allocated.emplace(pendingHandle, std::move(pending));
-                    }
-                }
+                ReleasePoolSlot(poolId);
             }
         }
         if (easy) {
@@ -1011,7 +1002,7 @@ private:
         TEasyCurlStream::TWeakPtr weak = stream;
         {
             const std::unique_lock lock(SyncRef());
-            const auto cap = PoolCaps.Value(poolId, MaxHandlers);
+            const auto cap = GetPoolCap(poolId);
             if (AllocatedPerPool[poolId] < cap && Allocated.size() < MaxHandlers) {
                 ++AllocatedPerPool[poolId];
                 Streams.emplace_back(weak);
@@ -1060,6 +1051,33 @@ private:
         AwaitQueue->Set(totalAwait);
         if (Allocated.size() < MaxHandlers && AllocatedSize + sizeLimit + OutputSize.load() <= MaxSimulatenousDownloadsSize) {
             curl_multi_wakeup(Handle.get());
+        }
+    }
+
+    size_t GetPoolCap(const TString& poolId) const {
+        return PoolCaps.Value(poolId, PoolCaps.Value(DefaultPoolId, MaxHandlers));
+    }
+
+    void ReleasePoolSlot(const TString& poolId) {
+        if (poolId.empty()) {
+            return;
+        }
+        if (auto& n = AllocatedPerPool[poolId]; n > 0) {
+            --n;
+        }
+        if (auto sIt = StreamAwaitPerPool.find(poolId); sIt != StreamAwaitPerPool.end()) {
+            const auto cap = GetPoolCap(poolId);
+            while (!sIt->second.empty() && AllocatedPerPool[poolId] < cap && Allocated.size() < MaxHandlers) {
+                auto pending = std::move(sIt->second.front());
+                sIt->second.pop();
+                ++AllocatedPerPool[poolId];
+                const auto pendingHandle = pending->GetHandle();
+                Streams.emplace_back(TEasyCurlStream::TWeakPtr(pending));
+                Allocated.emplace(pendingHandle, std::move(pending));
+            }
+        }
+        if (auto bIt = AwaitPerPool.find(poolId); bIt != AwaitPerPool.end() && !bIt->second.empty()) {
+            Wakeup(0ULL);
         }
     }
 

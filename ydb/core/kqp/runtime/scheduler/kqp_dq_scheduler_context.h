@@ -16,7 +16,7 @@ public:
 private:
     const NHdrf::NDynamic::TQueryPtr Query;
     const bool IsSchedulable;
-    TString PoolId;
+    const TString PoolId;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

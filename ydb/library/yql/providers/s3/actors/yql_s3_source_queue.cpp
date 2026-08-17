@@ -196,9 +196,17 @@ public:
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType)
-        , AllowLocalFiles(allowLocalFiles)
-        , SchedulerContext(std::move(schedulerContext))
-        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr) {
+        , AllowLocalFiles(allowLocalFiles) {
+        if (schedulerContext) {
+            if (auto work = schedulerContext->CreateSchedulableWork()) {
+                HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(
+                    work->GetPoolId(),
+                    [w = std::weak_ptr(work)](TDuration elapsed) {
+                        if (auto locked = w.lock()) locked->RecordUsage(elapsed);
+                    });
+                Work = std::move(work);
+            }
+        }
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -215,10 +223,6 @@ public:
     }
 
     void Bootstrap() {
-        // TODO: wrap per-listing-batch Start/Stop; skipped for now — most CPU is on curl-thread (ticket 3)
-        if (Work) {
-            Work->RegisterForResume(SelfId());
-        }
         if (UseRuntimeListing) {
             Schedule(PoisonTimeout, new NActors::TEvents::TEvPoison());
         }
@@ -525,7 +529,9 @@ private:
                     object.GetPath()},
                 Nothing(),
                 AllowLocalFiles,
-                NActors::TActivationContext::ActorSystem());
+                NActors::TActivationContext::ActorSystem(),
+                nullptr,
+                HttpRequestContext);
             Fetch();
             return true;
         }
@@ -648,8 +654,8 @@ private:
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
-    const IDqSchedulerContextPtr SchedulerContext;
     std::shared_ptr<IDqSchedulableWork> Work;
+    IHttpRequestContext::TPtr HttpRequestContext;
 
     static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);

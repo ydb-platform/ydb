@@ -80,7 +80,9 @@ private:
 
         auto startUnit = [this]() {
             while (Work && !Work->StartExecution(TMonotonic::Now())) {
-                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>([](const auto&){ return false; }, TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
+                    [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); },
+                    TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
             }
         };
         auto stopUnit = [this]() {

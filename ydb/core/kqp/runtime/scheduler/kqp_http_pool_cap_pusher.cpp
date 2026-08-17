@@ -43,12 +43,13 @@ private:
         if (auto gw = Gateway.lock()) {
             THashMap<TString, size_t> caps;
             for (const auto& [poolId, share] : Scheduler->GetPoolShares()) {
-                caps[poolId] = static_cast<size_t>(MaxHandlers * share);
+                const size_t raw = static_cast<size_t>(MaxHandlers * share);
+                caps[poolId] = share > 0.0 ? std::max<size_t>(raw, 1) : 0;
             }
-            const size_t s3Sum = std::accumulate(caps.begin(), caps.end(), size_t{0},
+            const size_t scheduledCapsSum = std::accumulate(caps.begin(), caps.end(), size_t{0},
                 [](size_t acc, const auto& kv) { return acc + kv.second; });
             const size_t defaultFloor = static_cast<size_t>(MaxHandlers * MinDefaultFraction);
-            const size_t defaultCap = std::max(defaultFloor, MaxHandlers > s3Sum ? MaxHandlers - s3Sum : 0);
+            const size_t defaultCap = std::max(defaultFloor, MaxHandlers > scheduledCapsSum ? MaxHandlers - scheduledCapsSum : 0);
             caps[NYql::IHTTPGateway::DefaultPoolId] = defaultCap;
 
             TStringBuilder log;
@@ -92,7 +93,8 @@ void RegisterHttpPoolCapPusherIfNeeded(NActors::TActorSystem* actorSystem, NYql:
     if (!appData || !appData->KqpComputeScheduler) {
         return;
     }
-    // TODO: read Period/MaxHandlers/MinDefaultFraction from THttpGatewayConfig
+    // TODO: read PoolCapsPushPeriodMs / MinDefaultPoolShare from THttpGatewayConfig;
+    // MaxHandlers should match IHTTPGateway config (MaxInFlightCount).
     actorSystem->Register(CreateHttpPoolCapPusher(
         appData->KqpComputeScheduler,
         gateway,

@@ -45,14 +45,20 @@ private:
 
 } // namespace
 
+namespace {
+    TString ExtractPoolId(const NHdrf::NDynamic::TQueryPtr& query) {
+        if (query && query->GetParent()) {
+            return std::get<NHdrf::TPoolId>(query->GetParent()->GetId());
+        }
+        return {};
+    }
+}
+
 TDqSchedulerContext::TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool isSchedulable)
     : Query(std::move(query))
     , IsSchedulable(isSchedulable)
-{
-    if (Query && Query->GetParent()) {
-        PoolId = std::get<NHdrf::TPoolId>(Query->GetParent()->GetId());
-    }
-}
+    , PoolId(ExtractPoolId(Query))
+{}
 
 std::shared_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedulableWork() {
     if (!Query) {

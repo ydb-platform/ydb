@@ -81,6 +81,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilit
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithBadQueueName_TableImplementation
@@ -244,6 +245,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesMultiple
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRedrivePolicy
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRetentionPeriod
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesUnknownAttribute
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestCreateQueue
@@ -322,11 +324,13 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatc
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesFifoImmutable
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesInvalidValues
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesMultiple
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesNonExistentConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesNonExistentQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesRedrivePolicy
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesRetentionPeriod
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesUnknownAttribute
+ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
@@ -344,6 +348,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomMixIndexesVariants[true,true,1,10,0,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap/types KqpOlapJson.SwitchAccessorCompactionVariants[10,false,1,1000,1000000,0]
+ydb/core/kqp/ut/olap/types KqpOlapJson.SwitchAccessorCompactionVariants[10,true,1,1000,1000000,0.5]
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.ANALYZE_TPCН_11
 ydb/core/kqp/ut/rbo KqpRboYql.AggregateKeyColumnsNotLeakedToInputMap
@@ -358,8 +363,10 @@ ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.CrossTables
+ydb/core/kqp/ut/tli KqpTli.DifferentKeys
 ydb/core/kqp/ut/tli KqpTli.IgnoredTableRegexes
 ydb/core/kqp/ut/tli KqpTli.InvisibleRowSkips
+ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
@@ -460,6 +467,7 @@ ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1_UNIQUE_SYNC-pk
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Datetime_1_UNIQUE_SYNC-pk_types5-all_types5-index5-Datetime-UNIQUE-SYNC]
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-2-1-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
@@ -670,5 +678,7 @@ ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_failing_cluster_config_is_not_selected
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_operations_prepare_deploy_context_before_install
+ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

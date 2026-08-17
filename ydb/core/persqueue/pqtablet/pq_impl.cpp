@@ -2317,7 +2317,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetClientId(),
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
-                                       cmd.GetReadToBlobEnd(),
+                                       cmd.HasReadToBlobEnd() ? cmd.GetReadToBlobEnd() : true,
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,

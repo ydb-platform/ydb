@@ -1518,6 +1518,34 @@ namespace NSchemeShardUT_Private {
         return TestCancelImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId, expectedStatus);
     }
 
+    TEvImport::TEvForgetImportRequest* ForgetImportRequest(ui64 txId, const TString& dbName, ui64 importId) {
+        return new TEvImport::TEvForgetImportRequest(txId, dbName, importId);
+    }
+
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId) {
+        AsyncSend(runtime, schemeshardId, ForgetImportRequest(txId, dbName, importId));
+    }
+
+    void AsyncForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId) {
+        AsyncForgetImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId);
+    }
+
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        AsyncForgetImport(runtime, schemeshardId, txId, dbName, importId);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvImport::TEvForgetImportResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrImport::TEvForgetImportResponse TestForgetImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        return TestForgetImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId, expectedStatus);
+    }
+
     NKikimrBackup::TEvGetIncrementalBackupResponse TestGetIncrementalBackup(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus) {
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetIncrementalBackupRequest(dbName, id));

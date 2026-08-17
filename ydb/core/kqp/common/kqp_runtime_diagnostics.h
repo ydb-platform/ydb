@@ -15,6 +15,7 @@
 namespace NKikimr::NKqp {
 
 constexpr size_t MaxShardReadDiagnostics = 8;
+constexpr size_t MaxActiveShardReadDiagnostics = 32;
 constexpr size_t MaxCommitShardDiagnostics = 8;
 
 // Exported diagnostics use wall clock because Wilson span timestamps are wall-clock values.
@@ -34,8 +35,14 @@ public:
         if (const auto it = Indexes_.find(shardId); it != Indexes_.end()) {
             startTimeMs = Reads_[it->second].GetStartTimeMs();
         }
-        ActiveStarts_.try_emplace(shardId, startTimeMs);
-        return startTimeMs;
+        if (const auto it = ActiveStarts_.find(shardId); it != ActiveStarts_.end()) {
+            return it->second;
+        }
+        if (ActiveStarts_.size() < MaxActiveShardReadDiagnostics) {
+            ActiveStarts_.emplace(shardId, startTimeMs);
+            return startTimeMs;
+        }
+        return 0;
     }
 
     void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0,
@@ -54,7 +61,7 @@ public:
         if (it == Indexes_.end()) {
             NKqpProto::TKqpShardReadStats candidate;
             candidate.SetShardId(shardId);
-            candidate.SetStartTimeMs(startTimeMs ? startTimeMs : now.MilliSeconds());
+            candidate.SetStartTimeMs(startTimeMs);
             candidate.SetFinishTimeMs(now.MilliSeconds());
             candidate.SetRows(rows);
             candidate.SetRetries(retries);
@@ -123,7 +130,8 @@ private:
     static auto Rank(const NKqpProto::TKqpShardReadStats& shard) {
         const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
             && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
-        const ui64 durationMs = shard.GetStartTimeMs() && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+        const ui64 durationMs = shard.GetStartTimeMs()
+                && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
             ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
         return std::tuple(failed, shard.GetRetries() > 0, durationMs);
     }

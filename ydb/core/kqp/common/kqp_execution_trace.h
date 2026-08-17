@@ -5,6 +5,7 @@
 #include <util/generic/string.h>
 
 #include <array>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -131,6 +132,7 @@ struct TExecutionTraceSnapshot {
     TString ExecuterActorType;
     TString ComputeActorType;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    std::optional<EExecutionPhase> FailedPhase;
     TExecutionTimeline Timeline;
     ui64 CpuUs = 0;
     std::vector<TStageTraceSnapshot> Stages;

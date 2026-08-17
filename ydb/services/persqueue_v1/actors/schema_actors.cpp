@@ -1,5 +1,7 @@
 #include "schema_actors.h"
 
+#include <ydb/core/ydb_convert/topic_description.h>
+
 #include "persqueue_utils.h"
 
 #include <ydb/core/persqueue/public/utils.h>

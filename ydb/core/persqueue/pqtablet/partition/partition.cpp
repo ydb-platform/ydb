@@ -3853,7 +3853,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            MaxBlobSize);
 
             for (auto& k : t.WriteInfo->BodyKeys) {
-                LOG_D("add key " << k.Key.ToString());
+                LOG_D("add key", {"key", k.Key.ToString()});
                 auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
                 if (write && !write->Value.empty()) {
                     AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
@@ -3864,7 +3864,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 k.BlobKeyToken->NeedDelete = false;
             }
 
-            LOG_D("PartitionedBlob.GetFormedBlobs().size=" << BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+            LOG_D("PartitionedBlob.GetFormedBlobs().size", {"size", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()});
             if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
                 ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
                 RenameFormedBlobs(formedBlobs,

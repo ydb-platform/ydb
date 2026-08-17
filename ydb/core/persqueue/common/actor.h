@@ -7,15 +7,14 @@
 #include <ydb/library/services/services.pb.h>
 
 #define NPQ_LOG_PREFIX LogBuilder() << GetLogPrefix()
-#define LOG(level, stream) LOG_LOG_S (*NActors::TlsActivationContext, level, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_W(stream) LOG_WARN_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_A(stream) LOG_ALERT_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_T(message, ...) YDB_LOG_TRACE_COMP (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_D(message, ...) YDB_LOG_DEBUG_COMP (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_I(message, ...) YDB_LOG_INFO_COMP  (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_N(message, ...) YDB_LOG_NOTICE_COMP(Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_W(message, ...) YDB_LOG_WARN_COMP  (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_E(message, ...) YDB_LOG_ERROR_COMP (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_C(message, ...) YDB_LOG_CRIT_COMP  (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
+#define LOG_A(message, ...) YDB_LOG_ALERT_COMP (Service, (message), {"logPrefix", NPQ_LOG_PREFIX} __VA_OPT__(, __VA_ARGS__))
 
 namespace NKikimr::NPQ {
 

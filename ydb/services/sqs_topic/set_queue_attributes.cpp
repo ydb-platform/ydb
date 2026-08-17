@@ -125,6 +125,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                     return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
                         "Access denied"));
+                case NDescriber::EStatus::BAD_REQUEST:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
+                        NDescriber::Description(FullTopicPath_, topicInfo.Status)));
                 case NDescriber::EStatus::UNKNOWN_ERROR:
                     return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                         NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));

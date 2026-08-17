@@ -967,6 +967,12 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
 
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        req->TracingTags().emplace_back("yt.offset", ToString(offset));
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
+
     req->set_use_native_tablet_node_api(options.UseNativeTabletNodeApi);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
@@ -998,6 +1004,15 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
     YT_OPTIONAL_SET_PROTO(req, offset, offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.consumer_path", ToString(consumerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        if (offset) {
+            req->TracingTags().emplace_back("yt.offset", ToString(*offset));
+        }
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 

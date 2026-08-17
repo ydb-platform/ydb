@@ -6,10 +6,19 @@
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NMLP {
+
+namespace {
+
+bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+    return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+}
+
+} // namespace
 
 TReaderActor::TReaderActor(const TActorId& parentId, const TReaderSettings& settings)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_READER)
@@ -150,6 +159,9 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
         TString messageGroupId;
         TString messageDeduplicationId;
+        if (IsKafkaBatchDataChunk(proto)) {
+            NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), message.GetId().GetOffset());
+        }
 
         std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
         for (auto& meta : *proto.MutableMessageMeta()) {

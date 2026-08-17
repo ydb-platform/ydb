@@ -988,6 +988,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                     auto& message = data->GetCompressedMessages().front();
                     UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), 0u);
                     UNIT_ASSERT_VALUES_EQUAL(message.GetLogicalMessageCount(), logicalMessageCount);
+                    UNIT_ASSERT_VALUES_EQUAL(NKafka::ReadKafkaRecordBatch(message.GetData()).BaseOffset, message.GetOffset());
 
                     if (commitDataEvent) {
                         data->Commit();

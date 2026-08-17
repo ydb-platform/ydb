@@ -30,22 +30,6 @@ NPersQueueCommon::ECodec KafkaBatchCodec() {
     return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
 }
 
-TString RewriteKafkaBatchBaseOffset(TStringBuf data, ui64 baseOffset) {
-    const auto header = ReadKafkaBatchHeader(data);
-    if (!header || header->Magic < TKafkaRecordBatch::MagicMeta::Default) {
-        return TString(data);
-    }
-
-    const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
-    TKafkaWriteBuffer buffer(baseOffsetSize);
-    TKafkaWritable writable(buffer);
-    writable << static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
-
-    TString result(data);
-    result.replace(0, baseOffsetSize, buffer.AsString());
-    return result;
-}
-
 void FillRecordFromDataChunk(TKafkaRecord& record, const NKikimrPQClient::TDataChunk& dataChunk) {
     for (const auto& metadata : dataChunk.GetMessageMeta()) {
         if (metadata.key() == "__key") {
@@ -217,8 +201,8 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     ui64 maxTimestamp = 0;
     bool first = true;
 
-    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, ui64 offset, const size_t messagesInBatch) {
-        kafkaBatchRecords += RewriteKafkaBatchBaseOffset(dataChunk.GetData(), offset);
+    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, const size_t messagesInBatch) {
+        kafkaBatchRecords += dataChunk.GetData();
         messagesCount += messagesInBatch;
     };
 
@@ -274,7 +258,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     };
 
     for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
@@ -295,7 +279,8 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
-            addRawKafkaBatch(dataChunk, result.GetOffset(), result.GetLogicalMessageCount());
+            SetKafkaBatchBaseOffset(*dataChunk.MutableData(), result.GetOffset());
+            addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
             continue;
         }
 

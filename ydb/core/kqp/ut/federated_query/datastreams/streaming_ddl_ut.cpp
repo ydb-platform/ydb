@@ -3116,6 +3116,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -3172,6 +3173,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -4427,6 +4429,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"sql(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1 OFFSET 1

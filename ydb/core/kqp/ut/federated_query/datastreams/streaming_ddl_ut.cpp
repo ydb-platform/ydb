@@ -1998,6 +1998,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName,
             "consumer_name"_a = consumerName
         ));
+
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -4442,7 +4443,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Trigger another batch so the write actor tries to write to the now-deleted table.
         WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
 
-     
         WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
             const auto& result = ExecQuery(
                 R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"

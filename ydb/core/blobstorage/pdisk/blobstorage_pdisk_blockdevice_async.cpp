@@ -1465,6 +1465,7 @@ public:
         Y_ASSERT(PDisk);
         TStackVec<TCompletionAction*, 32> pendingActions;
         {
+            TGuard<TMutex> stateGuard(PDisk->StateMutex);
             TGuard<TMutex> guard(CacheMutex);
             ui64 offset = completion->GetOffset();
             auto currentReadIt = CurrentReads.find(offset);

@@ -165,6 +165,7 @@ class FederationRecipe(object):
         os.environ["CREATE_ACCOUNTS_AS_DATABASES"] = "1"
         os.environ["SERVERLESS_DATABASE_PATH_PREFIX"] = meta_database
         os.environ["NO_YDBCP_MODE"] = "1"
+        os.environ["MIRROR_AUTOSCALING_ENABLED"] = "true"
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(meta_port),

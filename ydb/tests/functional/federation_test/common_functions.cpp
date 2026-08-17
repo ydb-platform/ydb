@@ -90,6 +90,37 @@ std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> sessi
     return result;
 }
 
+std::map<std::pair<uint64_t, uint64_t>, std::string> ReadAutoscaledTopicMessages(
+                    std::shared_ptr<IReadSession> session, size_t wantCount,
+                    TDuration timeout) {
+    std::map<std::pair<uint64_t, uint64_t>, std::string> result;
+    TInstant deadline = TInstant::Now() + timeout;
+
+    while (TInstant::Now() < deadline) {
+        auto event = session->GetEvent(false);
+        if (!event) {
+            Sleep(TDuration::MilliSeconds(50));
+            continue;
+        }
+        if (auto* e = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            e->Confirm();
+        } else if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            uint64_t partitionId = e->GetPartitionSession()->GetPartitionId();
+            for (const auto& msg : e->GetMessages()) {
+                result[{partitionId, msg.GetOffset()}] = std::string(msg.GetData());
+            }
+            e->Commit();
+        } else if (std::holds_alternative<TSessionClosedEvent>(*event)) {
+            break;
+        }
+
+        if (result.size() >= wantCount) {
+            break;
+        }
+    }
+    return result;
+}
+
 using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
 
 NLogBroker::Operations::Operation WaitOperation(AdminStub& stub, const NLogBroker::Operations::Operation& initial, TDuration timeout)
@@ -125,7 +156,7 @@ void ExecCmRequest(AdminStub& stub, NLogBroker::NAdmin::ExecuteModifyCommandsReq
         comment + ": CM status " + std::to_string((int)op.status()));
 }
 
-void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& comment)
+void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& comment, bool autoSplit)
 {
     NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
     req.set_comment(comment);
@@ -138,6 +169,14 @@ void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& co
     action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_strategy()->set_user_defined("disabled");
     action->mutable_create_topic()->mutable_properties()->mutable_supported_codecs()->set_user_defined("raw");
 
+    if (autoSplit) {
+        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_strategy()->set_user_defined("up");
+        action->mutable_create_topic()->mutable_properties()->mutable_max_partitions_count()->set_user_defined(4);
+        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_up_utilization_percent()->set_user_defined(50);
+        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_stabilization_window_seconds()->set_user_defined(10);
+        action->mutable_create_topic()->mutable_admin_properties()->mutable_max_partition_write_speed()->set_user_defined(1_MB);
+    }
+
     ExecCmRequest(stub, req, comment);
 }
 
@@ -148,6 +187,22 @@ void SetClusterWriteEnabled(AdminStub& stub, const std::string& clusterName, boo
     action->mutable_update_cluster()->set_name(clusterName);
     action->mutable_update_cluster()->mutable_properties()->mutable_write_enabled()->set_user_defined(enabled);
     ExecCmRequest(stub, req, "SetClusterWriteEnabled");
+}
+
+size_t GetActivePartitionCount(const std::string& endpoint, const std::string& database, const std::string& topicPath) {
+    TDriver driver = MakeDriver(endpoint, database);
+    TTopicClient client(driver);
+    auto result = client.DescribeTopic(topicPath).GetValueSync();
+    size_t count = 0;
+    if (result.IsSuccess()) {
+        for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
+            if (partition.GetActive()) {
+                ++count;
+            }
+        }
+    }
+    driver.Stop(true);
+    return count;
 }
 
 } // namespace

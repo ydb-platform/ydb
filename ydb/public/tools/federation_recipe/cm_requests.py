@@ -83,6 +83,7 @@ def request_create_topic_template():
     request.create_topic_template.properties.responsible.user_defined = 'admin'
     request.create_topic_template.properties.supported_format_version.user_defined = 0
     request.create_topic_template.properties.supported_codecs.user_defined = 'raw, gzip, lzop'
+    request.create_topic_template.properties.auto_partitioning_strategy.user_defined = 'disabled'
 
     request.create_topic_template.admin_properties.max_message_size.user_defined = 12582912
     request.create_topic_template.admin_properties.max_disk_size.user_defined = 9223372036854775807

@@ -8,7 +8,7 @@ PEERDIR(
     contrib/libs/grpc
 )
 
-TIMEOUT(100)
+TIMEOUT(350)
 
 SRCS(
     federation_tests.cpp

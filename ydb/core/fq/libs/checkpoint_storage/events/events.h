@@ -11,6 +11,8 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 namespace NFq {
 
 struct TEvCheckpointStorage {
@@ -264,9 +266,16 @@ struct TEvCheckpointStorage {
     // Response from TStorageProxy after deleting all checkpoint data for a graph.
     struct TEvDeleteGraphResponse : NActors::TEventLocal<TEvDeleteGraphResponse, EvDeleteGraphResponse> {
         explicit TEvDeleteGraphResponse(NYql::TIssues issues = {})
-            : Issues(std::move(issues)) {
+            : Status(issues.Empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR)
+            , Issues(std::move(issues)) {
         }
 
+        TEvDeleteGraphResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues)) {
+        }
+
+        Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
     };
 };

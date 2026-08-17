@@ -2992,7 +2992,14 @@ public:
         }
 
         QueryExistsInTable = false;
-        DeleteQueryGraphs();
+        CleanupQuery();
+    }
+
+    void Handle(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints")) {
+            return;
+        }
+        CleanupQuery();
     }
 
     void Handle(TEvPrivate::TEvExecuteSchemeTransactionResult::TPtr& ev) {
@@ -3050,6 +3057,17 @@ private:
             return;
         }
 
+        if (CheckpointIdToDelete) {
+            // Delete checkpoints
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest",
+                {"logPrefix", LogPrefix()},
+                {"graphId", *CheckpointIdToDelete});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(*CheckpointIdToDelete));
+            CheckpointIdToDelete = std::nullopt;
+            return;
+        }
+
         if (QueryExistsInSS) {
             // Remove query from SS
             const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
@@ -3075,28 +3093,6 @@ private:
         }
 
         Finish(Ydb::StatusIds::SUCCESS);
-    }
-
-    void DeleteQueryGraphs() {
-        if (!CheckpointIdToDelete) {
-            CleanupQuery();
-            return;
-        }
-
-        YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest",
-            {"logPrefix", LogPrefix()},
-            {"graphId", *CheckpointIdToDelete});
-        Send(NYql::NDq::MakeCheckpointStorageID(),
-             new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(*CheckpointIdToDelete));
-    }
-
-    void Handle(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
-        if (!ev->Get()->Issues.Empty()) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR,
-                TStringBuilder() << "Failed to delete checkpoints: " << ev->Get()->Issues.ToOneLineString());
-            return;
-        }
-        CleanupQuery();
     }
 
 private:

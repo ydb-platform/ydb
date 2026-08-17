@@ -199,7 +199,11 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            info.Status == NDescriber::EStatus::UNAUTHORIZED ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SCHEME_ERROR,
+                            info.Status == NDescriber::EStatus::UNAUTHORIZED
+                                ? Ydb::StatusIds::UNAUTHORIZED
+                                : (info.Status == NDescriber::EStatus::BAD_REQUEST
+                                    ? Ydb::StatusIds::BAD_REQUEST
+                                    : Ydb::StatusIds::SCHEME_ERROR),
                             NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx

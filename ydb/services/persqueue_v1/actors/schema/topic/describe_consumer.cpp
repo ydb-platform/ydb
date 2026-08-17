@@ -101,20 +101,17 @@ private:
         const auto* consumer = NPQ::GetConsumer(
             ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
             consumerName);
-        AFL_ENSURE(consumer);
+        AFL_ENSURE(consumer)("consumer", consumerName);
 
         Ydb::StatusIds::StatusCode status;
         TString error;
-        if (!FillConsumer(
-                *result.mutable_consumer(),
-                ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
-                *consumer,
-                status,
-                error,
-                false))
-        {
-            return ReplyWithError(status, error);
-        }
+        FillConsumer(
+            *result.mutable_consumer(),
+            ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
+            *consumer,
+            status,
+            error,
+            false);
 
         result.mutable_self()->CopyFrom(ev->Get()->SelfEntry);
         result.mutable_self()->set_name(TStringBuilder() << result.self().name() << "/" << consumerName);

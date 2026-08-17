@@ -5,7 +5,6 @@
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/string/join.h>
 
@@ -27,11 +26,11 @@ void AddWindowsStat(Ydb::Topic::MultipleWindowsStat* stat, ui64 perMin, ui64 per
     stat->set_per_day(stat->per_day() + perDay);
 }
 
-class TDescribeOperationActor: public NActors::TActorBootstrapped<TDescribeOperationActor>
-    , protected TPipeCacheClient
-    , public TConstantLogPrefix
+class TDescribeOperationActor: public TBaseActor<TDescribeOperationActor>
+                             , protected TPipeCacheClient
+                             , public TConstantLogPrefix
 {
-    static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
+private:
     static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
     static constexpr size_t StatsMaxRetries = 15;
     static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
@@ -45,7 +44,8 @@ public:
         const NActors::TActorId& parent,
         TDescribeOperationSettings&& settings,
         std::unique_ptr<IDescribeStrategy> strategy)
-        : TPipeCacheClient(this)
+        : TBaseActor<TDescribeOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
+        , TPipeCacheClient(this)
         , Parent(parent)
         , Settings(std::move(settings))
         , Strategy(std::move(strategy))
@@ -79,6 +79,15 @@ public:
         return TStringBuilder() << "[" << (Strategy ? Strategy->GetName() : "DescribeOperation") << "]";
     }
 
+    bool OnUnhandledException(const std::exception& exc) override {
+        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        ReplyWithError(
+            Ydb::StatusIds::INTERNAL_ERROR,
+            TStringBuilder() << "Unhandled exception: " << exc.what(),
+            Ydb::PersQueue::ErrorCode::ERROR);
+        return true;
+    }
+
 private:
     void PassAway() override {
         LOG_D("PassAway");
@@ -87,7 +96,7 @@ private:
             DescriberActorId = {};
         }
         TPipeCacheClient::Close();
-        TActorBootstrapped::PassAway();
+        TBaseActor::PassAway();
     }
 
     void HandlePoison() {
@@ -174,6 +183,8 @@ private:
                     case NDescriber::EStatus::UNAUTHORIZED:
                     case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                         return Ydb::StatusIds::SCHEME_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::StatusIds::BAD_REQUEST;
                     case NDescriber::EStatus::UNKNOWN_ERROR:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                     default:
@@ -188,6 +199,8 @@ private:
                         return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
                     case NDescriber::EStatus::NOT_TOPIC:
                         return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     default:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                 }
@@ -291,7 +304,8 @@ private:
         }
 
         for (const auto& partResult : record.GetPartResult()) {
-            Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = Partitions[partResult.GetPartition()].Stats;
+            auto& partitionInfo = Partitions[partResult.GetPartition()];
+            Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = partitionInfo.Stats;
             Ydb::Topic::PartitionStats* partStats = partRes.mutable_partition_stats();
 
             partStats->set_store_size_bytes(partResult.GetPartitionSize());
@@ -308,7 +322,6 @@ private:
                 partResult.GetAvgWriteSpeedPerDay());
 
             const auto& lagInfo = partResult.GetLagsInfo();
-
             auto consStats = partRes.mutable_partition_consumer_stats();
 
             consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
@@ -324,6 +337,22 @@ private:
                 partResult.GetAvgReadSpeedPerMin(),
                 partResult.GetAvgReadSpeedPerHour(),
                 partResult.GetAvgReadSpeedPerDay());
+
+            if (const auto consumerCount = partResult.ConsumerResultSize(); consumerCount > 0) {
+                partitionInfo.Consumers.reserve(consumerCount);
+                for (const auto& cons : partResult.GetConsumerResult()) {
+                    auto& consumerStats = partitionInfo.Consumers[cons.GetConsumer()];
+                    SetProtoTime(consumerStats.mutable_min_partitions_last_read_time(), cons.GetLastReadTimestampMs());
+                    SetProtoTime(consumerStats.mutable_max_read_time_lag(), cons.GetReadLagMs());
+                    SetProtoTime(consumerStats.mutable_max_write_time_lag(), cons.GetWriteLagMs());
+                    SetProtoTime(consumerStats.mutable_max_committed_time_lag(), cons.GetCommitedLagMs());
+                    AddWindowsStat(
+                        consumerStats.mutable_bytes_read(),
+                        cons.GetAvgReadSpeedPerMin(),
+                        cons.GetAvgReadSpeedPerHour(),
+                        cons.GetAvgReadSpeedPerDay());
+                }
+            }
         }
 
         StatsRetryPending.erase(tabletId);

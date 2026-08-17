@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/containers/absl
     ydb/core/persqueue/events
+    ydb/core/persqueue/public/nameresolver
 #    ydb/core/persqueue/public
 )
 

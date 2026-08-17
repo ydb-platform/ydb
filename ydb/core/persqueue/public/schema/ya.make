@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/nameresolver
     ydb/core/util
     ydb/core/ydb_convert
 )

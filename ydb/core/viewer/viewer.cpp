@@ -306,6 +306,7 @@ public:
                     // `/viewer/render` is used by GraphShard metrics rendering.
                     // It may expose cluster-level metrics, so it's intentionally restricted to Viewer access.
                     // Before changing it back to Database access, ensure that only database-scoped metrics are returned.
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},

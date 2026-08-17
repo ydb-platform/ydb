@@ -2174,7 +2174,7 @@ void TProducer::HandleClientMessage(TMessageInfo&& message) {
     MessagesWorker->AddMessage(std::move(message));
 }
 
-void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise) {
+void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult> promise) {
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         FlushPromises.push_back(std::make_pair(std::move(promise), TFlushResult{

@@ -495,7 +495,6 @@ void TNodeWarden::Bootstrap() {
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }
-        StartStaticProxies();
     }
     EstablishPipe();
 

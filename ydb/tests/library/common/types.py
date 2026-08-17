@@ -128,6 +128,7 @@ class TabletTypes(Enum):
     FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')
     BLOCKSTORE_VOLUME = _tablet_type(25, 999)
     BLOCKSTORE_PARTITION = _tablet_type(26, 999)
+    COLUMNSHARD = _tablet_type(35, 999)
 
     FLAT_TX_COORDINATOR = _tablet_type(13, 0x800001, service_name='TX_COORDINATOR')
     TX_MEDIATOR = _tablet_type(5, 0x810001, service_name='TX_MEDIATOR')

@@ -1,8 +1,10 @@
 #pragma once
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
 
 #include <util/generic/hash_set.h>
 
@@ -47,7 +49,7 @@ public:
 
     void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context);
     void StopMoveData();
-    ui64 GetMoveDataPortionsCount() const;
+    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);

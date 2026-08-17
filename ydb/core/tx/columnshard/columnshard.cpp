@@ -694,6 +694,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         LOG_S_INFO("TColumnShard::Handle TEvMoveData: empty group list, vacuum-only at tablet " << TabletID());
         MoveDataState.Active = true;
         MoveDataState.VacuumCompleted = false;
+        Counters.GetCSCounters().OnMoveDataStarted();
         Executor()->StartMoveDataVacuumFromOwner();
         return;
     }
@@ -703,6 +704,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     LOG_S_INFO(
         "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
 
+    Counters.GetCSCounters().OnMoveDataStarted();
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
     }
@@ -720,10 +722,17 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     // All three conditions must hold before responding to Hive:
     //  1. Rewriting queue is empty (pending + confirmed portions).
     //  2. No target-group blobs remain in keep/delete queues or shared-blob tables.
-    if (HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataPortionsCount() != 0) {
+    NOlap::NActualizer::TMoveDataQueueSizes queues;
+    if (HasIndex()) {
+        queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
+    }
+    Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight);
+    if (queues.GetTotal() != 0) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
         return;
     }
     if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
         LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
         return;
     }
@@ -735,6 +744,7 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
 
     ctx.Send(MoveDataState.HiveSender, new TEvTablet::TEvMoveDataResponse(TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
 
+    Counters.GetCSCounters().OnMoveDataFinished();
     MoveDataState = TMoveDataState{};
 }
 

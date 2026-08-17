@@ -35,6 +35,13 @@ TCSCounters::TCSCounters()
 
     IndexMetadataLimitBytes = TBase::GetValue("IndexMetadata/Limit/Bytes");
 
+    MoveDataActive = TBase::GetValueAutoAggregationsClient("MoveData/Active");
+    MoveDataPortionsPending = TBase::GetValueAutoAggregationsClient("MoveData/Portions/Pending");
+    MoveDataPortionsConfirmedToMove = TBase::GetValueAutoAggregationsClient("MoveData/Portions/ConfirmedToMove");
+    MoveDataPortionsInFlight = TBase::GetValueAutoAggregationsClient("MoveData/Portions/InFlight");
+    MoveDataGateBlockedByPortionsCount = TBase::GetDeriviative("MoveData/GateBlocked/Portions/Count");
+    MoveDataGateBlockedByGCCount = TBase::GetDeriviative("MoveData/GateBlocked/GC/Count");
+
     OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
     OverloadMetadataCount = TBase::GetDeriviative("Overload/Metadata/Count");
     OverloadCompactionBytes = TBase::GetDeriviative("Overload/Compaction/Bytes");

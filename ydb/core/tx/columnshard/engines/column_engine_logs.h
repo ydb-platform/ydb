@@ -184,12 +184,16 @@ public:
         }
     }
 
-    ui64 GetMoveDataPortionsCount() const {
-        ui64 total = 0;
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        NActualizer::TMoveDataQueueSizes result;
         for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
-            total += granule->GetMoveDataPortionsCount();
+            result += granule->GetMoveDataQueueSizes();
         }
-        return total;
+        return result;
+    }
+
+    ui64 GetMoveDataPortionsCount() const {
+        return GetMoveDataQueueSizes().GetTotal();
     }
 
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;

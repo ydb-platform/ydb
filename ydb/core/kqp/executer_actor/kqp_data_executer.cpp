@@ -1262,9 +1262,10 @@ private:
             streamingDisposition.mutable_from_last_checkpoint()->set_force(true);
         }
 
-        const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
-            ? FederatedQuery::FROM_LAST_CHECKPOINT
-            : FederatedQuery::EMPTY;
+        // const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
+        //     ? FederatedQuery::FROM_LAST_CHECKPOINT
+        //     : FederatedQuery::EMPTY;
+        const auto stateLoadMode = FederatedQuery::EMPTY;
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {

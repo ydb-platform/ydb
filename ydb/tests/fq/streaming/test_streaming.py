@@ -2255,6 +2255,11 @@ FROM `{table_name}`"""
             entity_name,
             partitions_count=1,
         )
+        def total_pq_read_actor_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.nodes
+            )
 
         name = f"test_restart_after_part_inc_{local_topics!s:.1}"
         sql = R'''
@@ -2271,6 +2276,11 @@ FROM `{table_name}`"""
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
+
+        count_after_create = total_pq_read_actor_count()
+        assert count_after_create == 1, (
+            f"Expected exactly 1 DQ_PQ_READ_ACTOR after CREATE, got {count_after_create}"
+        )
 
         # Stop the query before altering the topic partition count
         logger.debug(f"stopping query {name}")
@@ -2295,6 +2305,11 @@ FROM `{table_name}`"""
                 partition_key=''.join(random.choices(string.digits, k=8)),
                 endpoint=endpoint,
             )
+        
+        count_after_alter = total_pq_read_actor_count()
+        assert count_after_alter > 1, (
+            f"Expected more than 1 DQ_PQ_READ_ACTOR after ALTER, got {count_after_alter}"
+        )
 
         expected_data = ["my_data" for _ in range(message_count)]
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data

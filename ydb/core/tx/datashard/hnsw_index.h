@@ -64,7 +64,8 @@ public:
     // Estimates the memory required to hold an HNSW index over `rowCount`
     // vectors of `dimension` float elements, without building anything.
     // Used to decide up front whether a build should even be attempted.
-    static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension);
+    static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity = 16,
+        size_t serializedKeyBytes = 0);
 
 private:
     class TImpl;

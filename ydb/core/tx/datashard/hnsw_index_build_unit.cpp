@@ -42,7 +42,8 @@ bool ScanPostingTableVectors(
     }
 
     const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
-        precharge.ItemsPrecharged, settings.vector_dimension());
+        precharge.ItemsPrecharged, settings.vector_dimension(),
+        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16);
     memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
     if (!memoryReservation) {
         return true;
@@ -72,6 +73,24 @@ bool ScanPostingTableVectors(
                 TSerializedCellVec::Serialize(keyData.Cells()),
                 TString(rowData.Cells()[0].AsBuf()));
         }
+    }
+
+    size_t keyBytes = 0;
+    for (const auto& [key, _] : keysAndVectors) {
+        keyBytes += key.size();
+    }
+    if (keyBytes != 0) {
+        auto keyReservation = dataShard.TryReserveHnswCacheMemory(keyBytes);
+        if (!keyReservation) {
+            keysAndVectors.clear();
+            return true;
+        }
+        struct TCombinedReservation {
+            std::shared_ptr<void> Index;
+            std::shared_ptr<void> Keys;
+        };
+        memoryReservation = std::make_shared<TCombinedReservation>(
+            TCombinedReservation{std::move(memoryReservation), std::move(keyReservation)});
     }
 
     return true;

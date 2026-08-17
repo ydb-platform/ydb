@@ -1976,7 +1976,7 @@ public:
         const TString key = TSerializedCellVec::Serialize(keyCells);
         if (!entry.Index->HasDelta(key)) {
             auto reservation = TryReserveHnswCacheMemory(
-                NDataShard::THnswIndex::EstimateMemoryBytes(1, entry.Index->Dimension()));
+                entry.Index->EstimatedMemoryBytes() / entry.Index->Size());
             if (!reservation) {
                 HnswIndexCache.erase(it);
                 return;

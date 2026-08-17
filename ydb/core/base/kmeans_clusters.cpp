@@ -711,10 +711,16 @@ namespace {
             return false;
         }
 
-        if ((settings.has_hnsw_connectivity() && settings.hnsw_connectivity() == 0)
-            || (settings.has_hnsw_construction_candidates() && settings.hnsw_construction_candidates() == 0)
-            || (settings.has_hnsw_search_candidates() && settings.hnsw_search_candidates() == 0)) {
-            error = "HNSW connectivity and candidate counts should be greater than 0";
+        if (settings.has_hnsw_connectivity()
+            && !ValidateSettingInRange("hnsw_connectivity", settings.hnsw_connectivity(), 1, MaxHnswConnectivity, error)) {
+            return false;
+        }
+        if (settings.has_hnsw_construction_candidates()
+            && !ValidateSettingInRange("hnsw_construction_candidates", settings.hnsw_construction_candidates(), 1, MaxHnswConstructionCandidates, error)) {
+            return false;
+        }
+        if (settings.has_hnsw_search_candidates()
+            && !ValidateSettingInRange("hnsw_search_candidates", settings.hnsw_search_candidates(), 1, MaxHnswSearchCandidates, error)) {
             return false;
         }
 
@@ -1121,13 +1127,13 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
             ParseUInt32(nameLower, value, 0, Max<ui32>(), error));
     } else if (nameLower == "hnsw_connectivity") {
         settings.mutable_settings()->set_hnsw_connectivity(
-            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
+            ParseUInt32(nameLower, value, 1, MaxHnswConnectivity, error));
     } else if (nameLower == "hnsw_construction_candidates") {
         settings.mutable_settings()->set_hnsw_construction_candidates(
-            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
+            ParseUInt32(nameLower, value, 1, MaxHnswConstructionCandidates, error));
     } else if (nameLower == "hnsw_search_candidates") {
         settings.mutable_settings()->set_hnsw_search_candidates(
-            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
+            ParseUInt32(nameLower, value, 1, MaxHnswSearchCandidates, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

@@ -1,5 +1,6 @@
 #include "hnsw_index.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 
 #pragma clang diagnostic push
@@ -25,10 +26,7 @@ namespace {
 
 using Ydb::Table::VectorIndexSettings;
 
-// Rough per-node overhead of the HNSW graph itself (friend lists at every
-// level, on top of the raw vector data), used only to decide up front
-// whether a build should be attempted at all. Actual usage additionally
-// depends on connectivity (M) and level distribution.
+// Rough fixed per-node overhead of the HNSW graph, excluding friend ids.
 constexpr size_t EstimatedBytesPerNodeOverhead = 256;
 // HNSW construction runs in a build actor registered in the actor system's
 // batch pool. Keep NMSLIB single-threaded so it does not create unmanaged
@@ -107,6 +105,7 @@ public:
     void AddVector(TString key, TString vector, const float* data) {
         const auto id = static_cast<similarity::IdType>(Keys.size());
         auto* obj = new similarity::Object(id, /* label */ -1, Dimension * sizeof(float), data);
+        KeyBytes += key.size();
         Keys.push_back(std::move(key));
         Vectors.push_back(std::move(vector));
         KeyToIndex.emplace(Keys.back(), static_cast<size_t>(id));
@@ -120,9 +119,10 @@ public:
 
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
+        Connectivity = settings.has_hnsw_connectivity()
+            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
         similarity::AnyParams buildParams(std::vector<std::string>{
-            "M=" + std::to_string(settings.has_hnsw_connectivity()
-                ? settings.hnsw_connectivity() : DefaultHnswConnectivity),
+            "M=" + std::to_string(Connectivity),
             "efConstruction=" + std::to_string(settings.has_hnsw_construction_candidates()
                 ? settings.hnsw_construction_candidates() : DefaultHnswConstructionCandidates),
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
@@ -197,6 +197,14 @@ public:
         return Dimension;
     }
 
+    ui32 GetConnectivity() const {
+        return Connectivity;
+    }
+
+    size_t GetKeyBytes() const {
+        return KeyBytes;
+    }
+
     bool GetVector(TStringBuf key, TString& result) const {
         if (auto it = DeltaVectors.find(key); it != DeltaVectors.end()) {
             result = it->second;
@@ -239,6 +247,8 @@ public:
 private:
     std::unique_ptr<similarity::Space<float>> Space;
     size_t Dimension = 0;
+    ui32 Connectivity = DefaultHnswConnectivity;
+    size_t KeyBytes = 0;
     std::vector<const similarity::Object*> Objects;
     std::vector<TString> Keys; // Object::id() -> serialized primary key
     std::vector<TString> Vectors; // Object::id() -> wire-format vector
@@ -254,8 +264,19 @@ THnswIndex::THnswIndex(std::unique_ptr<TImpl> impl)
 
 THnswIndex::~THnswIndex() = default;
 
-size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension) {
-    return rowCount * (2 * dimension * sizeof(float) + HeaderLen + EstimatedBytesPerNodeOverhead);
+size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity,
+        size_t serializedKeyBytes) {
+    // NMSLIB reserves up to 2*M friend ids on level zero. Higher levels and
+    // container allocations are covered by the deliberately conservative
+    // fixed overhead. Saturate on overflow so an attacker cannot wrap the
+    // estimate and pass the cache budget check.
+    const size_t friendBytes = static_cast<size_t>(connectivity) * 2 * sizeof(similarity::IdType);
+    const size_t bytesPerRow = 2 * dimension * sizeof(float) + HeaderLen
+        + EstimatedBytesPerNodeOverhead + friendBytes;
+    if (rowCount != 0 && bytesPerRow > (Max<size_t>() - serializedKeyBytes) / rowCount) {
+        return Max<size_t>();
+    }
+    return rowCount * bytesPerRow + serializedKeyBytes;
 }
 
 std::unique_ptr<THnswIndex> THnswIndex::Build(
@@ -266,6 +287,12 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
 {
     if (settings.vector_type() != VectorIndexSettings::VECTOR_TYPE_FLOAT) {
         error = "HNSW index is only supported for float vectors";
+        return nullptr;
+    }
+
+    TString settingsError;
+    if (!NKMeans::ValidateSettingsPartial(settings, settingsError)) {
+        error = TStringBuilder() << "Invalid HNSW settings: " << settingsError;
         return nullptr;
     }
 
@@ -291,7 +318,18 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     }
 
     if (maxMemoryBytes != 0) {
-        const size_t estimated = EstimateMemoryBytes(keysAndVectors.size(), dimension);
+        const ui32 connectivity = settings.has_hnsw_connectivity()
+            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
+        size_t keyBytes = 0;
+        for (const auto& [key, _] : keysAndVectors) {
+            if (key.size() > Max<size_t>() - keyBytes) {
+                keyBytes = Max<size_t>();
+                break;
+            }
+            keyBytes += key.size();
+        }
+        const size_t estimated = EstimateMemoryBytes(
+            keysAndVectors.size(), dimension, connectivity, keyBytes);
         if (estimated > maxMemoryBytes) {
             error = TStringBuilder() << "Estimated HNSW memory usage " << estimated
                 << " exceeds budget " << maxMemoryBytes;
@@ -360,7 +398,8 @@ size_t THnswIndex::Dimension() const {
 }
 
 size_t THnswIndex::EstimatedMemoryBytes() const {
-    return EstimateMemoryBytes(Impl->Size(), Impl->Dim());
+    return EstimateMemoryBytes(
+        Impl->Size(), Impl->Dim(), Impl->GetConnectivity(), Impl->GetKeyBytes());
 }
 
 } // namespace NKikimr::NDataShard

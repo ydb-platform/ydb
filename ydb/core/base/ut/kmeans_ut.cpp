@@ -751,6 +751,31 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(!FillSetting(settings, "hnsw_connectivity", "0", error));
         UNIT_ASSERT(!FillSetting(settings, "hnsw_construction_candidates", "0", error));
         UNIT_ASSERT(!FillSetting(settings, "hnsw_search_candidates", "0", error));
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_connectivity", ToString(MaxHnswConnectivity + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_construction_candidates", ToString(MaxHnswConstructionCandidates + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_search_candidates", ToString(MaxHnswSearchCandidates + 1), error));
+    }
+
+    Y_UNIT_TEST(ValidateHnswResourceLimits) {
+        Ydb::Table::VectorIndexSettings settings;
+        settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_dimension(4);
+        TString error;
+
+        settings.set_hnsw_connectivity(MaxHnswConnectivity + 1);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_connectivity");
+
+        settings.set_hnsw_connectivity(MaxHnswConnectivity);
+        settings.set_hnsw_construction_candidates(MaxHnswConstructionCandidates + 1);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_construction_candidates");
+
+        settings.set_hnsw_construction_candidates(MaxHnswConstructionCandidates);
+        settings.set_hnsw_search_candidates(MaxHnswSearchCandidates + 1);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_search_candidates");
     }
 }
 

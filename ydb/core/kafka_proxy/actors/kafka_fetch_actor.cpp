@@ -14,6 +14,8 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
+#include <cstring>
+
 #include "actors.h"
 #include "kafka_fetch_actor.h"
 
@@ -28,6 +30,20 @@ static constexpr size_t KafkaMagic = 2;
 
 NPersQueueCommon::ECodec KafkaBatchCodec() {
     return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
+}
+
+TString RewriteKafkaBatchBaseOffset(TStringBuf data, ui64 baseOffset) {
+    const auto header = ReadKafkaBatchHeader(data);
+    if (!header || header->Magic < TKafkaRecordBatch::MagicMeta::Default) {
+        return TString(data);
+    }
+
+    auto kafkaBaseOffset = static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
+    NormalizeNumber(kafkaBaseOffset);
+
+    TString result(data);
+    std::memcpy(result.Detach(), &kafkaBaseOffset, sizeof(kafkaBaseOffset));
+    return result;
 }
 
 void FillRecordFromDataChunk(TKafkaRecord& record, const NKikimrPQClient::TDataChunk& dataChunk) {
@@ -201,8 +217,8 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     ui64 maxTimestamp = 0;
     bool first = true;
 
-    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, const size_t messagesInBatch) {
-        kafkaBatchRecords += dataChunk.GetData();
+    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, ui64 offset, const size_t messagesInBatch) {
+        kafkaBatchRecords += RewriteKafkaBatchBaseOffset(dataChunk.GetData(), offset);
         messagesCount += messagesInBatch;
     };
 
@@ -279,7 +295,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
-            addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
+            addRawKafkaBatch(dataChunk, result.GetOffset(), result.GetLogicalMessageCount());
             continue;
         }
 

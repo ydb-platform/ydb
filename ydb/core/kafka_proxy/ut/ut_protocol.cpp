@@ -939,13 +939,20 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 2);
 
         const auto plainFetchedBatch = ReadKafkaRecordBatch(batches[0]);
+        UNIT_ASSERT_VALUES_EQUAL(plainFetchedBatch.BaseOffset, 0);
         UNIT_ASSERT_VALUES_EQUAL(plainFetchedBatch.Records.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Key->data(), plainFetchedBatch.Records[0].Key->size()), "key-0");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Value->data(), plainFetchedBatch.Records[0].Value->size()), "value-0");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Key->data(), plainFetchedBatch.Records[1].Key->size()), "key-1");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Value->data(), plainFetchedBatch.Records[1].Value->size()), "value-1");
 
-        UNIT_ASSERT_VALUES_EQUAL(batches[1], compressedBatchBytes);
+        const auto compressedFetchedBatch = ReadKafkaRecordBatch(batches[1]);
+        UNIT_ASSERT_VALUES_EQUAL(compressedFetchedBatch.BaseOffset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(compressedFetchedBatch.Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[0].Key->data(), compressedFetchedBatch.Records[0].Key->size()), "key-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[0].Value->data(), compressedFetchedBatch.Records[0].Value->size()), "value-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[1].Key->data(), compressedFetchedBatch.Records[1].Key->size()), "key-1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[1].Value->data(), compressedFetchedBatch.Records[1].Value->size()), "value-1");
     }
 
     Y_UNIT_TEST(ProduceAndFetchLegacyRawKafkaBatch) {

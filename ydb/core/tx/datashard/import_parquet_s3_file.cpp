@@ -213,9 +213,7 @@ public:
             return arrow::Status::Invalid("parquet byte range is not loaded");
         }
 
-        return std::make_shared<arrow::Buffer>(
-            reinterpret_cast<const uint8_t*>(data.data()),
-            static_cast<int64_t>(data.size()));
+        return arrow::Buffer::FromString(std::move(data));
     }
 
 private:
@@ -385,7 +383,7 @@ bool TParquetSparseFile::TryParseFooterMetadataRange(TString& error, TMaybe<TPar
 
     TParquetFetchRange range;
     range.Offset = metadataOffset;
-    range.Length = metadataLen;
+    range.Length = footerOffset - metadataOffset;
     metadataRange = range;
     return true;
 }

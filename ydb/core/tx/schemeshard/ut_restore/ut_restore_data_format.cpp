@@ -1,4 +1,3 @@
-#include "restore_data_format_enums.h"
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -34,7 +33,7 @@ using namespace NKikimr::Tests;
 
 namespace {
 
-using ERestoreDataFormat = NSchemeShardUT_Private::ERestoreDataFormat;
+using ERestoreDataFormat = EDataFormat;
 
 struct TParquetUtf8Row {
     TString Key;
@@ -297,16 +296,8 @@ TString Int32KeySchemePb() {
 
 void ApplyParquetFeatureFlag(TTestBasicRuntime& runtime, ERestoreDataFormat format, bool enable = true) {
     if (format == ERestoreDataFormat::Parquet && enable) {
-        runtime.GetAppData().FeatureFlags.SetEnableParquetForS3Import(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
     }
-}
-
-TString RestoreDataFormatField(ERestoreDataFormat format) {
-    return format == ERestoreDataFormat::Parquet ? "DataFormat: PARQUET\n" : TString();
-}
-
-TString ImportDataFormatField(ERestoreDataFormat format) {
-    return format == ERestoreDataFormat::Parquet ? "data_format: PARQUET\n" : TString();
 }
 
 void DoRestore(
@@ -349,12 +340,11 @@ void DoRestore(
         S3Settings {
             Endpoint: "localhost:%d"
             Scheme: HTTP
-            %s
             Limits {
                 ReadBatchSize: %u
             }
         }
-    )", tableDescriptionStr.data(), port, RestoreDataFormatField(format).data(), readBatchSize), {NKikimrScheme::StatusAccepted});
+    )", tableDescriptionStr.data(), port, readBatchSize), {NKikimrScheme::StatusAccepted});
     env.TestWaitNotification(runtime, txId);
 }
 
@@ -363,7 +353,8 @@ void DoImport(
     const THashMap<TString, TString>& s3Data,
     ERestoreDataFormat format,
     Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-    bool enableParquetFeatureFlag = true)
+    bool enableParquetFeatureFlag = true,
+    TStringBuf expectedIssue = {})
 {
     TTestEnv env(runtime, TTestEnvOptions());
     ApplyParquetFeatureFlag(runtime, format, enableParquetFeatureFlag);
@@ -383,13 +374,12 @@ void DoImport(
         ImportFromS3Settings {
           endpoint: "localhost:%d"
           scheme: HTTP
-          %s
           items {
             source_prefix: ""
             destination_path: "/MyRoot/Table"
           }
         }
-    )", port, ImportDataFormatField(format).data());
+    )", port);
 
     auto initialStatus = Ydb::StatusIds::SUCCESS;
     if (expectedStatus == Ydb::StatusIds::BAD_REQUEST ||
@@ -401,7 +391,12 @@ void DoImport(
     env.TestWaitNotification(runtime, id);
 
     if (initialStatus == Ydb::StatusIds::SUCCESS) {
-        TestGetImport(runtime, id, "/MyRoot", expectedStatus);
+        const auto response = TestGetImport(runtime, id, "/MyRoot", expectedStatus);
+        if (expectedIssue) {
+            const auto& issues = response.GetResponse().GetEntry().GetIssues();
+            UNIT_ASSERT(!issues.empty());
+            UNIT_ASSERT_STRING_CONTAINS(issues.begin()->message(), expectedIssue);
+        }
     }
 }
 
@@ -485,6 +480,9 @@ THashMap<TString, TString> MakeImportSingleShardS3Data(ERestoreDataFormat format
 Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
     Y_UNIT_TEST(ShouldSucceedOnSingleShardUtf8, ERestoreDataFormat) {
         const auto format = Arg<0>();
+        if (format == ERestoreDataFormat::Invalid) {
+            return;
+        }
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -507,6 +505,9 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
 
     Y_UNIT_TEST(ShouldSucceedOnInt32Key, ERestoreDataFormat) {
         const auto format = Arg<0>();
+        if (format == ERestoreDataFormat::Invalid) {
+            return;
+        }
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -527,6 +528,9 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
 
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable, ERestoreDataFormat) {
         const auto format = Arg<0>();
+        if (format == ERestoreDataFormat::Invalid) {
+            return;
+        }
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -574,9 +578,8 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
             S3Settings {
                 Endpoint: "localhost:%d"
                 Scheme: HTTP
-                %s
             }
-        )", tableDescriptionStr.data(), port, RestoreDataFormatField(format).data()));
+        )", tableDescriptionStr.data(), port));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -601,7 +604,8 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", MakeParquetS3Data(Utf8KeySchemePb(), {BuildParquetUtf8WithNullValue()}), ERestoreDataFormat::Parquet);
+        )", MakeParquetS3Data(Utf8KeySchemePb(), {BuildParquetUtf8WithNullValue()}), ERestoreDataFormat::Parquet,
+            /*readBatchSize=*/32);
 
         const TString expectedYson =
             R"([[[[[["k1"];#];[["k2"];["v2"]]];%false]]])";
@@ -614,6 +618,9 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
 Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable, ERestoreDataFormat) {
         const auto format = Arg<0>();
+        if (format == ERestoreDataFormat::Invalid) {
+            return;
+        }
 
         TTestBasicRuntime runtime;
 
@@ -633,7 +640,8 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
             MakeParquetS3Data(Utf8KeySchemePb(), {parquet}),
             ERestoreDataFormat::Parquet,
             Ydb::StatusIds::CANCELLED,
-            /*enableParquetFeatureFlag=*/false);
+            /*enableParquetFeatureFlag=*/false,
+            "Parquet import is disabled by feature flag EnableImportInParquet");
     }
 }
 

@@ -9,7 +9,7 @@
 #include "import_s3.h"
 
 #include <ydb/core/tablet_flat/flat_direct_part_writer.h>
-#include <ydb/core/base/events.h>
+
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
@@ -17,7 +17,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -57,17 +56,6 @@ namespace {
 
 namespace NKikimr {
 namespace NDataShard {
-
-struct TEvS3ImportActor {
-    enum EEv {
-        EvParquetWork = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 200,
-        EvEnd,
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
-
-    struct TEvParquetWork : public TEventLocal<TEvParquetWork, EvParquetWork> {};
-};
 
 using namespace NBackup;
 using namespace NBackupRestoreTraits;
@@ -480,8 +468,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             Y_ENSURE(SparseFile && ActiveRange);
             Y_ENSURE(ActiveRange->Fetched + portion.size() <= ActiveRange->Length);
 
+            const ui64 portionSize = portion.size();
             SparseFile->PutRange(ActiveRange->Offset + ActiveRange->Fetched, std::move(portion));
-            ActiveRange->Fetched += portion.size();
+            ActiveRange->Fetched += portionSize;
 
             if (ActiveRange->Fetched >= ActiveRange->Length) {
                 TString advanceError;
@@ -999,13 +988,36 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 return RetryOrFinish(result.GetError());
             }
 
-            CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
-            if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+            if (DataFormatSelected) {
+                return RetryOrFinish(result.GetError());
+            }
+
+            if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
+                DataFormat = NBackupRestoreTraits::NextDataFormat(DataFormat);
+            } else {
+                CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
+                if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+                    DataFormat = NBackupRestoreTraits::NextDataFormat(DataFormat);
+                    CompressionCodec = NBackupRestoreTraits::ECompressionCodec::None;
+                }
+            }
+
+            if (DataFormat == NBackupRestoreTraits::EDataFormat::Invalid) {
                 return Finish(false, TStringBuilder() << "Cannot find any supported data file with prefix"
                     << ": " << Settings.GetObjectKeyPattern());
             }
 
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
+        }
+
+        DataFormatSelected = true;
+        if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet
+            && !AppData()->FeatureFlags.GetEnableImportInParquet()) {
+            return Finish(false, "Parquet import is disabled by feature flag EnableImportInParquet");
+        }
+
+        if (!PrepareDataImport()) {
+            return;
         }
 
         THolder<IReadController> reader;
@@ -1158,15 +1170,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         ReadBytes += msg.Body.size();
         Reader->Feed(std::move(msg.Body), ReadBytes >= ContentLength);
-        if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
-            this->Send(this->SelfId(), new TEvS3ImportActor::TEvParquetWork());
-            return;
-        }
-
-        Process();
-    }
-
-    void Handle(TEvS3ImportActor::TEvParquetWork::TPtr&) {
         Process();
     }
 
@@ -1790,27 +1793,12 @@ public:
         return GetSettings(task).GetLimits().GetReadBatchSize();
     }
 
-    static NBackupRestoreTraits::EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TRestoreTask& task) {
-        if (!task.HasS3Settings()) {
-            return NBackupRestoreTraits::EDataFormat::YdbDump;
-        }
-
-        switch (task.GetS3Settings().GetDataFormat()) {
-        case NKikimrSchemeOp::TS3Settings::CSV:
-            return NBackupRestoreTraits::EDataFormat::YdbDump;
-        case NKikimrSchemeOp::TS3Settings::PARQUET:
-            return NBackupRestoreTraits::EDataFormat::Parquet;
-        }
-
-        return NBackupRestoreTraits::EDataFormat::YdbDump;
-    }
-
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
-        , DataFormat(DataFormatFromTask(task))
+        , DataFormat(NBackupRestoreTraits::EDataFormat::YdbDump)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
@@ -1820,9 +1808,7 @@ public:
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
-        , DirectPartImportEnabled(
-            AppData()->FeatureFlags.GetEnableDataShardDirectPartImport()
-            && DataFormat == NBackupRestoreTraits::EDataFormat::YdbDump)
+        , DirectPartImportEnabled(AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
     {
     }
 
@@ -1833,26 +1819,6 @@ public:
 
         if (!CheckScheme()) {
             return;
-        }
-
-        switch (DataFormat) {
-        case NBackupRestoreTraits::EDataFormat::YdbDump:
-            Parser = CreateCsvDataParser();
-            break;
-        case NBackupRestoreTraits::EDataFormat::Parquet:
-            Parser = CreateParquetDataParser();
-            break;
-        case NBackupRestoreTraits::EDataFormat::Invalid:
-            return Finish(false, "Invalid data format in restore settings");
-        }
-
-        TString configureError;
-        if (!Parser->Configure(TableInfo, Scheme, configureError)) {
-            return Finish(false, TStringBuilder() << "failed to configure parser: " << configureError);
-        }
-
-        if (DirectPartImportEnabled) {
-            DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
         }
 
         AllocateResource();
@@ -1873,7 +1839,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
-            hFunc(TEvS3ImportActor::TEvParquetWork, Handle);
 
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
@@ -1900,12 +1865,44 @@ public:
     }
 
 private:
+    bool PrepareDataImport() {
+        if (Parser) {
+            return true;
+        }
+
+        switch (DataFormat) {
+        case NBackupRestoreTraits::EDataFormat::YdbDump:
+            Parser = CreateCsvDataParser();
+            break;
+        case NBackupRestoreTraits::EDataFormat::Parquet:
+            Parser = CreateParquetDataParser();
+            DirectPartImportEnabled = false;
+            break;
+        case NBackupRestoreTraits::EDataFormat::Invalid:
+            Finish(false, "Invalid data format");
+            return false;
+        }
+
+        TString configureError;
+        if (!Parser->Configure(TableInfo, Scheme, configureError)) {
+            Finish(false, TStringBuilder() << "failed to configure parser: " << configureError);
+            return false;
+        }
+
+        if (DirectPartImportEnabled) {
+            DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
+        }
+
+        return true;
+    }
+
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
     const TStorageSettings Settings;
-    const NBackupRestoreTraits::EDataFormat DataFormat;
+    NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
+    bool DataFormatSelected = false;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
 
@@ -1940,7 +1937,7 @@ private:
 
     TCounters Counters;
 
-    const bool DirectPartImportEnabled;
+    bool DirectPartImportEnabled;
     THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
     bool DownloadInterrupted = false; // current Process() pass ended (finish/error)
 

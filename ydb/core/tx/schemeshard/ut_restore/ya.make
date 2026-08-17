@@ -37,6 +37,4 @@ SRCS(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(restore_data_format_enums.h)
-
 END()

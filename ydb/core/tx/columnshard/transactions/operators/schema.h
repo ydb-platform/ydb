@@ -69,7 +69,6 @@ private:
             case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
                 return "Scheme:CopyTable";
             case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
-                //TODO implement me
                 return "Scheme:TruncateTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";

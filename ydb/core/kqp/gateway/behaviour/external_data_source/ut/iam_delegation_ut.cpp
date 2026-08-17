@@ -177,6 +177,23 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
             EIamOperationState::Failed);
     }
 
+    Y_UNIT_TEST(OperationPollBudgetBoundsTheDdlWait) {
+        // The bound itself is three lines in the lifecycle coroutine; what is
+        // worth pinning here are the policy numbers behind it. TBackoff's own
+        // growth and jitter belong to ydb/core/util.
+        UNIT_ASSERT_C(
+            IamOperationPollBudget > TDuration::Zero(),
+            "a zero budget would abandon every accepted operation immediately");
+        UNIT_ASSERT(IamOperationMinPollDelay > TDuration::Zero());
+        UNIT_ASSERT(IamOperationMinPollDelay <= IamOperationMaxPollDelay);
+
+        // The cap, plus the up-to-25% jitter TBackoff adds on top of it, must
+        // leave the budget room for several polls rather than one.
+        const TDuration ceiling =
+            IamOperationMaxPollDelay + IamOperationMaxPollDelay / 4;
+        UNIT_ASSERT(ceiling * 2 < IamOperationPollBudget);
+    }
+
     Y_UNIT_TEST(VendoredIamProtoMatchesCanonicalLifecycleSurface) {
         const auto* pool = google::protobuf::DescriptorPool::generated_pool();
         const auto* service = pool->FindServiceByName(

@@ -16,57 +16,64 @@ namespace {
 using TContext = TExternalDataSourceManager::TExternalModificationContext;
 using TStatus = TExternalDataSourceManager::TYqlConclusionStatus;
 
-struct TBridgeIamObjectDescription : NYql::IKikimrGateway::TGenericResult {
-    TIamObjectDescription Description;
+enum EBridgeEvent {
+    EvIamObject = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+    EvCloudId,
+    EvSchemeRequest,
+    EvIamSchemeRequest,
 };
 
-struct TBridgeCloudIdDescription : NYql::IKikimrGateway::TGenericResult {
-    TCloudIdDescription Description;
+// One event carries any bridged result back to the waiting actor. The event id
+// keeps the four adapters distinguishable even where they carry the same type.
+template <typename TPayload, ui32 EventId>
+struct TEvBridgeResult : NActors::TEventLocal<TEvBridgeResult<TPayload, EventId>, EventId> {
+    explicit TEvBridgeResult(TPayload payload)
+        : Payload(std::move(payload))
+    {}
+
+    TPayload Payload;
 };
 
-struct TEvIamDelegationDdlBridge {
-    enum EEv {
-        EvIamObject = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCloudId,
-        EvSchemeRequest,
-        EvIamSchemeRequest,
-    };
+// Deliver a future's value to `replyTo` as an event, then suspend the calling
+// actor coroutine until it arrives. This is the whole of the bridge: no
+// lifecycle decision is made in a future callback.
+template <ui32 EventId, ui64 Cookie, typename TPayload>
+NActors::async<TPayload> AwaitFuture(
+    NThreading::TFuture<TPayload> future,
+    const NActors::TActorId& replyTo)
+{
+    using TEvent = TEvBridgeResult<TPayload, EventId>;
+    future.Subscribe(
+        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& ready) {
+            actorSystem->Send(replyTo, new TEvent(ready.GetValue()), 0, Cookie);
+        });
+    const auto event = co_await NActors::ActorWaitForEvent<TEvent>(Cookie);
+    co_return std::move(event->Get()->Payload);
+}
 
-    struct TEvIamObject : NActors::TEventLocal<TEvIamObject, EvIamObject> {
-        explicit TEvIamObject(TIamObjectDescription description)
-            : Description(std::move(description))
-        {}
-
-        TIamObjectDescription Description;
-    };
-
-    struct TEvCloudId : NActors::TEventLocal<TEvCloudId, EvCloudId> {
-        explicit TEvCloudId(TCloudIdDescription description)
-            : Description(std::move(description))
-        {}
-
-        TCloudIdDescription Description;
-    };
-
-    struct TEvSchemeRequest : NActors::TEventLocal<TEvSchemeRequest, EvSchemeRequest> {
-        explicit TEvSchemeRequest(TStatus status)
-            : Status(std::move(status))
-        {}
-
-        TStatus Status;
-    };
-
-    struct TEvIamSchemeRequest
-        : NActors::TEventLocal<TEvIamSchemeRequest, EvIamSchemeRequest>
-    {
-        explicit TEvIamSchemeRequest(TStatus status)
-            : Status(std::move(status))
-        {}
-
-        TStatus Status;
-    };
-
+// SchemeCache lookups answer through TActorRequestHandler, which reports
+// transport failure on the gateway result rather than on our description.
+template <typename TDescription>
+struct TBridgeDescription : NYql::IKikimrGateway::TGenericResult {
+    TDescription Description;
 };
+
+template <typename TDescription>
+NThreading::TFuture<TDescription> UnwrapDescription(
+    NThreading::TFuture<TBridgeDescription<TDescription>> future)
+{
+    return future.Apply([](const auto& result) {
+        auto bridge = result.GetValue();
+        if (!bridge.Success()) {
+            bridge.Description.Status = TStatus::Fail(
+                bridge.Status(), bridge.Issues().ToString());
+        }
+        return std::move(bridge.Description);
+    });
+}
+
+using TBridgeIamObjectDescription = TBridgeDescription<TIamObjectDescription>;
+using TBridgeCloudIdDescription = TBridgeDescription<TCloudIdDescription>;
 
 constexpr ui64 IamObjectCookie = 101;
 constexpr ui64 CloudIdCookie = 102;
@@ -87,14 +94,7 @@ NThreading::TFuture<TCloudIdDescription> StartDatabaseCloudIdLookup(const TConte
     }
 
     auto promise = NThreading::NewPromise<TBridgeCloudIdDescription>();
-    auto future = promise.GetFuture().Apply([](const auto& result) {
-        auto bridge = result.GetValue();
-        if (!bridge.Success()) {
-            bridge.Description.Status = TStatus::Fail(
-                bridge.Status(), bridge.Issues().ToString());
-        }
-        return std::move(bridge.Description);
-    });
+    auto future = UnwrapDescription<TCloudIdDescription>(promise.GetFuture());
     context.GetActorSystem()->Register(
         new TActorRequestHandler<TRequest, TResponse, TBridgeCloudIdDescription>(
             MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
@@ -127,29 +127,34 @@ NThreading::TFuture<TIamObjectDescription> StartIamObjectLookup(
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
     using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
+    // Ask for the object and its parent in one navigate: when the object is
+    // absent, the parent still supplies the snapshot version the caller needs.
+    // Keep both paths in locals - emplace_back reallocates ResultSet, so a
+    // reference into it must not be read after the next entry is added.
+    const TVector<TString> targetPath = NKikimr::SplitPath(path);
+    TVector<TString> parentPath = targetPath;
+    parentPath.pop_back();
+
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    auto& target = navigate->ResultSet.emplace_back();
-    target.Path = NKikimr::SplitPath(path);
-    target.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
-    target.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
-    auto& parent = navigate->ResultSet.emplace_back();
-    parent.Path = target.Path;
-    parent.Path.pop_back();
-    parent.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    navigate->ResultSet.reserve(2);
+    {
+        auto& target = navigate->ResultSet.emplace_back();
+        target.Path = targetPath;
+        target.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
+        target.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
+    }
+    {
+        auto& parent = navigate->ResultSet.emplace_back();
+        parent.Path = std::move(parentPath);
+        parent.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    }
     navigate->DatabaseName = context.GetDatabase();
     if (context.GetUserToken()) {
         navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
     }
 
     auto promise = NThreading::NewPromise<TBridgeIamObjectDescription>();
-    auto future = promise.GetFuture().Apply([](const auto& result) {
-        auto bridge = result.GetValue();
-        if (!bridge.Success()) {
-            bridge.Description.Status = TStatus::Fail(
-                bridge.Status(), bridge.Issues().ToString());
-        }
-        return std::move(bridge.Description);
-    });
+    auto future = UnwrapDescription<TIamObjectDescription>(promise.GetFuture());
     context.GetActorSystem()->Register(
         new TActorRequestHandler<TRequest, TResponse, TBridgeIamObjectDescription>(
             MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
@@ -216,17 +221,8 @@ NActors::async<TCloudIdDescription> DescribeDatabaseCloudId(
     const TContext& context,
     const NActors::TActorId& replyTo)
 {
-    StartDatabaseCloudIdLookup(context).Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
-            actorSystem->Send(
-                replyTo,
-                new TEvIamDelegationDdlBridge::TEvCloudId(result.GetValue()),
-                0,
-                CloudIdCookie);
-        });
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvCloudId>(CloudIdCookie);
-    co_return std::move(event->Get()->Description);
+    co_return co_await AwaitFuture<EvCloudId, CloudIdCookie>(
+        StartDatabaseCloudIdLookup(context), replyTo);
 }
 
 NActors::async<TIamObjectDescription> DescribeIamObject(
@@ -234,34 +230,16 @@ NActors::async<TIamObjectDescription> DescribeIamObject(
     const TContext& context,
     const NActors::TActorId& replyTo)
 {
-    StartIamObjectLookup(path, context).Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
-            actorSystem->Send(
-                replyTo,
-                new TEvIamDelegationDdlBridge::TEvIamObject(result.GetValue()),
-                0,
-                IamObjectCookie);
-        });
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvIamObject>(IamObjectCookie);
-    co_return std::move(event->Get()->Description);
+    co_return co_await AwaitFuture<EvIamObject, IamObjectCookie>(
+        StartIamObjectLookup(path, context), replyTo);
 }
 
 NActors::async<TStatus> AwaitLegacyDdl(
     TExternalDataSourceManager::TAsyncStatus legacyDdl,
     const NActors::TActorId& replyTo)
 {
-    legacyDdl.Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
-            actorSystem->Send(
-                replyTo,
-                new TEvIamDelegationDdlBridge::TEvSchemeRequest(result.GetValue()),
-                0,
-                SchemeRequestCookie);
-        });
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvSchemeRequest>(SchemeRequestCookie);
-    co_return std::move(event->Get()->Status);
+    co_return co_await AwaitFuture<EvSchemeRequest, SchemeRequestCookie>(
+        std::move(legacyDdl), replyTo);
 }
 
 NActors::async<TStatus> ExecuteIamSchemeRequest(
@@ -269,17 +247,8 @@ NActors::async<TStatus> ExecuteIamSchemeRequest(
     const TContext& context,
     const NActors::TActorId& replyTo)
 {
-    SendSchemeRequest(schemeTx, context).Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(), replyTo](const auto& result) {
-            actorSystem->Send(
-                replyTo,
-                new TEvIamDelegationDdlBridge::TEvIamSchemeRequest(result.GetValue()),
-                0,
-                IamSchemeRequestCookie);
-        });
-    const auto event = co_await NActors::ActorWaitForEvent<
-        TEvIamDelegationDdlBridge::TEvIamSchemeRequest>(IamSchemeRequestCookie);
-    co_return std::move(event->Get()->Status);
+    co_return co_await AwaitFuture<EvIamSchemeRequest, IamSchemeRequestCookie>(
+        SendSchemeRequest(schemeTx, context), replyTo);
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

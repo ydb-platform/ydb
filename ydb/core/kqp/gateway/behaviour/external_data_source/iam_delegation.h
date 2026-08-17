@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/client/yc_private/iam/service_control_service.pb.h>
 
@@ -48,6 +49,18 @@ enum class EIamOperationState {
     Succeeded,
     Failed,
 };
+
+// Bounds the polling of an accepted-but-unfinished IAM operation: how long a DDL
+// is willing to wait for a terminal state, and how fast it may ask. Without the
+// budget, a lifecycle actor whose operation IAM never resolves waits forever and
+// the DDL never completes.
+//
+// A DDL statement waits on the budget synchronously, so CREATE can spend at most
+// two of them (EnsureEnabled, SetupDelegation) plus up to one gRPC request
+// timeout of overshoot on the final poll.
+constexpr TDuration IamOperationPollBudget = TDuration::Seconds(30);
+constexpr TDuration IamOperationMinPollDelay = TDuration::MilliSeconds(100);
+constexpr TDuration IamOperationMaxPollDelay = TDuration::Seconds(2);
 
 yandex::cloud::priv::iam::v1::EnsureServicesEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,

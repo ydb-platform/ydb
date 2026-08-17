@@ -18,6 +18,21 @@
 
 #include <util/generic/guid.h>
 
+// Delegation lifecycle for AUTH_METHOD=IAM external data sources.
+//
+// The single most important property of this file: every IAM call it makes acts
+// as the user who issued the DDL, never as the YDB system service account. That
+// identity is materialized once per operation as a TIamCallerIdentity holding
+//   * BearerToken - the user's own IAM token, which authenticates EnsureEnabled,
+//     SetupDelegation, RevokeDelegation and every operation poll, and
+//   * SubjectId   - the same token's verified subject, sent as
+//     SetupDelegation.on_behalf_of_subject_id so IAM checks the user's rights on
+//     the target service account.
+// Both come from the AccessService-verified TUserToken that travels with the
+// DDL, so the bearer and the subject can never belong to different identities.
+// An operation that cannot produce that identity is rejected before it reaches
+// SchemeShard.
+
 namespace NKikimr::NKqp::NExternalDataSource {
 namespace {
 
@@ -74,53 +89,49 @@ protected:
         , Promise(std::move(promise))
     {}
 
+    // Stage the delegation this DDL proposes. Both calls run as `caller`, and
+    // SetupDelegation additionally names `caller` as the subject IAM must
+    // authorize against the target service account.
     NActors::async<TIamDelegationResult> SetupDelegation(
         const TIamDelegation& delegation,
         const TIamCallerIdentity& caller)
     {
-        EnsureServiceControl();
-
-        auto ensure = MakeHolder<NCloud::TEvServiceControl::TEvEnsureEnabledRequest>();
-        ensure->Token = caller.BearerToken;
-        ensure->Request = MakeEnsureEnabledRequest(DelegationSettings, delegation);
-        this->Send(ServiceControl, ensure.Release(), 0, EnsureCookie);
-
-        const auto ensureResponse = co_await NActors::ActorWaitForEvent<
-            NCloud::TEvServiceControl::TEvEnsureEnabledResponse>(EnsureCookie);
-        if (auto result = co_await WaitForOperation(
-                *ensureResponse->Get(), "EnsureEnabled", caller);
-            !result.Success)
+        if (auto enabled = co_await CallServiceControlAsCaller<
+                NCloud::TEvServiceControl::TEvEnsureEnabledRequest,
+                NCloud::TEvServiceControl::TEvEnsureEnabledResponse>(
+                    caller,
+                    MakeEnsureEnabledRequest(DelegationSettings, delegation),
+                    "EnsureEnabled",
+                    EnsureCookie);
+            !enabled.Success)
         {
-            co_return result;
+            co_return enabled;
         }
 
-        auto setup = MakeHolder<NCloud::TEvServiceControl::TEvSetupDelegationRequest>();
-        setup->Token = caller.BearerToken;
-        setup->Request = MakeSetupDelegationRequest(
-            DelegationSettings, delegation, caller.SubjectId);
-        this->Send(ServiceControl, setup.Release(), 0, DelegationCookie);
-
-        const auto setupResponse = co_await NActors::ActorWaitForEvent<
-            NCloud::TEvServiceControl::TEvSetupDelegationResponse>(DelegationCookie);
-        co_return co_await WaitForOperation(
-            *setupResponse->Get(), "SetupDelegation", caller);
+        co_return co_await CallServiceControlAsCaller<
+            NCloud::TEvServiceControl::TEvSetupDelegationRequest,
+            NCloud::TEvServiceControl::TEvSetupDelegationResponse>(
+                caller,
+                MakeSetupDelegationRequest(
+                    DelegationSettings, delegation, caller.SubjectId),
+                "SetupDelegation",
+                DelegationCookie);
     }
 
+    // Release a delegation this DDL no longer owns: either the one it just
+    // staged, after SchemeShard refused the schema change, or the one the
+    // replaced/dropped object used to own.
     NActors::async<TIamDelegationResult> RevokeDelegation(
         const TIamDelegation& delegation,
         const TIamCallerIdentity& caller)
     {
-        EnsureServiceControl();
-
-        auto revoke = MakeHolder<NCloud::TEvServiceControl::TEvRevokeDelegationRequest>();
-        revoke->Token = caller.BearerToken;
-        revoke->Request = MakeRevokeDelegationRequest(DelegationSettings, delegation);
-        this->Send(ServiceControl, revoke.Release(), 0, DelegationCookie);
-
-        const auto response = co_await NActors::ActorWaitForEvent<
-            NCloud::TEvServiceControl::TEvRevokeDelegationResponse>(DelegationCookie);
-        co_return co_await WaitForOperation(
-            *response->Get(), "RevokeDelegation", caller);
+        co_return co_await CallServiceControlAsCaller<
+            NCloud::TEvServiceControl::TEvRevokeDelegationRequest,
+            NCloud::TEvServiceControl::TEvRevokeDelegationResponse>(
+                caller,
+                MakeRevokeDelegationRequest(DelegationSettings, delegation),
+                "RevokeDelegation",
+                DelegationCookie);
     }
 
     TStatus DelegationStatus(const TIamDelegationResult& result) const {
@@ -145,30 +156,54 @@ protected:
     const TContext Context;
 
 private:
-    void EnsureServiceControl() {
-        if (ServiceControl) {
-            return;
-        }
+    NCloud::TServiceControlSettings GrpcSettings() const {
         NCloud::TServiceControlSettings settings;
         settings.Endpoint = DelegationSettings.Endpoint;
         settings.EnableSsl = DelegationSettings.EnableSsl;
         settings.RequestTimeoutMs = DelegationSettings.Timeout.MilliSeconds();
-        ServiceControl = this->Register(NCloud::CreateServiceControl(settings));
+        return settings;
     }
 
-    void EnsureOperationService() {
-        if (OperationService) {
-            return;
+    NActors::TActorId ServiceControlClient() {
+        if (!ServiceControl) {
+            ServiceControl = this->Register(NCloud::CreateServiceControl(GrpcSettings()));
         }
-        NCloud::TServiceControlSettings settings;
-        settings.Endpoint = DelegationSettings.Endpoint;
-        settings.EnableSsl = DelegationSettings.EnableSsl;
-        settings.RequestTimeoutMs = DelegationSettings.Timeout.MilliSeconds();
-        OperationService = this->Register(NCloud::CreateIamOperationService(settings));
+        return ServiceControl;
     }
 
+    NActors::TActorId OperationServiceClient() {
+        if (!OperationService) {
+            OperationService =
+                this->Register(NCloud::CreateIamOperationService(GrpcSettings()));
+        }
+        return OperationService;
+    }
+
+    // The one place a ServiceControl lifecycle RPC is issued, so the rule that
+    // it is authenticated as the initiating user - and never as the YDB system
+    // service account - holds for all of them by construction.
+    template <typename TRequestEvent, typename TResponseEvent, typename TRequest>
+    NActors::async<TIamDelegationResult> CallServiceControlAsCaller(
+        const TIamCallerIdentity& caller,
+        TRequest request,
+        TStringBuf method,
+        ui64 cookie)
+    {
+        auto event = MakeHolder<TRequestEvent>();
+        event->Token = caller.BearerToken;
+        event->Request = std::move(request);
+        this->Send(ServiceControlClient(), event.Release(), 0, cookie);
+
+        const auto response = co_await NActors::ActorWaitForEvent<TResponseEvent>(cookie);
+        co_return co_await AwaitIamOperation(*response->Get(), method, caller);
+    }
+
+    // ServiceControl may answer with an accepted but unfinished operation. Poll
+    // it - again as the initiating user - until IAM reports a terminal state or
+    // the polling budget runs out. The budget is what keeps a DDL that IAM never
+    // resolves from hanging forever and leaking this actor.
     template <typename TResponse>
-    NActors::async<TIamDelegationResult> WaitForOperation(
+    NActors::async<TIamDelegationResult> AwaitIamOperation(
         const TResponse& response,
         TStringBuf method,
         const TIamCallerIdentity& caller)
@@ -182,6 +217,15 @@ private:
 
         auto operation = response.Response;
         const TString operationId = operation.id();
+
+        // Both live in the coroutine frame for the whole poll loop, so no actor
+        // member state is needed. The wall-clock deadline, not a retry count, is
+        // what bounds the wait: each poll can also spend up to the gRPC request
+        // timeout.
+        const TMonotonic deadline =
+            NActors::TActivationContext::Monotonic() + IamOperationPollBudget;
+        TBackoff backoff(IamOperationMinPollDelay, IamOperationMaxPollDelay);
+
         while (ClassifyIamOperation(operation) == EIamOperationState::InProgress) {
             if (operationId.empty()) {
                 co_return TIamDelegationResult{
@@ -190,9 +234,23 @@ private:
                         << " returned an unfinished operation without an id",
                 };
             }
+            if (NActors::TActivationContext::Monotonic() >= deadline) {
+                // Unknown outcome, not a refusal: IAM accepted the operation and
+                // may still apply it. Setup callers fail the DDL and leave a
+                // delegation to reconcile - the same leak as losing the process
+                // in this window - while post-commit cleanup ignores the result.
+                co_return TIamDelegationResult{
+                    false,
+                    TStringBuilder() << method << " operation " << operationId
+                        << " did not reach a terminal state within "
+                        << IamOperationPollBudget
+                        << " and may still be applied by IAM",
+                };
+            }
 
-            co_await NActors::AsyncSleepFor(OperationPollDelay);
-            EnsureOperationService();
+            // Jittered backoff, so a slow operation does not become a tight loop
+            // against IAM and concurrent DDLs do not poll in lockstep.
+            co_await NActors::AsyncSleepFor(backoff.Next());
 
             auto get = MakeHolder<NCloud::TEvServiceControl::TEvGetOperationRequest>();
             get->Token = caller.BearerToken;
@@ -200,14 +258,14 @@ private:
             // sparse Get response does not change the identity of the
             // accepted operation and must not make us abandon it.
             get->Request.set_operation_id(operationId);
-            this->Send(OperationService, get.Release(), 0, OperationCookie);
+            this->Send(OperationServiceClient(), get.Release(), 0, OperationCookie);
 
             const auto polled = co_await NActors::ActorWaitForEvent<
                 NCloud::TEvServiceControl::TEvGetOperationResponse>(OperationCookie);
             if (!polled->Get()->Status.Ok()) {
-                // Once ServiceControl accepted an operation, abandoning it on
-                // a transient polling failure can leak a delegation. Keep the
-                // DDL pending until IAM exposes a terminal state.
+                // Once ServiceControl accepted an operation, abandoning it on a
+                // transient polling failure can leak a delegation. Keep retrying
+                // until the budget expires rather than giving up on this reply.
                 continue;
             }
             operation = polled->Get()->Response;
@@ -226,7 +284,6 @@ private:
     static constexpr ui64 EnsureCookie = 1;
     static constexpr ui64 DelegationCookie = 2;
     static constexpr ui64 OperationCookie = 3;
-    static constexpr TDuration OperationPollDelay = TDuration::MilliSeconds(100);
 
     NThreading::TPromise<TStatus> Promise;
     const TIamDelegationSettings DelegationSettings =
@@ -235,23 +292,37 @@ private:
     NActors::TActorId OperationService;
 };
 
-class TDropIamDelegationDdlActor final
-    : public TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>
+// DROP and IAM-to-non-IAM replacement do not create a delegation, so they stay
+// on the pre-existing (legacy) executor. They are wrapped only because the
+// request does not say how the committed object authenticates, and a committed
+// object may own a managed delegation that this operation must release.
+//
+// The two differ solely in which name they look up and whether a missing object
+// is already the requested outcome, so one actor serves both.
+struct TIamCleanupTarget {
+    TString Name;
+    bool SucceedIfAbsent = false;
+};
+
+class TLegacyDdlWithIamCleanupActor final
+    : public TIamDelegationDdlActorBase<TLegacyDdlWithIamCleanupActor>
 {
-    using TBase = TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>;
+    using TBase = TIamDelegationDdlActorBase<TLegacyDdlWithIamCleanupActor>;
 
 public:
-    TDropIamDelegationDdlActor(
+    TLegacyDdlWithIamCleanupActor(
         NKikimrSchemeOp::TModifyScheme schemeTx,
         TContext context,
+        TIamCleanupTarget target,
         TLegacyDdlExecutor executeLegacyDdl,
         NThreading::TPromise<TStatus> promise)
         : TBase(std::move(schemeTx), std::move(context), std::move(promise))
+        , Target(std::move(target))
         , ExecuteLegacyDdl(std::move(executeLegacyDdl))
     {}
 
     void Bootstrap() {
-        Become(&TDropIamDelegationDdlActor::StateWork);
+        Become(&TLegacyDdlWithIamCleanupActor::StateWork);
         Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
     }
 
@@ -262,83 +333,25 @@ private:
 
     NActors::async<void> Execute() {
         const TString path = TStringBuilder()
-            << SchemeTx.GetWorkingDir() << '/' << SchemeTx.GetDrop().GetName();
-        auto described = co_await DescribeIamObject(path, Context, SelfId());
-        if (described.Status.IsFail()) {
-            Finish(std::move(described.Status));
+            << SchemeTx.GetWorkingDir() << '/' << Target.Name;
+        auto committed = co_await DescribeIamObject(path, Context, SelfId());
+        if (committed.Status.IsFail()) {
+            Finish(std::move(committed.Status));
             co_return;
         }
-
-        if (described.NotFound && SchemeTx.GetSuccessOnNotExist()) {
+        if (committed.NotFound && Target.SucceedIfAbsent) {
             Finish(TStatus::Success());
             co_return;
         }
 
+        // An object without a complete persisted delegation tuple is not
+        // DDL-managed: it needs no IAM call, and therefore no user identity.
+        // A managed one needs both, plus a precondition that pins the snapshot
+        // this decision was made on.
         std::optional<TIamCallerIdentity> caller;
-        if (IsManagedIamDelegation(described.Delegation)) {
+        if (IsManagedIamDelegation(committed.Delegation)) {
             AddIamPathVersionPrecondition(
-                SchemeTx, described.SnapshotPathId, described.SnapshotPathVersion);
-            caller = GetIamCallerIdentity(Context);
-            if (!caller) {
-                Finish(InvalidIamCallerIdentityStatus());
-                co_return;
-            }
-        }
-
-        const auto schemeStatus = co_await AwaitLegacyDdl(
-            ExecuteLegacyDdl(SchemeTx, Context), SelfId());
-        if (!schemeStatus.IsFail() && !described.NotFound && caller) {
-            co_await RevokeDelegation(described.Delegation, *caller);
-        }
-        Finish(schemeStatus);
-    }
-
-    STRICT_STFUNC(StateWork,
-        hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
-    )
-
-    TLegacyDdlExecutor ExecuteLegacyDdl;
-};
-
-class TReplaceIamWithNonIamDdlActor final
-    : public TIamDelegationDdlActorBase<TReplaceIamWithNonIamDdlActor>
-{
-    using TBase = TIamDelegationDdlActorBase<TReplaceIamWithNonIamDdlActor>;
-
-public:
-    TReplaceIamWithNonIamDdlActor(
-        NKikimrSchemeOp::TModifyScheme schemeTx,
-        TContext context,
-        TLegacyDdlExecutor executeLegacyDdl,
-        NThreading::TPromise<TStatus> promise)
-        : TBase(std::move(schemeTx), std::move(context), std::move(promise))
-        , ExecuteLegacyDdl(std::move(executeLegacyDdl))
-    {}
-
-    void Bootstrap() {
-        Become(&TReplaceIamWithNonIamDdlActor::StateWork);
-        Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
-    }
-
-private:
-    void HandleStart(TEvIamDelegationDdl::TEvStart::TPtr) {
-        co_await Execute();
-    }
-
-    NActors::async<void> Execute() {
-        const TString path = TStringBuilder()
-            << SchemeTx.GetWorkingDir() << '/'
-            << SchemeTx.GetCreateExternalDataSource().GetName();
-        auto previous = co_await DescribeIamObject(path, Context, SelfId());
-        if (previous.Status.IsFail()) {
-            Finish(std::move(previous.Status));
-            co_return;
-        }
-
-        std::optional<TIamCallerIdentity> caller;
-        if (IsManagedIamDelegation(previous.Delegation)) {
-            AddIamPathVersionPrecondition(
-                SchemeTx, previous.SnapshotPathId, previous.SnapshotPathVersion);
+                SchemeTx, committed.SnapshotPathId, committed.SnapshotPathVersion);
             caller = GetIamCallerIdentity(Context);
             if (!caller) {
                 Finish(InvalidIamCallerIdentityStatus());
@@ -349,7 +362,9 @@ private:
         const auto schemeStatus = co_await AwaitLegacyDdl(
             ExecuteLegacyDdl(SchemeTx, Context), SelfId());
         if (!schemeStatus.IsFail() && caller) {
-            co_await RevokeDelegation(previous.Delegation, *caller);
+            // Best effort by design: SchemeShard has already committed, so a
+            // revoke failure must not turn its success into a client error.
+            co_await RevokeDelegation(committed.Delegation, *caller);
         }
         Finish(schemeStatus);
     }
@@ -358,6 +373,7 @@ private:
         hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
     )
 
+    const TIamCleanupTarget Target;
     TLegacyDdlExecutor ExecuteLegacyDdl;
 };
 
@@ -384,35 +400,48 @@ private:
         co_await Execute();
     }
 
-    NActors::async<void> Execute() {
+    // Nothing here may touch IAM, so it stays outside the coroutine.
+    TStatus Validate() const {
         if (!SchemeTx.GetCreateExternalDataSource().GetAuth().HasIam()) {
-            Finish(TStatus::Fail(
+            return TStatus::Fail(
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                "IAM delegation actor received a non-IAM external data source"));
-            co_return;
+                "IAM delegation actor received a non-IAM external data source");
         }
         if (!AppData(Context.GetActorSystem())
                 ->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam())
         {
-            Finish(TStatus::Fail(
+            return TStatus::Fail(
                 NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
-                "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
-            co_return;
-        }
-        auto caller = GetIamCallerIdentity(Context);
-        if (!caller) {
-            Finish(InvalidIamCallerIdentityStatus());
-            co_return;
+                "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it");
         }
         if (SchemeTx.GetCreateExternalDataSource().GetSourceType() !=
             ToString(NYql::EDatabaseType::Ydb))
         {
-            Finish(TStatus::Fail(
+            return TStatus::Fail(
                 NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                "AUTH_METHOD=IAM is supported only for SOURCE_TYPE=Ydb"));
+                "AUTH_METHOD=IAM is supported only for SOURCE_TYPE=Ydb");
+        }
+        return TStatus::Success();
+    }
+
+    NActors::async<void> Execute() {
+        if (auto status = Validate(); status.IsFail()) {
+            Finish(std::move(status));
             co_return;
         }
 
+        // Resolve the initiating user once; setup, compensation and cleanup all
+        // reuse this one identity rather than reinterpreting the token.
+        const auto caller = GetIamCallerIdentity(Context);
+        if (!caller) {
+            Finish(InvalidIamCallerIdentityStatus());
+            co_return;
+        }
+
+        // Read the committed object, if this statement can hit one. A
+        // replacement must remember the delegation it is about to supersede,
+        // and CREATE IF NOT EXISTS must not call IAM for an object that is
+        // already there.
         TIamObjectDescription previous;
         const bool createIfNotExists =
             !SchemeTx.GetReplaceIfExists() && !SchemeTx.GetFailedOnAlreadyExists();
@@ -430,6 +459,8 @@ private:
                 co_return;
             }
             if (SchemeTx.GetReplaceIfExists()) {
+                // Losing a race with a concurrent replacement must fail the
+                // compare-and-swap instead of superseding a newer delegation.
                 AddIamPathVersionPrecondition(
                     SchemeTx,
                     previous.SnapshotPathId,
@@ -447,28 +478,38 @@ private:
                 ->MutableAuth()->MutableIam()->SetResourceId(cloud.CloudId);
         }
 
+        // Stage the new delegation before SchemeShard, so a setup failure fails
+        // the DDL while the committed object keeps working.
         const auto& iam = SchemeTx.GetCreateExternalDataSource().GetAuth().GetIam();
-        TIamDelegation staged{
+        const TIamDelegation staged{
             .ResourceId = iam.GetResourceId(),
             .ServiceAccountId = iam.GetServiceAccountId(),
             .ReferrerId = iam.GetDelegationReferrerId(),
         };
-        const auto setup = co_await SetupDelegation(staged, *caller);
-        if (!setup.Success) {
+        if (const auto setup = co_await SetupDelegation(staged, *caller);
+            !setup.Success)
+        {
             Finish(DelegationStatus(setup));
             co_return;
         }
 
         auto schemeStatus = co_await ExecuteIamSchemeRequest(
             SchemeTx, Context, SelfId());
-        const auto cleanup = SelectCleanupAfterSchemeRequest(
-            !schemeStatus.IsFail(),
-            previous.Delegation,
-            staged);
-        if (cleanup == EDelegationCleanup::Staged) {
-            co_await RevokeDelegation(staged, *caller);
-        } else if (cleanup == EDelegationCleanup::Previous) {
-            co_await RevokeDelegation(previous.Delegation, *caller);
+
+        // Exactly one delegation is now redundant: the staged one if SchemeShard
+        // refused, the superseded one if it committed. Either way the schema
+        // result stands - cleanup can never change it.
+        switch (SelectCleanupAfterSchemeRequest(
+            !schemeStatus.IsFail(), previous.Delegation, staged))
+        {
+            case EDelegationCleanup::Staged:
+                co_await RevokeDelegation(staged, *caller);
+                break;
+            case EDelegationCleanup::Previous:
+                co_await RevokeDelegation(previous.Delegation, *caller);
+                break;
+            case EDelegationCleanup::None:
+                break;
         }
         Finish(std::move(schemeStatus));
     }
@@ -541,24 +582,32 @@ NActors::IActor* CreateLegacyDdlWithIamCleanupActor(
     TLegacyDdlExecutor executeLegacyDdl,
     NThreading::TPromise<TStatus> promise)
 {
+    std::optional<TIamCleanupTarget> target;
     if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
-        return new TDropIamDelegationDdlActor(
-            std::move(schemeTx),
-            std::move(context),
-            std::move(executeLegacyDdl),
-            std::move(promise));
-    }
-    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource &&
+        // DROP ... IF EXISTS has nothing left to do once the object is absent.
+        target = TIamCleanupTarget{
+            .Name = schemeTx.GetDrop().GetName(),
+            .SucceedIfAbsent = schemeTx.GetSuccessOnNotExist(),
+        };
+    } else if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource &&
         schemeTx.GetReplaceIfExists() &&
         !schemeTx.GetCreateExternalDataSource().GetAuth().HasIam())
     {
-        return new TReplaceIamWithNonIamDdlActor(
-            std::move(schemeTx),
-            std::move(context),
-            std::move(executeLegacyDdl),
-            std::move(promise));
+        // A replacement still has to create the new object when none exists.
+        target = TIamCleanupTarget{
+            .Name = schemeTx.GetCreateExternalDataSource().GetName(),
+            .SucceedIfAbsent = false,
+        };
     }
-    return nullptr;
+    if (!target) {
+        return nullptr;
+    }
+    return new TLegacyDdlWithIamCleanupActor(
+        std::move(schemeTx),
+        std::move(context),
+        std::move(*target),
+        std::move(executeLegacyDdl),
+        std::move(promise));
 }
 
 } // namespace NKikimr::NKqp::NExternalDataSource

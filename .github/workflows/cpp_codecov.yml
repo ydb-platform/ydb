@@ -229,21 +229,34 @@ jobs:
             let pr = context.payload.pull_request;
             const eventHeadSha = pr.head.sha;
             const eventBaseSha = pr.base.sha;
-            if (!pr.merge_commit_sha) {
+            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const maxAttempts = 30;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               const { data } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: pr.number,
               });
               pr = data;
+
+              if (pr.head.sha !== eventHeadSha || pr.base.sha !== eventBaseSha) {
+                core.setFailed(
+                  'The PR or its base branch was updated after this workflow started. Please use the latest run.'
+                );
+                return;
+              }
+              if (pr.mergeable !== null) break;
+
+              core.info(`Waiting for GitHub to compute PR mergeability (${attempt}/${maxAttempts})`);
+              if (attempt < maxAttempts) await delay(2000);
             }
-            if (pr.head.sha !== eventHeadSha || pr.base.sha !== eventBaseSha) {
-              core.setFailed(
-                'The PR or its base branch was updated after this workflow started. Please use the latest run.'
-              );
+
+            if (pr.mergeable === null) {
+              core.setFailed('GitHub did not finish computing PR mergeability. Please re-run the workflow.');
               return;
             }
-            if (pr.mergeable === false || !pr.merge_commit_sha) {
+            if (!pr.mergeable || !pr.merge_commit_sha) {
               core.setFailed(
                 'Unable to merge PR into the base branch. Please rebase or resolve conflicts and re-request coverage.'
               );

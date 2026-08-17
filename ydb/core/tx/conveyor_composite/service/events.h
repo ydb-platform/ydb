@@ -100,6 +100,7 @@ struct TEvInternal {
     enum EEv {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
+        EvRetryConfigSubscription,
         EvEnd
     };
 
@@ -143,6 +144,8 @@ struct TEvInternal {
         TEvTaskProcessedResult(
             std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId);
     };
+
+    class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 };
 
 }   // namespace NKikimr::NConveyorComposite

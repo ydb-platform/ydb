@@ -15,6 +15,11 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         self.rows_per_user = 3
         self.index_name = "vector_idx"
         self.vector_dimension = 3
+        # Keep every branch of the two-level tree populated. Older versions
+        # reject DML when resolving a childless branch, while newer versions
+        # skip it, which makes the result depend on the node handling a query
+        # during a rolling upgrade.
+        self.clusters = 2
         # vector type: [ data type, conversion function ]
         self.vector_types = {
             "Uint8": ["Uint8", "Knn::ToBinaryStringUint8"],
@@ -60,7 +65,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                   vector_type={vector_type},
                   vector_dimension={self.vector_dimension},
                   levels=2,
-                  clusters=10
+                  clusters={self.clusters}
                   {overlap}
             );
         """

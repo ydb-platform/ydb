@@ -55,6 +55,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -81,6 +83,50 @@ namespace {
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
+
+void FinishProxyOwnedTrace(NWilson::TTraceId& traceId,
+        const std::optional<NPrivateEvents::TEvQueryRequest::TProxyTraceSeed>& seed,
+        NKikimrKqp::EQueryAction action, Ydb::StatusIds::StatusCode status, ui32 nodeId) {
+    if (!traceId) {
+        return;
+    }
+    NWilson::TTraceId ownedTraceId = std::move(traceId);
+    traceId = {};
+
+    const TInstant finishedAt = TInstant::Now();
+    const TInstant startedAt = seed ? seed->StartTime : finishedAt;
+    TString name = NKikimrKqp::EQueryAction_Name(action);
+    constexpr TStringBuf prefix = "QUERY_ACTION_";
+    if (name.StartsWith(prefix)) {
+        name = name.substr(prefix.size());
+    }
+
+    NWilson::TSpan root = NWilson::TSpan::ConstructTerminated(
+        ownedTraceId, ownedTraceId.Span(ownedTraceId.GetVerbosity()), startedAt, finishedAt,
+        NWilson::NTraceProto::Status::STATUS_CODE_ERROR, name,
+        NWilson::MakeUserFacingWilsonUploaderId());
+    if (!root) {
+        return;
+    }
+    root.Attribute("ydb.tracing.layer", TString("user"));
+    root.Attribute("ydb.code.component", TString("KQP"));
+    root.Attribute("db.system.name", TString("ydb"));
+    root.Attribute("db.operation.name", name);
+    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(status));
+    root.Attribute("ydb.trace.coverage", TString("proxy_only"));
+
+    NWilson::TSpan proxy = NWilson::TSpan::ConstructTerminated(
+        root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+        startedAt, finishedAt, NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+        "KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
+    if (proxy) {
+        proxy.Attribute("ydb.actor.type", TString("TKqpProxyService"));
+        proxy.Attribute("ydb.node_id", static_cast<i64>(nodeId));
+        proxy.Attribute("ydb.rejected", true);
+        proxy.EndError(Ydb::StatusIds::StatusCode_Name(status));
+    }
+    root.EndError(Ydb::StatusIds::StatusCode_Name(status));
+}
 
 using VSessions = NKikimr::NSysView::Schema::QuerySessions;
 using namespace NKikimrConfig;
@@ -617,6 +663,7 @@ public:
                     {"targetId", ev->Sender},
                     {"requestId", ev->Cookie});
 
+                PendingRequests.ReclaimUserFacingTrace(ev->Cookie);
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
                 RemoveSession("", ev->Sender);
                 break;
@@ -729,13 +776,9 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ev->Get()->EnsureProxyTraceSeed();
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
-        }
-
-        std::optional<TMonotonic> proxyRequestStart;
-        if (ev->Get()->Record.HasUserFacingTraceId()) {
-            proxyRequestStart = TMonotonic::Now();
         }
 
         // TODO: not the best place for adding database.
@@ -748,6 +791,7 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        PendingRequests.SetUserFacingTrace(requestId, *ev->Get());
         // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
         if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
             const auto& userToken = ev->Get()->GetUserToken();
@@ -859,11 +903,14 @@ public:
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
         if (ev->Get()->Record.HasUserFacingTraceId()) {
+            const auto& seed = ev->Get()->GetProxyTraceSeed();
+            Y_ABORT_UNLESS(seed);
             auto* hop = ev->Get()->Record.AddProxyRequestHops();
             hop->SetNodeId(SelfId().NodeId());
             hop->SetTargetNodeId(targetId.NodeId());
-            hop->SetDurationUs((TMonotonic::Now() - *proxyRequestStart).MicroSeconds());
+            hop->SetDurationUs((TMonotonic::Now() - seed->StartedAt).MicroSeconds());
         }
+        PendingRequests.TransferUserFacingTrace(requestId);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1542,6 +1589,11 @@ private:
             {"status", ydbStatus},
             {"issues", issues.ToOneLineString()});
 
+        if (request->EventType == TKqpEvents::EvQueryRequest && !request->UserFacingTraceTransferred) {
+            FinishProxyOwnedTrace(request->UserFacingTraceId, request->ProxyTraceSeed,
+                request->QueryAction, ydbStatus, SelfId().NodeId());
+        }
+
         if (request->EventType == TKqpEvents::EvPingSessionRequest) {
             auto response = std::make_unique<TEvKqp::TEvPingSessionResponse>();
             response->Record.SetStatus(ydbStatus);
@@ -1780,6 +1832,12 @@ private:
     void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
+                auto* request = static_cast<TEvKqp::TEvQueryRequest*>(requestEvent->GetBase());
+                if (request && request->Record.HasUserFacingTraceId()) {
+                    NWilson::TTraceId traceId = request->GetUserFacingWilsonTraceId();
+                    FinishProxyOwnedTrace(traceId, request->GetProxyTraceSeed(), request->GetAction(),
+                        status, SelfId().NodeId());
+                }
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);
                 NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());

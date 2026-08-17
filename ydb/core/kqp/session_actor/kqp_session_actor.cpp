@@ -112,6 +112,23 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
+TExecutionDiagnosticsPolicy MakeExecutionDiagnosticsPolicy(const TKqpQueryState* queryState) {
+    TExecutionDiagnosticsPolicy policy;
+    if (!queryState || !queryState->UserFacingTraceId) {
+        return policy;
+    }
+
+    const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
+    using TLevels = TComponentTracingLevels::TQueryProcessor;
+    policy.CollectTimeline = true;
+    policy.CollectStageAggregates = level >= TLevels::Detailed;
+    policy.CollectTaskSamples = level >= TLevels::Detailed;
+    policy.CollectShardSamples = level >= TLevels::Diagnostic;
+    policy.CollectBufferLookup = level >= TLevels::Detailed;
+    policy.CollectCommitTimeline = level >= TLevels::Detailed;
+    return policy;
+}
+
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -336,7 +353,6 @@ public:
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
-        InitializeUserFacingQueryText(*QueryState);
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
         }
@@ -348,6 +364,7 @@ public:
         Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
             "Cannot send to workload manager: PoolConfig is already resolved");
 
+        QueryState->AdmissionStartedAt = TInstant::Now();
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
@@ -887,6 +904,7 @@ public:
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+            MarkCompileCacheHit();
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -926,6 +944,19 @@ public:
         }
         QueryState->CompileAttempts.push_back({.Start = TInstant::Now()});
         QueryState->ActiveCompileAttempt = QueryState->CompileAttempts.size() - 1;
+    }
+
+    void MarkCompileCacheHit() {
+        if (!QueryState || !QueryState->UserFacingTraceId) {
+            return;
+        }
+        const TInstant now = TInstant::Now();
+        KeepCompileAttempt(QueryState->CompileAttempts, {
+            .Start = now,
+            .End = now,
+            .FromCache = true,
+            .Status = QueryState->CompileResult->Status,
+        }, QueryState->CompileAttemptsDropped);
     }
 
     void MarkCompileEnd(TEvKqp::TEvCompileResponse& response) {
@@ -1057,6 +1088,7 @@ public:
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+            MarkCompileCacheHit();
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             QueryState->CompileResult->IncUsage();
@@ -1734,16 +1766,7 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
-            if (queryState->UserFacingTraceId) {
-                const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
-                using TLevels = TComponentTracingLevels::TQueryProcessor;
-                request.DiagnosticsPolicy.CollectTimeline = true;
-                request.DiagnosticsPolicy.CollectStageAggregates = level >= TLevels::Detailed;
-                request.DiagnosticsPolicy.CollectTaskSamples = level >= TLevels::Detailed;
-                request.DiagnosticsPolicy.CollectShardSamples = level >= TLevels::Diagnostic;
-                request.DiagnosticsPolicy.CollectBufferLookup = level >= TLevels::Detailed;
-                request.DiagnosticsPolicy.CollectCommitTimeline = level >= TLevels::Detailed;
-            }
+            request.DiagnosticsPolicy = MakeExecutionDiagnosticsPolicy(queryState);
             request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
@@ -2392,8 +2415,7 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
-                .CollectDiagnostics = QueryState && QueryState->UserFacingTraceId
-                    && QueryState->UserFacingTraceId.GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Diagnostic,
+                .CollectDiagnostics = MakeExecutionDiagnosticsPolicy(QueryState.get()).CollectBufferLookup,
             };
 
             settings.UserCtx = CreateUserContext();
@@ -3445,9 +3467,13 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        FinishRejectedUserFacingSpan(*request->Get(), ydbStatus);
+        IActor* userFacingRenderer = CreateRejectedUserFacingTraceRenderer(
+            *request->Get(), ydbStatus);
 
         Send(request->Sender, response.release(), 0, proxyRequestId);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer);
+        }
     }
 
     void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {

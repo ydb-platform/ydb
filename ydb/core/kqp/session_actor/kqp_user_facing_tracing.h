@@ -57,18 +57,21 @@ private:
     ui64 Dropped_ = 0;
 };
 
-TString DescribeUserFacingQuery(const TKqpQueryState& state);
+struct TUserFacingQueryDescription {
+    TString DisplayName;
+    TString Operation;
+};
+
+TUserFacingQueryDescription DescribeUserFacingQuery(const TKqpQueryState& state);
 TString SanitizeUserFacingQueryText(const TString& text);
 TString FallbackUserFacingQueryName(const TKqpQueryState& state);
-
-void InitializeUserFacingQueryText(TKqpQueryState& state);
 
 // Consumes the sampled context and detaches an immutable snapshot for asynchronous rendering.
 NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
     const TString& statusCode);
 
-// Finishes a sampled request rejected before a per-query state can be created.
-void FinishRejectedUserFacingSpan(const NPrivateEvents::TEvQueryRequest& request,
+// Detaches a sampled request rejected before a per-query state can be created.
+NActors::IActor* CreateRejectedUserFacingTraceRenderer(const NPrivateEvents::TEvQueryRequest& request,
     Ydb::StatusIds::StatusCode status);
 
 // Derives the root name from the physical query rather than raw SQL text.

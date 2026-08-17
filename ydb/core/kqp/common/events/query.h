@@ -15,8 +15,10 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/monotonic.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
@@ -76,6 +78,11 @@ struct TQueryRequestSettings {
 
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
 public:
+    struct TProxyTraceSeed {
+        TInstant StartTime;
+        NActors::TMonotonic StartedAt;
+    };
+
     TEvQueryRequest(
         NKikimrKqp::EQueryAction queryAction,
         NKikimrKqp::EQueryType queryType,
@@ -248,6 +255,19 @@ public:
             return NWilson::TTraceId(Record.GetUserFacingTraceId());
         }
         return {};
+    }
+
+    void EnsureProxyTraceSeed() {
+        if (Record.HasUserFacingTraceId() && !ProxyTraceSeed) {
+            ProxyTraceSeed.emplace(TProxyTraceSeed{
+                .StartTime = TInstant::Now(),
+                .StartedAt = NActors::TMonotonic::Now(),
+            });
+        }
+    }
+
+    const std::optional<TProxyTraceSeed>& GetProxyTraceSeed() const {
+        return ProxyTraceSeed;
     }
 
     const TString& GetRequestType() const {
@@ -525,6 +545,7 @@ private:
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
     std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
+    std::optional<TProxyTraceSeed> ProxyTraceSeed;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

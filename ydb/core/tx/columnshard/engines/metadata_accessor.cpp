@@ -45,9 +45,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
-    std::vector<IColumnEngine::TSelectedPortionInfo> portions = context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(),
-        context.GetDataLocksManager(), *readDescription.PKRangesFilter, readDescription.readNonconflictingPortions,
-        readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
+    std::vector<IColumnEngine::TSelectedPortionInfo> portions =
+        context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
 
     switch (readerClass) {
         case NReader::EReaderClass::Plain: {

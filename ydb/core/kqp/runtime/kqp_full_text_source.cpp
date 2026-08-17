@@ -1587,8 +1587,9 @@ public:
             return nullptr;
         }
 
-        YQL_ENSURE(settings->GetIndexTables().size() >= 2);
-        auto& info = settings->GetIndexTables(1);
+        int docsPos = settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance ? 1 : 0;
+        YQL_ENSURE(settings->GetIndexTables().size() > docsPos);
+        auto& info = settings->GetIndexTables(docsPos);
         YQL_ENSURE(info.GetTable().GetPath().EndsWith(DocsTable));
         auto& columns = info.GetColumns();
         auto& keyColumns = info.GetKeyColumns();
@@ -1690,8 +1691,9 @@ public:
             return nullptr;
         }
 
-        YQL_ENSURE(settings->GetIndexTables().size() >= 3);
-        auto& info = settings->GetIndexTables(2);
+        int statsPos = settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance ? 2 : 1;
+        YQL_ENSURE(settings->GetIndexTables().size() > statsPos);
+        auto& info = settings->GetIndexTables(statsPos);
         YQL_ENSURE(info.GetTable().GetPath().EndsWith(StatsTable));
         auto& columns = info.GetColumns();
         auto& keyColumns = info.GetKeyColumns();

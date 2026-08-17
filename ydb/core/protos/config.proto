@@ -2949,10 +2949,8 @@ message TColumnShardConfig {
 
     optional TFlowControlConfig FlowControl = 74;
 
-    // When enabled, an oversized secondary-index chunk on a blob storage is split into several chunks (each
-    // under MaxBlobSize) instead of being dropped. Off by default so the whole fleet can read the split
-    // representation before any node starts writing it (two-phase rollout).
-    optional bool EnableIndexBlobSplit = 75 [default = false];
+    // Keep off until the whole fleet can read multi-chunk indexes (two-phase rollout).
+    optional bool EnableLargeIndexes = 75 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

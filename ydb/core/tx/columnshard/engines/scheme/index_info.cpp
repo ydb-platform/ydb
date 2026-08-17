@@ -500,12 +500,9 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-            // The chunk does not fit the target storage. Inplace (_LOCAL) indexes cannot be split and with the
-            // flag off nothing is split; with the flag on a blob-storage chunk was already split to fit, so
-            // reaching here means the builder produced an oversize chunk anyway. Drop it (Success means
-            // "handled", not "index stored") instead of failing: a failure would abort the compaction and
-            // actualization callers via DetachResult, i.e. the tablet crash #26733 fixes. The portion stays
-            // correct without the index, only the skip optimization is lost.
+            // The chunk does not fit the target storage. Drop the whole index instead of failing: a failure
+            // would abort the compaction/actualization callers via DetachResult, i.e. the tablet crash #26733
+            // fixes. The portion stays correct without the index, only the skip optimization is lost.
             auto indexMeta = GetIndexOptional(indexId);
             YDB_LOG_WARN("",
                 {"event", "index_skipped"},
@@ -532,13 +529,12 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    // With EnableIndexBlobSplit on, a blob-storage index is split into several chunks each fitting MaxBlobSize;
-    // an inplace (_LOCAL) index cannot be split and gets no budget. With the flag off nothing is split — an
-    // oversize index is dropped by ReuseIndexChunks (the same behaviour as before the split was introduced).
+    // An inplace (_LOCAL) index cannot be split, so it gets no size budget; oversize indexes without a budget
+    // are dropped by ReuseIndexChunks.
     std::optional<ui64> chunkSizeLimit;
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     if (indexStorageId != IStoragesManager::LocalMetadataStorageId &&
-        NYDBTest::TControllers::GetColumnShardController()->GetEnableIndexBlobSplit()) {
+        NYDBTest::TControllers::GetColumnShardController()->GetEnableLargeIndexes()) {
         chunkSizeLimit = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
     }
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =

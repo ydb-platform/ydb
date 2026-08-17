@@ -183,11 +183,11 @@ bool HasIndex(const TWritePortionInfoWithBlobsResult& portion, const ui32 indexI
 Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // Issue #26733: actualization rebuilds the index for the target tier, and a filter above the storage
     // MaxBlobSize used to abort the tablet with "blob size for secondary data ... bigger than limit". With
-    // EnableIndexBlobSplit on, a filter that cannot even be split (its base size is above the limit) is folded
+    // EnableLargeIndexes on, a filter that cannot even be split (its base size is above the limit) is folded
     // down to the limit.
     Y_UNIT_TEST(OversizedIndexOnActualizationIsClampedToLimit) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideEnableLargeIndexes(true);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(MaxBlobSize).SetMinBlobSize(MaxBlobSize / 4));
 
         const auto schemaFrom = MakeSchemaWithNGrammIndex(1);
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     Y_UNIT_TEST(OversizedIndexOnDefaultStorageIsSplit) {
         constexpr i64 blobLimit = 10_KB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideEnableLargeIndexes(true);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
 
         // 512 records over 4 column chunks: the whole-portion filter is 32 KB (8 KB doubled twice), while
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     Y_UNIT_TEST(OversizedSingleChunkIsClampedToLimit) {
         constexpr i64 blobLimit = 10_KB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideEnableLargeIndexes(true);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
 
         // One column chunk of 512 records: the 8 KB base filter doubles past the 10 KB limit, but a single
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     Y_UNIT_TEST(OversizedIndexOnDefaultStorageIsSplitNewSizing) {
         constexpr i64 blobLimit = 2_KB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideEnableLargeIndexes(true);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
 
         const auto schema = MakeSchemaWithNGrammIndex(1, FilterSizeBytes, 1024, IStoragesManager::DefaultStorageId, 0.005);
@@ -328,9 +328,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // An oversized inplace (_LOCAL) index cannot be split: it is dropped completely, leaving no chunks and
     // no inplace metadata, so nothing about it is persisted with the portion (IndexColumnsV2 stays clean).
     Y_UNIT_TEST(OversizedLocalIndexIsSkippedWithoutMeta) {
-        // Even with splitting enabled, an inplace index cannot be split and is dropped.
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(true);
+        csController->SetOverrideEnableLargeIndexes(true);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(MaxBlobSize).SetMinBlobSize(MaxBlobSize / 4));
 
         const auto schemaFrom = MakeSchemaWithNGrammIndex(1, FilterSizeBytes, 1024, IStoragesManager::LocalMetadataStorageId);
@@ -361,12 +360,12 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         UNIT_ASSERT(!HasIndex(*syncResult, NGrammIndexId));
     }
 
-    // With EnableIndexBlobSplit off, an oversized index on a blob storage is dropped (not split), exactly like
+    // With EnableLargeIndexes off, an oversized index on a blob storage is dropped (not split), exactly like
     // a portion older than the index. This is the safe default the flag guards.
     Y_UNIT_TEST(OversizedIndexOnDefaultStorageDroppedWhenFlagOff) {
         constexpr i64 blobLimit = 10_KB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideEnableIndexBlobSplit(false);
+        csController->SetOverrideEnableLargeIndexes(false);
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
 
         const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128);

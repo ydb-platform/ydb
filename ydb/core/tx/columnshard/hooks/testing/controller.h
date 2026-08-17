@@ -30,7 +30,7 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
-    YDB_ACCESSOR(std::optional<bool>, OverrideEnableIndexBlobSplit, std::nullopt);
+    YDB_ACCESSOR(std::optional<bool>, OverrideEnableLargeIndexes, std::nullopt);
     YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
 
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
@@ -224,8 +224,8 @@ protected:
         }
     }
 
-    virtual bool DoGetEnableIndexBlobSplit(const bool defaultValue) const override {
-        return OverrideEnableIndexBlobSplit.value_or(defaultValue);
+    virtual bool DoGetEnableLargeIndexes(const bool defaultValue) const override {
+        return OverrideEnableLargeIndexes.value_or(defaultValue);
     }
 
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(

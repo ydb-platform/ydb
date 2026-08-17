@@ -185,7 +185,7 @@ protected:
         return defaultValue;
     }
 
-    virtual bool DoGetEnableIndexBlobSplit(const bool defaultValue) const {
+    virtual bool DoGetEnableLargeIndexes(const bool defaultValue) const {
         return defaultValue;
     }
 
@@ -208,8 +208,8 @@ public:
         return DoGetBlobSplitSettings(defaultValue);
     }
 
-    bool GetEnableIndexBlobSplit() const {
-        return DoGetEnableIndexBlobSplit(GetConfig().GetEnableIndexBlobSplit());
+    bool GetEnableLargeIndexes() const {
+        return DoGetEnableLargeIndexes(GetConfig().GetEnableLargeIndexes());
     }
 
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);

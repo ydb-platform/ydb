@@ -318,9 +318,8 @@ def load_existing_grpc_tls_data(tls_data_path):
     if not existing_paths:
         return None
 
-    invalid_paths = [path for path in paths if not os.path.isfile(path) or os.path.getsize(path) == 0]
     if invalid_paths:
-        raise RuntimeError(
+        raise ValueError(
             'Existing gRPC TLS data requires non-empty regular files {}. Missing or invalid: {}'.format(
                 ', '.join(GRPC_TLS_DATA_FILES),
                 ', '.join(invalid_paths),

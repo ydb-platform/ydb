@@ -70,6 +70,7 @@ message TAuthConfig {
     optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
     optional TExternalIdpConfig ExternalIdpConfig = 91;
     optional TLocalMetadataService LocalMetadataService = 92;
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -88,6 +89,9 @@ message TAuthConfig {
 >>>>>>> df8ef0f4337 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
 =======
 >>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+>>>>>>> d04f492c636 ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
 }
 
 message TLocalMetadataService {

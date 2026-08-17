@@ -142,6 +142,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TSyncHint
+{
+    ui64 SyncId = 0;
+    THostIndex Host = InvalidHostIndex;
+    TBlockRange64 Range;
+
+    // ReadyToStart will be triggered at the moment when all
+    // overlapping flush operations with this range are completed.
+    // After that, the range synchronization can begin.
+    NThreading::TFuture<void> ReadyToStart;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDDiskState
 {
 public:
@@ -302,12 +316,11 @@ public:
     // can read it from anywhere.
     [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
         THostIndex host) const;
-    // Returns TFuture, which will be triggered at the moment when all
-    // overlapping flush operations with this range are completed.
-    NThreading::TFuture<void> GetRangeSyncStartTrigger(
-        THostIndex host,
-        TBlockRange64 range);
-    void RangeSynced(THostIndex host, TBlockRange64 range);
+    // See TSyncHint for details.
+    // The BeginRangeSync and EndRangeSync calls must be paired.
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range);
+    // Should be called when the range synchronization is complete or failed.
+    void EndRangeSync(ui64 syncId, bool success);
     void ClearRangeSyncs(THostIndex host);
 
     [[nodiscard]] size_t GetHostCount() const;
@@ -375,7 +388,8 @@ private:
     struct TInflightDDiskSync
     {
         THostIndex DestinationHost = InvalidHostIndex;
-        NThreading::TPromise<void> SyncStartTrigger;
+        NThreading::TPromise<void> SyncStartTrigger =
+            NThreading::NewPromise<void>();
     };
 
     using TInflightDDiskSyncMap = TBlockRangeMap<ui64, TInflightDDiskSync>;
@@ -393,7 +407,7 @@ private:
         TBlockRange64 range,
         ui64 offsetBlocks);
 
-    void AddToAheadAndBehind(ui64 lsn, THostMask ddisks);
+    void AddToAheadAndBehindOnFlushCompleted(ui64 lsn, THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
     void InflightFlushFinished(TBlockRange64 range);

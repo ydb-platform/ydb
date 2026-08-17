@@ -247,6 +247,240 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             DirtyMap->DebugPrintDDiskState());
     }
 
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnNonRetriableWriteError, TFixture)
+    {
+        Init();
+
+        // Will respond with a non-retriable error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_IO_SILENT)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The range sync is registered as in-flight while the copy is running.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range - OK.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // Data copying should be completed with error.
+        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskDataCopier::EResult::Error,
+            complete.GetValue());
+
+        // The failed sync must be removed from the in-flight sync map
+        // (EndRangeSync(syncId, false)), so it does not leak.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnReadError, TFixture)
+    {
+        Init();
+
+        size_t readsCount = 0;
+        DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++readsCount;
+
+            // ReadExecutor will respond with E_REJECTED even if all replicas
+            // returned a non-retriable error.
+            return MakeFuture<TDBGReadBlocksResponse>(
+                {.Error = MakeError(E_IO)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // Wait for read retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3, readsCount);
+
+        // The failed sync must be removed from the in-flight sync map
+        // (EndRangeSync(syncId, false)) even on a read error, so it does not
+        // leak across retries.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnRetriableWriteError, TFixture)
+    {
+        Init();
+
+        // Will respond with a retriable error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_REJECTED)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The range sync is registered as in-flight while the copy is running.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range - OK. The subsequent write fails with a retriable error.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // The retriable error must schedule a retry, not complete the copy.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+
+        // Even on a retriable write error the failed sync must be removed from
+        // the in-flight sync map (EndRangeSync(syncId, false)), so it does not
+        // leak across retries.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncAfterSuccessfulRange, TFixture)
+    {
+        Init();
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The first range sync is registered as in-flight.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range #0 - OK.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // The next range starts right after writing range #0.
+        ExpectedRange = TBlockRange64::WithLength(BlocksPerCopy, BlocksPerCopy);
+
+        // Stop the copier so it finishes after the current range's write.
+        Copier->Stop();
+
+        // Write range #0 - OK. EndRangeSync(syncId, true) must remove the
+        // completed entry from the in-flight sync map and advance the fresh
+        // range.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
+
+        // Data copying should be interrupted right after the successful range.
+        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskDataCopier::EResult::Interrupted,
+            complete.GetValue());
+
+        // The successfully synced range must be removed from the in-flight sync
+        // map; nothing must leak.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range advanced by exactly one copy range.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(256, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,256};"   // Watermark advanced by one copy range
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
     Y_UNIT_TEST_F(ShouldRetryOnRetriableWriteError, TFixture)
     {
         Init();
